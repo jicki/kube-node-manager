@@ -20,8 +20,8 @@ FROM reg.deeproute.ai/deeproute-public/zzh/golang:1.24-alpine-plugin AS backend-
 
 WORKDIR /app
 
-# 安装必要的包
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
+# # 安装必要的包
+# RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
 
 # # 安装statik工具
 # RUN go install github.com/rakyll/statik@latest
@@ -35,7 +35,7 @@ RUN go mod download
 # 复制前端构建产物
 COPY --from=frontend-builder /app/frontend/dist ./web
 
-# 生成静态文件嵌入代码
+# 生成静态文件嵌入代码  
 RUN statik -src=./web -dest=. -f
 
 # 复制后端源代码
@@ -49,8 +49,8 @@ RUN go build -a -o main ./cmd
 # 最终运行阶段
 FROM reg.deeproute.ai/deeproute-public/zzh/alpine:3.21-plugin
 
-# # 安装必要的运行时包
-# RUN apk --no-cache add ca-certificates tzdata wget
+# # 安装必要的运行时包  
+# RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /app
 

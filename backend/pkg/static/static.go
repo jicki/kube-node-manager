@@ -17,7 +17,28 @@ func StaticFileHandler() gin.HandlerFunc {
 	// 获取嵌入的静态文件系统
 	statikFS, err := fs.New()
 	if err != nil {
-		panic("Failed to initialize static file system: " + err.Error())
+		// 如果静态文件系统初始化失败，返回一个fallback处理器
+		return func(c *gin.Context) {
+			reqPath := c.Request.URL.Path
+			// 如果是API路径，跳过处理
+			if strings.HasPrefix(reqPath, "/api/") {
+				c.Next()
+				return
+			}
+			// 返回简单的错误页面
+			c.Header("Content-Type", "text/html; charset=utf-8")
+			c.String(http.StatusInternalServerError, `
+<!DOCTYPE html>
+<html>
+<head><title>Service Unavailable</title></head>
+<body>
+<h1>Static files not available</h1>
+<p>The frontend is not properly built or embedded. Please rebuild the application.</p>
+<p>API is still available at <a href="/api/v1/health">/api/v1/health</a></p>
+</body>
+</html>`)
+			c.Abort()
+		}
 	}
 
 	return func(c *gin.Context) {
