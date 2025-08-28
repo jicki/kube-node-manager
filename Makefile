@@ -7,8 +7,22 @@
 # 备份文件名（用于数据备份恢复）
 BACKUP ?= ""
 
-# 版本号（用于发布管理）
-VERSION ?= ""
+# 版本号配置（从VERSION文件读取，可通过环境变量或命令行覆盖）
+ifneq ($(VERSION),)
+    # 使用命令行或环境变量提供的版本
+    VERSION_TAG := $(VERSION)
+else ifeq ($(wildcard VERSION),VERSION)
+    # 从VERSION文件读取版本号
+    VERSION_TAG := $(shell cat VERSION 2>/dev/null | tr -d '\n' | tr -d ' ')
+else
+    # 使用git标签或默认版本
+    VERSION_TAG := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+endif
+
+# 确保版本标签不为空
+ifeq ($(strip $(VERSION_TAG)),)
+    VERSION_TAG := dev
+endif
 
 # Pod副本数（用于Kubernetes扩缩容）
 REPLICAS ?= ""
@@ -16,14 +30,14 @@ REPLICAS ?= ""
 # 镜像仓库前缀配置，可通过环境变量或命令行覆盖
 # 示例: harbor.example.com/project, docker.io/username, registry.local/namespace
 ifeq ($(strip $(REGISTRY)),)
-    REGISTRY := harbor.local/kube-node-manager
+    REGISTRY := reg.deeproute.ai/deeproute-public/zzh
 endif
 
 # ================================
 # Makefile 配置
 # ================================
 
-.PHONY: help dev build start stop clean install test docker-build docker-push
+.PHONY: help dev build start stop clean install test docker-build docker-push version update-version
 
 # 默认目标
 help: ## 显示帮助信息
@@ -45,8 +59,9 @@ dev-frontend: ## 启动前端开发服务器
 
 # 构建
 build: ## 构建应用（多阶段构建单一镜像）
-	@echo "构建应用..."
-	docker build -t $(REGISTRY)/kube-node-manager:latest .
+	@echo "构建应用 [版本: $(VERSION_TAG)]..."
+	docker build -t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
+	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:latest
 
 build-compose: ## 使用docker-compose构建
 	@echo "使用docker-compose构建..."
@@ -127,34 +142,43 @@ lint-frontend: ## 前端代码检查
 
 # Docker 相关
 docker-build: ## 构建 Docker 镜像（多阶段构建）
-	@echo "构建 Docker 镜像..."
-	docker build -t $(REGISTRY)/kube-node-manager:latest .
+	@echo "构建 Docker 镜像 [版本: $(VERSION_TAG)]..."
+	docker build -t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
+	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:latest
 
 docker-build-dev: ## 构建开发环境镜像
-	@echo "构建开发环境镜像..."
-	docker build -t $(REGISTRY)/kube-node-manager/backend:dev -f backend/Dockerfile.dev backend/
-	docker build -t $(REGISTRY)/kube-node-manager/frontend:dev -f frontend/Dockerfile.dev frontend/
+	@echo "构建开发环境镜像 [版本: $(VERSION_TAG)]..."
+	docker build -t $(REGISTRY)/kube-node-manager/backend:$(VERSION_TAG)-dev -f backend/Dockerfile.dev backend/
+	docker build -t $(REGISTRY)/kube-node-manager/frontend:$(VERSION_TAG)-dev -f frontend/Dockerfile.dev frontend/
+	docker tag $(REGISTRY)/kube-node-manager/backend:$(VERSION_TAG)-dev $(REGISTRY)/kube-node-manager/backend:dev
+	docker tag $(REGISTRY)/kube-node-manager/frontend:$(VERSION_TAG)-dev $(REGISTRY)/kube-node-manager/frontend:dev
 
 docker-push: ## 推送 Docker 镜像
-	@echo "推送 Docker 镜像..."
+	@echo "推送 Docker 镜像 [版本: $(VERSION_TAG)]..."
+	docker push $(REGISTRY)/kube-node-manager:$(VERSION_TAG)
 	docker push $(REGISTRY)/kube-node-manager:latest
 
 docker-tag: ## 给镜像打标签
-	@echo "给镜像打标签..."
+	@echo "给镜像打标签 [源版本: $(VERSION_TAG)]..."
 	@if [ -z "$(TAG)" ]; then echo "错误: 请指定标签，例如: make docker-tag TAG=v1.0.0"; exit 1; fi
-	docker tag $(REGISTRY)/kube-node-manager:latest $(REGISTRY)/kube-node-manager:$(TAG)
+	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:$(TAG)
 
 docker-push-dev: ## 推送开发环境镜像
-	@echo "推送开发环境镜像..."
+	@echo "推送开发环境镜像 [版本: $(VERSION_TAG)]..."
+	docker push $(REGISTRY)/kube-node-manager/backend:$(VERSION_TAG)-dev
+	docker push $(REGISTRY)/kube-node-manager/frontend:$(VERSION_TAG)-dev
 	docker push $(REGISTRY)/kube-node-manager/backend:dev
 	docker push $(REGISTRY)/kube-node-manager/frontend:dev
 
 docker-registry: ## 显示镜像仓库配置信息
 	@echo "镜像仓库配置信息:"
 	@REGISTRY_VAR="$(strip $(REGISTRY))"; \
-	DEFAULT_REGISTRY="harbor.local/kube-node-manager"; \
+	VERSION_VAR="$(VERSION_TAG)"; \
+	DEFAULT_REGISTRY="reg.deeproute.ai/deeproute-public/zzh"; \
 	echo "  当前仓库前缀: $$REGISTRY_VAR"; \
-	echo "  完整镜像名: $$REGISTRY_VAR/kube-node-manager:latest"; \
+	echo "  当前版本标签: $$VERSION_VAR"; \
+	echo "  完整镜像名: $$REGISTRY_VAR/kube-node-manager:$$VERSION_VAR"; \
+	echo "  Latest 镜像名: $$REGISTRY_VAR/kube-node-manager:latest"; \
 	echo ""; \
 	if [ "$$REGISTRY_VAR" = "$$DEFAULT_REGISTRY" ]; then \
 		echo "正在使用默认仓库配置"; \
@@ -223,9 +247,18 @@ update-deps: ## 更新依赖
 # 版本管理
 version: ## 显示版本信息
 	@echo "项目版本信息:"
-	@echo "Git 提交: $$(git rev-parse HEAD)"
-	@echo "Git 分支: $$(git branch --show-current)"
+	@echo "当前版本: $(VERSION_TAG)"
+	@if [ -f VERSION ]; then echo "VERSION文件: $$(cat VERSION)"; fi
+	@echo "Git 提交: $$(git rev-parse HEAD 2>/dev/null || echo 'N/A')"
+	@echo "Git 分支: $$(git branch --show-current 2>/dev/null || echo 'N/A')"
+	@echo "Git 标签: $$(git describe --tags --always 2>/dev/null || echo 'N/A')"
 	@echo "构建时间: $$(date)"
+
+update-version: ## 更新VERSION文件
+	@if [ -z "$(VERSION)" ]; then echo "错误: 请指定版本号，例如: make update-version VERSION=v1.0.1"; exit 1; fi
+	@echo "更新版本到: $(VERSION)"
+	@echo "$(VERSION)" > VERSION
+	@echo "VERSION文件已更新"
 
 release: ## 创建发布版本
 	@echo "创建发布版本..."
