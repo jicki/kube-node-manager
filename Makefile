@@ -37,7 +37,7 @@ endif
 # Makefile 配置
 # ================================
 
-.PHONY: help dev build start stop clean install test docker-build docker-push version update-version
+.PHONY: help dev build start stop clean install test docker-build docker-build-only docker-push version update-version
 
 # 默认目标
 help: ## 显示帮助信息
@@ -141,10 +141,18 @@ lint-frontend: ## 前端代码检查
 	cd frontend && npm run lint
 
 # Docker 相关
-docker-build: ## 构建 Docker 镜像（多阶段构建）
+docker-build: ## 构建 Docker 镜像（多阶段构建）并推送
 	@echo "构建 Docker 镜像 [版本: $(VERSION_TAG)]..."
 	docker build -t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
 	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:latest
+	@echo "镜像构建成功，开始推送..."
+	@$(MAKE) docker-push
+
+docker-build-only: ## 只构建 Docker 镜像，不推送
+	@echo "构建 Docker 镜像 [版本: $(VERSION_TAG)]..."
+	docker build -t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
+	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:latest
+	@echo "镜像构建完成（未推送）"
 
 docker-build-dev: ## 构建开发环境镜像
 	@echo "构建开发环境镜像 [版本: $(VERSION_TAG)]..."
