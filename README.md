@@ -273,8 +273,7 @@ docker-compose down -v
 
 如果您有任何问题或建议，请：
 - 提交 [Issue](issues)
-- 发送邮件到 [your-email@example.com]
-
+- 
 ---
 
 **注意**: 请在生产环境中修改默认密码和JWT密钥！
