@@ -137,7 +137,16 @@
             </div>
             
             <div v-if="clusters.length === 0" class="empty-clusters">
-              <el-empty description="暂无集群数据" :image-size="60" />
+              <el-empty description="暂无集群配置" :image-size="60">
+                <template #description>
+                  <p>您还没有配置任何Kubernetes集群</p>
+                  <p>请先添加集群配置以开始管理节点</p>
+                </template>
+                <el-button type="primary" @click="$router.push('/clusters')">
+                  <el-icon><Plus /></el-icon>
+                  添加集群
+                </el-button>
+              </el-empty>
             </div>
           </div>
         </el-card>

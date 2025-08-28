@@ -16,7 +16,9 @@ export const useClusterStore = defineStore('cluster', {
   getters: {
     activeClusters: (state) => state.clusters.filter(cluster => cluster.status === 'Active'),
     inactiveClusters: (state) => state.clusters.filter(cluster => cluster.status !== 'Active'),
-    currentClusterName: (state) => state.currentCluster?.name || 'default'
+    currentClusterName: (state) => state.currentCluster?.name || null,
+    hasCluster: (state) => state.clusters.length > 0,
+    hasCurrentCluster: (state) => !!state.currentCluster
   },
 
   actions: {

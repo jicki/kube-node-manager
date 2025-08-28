@@ -58,11 +58,21 @@ export const useNodeStore = defineStore('node', {
       this.loading = true
       try {
         const clusterStore = useClusterStore()
+        const clusterName = params.cluster_name || this.filters.cluster_name || clusterStore.currentClusterName
+        
+        // 如果没有集群名称，直接返回空结果
+        if (!clusterName) {
+          this.nodes = []
+          this.pagination.total = 0
+          this.updateStats()
+          return { data: [] }
+        }
+        
         const queryParams = {
           page: this.pagination.current,
           size: this.pagination.size,
           ...this.filters,
-          cluster_name: params.cluster_name || this.filters.cluster_name || clusterStore.currentClusterName,
+          cluster_name: clusterName,
           ...params
         }
         

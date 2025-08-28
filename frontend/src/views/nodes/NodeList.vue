@@ -59,6 +59,40 @@
         @selection-change="handleSelectionChange"
         @sort-change="handleSortChange"
       >
+        <!-- 空状态 -->
+        <template #empty>
+          <div class="empty-content">
+            <el-empty
+              v-if="!clusterStore.hasCluster"
+              description="暂无集群配置"
+              :image-size="100"
+            >
+              <template #description>
+                <p>您还没有配置任何Kubernetes集群</p>
+                <p>请先添加集群配置以开始管理节点</p>
+              </template>
+              <el-button type="primary" @click="$router.push('/clusters')">
+                <el-icon><Plus /></el-icon>
+                添加集群
+              </el-button>
+            </el-empty>
+            
+            <el-empty
+              v-else
+              description="当前集群暂无节点数据"
+              :image-size="80"
+            >
+              <template #description>
+                <p>当前集群中没有找到节点</p>
+                <p>请检查集群连接状态或稍后重试</p>
+              </template>
+              <el-button @click="refreshData">
+                <el-icon><Refresh /></el-icon>
+                刷新数据
+              </el-button>
+            </el-empty>
+          </div>
+        </template>
         <el-table-column type="selection" width="55" />
         
         <el-table-column
@@ -263,6 +297,7 @@
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useNodeStore } from '@/store/modules/node'
+import { useClusterStore } from '@/store/modules/cluster'
 import { formatTime, formatNodeStatus, formatNodeRoles, formatCPU, formatMemory } from '@/utils/format'
 import SearchBox from '@/components/common/SearchBox.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -275,10 +310,12 @@ import {
   View,
   MoreFilled,
   CollectionTag,
-  WarningFilled
+  WarningFilled,
+  Plus
 } from '@element-plus/icons-vue'
 
 const nodeStore = useNodeStore()
+const clusterStore = useClusterStore()
 
 // 响应式数据
 const loading = ref(false)

@@ -419,8 +419,16 @@ const fetchLabels = async () => {
 const fetchNodes = async () => {
   try {
     const clusterStore = useClusterStore()
+    const clusterName = clusterStore.currentClusterName
+    
+    // 如果没有集群，直接设置为空数组
+    if (!clusterName) {
+      availableNodes.value = []
+      return
+    }
+    
     const response = await nodeApi.getNodes({
-      cluster_name: clusterStore.currentClusterName
+      cluster_name: clusterName
     })
     availableNodes.value = response.data?.items || response.data || []
   } catch (error) {
