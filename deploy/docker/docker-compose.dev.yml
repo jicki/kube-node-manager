@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: kube-node-manager-backend-dev
+    environment:
+      - PORT=8080
+      - GIN_MODE=debug
+      - DATABASE_DSN=./data/kube-node-manager.db
+      - JWT_SECRET=development-jwt-secret-not-for-production
+      - JWT_EXPIRE_TIME=86400
+      - LDAP_ENABLED=false
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app:cached
+      - ./data:/app/data
+      - ~/.kube:/root/.kube:ro
+    restart: unless-stopped
+    command: ["air", "-c", ".air.toml"]
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: kube-node-manager-frontend-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app:cached
+      - /app/node_modules
+    restart: unless-stopped
+    command: ["npm", "run", "dev"]
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

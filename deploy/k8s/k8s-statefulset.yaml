@@ -1,0 +1,181 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kube-node-manager
+  namespace: default
+  labels:
+    app: kube-node-manager
+spec:
+  serviceName: kube-node-manager
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-node-manager
+  template:
+    metadata:
+      labels:
+        app: kube-node-manager
+    spec:
+      serviceAccountName: kube-node-manager
+      containers:
+      - name: kube-node-manager
+        image: kube-node-manager:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: PORT
+          value: "8080"
+        - name: GIN_MODE
+          value: "release"
+        - name: DATABASE_DSN
+          value: "/app/data/kube-node-manager.db"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: kube-node-manager-secret
+              key: jwt-secret
+        - name: JWT_EXPIRE_TIME
+          value: "86400"
+        - name: LDAP_ENABLED
+          value: "false"
+        - name: LDAP_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: kube-node-manager-config
+              key: ldap-host
+              optional: true
+        - name: LDAP_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: kube-node-manager-config
+              key: ldap-port
+              optional: true
+        - name: LDAP_BASE_DN
+          valueFrom:
+            configMapKeyRef:
+              name: kube-node-manager-config
+              key: ldap-base-dn
+              optional: true
+        - name: LDAP_USER_FILTER
+          valueFrom:
+            configMapKeyRef:
+              name: kube-node-manager-config
+              key: ldap-user-filter
+              optional: true
+        - name: LDAP_ADMIN_DN
+          valueFrom:
+            secretKeyRef:
+              name: kube-node-manager-secret
+              key: ldap-admin-dn
+              optional: true
+        - name: LDAP_ADMIN_PASS
+          valueFrom:
+            secretKeyRef:
+              name: kube-node-manager-secret
+              key: ldap-admin-pass
+              optional: true
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: config
+          mountPath: /app/configs
+          readOnly: true
+        - name: kube-config
+          mountPath: /home/appuser/.kube
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: config
+        configMap:
+          name: kube-node-manager-config
+      - name: kube-config
+        secret:
+          secretName: kube-node-manager-kubeconfig
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-node-manager
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-node-manager
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+- apiGroups: [""]
+  resources: ["nodes/status"]
+  verbs: ["patch"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-node-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-node-manager
+subjects:
+- kind: ServiceAccount
+  name: kube-node-manager
+  namespace: default
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-node-manager-config
+  namespace: default
+data:
+  ldap-host: "ldap.example.com"
+  ldap-port: "389"
+  ldap-base-dn: "dc=example,dc=com"
+  ldap-user-filter: "(uid=%s)"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kube-node-manager-secret
+  namespace: default
+type: Opaque
+data:
+  jwt-secret: eW91ci1qd3Qtc2VjcmV0LWNoYW5nZS1pbi1wcm9kdWN0aW9u # base64: your-jwt-secret-change-in-production
+  ldap-admin-dn: Y249YWRtaW4sZGM9ZXhhbXBsZSxkYz1jb20= # base64: cn=admin,dc=example,dc=com
+  ldap-admin-pass: YWRtaW5fcGFzc3dvcmQ= # base64: admin_password
