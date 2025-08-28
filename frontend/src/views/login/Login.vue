@@ -175,8 +175,8 @@ const showLdapLogin = computed(() => {
   return import.meta.env.VITE_ENABLE_LDAP === 'true'
 })
 
-// 系统版本信息
-const systemVersion = ref('v1.0.10')
+// 系统版本信息 - 优先使用构建时注入的版本，后备为API获取
+const systemVersion = ref(__APP_VERSION__ || 'dev')
 
 // 处理登录
 const handleLogin = async () => {

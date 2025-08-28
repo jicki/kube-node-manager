@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"kube-node-manager/internal/config"
 	"kube-node-manager/internal/handler"
 	"kube-node-manager/internal/model"
@@ -10,6 +9,7 @@ import (
 	"kube-node-manager/pkg/logger"
 	"kube-node-manager/pkg/static"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/gin-contrib/cors"
@@ -145,7 +145,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 
 // getVersion 读取VERSION文件内容
 func getVersion() string {
-	data, err := ioutil.ReadFile("VERSION")
+	data, err := os.ReadFile("VERSION")
 	if err != nil {
 		return "dev" // 如果读取失败，返回默认版本
 	}

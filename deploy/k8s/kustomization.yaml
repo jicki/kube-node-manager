@@ -12,7 +12,7 @@ resources:
 
 commonLabels:
   app: kube-node-manager
-  version: v1.0.0
+  version: v1.0.14
 
 namespace: default
 

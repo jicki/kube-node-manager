@@ -4,6 +4,17 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { fileURLToPath, URL } from 'node:url'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
+// 读取VERSION文件
+let version = 'dev'
+try {
+  const versionPath = resolve(__dirname, '../VERSION')
+  version = readFileSync(versionPath, 'utf-8').trim()
+} catch (err) {
+  console.warn('Could not read VERSION file, using default version')
+}
 
 export default defineConfig({
   plugins: [
@@ -16,7 +27,11 @@ export default defineConfig({
       resolvers: [ElementPlusResolver()]
     })
   ],
-
+  define: {
+    // 注入版本信息到前端
+    __APP_VERSION__: JSON.stringify(version),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString())
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
