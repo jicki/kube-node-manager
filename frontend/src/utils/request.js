@@ -5,7 +5,8 @@ import router from '@/router'
 
 // 创建axios实例
 const service = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
+  // 使用环境变量或默认值，开发模式使用空字符串依赖代理
+  baseURL: import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '' : ''),
   timeout: 60000, // 请求超时时间
   headers: {
     'Content-Type': 'application/json'

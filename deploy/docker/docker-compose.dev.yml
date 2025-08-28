@@ -3,21 +3,28 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ./backend
+      context: ../../backend
       dockerfile: Dockerfile.dev
     container_name: kube-node-manager-backend-dev
     environment:
-      - PORT=8080
-      - GIN_MODE=debug
-      - DATABASE_DSN=./data/kube-node-manager.db
-      - JWT_SECRET=development-jwt-secret-not-for-production
-      - JWT_EXPIRE_TIME=86400
-      - LDAP_ENABLED=false
+      # 后端环境变量
+      - PORT=${BACKEND_PORT:-8080}
+      - GIN_MODE=${GIN_MODE:-debug}
+      - DATABASE_DSN=${DATABASE_DSN:-./data/kube-node-manager.db}
+      - JWT_SECRET=${JWT_SECRET:-development-jwt-secret-not-for-production}
+      - JWT_EXPIRE_TIME=${JWT_EXPIRE_TIME:-86400}
+      - LDAP_ENABLED=${LDAP_ENABLED:-false}
+      - LDAP_HOST=${LDAP_HOST:-}
+      - LDAP_PORT=${LDAP_PORT:-389}
+      - LDAP_BASE_DN=${LDAP_BASE_DN:-}
+      - LDAP_USER_FILTER=${LDAP_USER_FILTER:-}
+      - LDAP_ADMIN_DN=${LDAP_ADMIN_DN:-}
+      - LDAP_ADMIN_PASS=${LDAP_ADMIN_PASS:-}
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8080}:8080"
     volumes:
-      - ./backend:/app:cached
-      - ./data:/app/data
+      - ../../backend:/app:cached
+      - ../../data:/app/data
       - ~/.kube:/root/.kube:ro
     restart: unless-stopped
     command: ["air", "-c", ".air.toml"]
@@ -26,15 +33,22 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ../../frontend  
       dockerfile: Dockerfile.dev
     container_name: kube-node-manager-frontend-dev
+    environment:
+      # 前端环境变量
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-}
+      - VITE_API_TARGET=${VITE_API_TARGET:-http://backend:8080}
+      - VITE_ENABLE_LDAP=${VITE_ENABLE_LDAP:-false}
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     volumes:
-      - ./frontend:/app:cached
+      - ../../frontend:/app:cached
       - /app/node_modules
     restart: unless-stopped
+    depends_on:
+      - backend
     command: ["npm", "run", "dev"]
     networks:
       - app-network

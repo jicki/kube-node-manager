@@ -5,6 +5,7 @@ metadata:
   name: kube-node-manager
 
 resources:
+  - configmap.yaml
   - k8s-statefulset.yaml
   - k8s-service.yaml
   - k8s-ingress.yaml
@@ -17,4 +18,5 @@ namespace: default
 
 images:
   - name: kube-node-manager
+    newName: reg.deeproute.ai/deeproute-public/zzh/kube-node-manager
     newTag: latest

@@ -3,7 +3,7 @@ version: '3.8'
 services:
   app:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
     container_name: kube-node-manager
     environment:
@@ -22,8 +22,8 @@ services:
     ports:
       - "8080:8080"  # 应用端口（前端+后端）
     volumes:
-      - ./data:/app/data
-      - ./backend/configs:/app/configs:ro
+      - ../../data:/app/data
+      - ../../backend/configs:/app/configs:ro
       - ~/.kube:/home/appuser/.kube:ro  # Kubernetes配置
     restart: unless-stopped
     healthcheck:

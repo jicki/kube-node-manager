@@ -33,6 +33,12 @@ ifeq ($(strip $(REGISTRY)),)
     REGISTRY := reg.deeproute.ai/deeproute-public/zzh
 endif
 
+# 前端构建时环境变量配置
+# VITE_API_BASE_URL: 前端API基础URL，留空使用相对路径
+VITE_API_BASE_URL ?= 
+# VITE_ENABLE_LDAP: 是否启用LDAP登录功能
+VITE_ENABLE_LDAP ?= false
+
 # ================================
 # Makefile 配置
 # ================================
@@ -60,7 +66,10 @@ dev-frontend: ## 启动前端开发服务器
 # 构建
 build: ## 构建应用（多阶段构建单一镜像）
 	@echo "构建应用 [版本: $(VERSION_TAG)]..."
-	docker build -t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
+	docker build \
+		--build-arg VITE_API_BASE_URL="$(VITE_API_BASE_URL)" \
+		--build-arg VITE_ENABLE_LDAP="$(VITE_ENABLE_LDAP)" \
+		-t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
 	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:latest
 
 build-compose: ## 使用docker-compose构建
@@ -143,14 +152,20 @@ lint-frontend: ## 前端代码检查
 # Docker 相关
 docker-build: ## 构建 Docker 镜像（多阶段构建）并推送
 	@echo "构建 Docker 镜像 [版本: $(VERSION_TAG)]..."
-	docker build -t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
+	docker build \
+		--build-arg VITE_API_BASE_URL="$(VITE_API_BASE_URL)" \
+		--build-arg VITE_ENABLE_LDAP="$(VITE_ENABLE_LDAP)" \
+		-t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
 	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:latest
 	@echo "镜像构建成功，开始推送..."
 	@$(MAKE) docker-push
 
 docker-build-only: ## 只构建 Docker 镜像，不推送
 	@echo "构建 Docker 镜像 [版本: $(VERSION_TAG)]..."
-	docker build -t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
+	docker build \
+		--build-arg VITE_API_BASE_URL="$(VITE_API_BASE_URL)" \
+		--build-arg VITE_ENABLE_LDAP="$(VITE_ENABLE_LDAP)" \
+		-t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
 	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:latest
 	@echo "镜像构建完成（未推送）"
 
@@ -177,6 +192,20 @@ docker-push-dev: ## 推送开发环境镜像
 	docker push $(REGISTRY)/kube-node-manager/frontend:$(VERSION_TAG)-dev
 	docker push $(REGISTRY)/kube-node-manager/backend:dev
 	docker push $(REGISTRY)/kube-node-manager/frontend:dev
+
+docker-config: ## 显示Docker构建配置信息
+	@echo "Docker构建配置:"
+	@echo "  镜像仓库: $(REGISTRY)"
+	@echo "  版本标签: $(VERSION_TAG)"
+	@echo "  前端API地址: $(VITE_API_BASE_URL)"
+	@echo "  启用LDAP: $(VITE_ENABLE_LDAP)"
+	@echo ""
+	@echo "完整镜像名: $(REGISTRY)/kube-node-manager:$(VERSION_TAG)"
+	@echo ""
+	@echo "自定义构建示例:"
+	@echo "  make docker-build-only VITE_API_BASE_URL=https://api.example.com"
+	@echo "  make docker-build VITE_ENABLE_LDAP=true REGISTRY=your.registry.com"
+	@echo "  export VITE_API_BASE_URL=https://prod-api.example.com && make build"
 
 docker-registry: ## 显示镜像仓库配置信息
 	@echo "镜像仓库配置信息:"

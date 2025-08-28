@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-node-manager-config
+  namespace: default
+data:
+  # 应用基础配置
+  gin-mode: "release"
+  
+  # LDAP配置（可选）
+  ldap-enabled: "false"
+  ldap-host: "ldap.example.com"
+  ldap-port: "389"
+  ldap-base-dn: "dc=example,dc=com"
+  ldap-user-filter: "(uid=%s)"
+  
+  # 前端配置
+  vite-api-base-url: ""
+  vite-enable-ldap: "false"

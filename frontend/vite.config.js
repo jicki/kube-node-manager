@@ -16,6 +16,7 @@ export default defineConfig({
       resolvers: [ElementPlusResolver()]
     })
   ],
+
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
@@ -25,8 +26,10 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
-        changeOrigin: true
+        // 从环境变量读取API目标地址，默认为本地开发地址
+        target: process.env.VITE_API_TARGET || 'http://localhost:8080',
+        changeOrigin: true,
+        secure: process.env.VITE_API_TARGET?.startsWith('https') || false
       }
     }
   },

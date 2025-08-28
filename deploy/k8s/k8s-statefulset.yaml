@@ -25,12 +25,17 @@ spec:
         - containerPort: 8080
           name: http
         env:
+        # 应用基础配置
         - name: PORT
           value: "8080"
         - name: GIN_MODE
-          value: "release"
+          valueFrom:
+            configMapKeyRef:
+              name: kube-node-manager-config
+              key: gin-mode
         - name: DATABASE_DSN
           value: "/app/data/kube-node-manager.db"
+        # JWT配置
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
@@ -38,8 +43,12 @@ spec:
               key: jwt-secret
         - name: JWT_EXPIRE_TIME
           value: "86400"
+        # LDAP配置
         - name: LDAP_ENABLED
-          value: "false"
+          valueFrom:
+            configMapKeyRef:
+              name: kube-node-manager-config
+              key: ldap-enabled
         - name: LDAP_HOST
           valueFrom:
             configMapKeyRef:
@@ -157,17 +166,7 @@ subjects:
 - kind: ServiceAccount
   name: kube-node-manager
   namespace: default
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: kube-node-manager-config
-  namespace: default
-data:
-  ldap-host: "ldap.example.com"
-  ldap-port: "389"
-  ldap-base-dn: "dc=example,dc=com"
-  ldap-user-filter: "(uid=%s)"
+
 ---
 apiVersion: v1
 kind: Secret

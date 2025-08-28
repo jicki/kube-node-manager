@@ -8,7 +8,16 @@ COPY package*.json ./
 # 安装依赖
 RUN npm ci
 
+# 复制源代码
+COPY . .
+
+# 设置默认环境变量
+ENV VITE_API_BASE_URL=""
+ENV VITE_API_TARGET="http://backend:8080"  
+ENV VITE_ENABLE_LDAP="false"
+
 # 暴露端口
 EXPOSE 3000
 
-CMD ["npm", "run", "dev"]
+# 使用host 0.0.0.0 让容器外部可以访问
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
