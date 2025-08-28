@@ -469,10 +469,7 @@ onMounted(() => {
   margin-bottom: 8px;
 }
 
-.forgot-password {
-  padding: 0;
-  font-size: 14px;
-}
+
 
 .login-button {
   width: 100%;
