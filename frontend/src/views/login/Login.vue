@@ -85,7 +85,7 @@
                 <el-input
                   v-model="loginForm.captcha"
                   placeholder="请输入验证码"
-                  prefix-icon="Shield"
+                  prefix-icon="Warning"
                   style="flex: 1; margin-right: 8px;"
                   @keyup.enter="handleLogin"
                 />
@@ -157,7 +157,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import { Monitor, Check, User, Lock, Shield, Connection } from '@element-plus/icons-vue'
+import { Monitor, Check, User, Lock, Warning, Connection } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

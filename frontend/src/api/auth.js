@@ -4,7 +4,7 @@ const authApi = {
   // 用户登录
   login(credentials) {
     return request({
-      url: '/api/auth/login',
+      url: '/api/v1/auth/login',
       method: 'post',
       data: credentials
     })
@@ -13,7 +13,7 @@ const authApi = {
   // 获取用户信息
   getUserInfo() {
     return request({
-      url: '/api/auth/user',
+      url: '/api/v1/auth/user',
       method: 'get'
     })
   },
@@ -21,7 +21,7 @@ const authApi = {
   // 刷新Token
   refreshToken() {
     return request({
-      url: '/api/auth/refresh',
+      url: '/api/v1/auth/refresh',
       method: 'post'
     })
   },
@@ -29,7 +29,7 @@ const authApi = {
   // 用户登出
   logout() {
     return request({
-      url: '/api/auth/logout',
+      url: '/api/v1/auth/logout',
       method: 'post'
     })
   },
@@ -37,7 +37,7 @@ const authApi = {
   // 修改密码
   changePassword(data) {
     return request({
-      url: '/api/auth/change-password',
+      url: '/api/v1/auth/change-password',
       method: 'post',
       data
     })
@@ -46,7 +46,7 @@ const authApi = {
   // 验证Token有效性
   validateToken() {
     return request({
-      url: '/api/auth/validate',
+      url: '/api/v1/auth/validate',
       method: 'get'
     })
   }

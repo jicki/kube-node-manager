@@ -41,8 +41,8 @@ RUN statik -src=./web -dest=. -f
 # 复制后端源代码
 COPY backend/ .
 
-# 构建应用 (启用CGO以支持SQLite)
-ENV CGO_ENABLED=1
+# 构建应用 (禁用CGO使用纯Go SQLite驱动)
+ENV CGO_ENABLED=0
 ENV GOOS=linux
 RUN go build -a -o main ./cmd
 
