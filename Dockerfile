@@ -52,21 +52,10 @@ FROM reg.deeproute.ai/deeproute-public/zzh/alpine:3.21-plugin
 # # 安装必要的运行时包
 # RUN apk --no-cache add ca-certificates tzdata wget
 
-# 创建非root用户
-RUN addgroup -g 1001 appgroup && \
-    adduser -u 1001 -G appgroup -s /bin/sh -D appuser
-
 WORKDIR /app
 
 # 复制构建的二进制文件
 COPY --from=backend-builder /app/main .
-
-# 创建数据目录
-RUN mkdir -p /app/data && \
-    chown -R appuser:appgroup /app
-
-# 切换到非root用户
-USER appuser
 
 # 暴露端口
 EXPOSE 8080
