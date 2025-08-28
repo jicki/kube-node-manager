@@ -59,11 +59,14 @@ func NewService(db *gorm.DB, logger *logger.Logger, jwtCfg config.JWTConfig, lda
 func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
 	var user model.User
 	err := s.db.Where("username = ?", req.Username).First(&user).Error
-	
+
 	var isLDAPAuth bool
 	if err != nil {
 		if err == gorm.ErrRecordNotFound && s.ldap.IsEnabled() {
-			ldapUser, ldapErr := s.ldap.Authenticate(req.Username, req.Password)
+			ldapUser, ldapErr := s.ldap.Authenticate(ldap.AuthRequest{
+				Username: req.Username,
+				Password: req.Password,
+			})
 			if ldapErr != nil {
 				s.audit.Log(audit.LogRequest{
 					Action:       model.ActionLogin,
@@ -76,7 +79,7 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 				})
 				return nil, errors.New("invalid credentials")
 			}
-			
+
 			user = model.User{
 				Username: ldapUser.Username,
 				Email:    ldapUser.Email,
@@ -92,7 +95,7 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 			return nil, err
 		}
 	}
-	
+
 	if user.Status != model.StatusActive {
 		s.audit.Log(audit.LogRequest{
 			UserID:       user.ID,
@@ -106,7 +109,7 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 		})
 		return nil, errors.New("account is inactive")
 	}
-	
+
 	if !isLDAPAuth {
 		if !user.CheckPassword(req.Password) {
 			s.audit.Log(audit.LogRequest{
@@ -122,22 +125,22 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 			return nil, errors.New("invalid credentials")
 		}
 	}
-	
+
 	expiresAt := time.Now().Add(time.Duration(s.jwtCfg.ExpireTime) * time.Second)
-	
+
 	token, err := s.generateToken(user.ID, user.Username, user.Role, "access", expiresAt)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	refreshToken, err := s.generateToken(user.ID, user.Username, user.Role, "refresh", time.Now().Add(7*24*time.Hour))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	now := time.Now()
 	s.db.Model(&user).Update("last_login", now)
-	
+
 	s.audit.Log(audit.LogRequest{
 		UserID:       user.ID,
 		Action:       model.ActionLogin,
@@ -147,7 +150,7 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 		IPAddress:    ipAddress,
 		UserAgent:    userAgent,
 	})
-	
+
 	return &LoginResponse{
 		Token:        token,
 		RefreshToken: refreshToken,
@@ -161,32 +164,32 @@ func (s *Service) RefreshToken(req RefreshTokenRequest) (*LoginResponse, error) 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if claims.Type != "refresh" {
 		return nil, errors.New("invalid token type")
 	}
-	
+
 	var user model.User
 	if err := s.db.First(&user, claims.UserID).Error; err != nil {
 		return nil, err
 	}
-	
+
 	if user.Status != model.StatusActive {
 		return nil, errors.New("account is inactive")
 	}
-	
+
 	expiresAt := time.Now().Add(time.Duration(s.jwtCfg.ExpireTime) * time.Second)
-	
+
 	token, err := s.generateToken(user.ID, user.Username, user.Role, "access", expiresAt)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	refreshToken, err := s.generateToken(user.ID, user.Username, user.Role, "refresh", time.Now().Add(7*24*time.Hour))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &LoginResponse{
 		Token:        token,
 		RefreshToken: refreshToken,
@@ -210,7 +213,7 @@ func (s *Service) generateToken(userID uint, username string, role model.UserRol
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
-	
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.jwtCfg.Secret))
 }
@@ -222,14 +225,14 @@ func (s *Service) validateToken(tokenString string) (*Claims, error) {
 		}
 		return []byte(s.jwtCfg.Secret), nil
 	})
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		return claims, nil
 	}
-	
+
 	return nil, errors.New("invalid token")
 }

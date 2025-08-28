@@ -17,9 +17,9 @@ type Service struct {
 
 // UserInfo LDAP用户信息
 type UserInfo struct {
-	Username    string `json:"username"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
+	Username    string   `json:"username"`
+	Email       string   `json:"email"`
+	DisplayName string   `json:"display_name"`
 	Groups      []string `json:"groups"`
 }
 
@@ -86,10 +86,10 @@ func (s *Service) Authenticate(req AuthRequest) (*UserInfo, error) {
 // connect 连接到LDAP服务器
 func (s *Service) connect() (*ldap.Conn, error) {
 	address := fmt.Sprintf("%s:%d", s.config.Host, s.config.Port)
-	
+
 	var conn *ldap.Conn
 	var err error
-	
+
 	if s.config.Port == 636 {
 		// LDAPS连接
 		conn, err = ldap.DialTLS("tcp", address, &tls.Config{
@@ -103,15 +103,15 @@ func (s *Service) connect() (*ldap.Conn, error) {
 			if err := conn.StartTLS(&tls.Config{
 				ServerName: s.config.Host,
 			}); err != nil {
-				s.logger.Warn("Failed to start TLS, continuing with plain connection: %v", err)
+				s.logger.Warning("Failed to start TLS, continuing with plain connection: %v", err)
 			}
 		}
 	}
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial LDAP server: %w", err)
 	}
-	
+
 	return conn, nil
 }
 
@@ -120,11 +120,11 @@ func (s *Service) bindAdmin(conn *ldap.Conn) error {
 	if s.config.AdminDN == "" || s.config.AdminPass == "" {
 		return fmt.Errorf("admin DN and password are required")
 	}
-	
+
 	if err := conn.Bind(s.config.AdminDN, s.config.AdminPass); err != nil {
 		return fmt.Errorf("failed to bind admin: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -135,7 +135,7 @@ func (s *Service) searchUser(conn *ldap.Conn, username string) (string, *UserInf
 	if s.config.UserFilter == "" {
 		filter = fmt.Sprintf("(uid=%s)", username)
 	}
-	
+
 	searchRequest := ldap.NewSearchRequest(
 		s.config.BaseDN,
 		ldap.ScopeWholeSubtree,
@@ -147,16 +147,16 @@ func (s *Service) searchUser(conn *ldap.Conn, username string) (string, *UserInf
 		[]string{"dn", "uid", "cn", "mail", "displayName", "memberOf"},
 		nil,
 	)
-	
+
 	sr, err := conn.Search(searchRequest)
 	if err != nil {
 		return "", nil, fmt.Errorf("search failed: %w", err)
 	}
-	
+
 	if len(sr.Entries) == 0 {
 		return "", nil, nil
 	}
-	
+
 	entry := sr.Entries[0]
 	userInfo := &UserInfo{
 		Username:    entry.GetAttributeValue("uid"),
@@ -164,17 +164,17 @@ func (s *Service) searchUser(conn *ldap.Conn, username string) (string, *UserInf
 		DisplayName: entry.GetAttributeValue("displayName"),
 		Groups:      entry.GetAttributeValues("memberOf"),
 	}
-	
+
 	// 如果没有displayName，使用cn
 	if userInfo.DisplayName == "" {
 		userInfo.DisplayName = entry.GetAttributeValue("cn")
 	}
-	
+
 	// 如果没有uid，使用用户名
 	if userInfo.Username == "" {
 		userInfo.Username = username
 	}
-	
+
 	return entry.DN, userInfo, nil
 }
 
@@ -186,12 +186,12 @@ func (s *Service) authenticateUser(conn *ldap.Conn, userDN, password string) err
 		return fmt.Errorf("failed to create user connection: %w", err)
 	}
 	defer userConn.Close()
-	
+
 	// 尝试使用用户凭据绑定
 	if err := userConn.Bind(userDN, password); err != nil {
 		return fmt.Errorf("bind failed: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -200,17 +200,17 @@ func (s *Service) TestConnection() error {
 	if !s.config.Enabled {
 		return fmt.Errorf("LDAP is not enabled")
 	}
-	
+
 	conn, err := s.connect()
 	if err != nil {
 		return fmt.Errorf("connection failed: %w", err)
 	}
 	defer conn.Close()
-	
+
 	if err := s.bindAdmin(conn); err != nil {
 		return fmt.Errorf("admin bind failed: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -219,26 +219,26 @@ func (s *Service) GetUserGroups(username string) ([]string, error) {
 	if !s.config.Enabled {
 		return nil, fmt.Errorf("LDAP is not enabled")
 	}
-	
+
 	conn, err := s.connect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
 	defer conn.Close()
-	
+
 	if err := s.bindAdmin(conn); err != nil {
 		return nil, fmt.Errorf("failed to bind admin: %w", err)
 	}
-	
+
 	_, userInfo, err := s.searchUser(conn, username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search user: %w", err)
 	}
-	
+
 	if userInfo == nil {
 		return nil, fmt.Errorf("user not found")
 	}
-	
+
 	return userInfo.Groups, nil
 }
 
@@ -247,21 +247,21 @@ func (s *Service) SearchUsers(filter string, limit int) ([]*UserInfo, error) {
 	if !s.config.Enabled {
 		return nil, fmt.Errorf("LDAP is not enabled")
 	}
-	
+
 	conn, err := s.connect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
 	defer conn.Close()
-	
+
 	if err := s.bindAdmin(conn); err != nil {
 		return nil, fmt.Errorf("failed to bind admin: %w", err)
 	}
-	
+
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	
+
 	searchRequest := ldap.NewSearchRequest(
 		s.config.BaseDN,
 		ldap.ScopeWholeSubtree,
@@ -273,12 +273,12 @@ func (s *Service) SearchUsers(filter string, limit int) ([]*UserInfo, error) {
 		[]string{"dn", "uid", "cn", "mail", "displayName", "memberOf"},
 		nil,
 	)
-	
+
 	sr, err := conn.Search(searchRequest)
 	if err != nil {
 		return nil, fmt.Errorf("search failed: %w", err)
 	}
-	
+
 	var users []*UserInfo
 	for _, entry := range sr.Entries {
 		userInfo := &UserInfo{
@@ -287,13 +287,13 @@ func (s *Service) SearchUsers(filter string, limit int) ([]*UserInfo, error) {
 			DisplayName: entry.GetAttributeValue("displayName"),
 			Groups:      entry.GetAttributeValues("memberOf"),
 		}
-		
+
 		if userInfo.DisplayName == "" {
 			userInfo.DisplayName = entry.GetAttributeValue("cn")
 		}
-		
+
 		users = append(users, userInfo)
 	}
-	
+
 	return users, nil
 }

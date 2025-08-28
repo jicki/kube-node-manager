@@ -13,28 +13,28 @@ type Service struct {
 }
 
 type LogRequest struct {
-	UserID       uint                `json:"user_id"`
-	ClusterID    *uint               `json:"cluster_id,omitempty"`
-	NodeName     string              `json:"node_name,omitempty"`
-	Action       model.AuditAction   `json:"action"`
-	ResourceType model.ResourceType  `json:"resource_type"`
-	Details      string              `json:"details"`
-	Status       model.AuditStatus   `json:"status"`
-	ErrorMsg     string              `json:"error_msg,omitempty"`
-	IPAddress    string              `json:"ip_address,omitempty"`
-	UserAgent    string              `json:"user_agent,omitempty"`
+	UserID       uint               `json:"user_id"`
+	ClusterID    *uint              `json:"cluster_id,omitempty"`
+	NodeName     string             `json:"node_name,omitempty"`
+	Action       model.AuditAction  `json:"action"`
+	ResourceType model.ResourceType `json:"resource_type"`
+	Details      string             `json:"details"`
+	Status       model.AuditStatus  `json:"status"`
+	ErrorMsg     string             `json:"error_msg,omitempty"`
+	IPAddress    string             `json:"ip_address,omitempty"`
+	UserAgent    string             `json:"user_agent,omitempty"`
 }
 
 type ListRequest struct {
-	Page         int                 `json:"page"`
-	PageSize     int                 `json:"page_size"`
-	UserID       uint                `json:"user_id"`
-	ClusterID    uint                `json:"cluster_id"`
-	Action       model.AuditAction   `json:"action"`
-	ResourceType model.ResourceType  `json:"resource_type"`
-	Status       model.AuditStatus   `json:"status"`
-	StartDate    string              `json:"start_date"`
-	EndDate      string              `json:"end_date"`
+	Page         int                `json:"page"`
+	PageSize     int                `json:"page_size"`
+	UserID       uint               `json:"user_id"`
+	ClusterID    uint               `json:"cluster_id"`
+	Action       model.AuditAction  `json:"action"`
+	ResourceType model.ResourceType `json:"resource_type"`
+	Status       model.AuditStatus  `json:"status"`
+	StartDate    string             `json:"start_date"`
+	EndDate      string             `json:"end_date"`
 }
 
 type ListResponse struct {
@@ -52,9 +52,14 @@ func NewService(db *gorm.DB, logger *logger.Logger) *Service {
 }
 
 func (s *Service) Log(req LogRequest) {
+	var clusterID uint
+	if req.ClusterID != nil {
+		clusterID = *req.ClusterID
+	}
+
 	auditLog := model.AuditLog{
 		UserID:       req.UserID,
-		ClusterID:    req.ClusterID,
+		ClusterID:    clusterID,
 		NodeName:     req.NodeName,
 		Action:       req.Action,
 		ResourceType: req.ResourceType,
@@ -64,7 +69,7 @@ func (s *Service) Log(req LogRequest) {
 		IPAddress:    req.IPAddress,
 		UserAgent:    req.UserAgent,
 	}
-	
+
 	if err := s.db.Create(&auditLog).Error; err != nil {
 		s.logger.Error("Failed to create audit log:", err)
 	}
@@ -72,7 +77,7 @@ func (s *Service) Log(req LogRequest) {
 
 func (s *Service) List(req ListRequest) (*ListResponse, error) {
 	query := s.db.Model(&model.AuditLog{}).Preload("User").Preload("Cluster")
-	
+
 	if req.UserID > 0 {
 		query = query.Where("user_id = ?", req.UserID)
 	}
@@ -94,26 +99,26 @@ func (s *Service) List(req ListRequest) (*ListResponse, error) {
 	if req.EndDate != "" {
 		query = query.Where("created_at <= ?", req.EndDate)
 	}
-	
+
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err
 	}
-	
+
 	if req.Page <= 0 {
 		req.Page = 1
 	}
 	if req.PageSize <= 0 || req.PageSize > 100 {
 		req.PageSize = 10
 	}
-	
+
 	offset := (req.Page - 1) * req.PageSize
-	
+
 	var logs []model.AuditLog
 	if err := query.Order("created_at DESC").Offset(offset).Limit(req.PageSize).Find(&logs).Error; err != nil {
 		return nil, err
 	}
-	
+
 	return &ListResponse{
 		Logs:     logs,
 		Total:    total,

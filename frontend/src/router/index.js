@@ -26,7 +26,7 @@ const router = createRouter({
           path: 'nodes',
           name: 'NodeList',
           component: () => import('@/views/nodes/NodeList.vue'),
-          meta: { title: '节点管理', icon: 'Server', requiresAuth: true }
+          meta: { title: '节点管理', icon: 'Monitor', requiresAuth: true }
         },
         {
           path: 'labels',

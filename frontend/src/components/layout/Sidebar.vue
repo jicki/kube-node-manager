@@ -4,11 +4,11 @@
     <div class="logo-container">
       <div class="logo">
         <el-icon v-if="collapsed" class="logo-icon">
-          <Server />
+          <Monitor />
         </el-icon>
         <template v-else>
           <el-icon class="logo-icon">
-            <Server />
+            <Monitor />
           </el-icon>
           <span class="logo-text">K8s节点管理</span>
         </template>
@@ -59,7 +59,7 @@
       </el-menu-item>
       
       <el-menu-item index="/nodes">
-        <el-icon><Server /></el-icon>
+        <el-icon><Monitor /></el-icon>
         <template #title>节点管理</template>
       </el-menu-item>
       
@@ -98,7 +98,6 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
 import { useClusterStore } from '@/store/modules/cluster'
 import {
-  Server,
   Monitor,
   CollectionTag,
   WarningFilled,

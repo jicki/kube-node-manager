@@ -187,7 +187,7 @@ func (h *Handler) Drain(c *gin.Context) {
 
 	// 验证节点操作权限
 	if err := h.nodeSvc.ValidateNodeOperation(req.ClusterName, req.NodeName, "drain"); err != nil {
-		h.logger.Warn("Node operation validation failed: %v", err)
+		h.logger.Warning("Node operation validation failed: %v", err)
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: err.Error(),

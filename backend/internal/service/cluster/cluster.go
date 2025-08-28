@@ -13,10 +13,10 @@ import (
 
 // Service 集群管理服务
 type Service struct {
-	db        *gorm.DB
-	logger    *logger.Logger
-	auditSvc  *audit.Service
-	k8sSvc    *k8s.Service
+	db       *gorm.DB
+	logger   *logger.Logger
+	auditSvc *audit.Service
+	k8sSvc   *k8s.Service
 }
 
 // CreateRequest 创建集群请求
@@ -35,9 +35,9 @@ type UpdateRequest struct {
 
 // ListRequest 集群列表请求
 type ListRequest struct {
-	Page     int                `json:"page"`
-	PageSize int                `json:"page_size"`
-	Name     string             `json:"name"`
+	Page     int                 `json:"page"`
+	PageSize int                 `json:"page_size"`
+	Name     string              `json:"name"`
 	Status   model.ClusterStatus `json:"status"`
 }
 
@@ -159,7 +159,7 @@ func (s *Service) GetByID(id uint, userID uint) (*ClusterWithNodes, error) {
 
 	// 获取节点信息
 	if nodes, err := s.k8sSvc.ListNodes(cluster.Name); err != nil {
-		s.logger.Warn("Failed to get nodes for cluster %s: %v", cluster.Name, err)
+		s.logger.Warning("Failed to get nodes for cluster %s: %v", cluster.Name, err)
 		// 不返回错误，继续执行
 	} else {
 		result.Nodes = nodes
@@ -246,12 +246,12 @@ func (s *Service) Update(id uint, req UpdateRequest, userID uint) (*model.Cluste
 	if req.Name != "" || req.KubeConfig != "" {
 		// 移除旧客户端
 		s.k8sSvc.RemoveClient(oldName)
-		
+
 		// 重新获取更新后的cluster
 		if err := s.db.First(&cluster, id).Error; err != nil {
 			return nil, fmt.Errorf("failed to get updated cluster: %w", err)
 		}
-		
+
 		// 创建新客户端
 		if err := s.k8sSvc.CreateClient(cluster.Name, cluster.KubeConfig); err != nil {
 			s.logger.Error("Failed to create k8s client for updated cluster %s: %v", cluster.Name, err)
@@ -407,8 +407,8 @@ func (s *Service) syncClusterInfo(cluster *model.Cluster) error {
 		s.logger.Error("Failed to get cluster info for %s: %v", cluster.Name, err)
 		// 更新状态为错误
 		s.db.Model(cluster).Updates(map[string]interface{}{
-			"status":     model.ClusterStatusError,
-			"last_sync":  time.Now(),
+			"status":    model.ClusterStatusError,
+			"last_sync": time.Now(),
 		})
 		return err
 	}
@@ -416,10 +416,10 @@ func (s *Service) syncClusterInfo(cluster *model.Cluster) error {
 	// 更新集群信息
 	now := time.Now()
 	updates := map[string]interface{}{
-		"version":     clusterInfo.Version,
-		"node_count":  clusterInfo.NodeCount,
-		"status":      model.ClusterStatusActive,
-		"last_sync":   now,
+		"version":    clusterInfo.Version,
+		"node_count": clusterInfo.NodeCount,
+		"status":     model.ClusterStatusActive,
+		"last_sync":  now,
 	}
 
 	if err := s.db.Model(cluster).Updates(updates).Error; err != nil {

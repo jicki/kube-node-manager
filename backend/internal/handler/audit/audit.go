@@ -50,7 +50,7 @@ func NewHandler(auditSvc *audit.Service, logger *logger.Logger) *Handler {
 // @Router /audit/logs [get]
 func (h *Handler) List(c *gin.Context) {
 	var req audit.ListRequest
-	
+
 	// 解析查询参数
 	if pageStr := c.Query("page"); pageStr != "" {
 		if page, err := strconv.Atoi(pageStr); err == nil {
@@ -72,7 +72,7 @@ func (h *Handler) List(c *gin.Context) {
 			req.ClusterID = uint(clusterID)
 		}
 	}
-	
+
 	req.Action = model.AuditAction(c.Query("action"))
 	req.ResourceType = model.ResourceType(c.Query("resource_type"))
 	req.Status = model.AuditStatus(c.Query("status"))
@@ -203,7 +203,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 // @Success 200 {object} Response
 // @Router /audit/stats [get]
 func (h *Handler) GetStats(c *gin.Context) {
-	currentUserID, exists := c.Get("user_id")
+	_, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, Response{
 			Code:    http.StatusUnauthorized,
@@ -328,32 +328,32 @@ func (h *Handler) GetUserActivity(c *gin.Context) {
 // calculateStats 计算审计统计信息
 func (h *Handler) calculateStats(logs []model.AuditLog) map[string]interface{} {
 	stats := make(map[string]interface{})
-	
+
 	// 基础统计
 	stats["total_logs"] = len(logs)
-	
+
 	// 按操作类型统计
 	actionStats := make(map[string]int)
 	resourceStats := make(map[string]int)
 	statusStats := make(map[string]int)
 	userStats := make(map[uint]int)
-	
+
 	successCount := 0
 	failedCount := 0
-	
+
 	for _, log := range logs {
 		// 操作类型统计
 		actionStats[string(log.Action)]++
-		
+
 		// 资源类型统计
 		resourceStats[string(log.ResourceType)]++
-		
+
 		// 状态统计
 		statusStats[string(log.Status)]++
-		
+
 		// 用户统计
 		userStats[log.UserID]++
-		
+
 		// 成功失败统计
 		if log.Status == model.AuditStatusSuccess {
 			successCount++
@@ -361,62 +361,62 @@ func (h *Handler) calculateStats(logs []model.AuditLog) map[string]interface{} {
 			failedCount++
 		}
 	}
-	
+
 	stats["actions"] = actionStats
 	stats["resources"] = resourceStats
 	stats["status"] = statusStats
 	stats["success_count"] = successCount
 	stats["failed_count"] = failedCount
 	stats["active_users"] = len(userStats)
-	
+
 	// 成功率
 	if len(logs) > 0 {
 		stats["success_rate"] = float64(successCount) / float64(len(logs)) * 100
 	} else {
 		stats["success_rate"] = 100.0
 	}
-	
+
 	return stats
 }
 
 // calculateUserActivity 计算用户活动统计
 func (h *Handler) calculateUserActivity(logs []model.AuditLog, days int) map[string]interface{} {
 	activity := make(map[string]interface{})
-	
+
 	// 基础信息
 	activity["total_actions"] = len(logs)
 	activity["days"] = days
-	
+
 	// 按日期分组
 	dailyActivity := make(map[string]int)
 	actionTypes := make(map[string]int)
 	resourceTypes := make(map[string]int)
-	
+
 	recentActions := 0
 	for _, log := range logs {
 		dateKey := log.CreatedAt.Format("2006-01-02")
 		dailyActivity[dateKey]++
-		
+
 		actionTypes[string(log.Action)]++
 		resourceTypes[string(log.ResourceType)]++
-		
+
 		// 统计最近7天的活动
 		if log.CreatedAt.After(log.CreatedAt.AddDate(0, 0, -days)) {
 			recentActions++
 		}
 	}
-	
+
 	activity["daily_activity"] = dailyActivity
 	activity["action_types"] = actionTypes
 	activity["resource_types"] = resourceTypes
 	activity["recent_actions"] = recentActions
-	
+
 	// 平均每日活动
 	if days > 0 {
 		activity["avg_daily_actions"] = float64(recentActions) / float64(days)
 	} else {
 		activity["avg_daily_actions"] = 0.0
 	}
-	
+
 	return activity
 }

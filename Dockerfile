@@ -20,11 +20,11 @@ FROM reg.deeproute.ai/deeproute-public/zzh/golang:1.24-alpine-plugin AS backend-
 
 WORKDIR /app
 
-# # 安装必要的包
-# RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
+# 安装必要的包
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
 
-# # 安装statik工具
-# RUN go install github.com/rakyll/statik@latest
+# 安装statik工具
+RUN go install github.com/rakyll/statik@latest
 
 # 复制go.mod和go.sum
 COPY backend/go.mod backend/go.sum ./
@@ -41,8 +41,10 @@ RUN statik -src=./web -dest=. -f
 # 复制后端源代码
 COPY backend/ .
 
-# 构建应用
-RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflags "-static"' -o main ./cmd
+# 构建应用 (禁用CGO以避免SQLite编译问题)
+ENV CGO_ENABLED=0
+ENV GOOS=linux
+RUN go build -a -o main ./cmd
 
 # 最终运行阶段
 FROM reg.deeproute.ai/deeproute-public/zzh/alpine:3.21-plugin

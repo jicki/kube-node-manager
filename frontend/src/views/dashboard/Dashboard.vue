@@ -12,7 +12,7 @@
         <el-card class="stat-card stat-card-primary">
           <div class="stat-content">
             <div class="stat-icon">
-              <el-icon><Server /></el-icon>
+              <el-icon><Monitor /></el-icon>
             </div>
             <div class="stat-info">
               <div class="stat-value">{{ nodeStats.total }}</div>
@@ -206,7 +206,7 @@
           <div class="quick-actions">
             <div class="quick-action-item" @click="$router.push('/nodes')">
               <div class="quick-action-icon">
-                <el-icon><Server /></el-icon>
+                <el-icon><Monitor /></el-icon>
               </div>
               <div class="quick-action-content">
                 <div class="quick-action-title">节点管理</div>
@@ -261,7 +261,7 @@ import { useClusterStore } from '@/store/modules/cluster'
 import { useNodeStore } from '@/store/modules/node'
 import { formatRelativeTime } from '@/utils/format'
 import {
-  Server,
+  Monitor,
   Check,
   Warning,
   Connection,
@@ -327,7 +327,7 @@ const getActionIcon = (type) => {
     label_add: Plus,
     label_delete: Delete,
     node_cordon: Warning,
-    node_drain: Server,
+    node_drain: Monitor,
     taint_add: WarningFilled,
     taint_delete: Delete,
     user_create: User,

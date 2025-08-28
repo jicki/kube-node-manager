@@ -15,7 +15,7 @@
       <div class="login-info">
         <div class="info-content">
           <h1 class="system-title">
-            <el-icon class="title-icon"><Server /></el-icon>
+            <el-icon class="title-icon"><Monitor /></el-icon>
             Kubernetes 节点管理平台
           </h1>
           <p class="system-description">
@@ -157,7 +157,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import { Server, Check, User, Lock, Shield, Connection } from '@element-plus/icons-vue'
+import { Monitor, Check, User, Lock, Shield, Connection } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

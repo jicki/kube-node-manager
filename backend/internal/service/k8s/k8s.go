@@ -10,9 +10,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -25,23 +23,23 @@ type Service struct {
 
 // NodeInfo Kubernetes节点信息
 type NodeInfo struct {
-	Name              string            `json:"name"`
-	Status            string            `json:"status"`
-	Roles             []string          `json:"roles"`
-	Age               string            `json:"age"`
-	Version           string            `json:"version"`
-	InternalIP        string            `json:"internal_ip"`
-	ExternalIP        string            `json:"external_ip"`
-	OS                string            `json:"os"`
-	OSImage           string            `json:"os_image"`
-	KernelVersion     string            `json:"kernel_version"`
-	ContainerRuntime  string            `json:"container_runtime"`
-	Capacity          ResourceInfo      `json:"capacity"`
-	Allocatable       ResourceInfo      `json:"allocatable"`
-	Labels            map[string]string `json:"labels"`
-	Taints            []TaintInfo       `json:"taints"`
-	Conditions        []NodeCondition   `json:"conditions"`
-	CreatedAt         time.Time         `json:"created_at"`
+	Name             string            `json:"name"`
+	Status           string            `json:"status"`
+	Roles            []string          `json:"roles"`
+	Age              string            `json:"age"`
+	Version          string            `json:"version"`
+	InternalIP       string            `json:"internal_ip"`
+	ExternalIP       string            `json:"external_ip"`
+	OS               string            `json:"os"`
+	OSImage          string            `json:"os_image"`
+	KernelVersion    string            `json:"kernel_version"`
+	ContainerRuntime string            `json:"container_runtime"`
+	Capacity         ResourceInfo      `json:"capacity"`
+	Allocatable      ResourceInfo      `json:"allocatable"`
+	Labels           map[string]string `json:"labels"`
+	Taints           []TaintInfo       `json:"taints"`
+	Conditions       []NodeCondition   `json:"conditions"`
+	CreatedAt        time.Time         `json:"created_at"`
 }
 
 // ResourceInfo 资源信息
@@ -53,9 +51,9 @@ type ResourceInfo struct {
 
 // TaintInfo 污点信息
 type TaintInfo struct {
-	Key       string `json:"key"`
-	Value     string `json:"value"`
-	Effect    string `json:"effect"`
+	Key       string     `json:"key"`
+	Value     string     `json:"value"`
+	Effect    string     `json:"effect"`
 	TimeAdded *time.Time `json:"time_added,omitempty"`
 }
 
@@ -83,10 +81,10 @@ type TaintUpdateRequest struct {
 
 // ClusterInfo 集群信息
 type ClusterInfo struct {
-	Version     string    `json:"version"`
-	NodeCount   int       `json:"node_count"`
-	Nodes       []NodeInfo `json:"nodes,omitempty"`
-	LastSync    time.Time `json:"last_sync"`
+	Version   string     `json:"version"`
+	NodeCount int        `json:"node_count"`
+	Nodes     []NodeInfo `json:"nodes,omitempty"`
+	LastSync  time.Time  `json:"last_sync"`
 }
 
 // NewService 创建新的Kubernetes服务实例
@@ -136,7 +134,7 @@ func (s *Service) CreateClient(clusterName, kubeconfig string) error {
 func (s *Service) RemoveClient(clusterName string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	delete(s.clients, clusterName)
 	s.logger.Info("Removed Kubernetes client for cluster: %s", clusterName)
 }
@@ -159,9 +157,6 @@ func (s *Service) GetClusterInfo(clusterName string) (*ClusterInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	// 获取集群版本
 	version, err := client.Discovery().ServerVersion()
@@ -371,7 +366,7 @@ func (s *Service) DrainNode(clusterName, nodeName string) error {
 			GracePeriodSeconds: func() *int64 { i := int64(30); return &i }(),
 		})
 		if err != nil {
-			s.logger.Warn("Failed to delete pod %s/%s: %v", pod.Namespace, pod.Name, err)
+			s.logger.Warning("Failed to delete pod %s/%s: %v", pod.Namespace, pod.Name, err)
 		}
 	}
 
