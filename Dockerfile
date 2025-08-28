@@ -20,11 +20,11 @@ FROM reg.deeproute.ai/deeproute-public/zzh/golang:1.24-alpine-plugin AS backend-
 
 WORKDIR /app
 
-# 安装必要的包
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
+# # 安装必要的包
+# RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
 
-# 安装statik工具
-RUN go install github.com/rakyll/statik@latest
+# # 安装statik工具
+# RUN go install github.com/rakyll/statik@latest
 
 # 复制go.mod和go.sum
 COPY backend/go.mod backend/go.sum ./
