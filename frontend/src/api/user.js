@@ -4,7 +4,7 @@ const userApi = {
   // 获取用户列表
   getUsers(params) {
     return request({
-      url: '/api/users',
+      url: '/api/v1/users',
       method: 'get',
       params
     })
@@ -13,7 +13,7 @@ const userApi = {
   // 获取用户详情
   getUserDetail(id) {
     return request({
-      url: `/api/users/${id}`,
+      url: `/api/v1/users/${id}`,
       method: 'get'
     })
   },
@@ -21,7 +21,7 @@ const userApi = {
   // 创建用户
   createUser(data) {
     return request({
-      url: '/api/users',
+      url: '/api/v1/users',
       method: 'post',
       data
     })
@@ -30,7 +30,7 @@ const userApi = {
   // 更新用户
   updateUser(id, data) {
     return request({
-      url: `/api/users/${id}`,
+      url: `/api/v1/users/${id}`,
       method: 'put',
       data
     })
@@ -39,7 +39,7 @@ const userApi = {
   // 删除用户
   deleteUser(id) {
     return request({
-      url: `/api/users/${id}`,
+      url: `/api/v1/users/${id}`,
       method: 'delete'
     })
   },
@@ -47,7 +47,7 @@ const userApi = {
   // 批量删除用户
   batchDeleteUsers(ids) {
     return request({
-      url: '/api/users/batch-delete',
+      url: '/api/v1/users/batch-delete',
       method: 'post',
       data: { ids }
     })
@@ -56,7 +56,7 @@ const userApi = {
   // 重置用户密码
   resetPassword(id, data) {
     return request({
-      url: `/api/users/${id}/reset-password`,
+      url: `/api/v1/users/${id}/reset-password`,
       method: 'post',
       data
     })
@@ -65,7 +65,7 @@ const userApi = {
   // 启用/禁用用户
   toggleUserStatus(id, enabled) {
     return request({
-      url: `/api/users/${id}/toggle-status`,
+      url: `/api/v1/users/${id}/toggle-status`,
       method: 'post',
       data: { enabled }
     })
@@ -74,7 +74,7 @@ const userApi = {
   // 获取用户角色列表
   getUserRoles() {
     return request({
-      url: '/api/users/roles',
+      url: '/api/v1/users/roles',
       method: 'get'
     })
   }

@@ -4,7 +4,7 @@ const clusterApi = {
   // 获取集群列表
   getClusters(params) {
     return request({
-      url: '/api/clusters',
+      url: '/api/v1/clusters',
       method: 'get',
       params
     })
@@ -13,7 +13,7 @@ const clusterApi = {
   // 获取集群详情
   getClusterDetail(id) {
     return request({
-      url: `/api/clusters/${id}`,
+      url: `/api/v1/clusters/${id}`,
       method: 'get'
     })
   },
@@ -21,7 +21,7 @@ const clusterApi = {
   // 添加集群
   addCluster(data) {
     return request({
-      url: '/api/clusters',
+      url: '/api/v1/clusters',
       method: 'post',
       data
     })
@@ -30,7 +30,7 @@ const clusterApi = {
   // 更新集群
   updateCluster(id, data) {
     return request({
-      url: `/api/clusters/${id}`,
+      url: `/api/v1/clusters/${id}`,
       method: 'put',
       data
     })
@@ -39,7 +39,7 @@ const clusterApi = {
   // 删除集群
   deleteCluster(id) {
     return request({
-      url: `/api/clusters/${id}`,
+      url: `/api/v1/clusters/${id}`,
       method: 'delete'
     })
   },
@@ -47,7 +47,7 @@ const clusterApi = {
   // 测试集群连接
   testConnection(id) {
     return request({
-      url: `/api/clusters/${id}/test`,
+      url: `/api/v1/clusters/${id}/test`,
       method: 'post'
     })
   },
@@ -55,7 +55,7 @@ const clusterApi = {
   // 获取集群状态
   getClusterStatus(id) {
     return request({
-      url: `/api/clusters/${id}/status`,
+      url: `/api/v1/clusters/${id}/status`,
       method: 'get'
     })
   },
@@ -63,7 +63,7 @@ const clusterApi = {
   // 获取集群资源使用情况
   getClusterResources(id) {
     return request({
-      url: `/api/clusters/${id}/resources`,
+      url: `/api/v1/clusters/${id}/resources`,
       method: 'get'
     })
   },
@@ -71,7 +71,7 @@ const clusterApi = {
   // 切换当前集群
   switchCluster(id) {
     return request({
-      url: `/api/clusters/${id}/switch`,
+      url: `/api/v1/clusters/${id}/switch`,
       method: 'post'
     })
   }

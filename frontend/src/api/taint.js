@@ -4,7 +4,7 @@ const taintApi = {
   // 获取节点污点
   getNodeTaints(nodeName) {
     return request({
-      url: `/api/nodes/${nodeName}/taints`,
+      url: `/api/v1/nodes/${nodeName}/taints`,
       method: 'get'
     })
   },
@@ -12,7 +12,7 @@ const taintApi = {
   // 添加节点污点
   addNodeTaint(nodeName, data) {
     return request({
-      url: `/api/nodes/${nodeName}/taints`,
+      url: `/api/v1/nodes/${nodeName}/taints`,
       method: 'post',
       data
     })
@@ -21,7 +21,7 @@ const taintApi = {
   // 更新节点污点
   updateNodeTaint(nodeName, key, data) {
     return request({
-      url: `/api/nodes/${nodeName}/taints/${key}`,
+      url: `/api/v1/nodes/${nodeName}/taints/${key}`,
       method: 'put',
       data
     })
@@ -30,7 +30,7 @@ const taintApi = {
   // 删除节点污点
   deleteNodeTaint(nodeName, key) {
     return request({
-      url: `/api/nodes/${nodeName}/taints/${key}`,
+      url: `/api/v1/nodes/${nodeName}/taints/${key}`,
       method: 'delete'
     })
   },
@@ -38,7 +38,7 @@ const taintApi = {
   // 批量添加污点
   batchAddTaints(nodeNames, taints) {
     return request({
-      url: '/api/nodes/taints/batch-add',
+      url: '/api/v1/nodes/taints/batch-add',
       method: 'post',
       data: { nodes: nodeNames, taints }
     })
@@ -47,7 +47,7 @@ const taintApi = {
   // 批量删除污点
   batchDeleteTaints(nodeNames, keys) {
     return request({
-      url: '/api/nodes/taints/batch-delete',
+      url: '/api/v1/nodes/taints/batch-delete',
       method: 'post',
       data: { nodes: nodeNames, keys }
     })
@@ -56,7 +56,7 @@ const taintApi = {
   // 获取所有污点
   getAllTaints(params) {
     return request({
-      url: '/api/taints',
+      url: '/api/v1/taints',
       method: 'get',
       params
     })
@@ -65,7 +65,7 @@ const taintApi = {
   // 搜索污点
   searchTaints(keyword) {
     return request({
-      url: '/api/taints/search',
+      url: '/api/v1/taints/search',
       method: 'get',
       params: { keyword }
     })
@@ -74,7 +74,7 @@ const taintApi = {
   // 获取污点使用统计
   getTaintStats() {
     return request({
-      url: '/api/taints/stats',
+      url: '/api/v1/taints/stats',
       method: 'get'
     })
   },
@@ -82,7 +82,7 @@ const taintApi = {
   // 获取污点效果选项
   getTaintEffects() {
     return request({
-      url: '/api/taints/effects',
+      url: '/api/v1/taints/effects',
       method: 'get'
     })
   },
@@ -90,7 +90,7 @@ const taintApi = {
   // 验证污点格式
   validateTaint(data) {
     return request({
-      url: '/api/taints/validate',
+      url: '/api/v1/taints/validate',
       method: 'post',
       data
     })
@@ -99,7 +99,7 @@ const taintApi = {
   // 获取推荐污点
   getRecommendedTaints(nodeName) {
     return request({
-      url: `/api/nodes/${nodeName}/taints/recommendations`,
+      url: `/api/v1/nodes/${nodeName}/taints/recommendations`,
       method: 'get'
     })
   },
@@ -107,7 +107,7 @@ const taintApi = {
   // 导入污点模板
   importTaints(data) {
     return request({
-      url: '/api/taints/import',
+      url: '/api/v1/taints/import',
       method: 'post',
       data
     })
@@ -116,7 +116,7 @@ const taintApi = {
   // 导出污点
   exportTaints(params) {
     return request({
-      url: '/api/taints/export',
+      url: '/api/v1/taints/export',
       method: 'get',
       params,
       responseType: 'blob'
@@ -126,7 +126,7 @@ const taintApi = {
   // 清除所有污点
   clearAllTaints(nodeName) {
     return request({
-      url: `/api/nodes/${nodeName}/taints/clear`,
+      url: `/api/v1/nodes/${nodeName}/taints/clear`,
       method: 'post'
     })
   }

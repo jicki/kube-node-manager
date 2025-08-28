@@ -4,7 +4,7 @@ const labelApi = {
   // 获取节点标签
   getNodeLabels(nodeName) {
     return request({
-      url: `/api/nodes/${nodeName}/labels`,
+      url: `/api/v1/nodes/${nodeName}/labels`,
       method: 'get'
     })
   },
@@ -12,7 +12,7 @@ const labelApi = {
   // 添加节点标签
   addNodeLabel(nodeName, data) {
     return request({
-      url: `/api/nodes/${nodeName}/labels`,
+      url: `/api/v1/nodes/${nodeName}/labels`,
       method: 'post',
       data
     })
@@ -21,7 +21,7 @@ const labelApi = {
   // 更新节点标签
   updateNodeLabel(nodeName, key, data) {
     return request({
-      url: `/api/nodes/${nodeName}/labels/${key}`,
+      url: `/api/v1/nodes/${nodeName}/labels/${key}`,
       method: 'put',
       data
     })
@@ -30,7 +30,7 @@ const labelApi = {
   // 删除节点标签
   deleteNodeLabel(nodeName, key) {
     return request({
-      url: `/api/nodes/${nodeName}/labels/${key}`,
+      url: `/api/v1/nodes/${nodeName}/labels/${key}`,
       method: 'delete'
     })
   },
@@ -38,7 +38,7 @@ const labelApi = {
   // 批量添加标签
   batchAddLabels(nodeNames, labels) {
     return request({
-      url: '/api/nodes/labels/batch-add',
+      url: '/api/v1/nodes/labels/batch-add',
       method: 'post',
       data: { nodes: nodeNames, labels }
     })
@@ -47,7 +47,7 @@ const labelApi = {
   // 批量删除标签
   batchDeleteLabels(nodeNames, keys) {
     return request({
-      url: '/api/nodes/labels/batch-delete',
+      url: '/api/v1/nodes/labels/batch-delete',
       method: 'post',
       data: { nodes: nodeNames, keys }
     })
@@ -56,7 +56,7 @@ const labelApi = {
   // 获取所有标签
   getAllLabels(params) {
     return request({
-      url: '/api/labels',
+      url: '/api/v1/labels',
       method: 'get',
       params
     })
@@ -65,7 +65,7 @@ const labelApi = {
   // 搜索标签
   searchLabels(keyword) {
     return request({
-      url: '/api/labels/search',
+      url: '/api/v1/labels/search',
       method: 'get',
       params: { keyword }
     })
@@ -74,7 +74,7 @@ const labelApi = {
   // 获取标签使用统计
   getLabelStats() {
     return request({
-      url: '/api/labels/stats',
+      url: '/api/v1/labels/stats',
       method: 'get'
     })
   },
@@ -82,7 +82,7 @@ const labelApi = {
   // 获取推荐标签
   getRecommendedLabels(nodeName) {
     return request({
-      url: `/api/nodes/${nodeName}/labels/recommendations`,
+      url: `/api/v1/nodes/${nodeName}/labels/recommendations`,
       method: 'get'
     })
   },
@@ -90,7 +90,7 @@ const labelApi = {
   // 验证标签格式
   validateLabel(data) {
     return request({
-      url: '/api/labels/validate',
+      url: '/api/v1/labels/validate',
       method: 'post',
       data
     })
@@ -99,7 +99,7 @@ const labelApi = {
   // 导入标签模板
   importLabels(data) {
     return request({
-      url: '/api/labels/import',
+      url: '/api/v1/labels/import',
       method: 'post',
       data
     })
@@ -108,7 +108,7 @@ const labelApi = {
   // 导出标签
   exportLabels(params) {
     return request({
-      url: '/api/labels/export',
+      url: '/api/v1/labels/export',
       method: 'get',
       params,
       responseType: 'blob'

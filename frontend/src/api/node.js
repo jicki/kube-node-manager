@@ -4,7 +4,7 @@ const nodeApi = {
   // 获取节点列表
   getNodes(params) {
     return request({
-      url: '/api/nodes',
+      url: '/api/v1/nodes',
       method: 'get',
       params
     })
@@ -13,7 +13,7 @@ const nodeApi = {
   // 获取节点详情
   getNodeDetail(nodeName) {
     return request({
-      url: `/api/nodes/${nodeName}`,
+      url: `/api/v1/nodes/${nodeName}`,
       method: 'get'
     })
   },
@@ -21,7 +21,7 @@ const nodeApi = {
   // 封锁节点
   cordonNode(nodeName) {
     return request({
-      url: `/api/nodes/${nodeName}/cordon`,
+      url: `/api/v1/nodes/${nodeName}/cordon`,
       method: 'post'
     })
   },
@@ -29,7 +29,7 @@ const nodeApi = {
   // 取消封锁节点
   uncordonNode(nodeName) {
     return request({
-      url: `/api/nodes/${nodeName}/uncordon`,
+      url: `/api/v1/nodes/${nodeName}/uncordon`,
       method: 'post'
     })
   },
@@ -37,7 +37,7 @@ const nodeApi = {
   // 驱逐节点
   drainNode(nodeName, options = {}) {
     return request({
-      url: `/api/nodes/${nodeName}/drain`,
+      url: `/api/v1/nodes/${nodeName}/drain`,
       method: 'post',
       data: options
     })
@@ -46,7 +46,7 @@ const nodeApi = {
   // 批量封锁节点
   batchCordon(nodeNames) {
     return request({
-      url: '/api/nodes/batch-cordon',
+      url: '/api/v1/nodes/batch-cordon',
       method: 'post',
       data: { nodes: nodeNames }
     })
@@ -55,7 +55,7 @@ const nodeApi = {
   // 批量取消封锁节点
   batchUncordon(nodeNames) {
     return request({
-      url: '/api/nodes/batch-uncordon',
+      url: '/api/v1/nodes/batch-uncordon',
       method: 'post',
       data: { nodes: nodeNames }
     })
@@ -64,7 +64,7 @@ const nodeApi = {
   // 批量驱逐节点
   batchDrain(nodeNames, options = {}) {
     return request({
-      url: '/api/nodes/batch-drain',
+      url: '/api/v1/nodes/batch-drain',
       method: 'post',
       data: { nodes: nodeNames, options }
     })
@@ -73,7 +73,7 @@ const nodeApi = {
   // 获取节点资源使用情况
   getNodeResources(nodeName) {
     return request({
-      url: `/api/nodes/${nodeName}/resources`,
+      url: `/api/v1/nodes/${nodeName}/resources`,
       method: 'get'
     })
   },
@@ -81,7 +81,7 @@ const nodeApi = {
   // 获取节点上的Pods
   getNodePods(nodeName, params) {
     return request({
-      url: `/api/nodes/${nodeName}/pods`,
+      url: `/api/v1/nodes/${nodeName}/pods`,
       method: 'get',
       params
     })
@@ -90,7 +90,7 @@ const nodeApi = {
   // 获取节点事件
   getNodeEvents(nodeName, params) {
     return request({
-      url: `/api/nodes/${nodeName}/events`,
+      url: `/api/v1/nodes/${nodeName}/events`,
       method: 'get',
       params
     })
@@ -99,7 +99,7 @@ const nodeApi = {
   // 获取节点统计信息
   getNodeStats() {
     return request({
-      url: '/api/nodes/stats',
+      url: '/api/v1/nodes/stats',
       method: 'get'
     })
   }
