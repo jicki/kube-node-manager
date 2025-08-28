@@ -84,6 +84,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		auth.POST("/login", handlers.Auth.Login)
 		auth.POST("/logout", handlers.Auth.Logout)
 		auth.POST("/refresh", handlers.Auth.RefreshToken)
+		auth.GET("/user", handlers.Auth.AuthMiddleware(), handlers.Auth.GetUser)
 	}
 
 	protected := api.Group("/")

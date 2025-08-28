@@ -57,12 +57,17 @@ type ClusterWithNodes struct {
 
 // NewService 创建新的集群管理服务实例
 func NewService(db *gorm.DB, logger *logger.Logger, auditSvc *audit.Service, k8sSvc *k8s.Service) *Service {
-	return &Service{
+	service := &Service{
 		db:       db,
 		logger:   logger,
 		auditSvc: auditSvc,
 		k8sSvc:   k8sSvc,
 	}
+
+	// 初始化已存在的集群客户端连接
+	service.initializeExistingClients()
+
+	return service
 }
 
 // Create 创建集群
@@ -476,4 +481,25 @@ func (s *Service) GetNodes(id uint, userID uint) ([]k8s.NodeInfo, error) {
 	})
 
 	return nodes, nil
+}
+
+// initializeExistingClients 初始化已存在的集群客户端连接
+func (s *Service) initializeExistingClients() {
+	var clusters []model.Cluster
+	if err := s.db.Where("status = ?", model.ClusterStatusActive).Find(&clusters).Error; err != nil {
+		s.logger.Error("Failed to load existing clusters: %v", err)
+		return
+	}
+
+	s.logger.Info("Initializing %d existing cluster connections", len(clusters))
+
+	for _, cluster := range clusters {
+		if err := s.k8sSvc.CreateClient(cluster.Name, cluster.KubeConfig); err != nil {
+			s.logger.Warning("Failed to initialize client for cluster %s: %v", cluster.Name, err)
+			// 更新集群状态为不可用
+			s.db.Model(&cluster).Update("status", model.ClusterStatusInactive)
+		} else {
+			s.logger.Info("Successfully initialized client for cluster: %s", cluster.Name)
+		}
+	}
 }
