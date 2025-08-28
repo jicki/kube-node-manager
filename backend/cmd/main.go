@@ -30,6 +30,10 @@ func main() {
 		log.Fatal("Failed to run migrations:", err)
 	}
 
+	if err := model.SeedDefaultData(db); err != nil {
+		log.Fatal("Failed to seed default data:", err)
+	}
+
 	services := service.NewServices(db, logger, cfg)
 	handlers := handler.NewHandlers(services, logger)
 

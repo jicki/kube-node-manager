@@ -79,29 +79,11 @@
               />
             </el-form-item>
             
-            <!-- 验证码（如果需要） -->
-            <el-form-item v-if="showCaptcha" label="验证码" prop="captcha">
-              <div class="captcha-container">
-                <el-input
-                  v-model="loginForm.captcha"
-                  placeholder="请输入验证码"
-                  prefix-icon="Warning"
-                  style="flex: 1; margin-right: 8px;"
-                  @keyup.enter="handleLogin"
-                />
-                <div class="captcha-image" @click="refreshCaptcha">
-                  <img v-if="captchaImage" :src="captchaImage" alt="验证码" />
-                  <span v-else>点击获取</span>
-                </div>
-              </div>
-            </el-form-item>
+
             
             <el-form-item>
               <div class="login-options">
                 <el-checkbox v-model="rememberMe">记住我</el-checkbox>
-                <el-button type="text" class="forgot-password">
-                  忘记密码？
-                </el-button>
               </div>
             </el-form-item>
             
@@ -167,15 +149,12 @@ const authStore = useAuthStore()
 const loginFormRef = ref()
 const loading = ref(false)
 const ldapLoading = ref(false)
-const showCaptcha = ref(false)
-const captchaImage = ref('')
 const rememberMe = ref(false)
 
 // 登录表单
 const loginForm = reactive({
   username: '',
-  password: '',
-  captcha: ''
+  password: ''
 })
 
 // 表单验证规则
@@ -187,10 +166,6 @@ const loginRules = {
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码长度至少为 6 位', trigger: 'blur' }
-  ],
-  captcha: [
-    { required: true, message: '请输入验证码', trigger: 'blur' },
-    { len: 4, message: '验证码长度为 4 位', trigger: 'blur' }
   ]
 }
 
@@ -216,10 +191,7 @@ const handleLogin = async () => {
       password: loginForm.password
     }
     
-    // 如果显示验证码，添加验证码
-    if (showCaptcha.value) {
-      credentials.captcha = loginForm.captcha
-    }
+
     
     // 调用登录API
     await authStore.login(credentials)
@@ -239,20 +211,9 @@ const handleLogin = async () => {
   } catch (error) {
     console.error('Login error:', error)
     
-    // 如果是验证码错误，刷新验证码
-    if (error.message && error.message.includes('验证码')) {
-      showCaptcha.value = true
-      refreshCaptcha()
-    }
-    
-    // 连续登录失败多次后显示验证码
+    // 登录失败处理
     const failedCount = parseInt(localStorage.getItem('loginFailedCount') || '0') + 1
     localStorage.setItem('loginFailedCount', failedCount.toString())
-    
-    if (failedCount >= 3) {
-      showCaptcha.value = true
-      refreshCaptcha()
-    }
     
     ElMessage.error(error.message || '登录失败，请检查用户名和密码')
   } finally {
@@ -275,19 +236,7 @@ const handleLdapLogin = async () => {
   }
 }
 
-// 刷新验证码
-const refreshCaptcha = async () => {
-  try {
-    // 这里应该调用获取验证码的API
-    // const response = await authApi.getCaptcha()
-    // captchaImage.value = response.data.image
-    
-    // 临时模拟
-    captchaImage.value = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
-  } catch (error) {
-    console.error('获取验证码失败:', error)
-  }
-}
+
 
 // 记住用户名
 const loadRememberedUsername = () => {
@@ -314,13 +263,6 @@ const fetchSystemVersion = async () => {
 onMounted(() => {
   loadRememberedUsername()
   fetchSystemVersion()
-  
-  // 清除登录失败计数（页面刷新时）
-  const failedCount = parseInt(localStorage.getItem('loginFailedCount') || '0')
-  if (failedCount >= 3) {
-    showCaptcha.value = true
-    refreshCaptcha()
-  }
 })
 </script>
 
@@ -518,30 +460,7 @@ onMounted(() => {
   box-shadow: 0 0 0 2px rgba(64, 150, 255, 0.2);
 }
 
-.captcha-container {
-  display: flex;
-  align-items: center;
-}
 
-.captcha-image {
-  width: 100px;
-  height: 40px;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  background: #f5f5f5;
-  font-size: 12px;
-  color: #999;
-}
-
-.captcha-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
 
 .login-options {
   display: flex;
