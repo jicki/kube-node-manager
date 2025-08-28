@@ -215,7 +215,17 @@ const handleLogin = async () => {
     const failedCount = parseInt(localStorage.getItem('loginFailedCount') || '0') + 1
     localStorage.setItem('loginFailedCount', failedCount.toString())
     
-    ElMessage.error(error.message || '登录失败，请检查用户名和密码')
+    // 显示更友好的错误信息
+    let errorMessage = '登录失败，请检查用户名和密码'
+    if (error.message) {
+      errorMessage = error.message
+    } else if (error.response && error.response.status === 401) {
+      errorMessage = '用户名或密码错误'
+    } else if (error.response && error.response.status >= 500) {
+      errorMessage = '服务器错误，请稍后重试'
+    }
+    
+    ElMessage.error(errorMessage)
   } finally {
     loading.value = false
   }

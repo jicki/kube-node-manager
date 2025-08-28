@@ -42,7 +42,7 @@ service.interceptors.response.use(
     const res = response.data
     
     // 如果自定义状态码不是200，则判断为错误
-    if (res.code && res.code !== 200) {
+    if (res && res.code && res.code !== 200) {
       ElMessage({
         message: res.message || '请求失败',
         type: 'error',
@@ -59,7 +59,8 @@ service.interceptors.response.use(
       return Promise.reject(new Error(res.message || 'Error'))
     }
     
-    return res
+    // 返回完整的response对象，保持data属性
+    return response
   },
   error => {
     const { response } = error
