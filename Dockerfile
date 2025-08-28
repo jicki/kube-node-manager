@@ -20,8 +20,8 @@ FROM reg.deeproute.ai/deeproute-public/zzh/golang:1.24-alpine-plugin AS backend-
 
 WORKDIR /app
 
-# # 安装必要的包
-# RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
+# 安装必要的包
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
 
 # # 安装statik工具
 # RUN go install github.com/rakyll/statik@latest
@@ -41,8 +41,8 @@ RUN statik -src=./web -dest=. -f
 # 复制后端源代码
 COPY backend/ .
 
-# 构建应用 (禁用CGO以避免SQLite编译问题)
-ENV CGO_ENABLED=0
+# 构建应用 (启用CGO以支持SQLite)
+ENV CGO_ENABLED=1
 ENV GOOS=linux
 RUN go build -a -o main ./cmd
 
