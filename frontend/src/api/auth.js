@@ -49,6 +49,14 @@ const authApi = {
       url: '/api/v1/auth/validate',
       method: 'get'
     })
+  },
+
+  // 获取系统版本信息
+  getVersion() {
+    return request({
+      url: '/api/v1/version',
+      method: 'get'
+    })
   }
 }
 

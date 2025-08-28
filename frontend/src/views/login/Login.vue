@@ -135,7 +135,7 @@
           
           <!-- 系统信息 -->
           <div class="system-info">
-            <p class="version-info">版本: v{{ systemVersion }}</p>
+            <p class="version-info">版本: {{ systemVersion }}</p>
             <p class="copyright">© 2024 Kubernetes 节点管理平台</p>
           </div>
         </div>
@@ -158,6 +158,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { Monitor, Check, User, Lock, Warning, Connection } from '@element-plus/icons-vue'
+import authApi from '@/api/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -199,9 +200,8 @@ const showLdapLogin = computed(() => {
   return import.meta.env.VITE_ENABLE_LDAP === 'true'
 })
 
-const systemVersion = computed(() => {
-  return import.meta.env.VITE_APP_VERSION || '1.0.0'
-})
+// 系统版本信息
+const systemVersion = ref('1.0.0')
 
 // 处理登录
 const handleLogin = async () => {
@@ -298,8 +298,22 @@ const loadRememberedUsername = () => {
   }
 }
 
+// 获取系统版本信息
+const fetchSystemVersion = async () => {
+  try {
+    const response = await authApi.getVersion()
+    if (response && response.version) {
+      systemVersion.value = response.version
+    }
+  } catch (error) {
+    console.warn('Failed to fetch system version:', error)
+    // 保持默认版本
+  }
+}
+
 onMounted(() => {
   loadRememberedUsername()
+  fetchSystemVersion()
   
   // 清除登录失败计数（页面刷新时）
   const failedCount = parseInt(localStorage.getItem('loginFailedCount') || '0')

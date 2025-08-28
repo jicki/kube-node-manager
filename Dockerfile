@@ -57,6 +57,9 @@ WORKDIR /app
 # 复制构建的二进制文件
 COPY --from=backend-builder /app/main .
 
+# 复制VERSION文件
+COPY VERSION .
+
 # 暴露端口
 EXPOSE 8080
 

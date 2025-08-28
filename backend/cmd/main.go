@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io/ioutil"
 	"kube-node-manager/internal/config"
 	"kube-node-manager/internal/handler"
 	"kube-node-manager/internal/model"
@@ -9,6 +10,7 @@ import (
 	"kube-node-manager/pkg/logger"
 	"kube-node-manager/pkg/static"
 	"log"
+	"strings"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -60,6 +62,15 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 	// 健康检查端点
 	router.GET("/api/v1/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "healthy", "service": "kube-node-manager"})
+	})
+
+	// 版本信息端点
+	router.GET("/api/v1/version", func(c *gin.Context) {
+		version := getVersion()
+		c.JSON(200, gin.H{
+			"version": version,
+			"service": "kube-node-manager",
+		})
 	})
 
 	api := router.Group("/api/v1")
@@ -126,4 +137,13 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		audit.GET("", handlers.Audit.List)
 		audit.GET("/:id", handlers.Audit.GetByID)
 	}
+}
+
+// getVersion 读取VERSION文件内容
+func getVersion() string {
+	data, err := ioutil.ReadFile("VERSION")
+	if err != nil {
+		return "dev" // 如果读取失败，返回默认版本
+	}
+	return strings.TrimSpace(string(data))
 }

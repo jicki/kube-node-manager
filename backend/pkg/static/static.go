@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rakyll/statik/fs"
-	
+
 	// 导入生成的静态文件
 	_ "kube-node-manager/statik"
 )
@@ -44,34 +44,30 @@ func StaticFileHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 获取请求路径
 		reqPath := c.Request.URL.Path
-		
+
 		// 如果是API路径，跳过静态文件处理
 		if strings.HasPrefix(reqPath, "/api/") {
 			c.Next()
 			return
 		}
-		
+
 		// 处理根路径
 		if reqPath == "/" {
 			reqPath = "/index.html"
 		}
-		
+
 		// 尝试打开文件
 		file, err := statikFS.Open(reqPath)
 		if err != nil {
-			// 如果文件不存在，对于SPA应用返回index.html
-			if strings.Contains(err.Error(), "not found") {
-				file, err = statikFS.Open("/index.html")
-				if err != nil {
-					c.Status(http.StatusNotFound)
-					c.Abort()
-					return
-				}
-			} else {
+			// 对于SPA应用，任何文件不存在的情况都返回index.html
+			file, err = statikFS.Open("/index.html")
+			if err != nil {
 				c.Status(http.StatusInternalServerError)
 				c.Abort()
 				return
 			}
+			// 重置路径为index.html以确保正确的Content-Type
+			reqPath = "/index.html"
 		}
 		defer file.Close()
 
