@@ -71,13 +71,14 @@ USER appuser
 # 暴露端口
 EXPOSE 8080
 
-# 健康检查
+# 健康检查 (使用内置命令，避免依赖外部工具)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/v1/health || exit 1
+  CMD nc -z localhost 8080 || exit 1
 
 # 设置环境变量
 ENV GIN_MODE=release \
     DATABASE_DSN=./data/kube-node-manager.db
 
-# 运行应用
+# 清除基础镜像的入口点并设置我们的启动命令
+ENTRYPOINT []
 CMD ["./main"]
