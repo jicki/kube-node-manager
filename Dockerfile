@@ -9,6 +9,9 @@ COPY frontend/package*.json ./
 # 安装前端依赖
 RUN npm ci
 
+# 复制VERSION文件到父目录，供前端构建使用
+COPY VERSION ../VERSION
+
 # 复制前端源代码
 COPY frontend/ .
 

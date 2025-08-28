@@ -10,7 +10,8 @@ import { resolve } from 'path'
 // 读取VERSION文件
 let version = 'dev'
 try {
-  const versionPath = resolve(__dirname, '../VERSION')
+  // 在Docker构建环境中，使用更明确的路径
+  const versionPath = resolve(fileURLToPath(new URL('.', import.meta.url)), '../VERSION')
   version = readFileSync(versionPath, 'utf-8').trim()
 } catch (err) {
   console.warn('Could not read VERSION file, using default version')
