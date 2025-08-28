@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import nodeApi from '@/api/node'
+import { useClusterStore } from './cluster'
 
 export const useNodeStore = defineStore('node', {
   state: () => ({
@@ -20,7 +21,7 @@ export const useNodeStore = defineStore('node', {
       name: '',
       status: '',
       role: '',
-      cluster: ''
+      cluster_name: ''
     },
     loading: false
   }),
@@ -56,10 +57,12 @@ export const useNodeStore = defineStore('node', {
     async fetchNodes(params = {}) {
       this.loading = true
       try {
+        const clusterStore = useClusterStore()
         const queryParams = {
           page: this.pagination.current,
           size: this.pagination.size,
           ...this.filters,
+          cluster_name: params.cluster_name || this.filters.cluster_name || clusterStore.currentClusterName,
           ...params
         }
         
@@ -163,7 +166,7 @@ export const useNodeStore = defineStore('node', {
         name: '',
         status: '',
         role: '',
-        cluster: ''
+        cluster_name: ''
       }
       this.pagination.current = 1
     }
