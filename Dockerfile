@@ -1,5 +1,5 @@
 # 多阶段构建 - 前端构建阶段
-FROM node:18-alpine AS frontend-builder
+FROM reg.deeproute.ai/deeproute-public/node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -16,15 +16,15 @@ COPY frontend/ .
 RUN npm run build
 
 # 多阶段构建 - 后端构建阶段
-FROM golang:1.21-alpine AS backend-builder
+FROM reg.deeproute.ai/deeproute-public/zzh/golang:1.24-alpine-plugin AS backend-builder
 
 WORKDIR /app
 
-# 安装必要的包
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
+# # 安装必要的包
+# RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
 
-# 安装statik工具
-RUN go install github.com/rakyll/statik@latest
+# # 安装statik工具
+# RUN go install github.com/rakyll/statik@latest
 
 # 复制go.mod和go.sum
 COPY backend/go.mod backend/go.sum ./
@@ -45,10 +45,10 @@ COPY backend/ .
 RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflags "-static"' -o main ./cmd
 
 # 最终运行阶段
-FROM alpine:latest
+FROM reg.deeproute.ai/deeproute-public/zzh/alpine:3.21-plugin
 
-# 安装必要的运行时包
-RUN apk --no-cache add ca-certificates tzdata wget
+# # 安装必要的运行时包
+# RUN apk --no-cache add ca-certificates tzdata wget
 
 # 创建非root用户
 RUN addgroup -g 1001 appgroup && \
