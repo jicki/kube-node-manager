@@ -176,7 +176,7 @@ const showLdapLogin = computed(() => {
 })
 
 // 系统版本信息
-const systemVersion = ref('1.0.0')
+const systemVersion = ref('v1.0.10')
 
 // 处理登录
 const handleLogin = async () => {
