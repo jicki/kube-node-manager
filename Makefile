@@ -1,5 +1,28 @@
 # Kubernetes 节点管理器 Makefile
 
+# ================================
+# 默认配置变量
+# ================================
+
+# 备份文件名（用于数据备份恢复）
+BACKUP ?= ""
+
+# 版本号（用于发布管理）
+VERSION ?= ""
+
+# Pod副本数（用于Kubernetes扩缩容）
+REPLICAS ?= ""
+
+# 镜像仓库前缀配置，可通过环境变量或命令行覆盖
+# 示例: harbor.example.com/project, docker.io/username, registry.local/namespace
+ifeq ($(strip $(REGISTRY)),)
+    REGISTRY := harbor.local/kube-node-manager
+endif
+
+# ================================
+# Makefile 配置
+# ================================
+
 .PHONY: help dev build start stop clean install test docker-build docker-push
 
 # 默认目标
@@ -23,7 +46,7 @@ dev-frontend: ## 启动前端开发服务器
 # 构建
 build: ## 构建应用（多阶段构建单一镜像）
 	@echo "构建应用..."
-	docker build -t kube-node-manager:latest .
+	docker build -t $(REGISTRY)/kube-node-manager:latest .
 
 build-compose: ## 使用docker-compose构建
 	@echo "使用docker-compose构建..."
@@ -105,21 +128,47 @@ lint-frontend: ## 前端代码检查
 # Docker 相关
 docker-build: ## 构建 Docker 镜像（多阶段构建）
 	@echo "构建 Docker 镜像..."
-	docker build -t kube-node-manager:latest .
+	docker build -t $(REGISTRY)/kube-node-manager:latest .
 
 docker-build-dev: ## 构建开发环境镜像
 	@echo "构建开发环境镜像..."
-	docker build -t kube-node-manager/backend:dev -f backend/Dockerfile.dev backend/
-	docker build -t kube-node-manager/frontend:dev -f frontend/Dockerfile.dev frontend/
+	docker build -t $(REGISTRY)/kube-node-manager/backend:dev -f backend/Dockerfile.dev backend/
+	docker build -t $(REGISTRY)/kube-node-manager/frontend:dev -f frontend/Dockerfile.dev frontend/
 
 docker-push: ## 推送 Docker 镜像
 	@echo "推送 Docker 镜像..."
-	docker push kube-node-manager:latest
+	docker push $(REGISTRY)/kube-node-manager:latest
 
 docker-tag: ## 给镜像打标签
 	@echo "给镜像打标签..."
 	@if [ -z "$(TAG)" ]; then echo "错误: 请指定标签，例如: make docker-tag TAG=v1.0.0"; exit 1; fi
-	docker tag kube-node-manager:latest kube-node-manager:$(TAG)
+	docker tag $(REGISTRY)/kube-node-manager:latest $(REGISTRY)/kube-node-manager:$(TAG)
+
+docker-push-dev: ## 推送开发环境镜像
+	@echo "推送开发环境镜像..."
+	docker push $(REGISTRY)/kube-node-manager/backend:dev
+	docker push $(REGISTRY)/kube-node-manager/frontend:dev
+
+docker-registry: ## 显示镜像仓库配置信息
+	@echo "镜像仓库配置信息:"
+	@REGISTRY_VAR="$(strip $(REGISTRY))"; \
+	DEFAULT_REGISTRY="harbor.local/kube-node-manager"; \
+	echo "  当前仓库前缀: $$REGISTRY_VAR"; \
+	echo "  完整镜像名: $$REGISTRY_VAR/kube-node-manager:latest"; \
+	echo ""; \
+	if [ "$$REGISTRY_VAR" = "$$DEFAULT_REGISTRY" ]; then \
+		echo "正在使用默认仓库配置"; \
+		echo ""; \
+		echo "自定义仓库示例:"; \
+		echo "  make docker-build REGISTRY=harbor.example.com/project"; \
+		echo "  make docker-push REGISTRY=your.registry.com/namespace"; \
+		echo "  export REGISTRY=registry.local/myproject && make docker-build"; \
+	else \
+		echo "正在使用自定义仓库配置"; \
+		echo ""; \
+		echo "恢复默认配置:"; \
+		echo "  unset REGISTRY && make docker-build"; \
+	fi
 
 docker-clean: ## 清理 Docker 镜像和容器
 	@echo "清理 Docker..."
@@ -215,11 +264,6 @@ k8s-scale: ## 扩缩容 Pod (需要指定副本数)
 	@echo "扩缩容 Pod..."
 	@if [ -z "$(REPLICAS)" ]; then echo "错误: 请指定副本数，例如: make k8s-scale REPLICAS=3"; exit 1; fi
 	kubectl scale statefulset/kube-node-manager --replicas=$(REPLICAS)
-
-# 默认变量
-BACKUP ?= ""
-VERSION ?= ""
-REPLICAS ?= ""
 
 # 帮助信息
 .DEFAULT_GOAL := help
