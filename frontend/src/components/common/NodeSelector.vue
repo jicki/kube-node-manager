@@ -82,10 +82,10 @@
               :disabled="!node.name"
             >
                               <div class="node-content">
-                  <div class="node-main-info">
-                    <div class="node-header">
+                  <div class="node-row">
+                    <div class="node-basic-info">
                       <div class="node-name">{{ node.name || '未知节点' }}</div>
-                      <div class="node-status-section">
+                      <div class="node-meta-row">
                         <el-tag 
                           :type="getStatusType(node.status)" 
                           size="small"
@@ -96,22 +96,21 @@
                         <span v-if="node.roles?.length" class="node-roles">
                           {{ node.roles.join(', ') }}
                         </span>
+                        <div v-if="node.internal_ip" class="node-ip">
+                          <el-icon><Location /></el-icon>
+                          <span>{{ node.internal_ip }}</span>
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div v-if="node.internal_ip" class="node-ip">
-                      <el-icon><Location /></el-icon>
-                      <span>{{ node.internal_ip }}</span>
                     </div>
                   </div>
                   
-                  <div class="node-details">
-                    <div v-if="node.labels && showLabels && Object.keys(getDisplayLabels(node.labels)).length > 0" class="node-labels-section">
-                      <div class="labels-header">
+                  <div v-if="(node.labels && showLabels && Object.keys(getDisplayLabels(node.labels)).length > 0) || (node.taints && node.taints.length > 0)" class="node-attributes">
+                    <div v-if="node.labels && showLabels && Object.keys(getDisplayLabels(node.labels)).length > 0" class="attributes-section">
+                      <div class="attributes-header">
                         <el-icon class="section-icon"><Collection /></el-icon>
                         <span class="section-label">标签</span>
                       </div>
-                      <div class="labels-content">
+                      <div class="attributes-content">
                         <el-tag
                           v-for="(value, key) in getDisplayLabels(node.labels)"
                           :key="`${node.name}-${key}`"
@@ -120,9 +119,9 @@
                           class="label-tag"
                           :title="`${key}=${value}`"
                         >
-                          <span class="label-key">{{ truncateText(key, 12) }}</span>
+                          <span class="label-key">{{ truncateText(key, 15) }}</span>
                           <span v-if="value" class="label-separator">=</span>
-                          <span v-if="value" class="label-value">{{ truncateText(value, 10) }}</span>
+                          <span v-if="value" class="label-value">{{ truncateText(value, 12) }}</span>
                         </el-tag>
                         <el-tag
                           v-if="getTotalLabelsCount(node.labels) > maxLabelDisplay"
@@ -137,12 +136,12 @@
                       </div>
                     </div>
                     
-                    <div v-if="node.taints && node.taints.length > 0" class="node-taints-section">
-                      <div class="taints-header">
+                    <div v-if="node.taints && node.taints.length > 0" class="attributes-section">
+                      <div class="attributes-header">
                         <el-icon class="section-icon"><Warning /></el-icon>
                         <span class="section-label">污点</span>
                       </div>
-                      <div class="taints-content">
+                      <div class="attributes-content">
                         <el-tag
                           v-for="(taint, index) in getDisplayTaints(node.taints)"
                           :key="`${node.name}-taint-${index}`"
@@ -151,9 +150,9 @@
                           class="taint-tag"
                           :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
                         >
-                          <span class="taint-key">{{ truncateText(taint.key, 10) }}</span>
+                          <span class="taint-key">{{ truncateText(taint.key, 12) }}</span>
                           <span v-if="taint.value" class="taint-separator">=</span>
-                          <span v-if="taint.value" class="taint-value">{{ truncateText(taint.value, 8) }}</span>
+                          <span v-if="taint.value" class="taint-value">{{ truncateText(taint.value, 10) }}</span>
                           <span class="taint-effect">:{{ taint.effect.substr(0, 2) }}</span>
                         </el-tag>
                         <el-tag
@@ -511,43 +510,42 @@ onUnmounted(() => {
 .node-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   margin-left: 8px;
+  width: 100%;
+  min-height: 0;
+}
+
+.node-row {
+  display: flex;
   width: 100%;
 }
 
-.node-main-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.node-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
+.node-basic-info {
+  flex: 1;
+  min-width: 0;
 }
 
 .node-name {
   font-weight: 600;
   color: #333;
   font-size: 15px;
-  line-height: 1.4;
+  line-height: 1.3;
   word-break: break-all;
-  flex: 1;
-  margin: 0;
+  margin: 0 0 6px 0;
 }
 
-.node-status-section {
+.node-meta-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  line-height: 1.2;
 }
 
 .node-status-tag {
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .node-roles {
@@ -557,41 +555,44 @@ onUnmounted(() => {
   padding: 2px 6px;
   border-radius: 3px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .node-ip {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #666;
-  background: #fafafa;
-  padding: 6px 10px;
-  border-radius: 4px;
-  border-left: 3px solid #52c41a;
-  width: fit-content;
+  gap: 4px;
+  font-size: 12px;
+  color: #52c41a;
+  background: #f6ffed;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #b7eb8f;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .node-ip .el-icon {
-  font-size: 14px;
+  font-size: 12px;
   color: #52c41a;
 }
 
-.node-details {
+.node-attributes {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  padding-left: 0;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 8px;
 }
 
-.node-labels-section,
-.node-taints-section {
+.attributes-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
-.labels-header,
-.taints-header {
+.attributes-header {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -599,46 +600,44 @@ onUnmounted(() => {
 }
 
 .section-icon {
-  font-size: 13px;
-  color: #666;
+  font-size: 12px;
+  color: #999;
 }
 
 .section-label {
-  font-size: 12px;
-  color: #666;
+  font-size: 11px;
+  color: #999;
   font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.labels-content {
+.attributes-content {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3px;
   align-items: flex-start;
-}
-
-.taints-content {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: flex-start;
+  line-height: 1;
 }
 
 .label-tag {
-  font-size: 11px;
-  height: 22px;
-  line-height: 20px;
-  padding: 0 6px;
+  font-size: 10px;
+  height: 20px;
+  line-height: 18px;
+  padding: 0 5px;
   font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
-  margin: 1px;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: top;
 }
 
 .label-tag:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   border-color: #d9ecff;
   z-index: 10;
   position: relative;
@@ -650,7 +649,7 @@ onUnmounted(() => {
 }
 
 .label-separator {
-  margin: 0 2px;
+  margin: 0 1px;
   opacity: 0.7;
   color: #666;
 }
@@ -662,21 +661,23 @@ onUnmounted(() => {
 }
 
 .taint-tag {
-  font-size: 11px;
-  height: 22px;
-  line-height: 20px;
-  padding: 0 6px;
+  font-size: 10px;
+  height: 20px;
+  line-height: 18px;
+  padding: 0 5px;
   font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
-  margin: 1px;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: top;
 }
 
 .taint-tag:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   z-index: 10;
   position: relative;
 }
@@ -686,7 +687,7 @@ onUnmounted(() => {
 }
 
 .taint-separator {
-  margin: 0 2px;
+  margin: 0 1px;
   opacity: 0.7;
 }
 
@@ -697,27 +698,29 @@ onUnmounted(() => {
 
 .taint-effect {
   font-weight: 700;
-  margin-left: 2px;
+  margin-left: 1px;
   text-transform: uppercase;
 }
 
 .more-labels-tag,
 .more-taints-tag {
-  font-size: 11px;
-  height: 22px;
-  line-height: 20px;
-  padding: 0 6px;
+  font-size: 10px;
+  height: 20px;
+  line-height: 18px;
+  padding: 0 5px;
   cursor: pointer;
   font-weight: 600;
-  border-radius: 4px;
+  border-radius: 3px;
   transition: all 0.2s ease;
-  margin: 1px;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: top;
 }
 
 .more-labels-tag:hover,
 .more-taints-tag:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .empty-nodes, .loading-nodes {
@@ -736,51 +739,50 @@ onUnmounted(() => {
   }
   
   .node-content {
-    gap: 10px;
-  }
-  
-  .node-header {
-    flex-direction: column;
-    align-items: flex-start;
     gap: 8px;
-  }
-  
-  .node-status-section {
-    align-self: flex-start;
   }
   
   .node-name {
     font-size: 14px;
+    margin-bottom: 4px;
+  }
+  
+  .node-meta-row {
+    gap: 6px;
   }
   
   .node-ip {
-    padding: 4px 8px;
-    font-size: 12px;
+    padding: 2px 5px;
+    font-size: 11px;
   }
   
-  .labels-content,
-  .taints-content {
-    gap: 3px;
+  .node-attributes {
+    gap: 6px;
+    padding-top: 6px;
+  }
+  
+  .attributes-content {
+    gap: 2px;
   }
   
   .label-tag,
   .taint-tag {
-    font-size: 10px;
-    height: 20px;
-    line-height: 18px;
-    padding: 0 5px;
+    font-size: 9px;
+    height: 18px;
+    line-height: 16px;
+    padding: 0 4px;
   }
   
   .more-labels-tag,
   .more-taints-tag {
-    font-size: 10px;
-    height: 20px;
-    line-height: 18px;
-    padding: 0 5px;
+    font-size: 9px;
+    height: 18px;
+    line-height: 16px;
+    padding: 0 4px;
   }
   
   .section-label {
-    font-size: 11px;
+    font-size: 10px;
   }
   
   .selector-header {
@@ -798,15 +800,17 @@ onUnmounted(() => {
   }
   
   .node-content {
-    gap: 8px;
+    gap: 6px;
   }
   
   .node-name {
     font-size: 13px;
+    margin-bottom: 4px;
   }
   
-  .node-status-section {
-    gap: 6px;
+  .node-meta-row {
+    gap: 4px;
+    flex-wrap: wrap;
   }
   
   .node-roles {
@@ -815,37 +819,45 @@ onUnmounted(() => {
   }
   
   .node-ip {
-    padding: 3px 6px;
-    font-size: 11px;
+    padding: 1px 4px;
+    font-size: 10px;
+  }
+  
+  .node-attributes {
+    gap: 4px;
+    padding-top: 4px;
+  }
+  
+  .attributes-content {
+    gap: 2px;
   }
   
   .label-tag,
   .taint-tag {
-    font-size: 9px;
-    height: 18px;
-    line-height: 16px;
-    padding: 0 4px;
+    font-size: 8px;
+    height: 16px;
+    line-height: 14px;
+    padding: 0 3px;
   }
   
   .more-labels-tag,
   .more-taints-tag {
-    font-size: 9px;
-    height: 18px;
-    line-height: 16px;
-    padding: 0 4px;
+    font-size: 8px;
+    height: 16px;
+    line-height: 14px;
+    padding: 0 3px;
   }
   
   .section-label {
+    font-size: 9px;
+  }
+  
+  .attributes-header .el-icon {
     font-size: 10px;
   }
   
-  .labels-header .el-icon,
-  .taints-header .el-icon {
-    font-size: 12px;
-  }
-  
   .node-selector {
-    font-size: 13px;
+    font-size: 12px;
   }
 }
 </style>
