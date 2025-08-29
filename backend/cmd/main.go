@@ -149,8 +149,8 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 
 	audit := protected.Group("/audit")
 	{
-		audit.GET("", handlers.Audit.List)
-		audit.GET("/:id", handlers.Audit.GetByID)
+		audit.GET("/logs", handlers.Audit.List)
+		audit.GET("/logs/:id", handlers.Audit.GetByID)
 	}
 }
 
