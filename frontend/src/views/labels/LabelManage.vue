@@ -127,7 +127,13 @@
               size="small"
               class="label-item-tag"
             >
-              {{ key }}{{ value ? `=${value}` : '' }}
+              <span class="label-key">{{ key }}</span>
+              <span v-if="Array.isArray(value) && value.length > 1" class="label-values">
+                =[{{ value.filter(v => v !== '').join('|') || '空' }}]
+              </span>
+              <span v-else-if="Array.isArray(value) ? value[0] : value" class="label-value">
+                ={{ Array.isArray(value) ? value[0] : value }}
+              </span>
             </el-tag>
           </div>
         </div>
@@ -224,11 +230,40 @@
               </el-col>
               <el-col :xs="24" :sm="11">
                 <el-form-item style="margin-bottom: 12px;">
-                  <el-input
-                    v-model="label.value"
-                    placeholder="标签值，如：web、v1.0、production（可为空）"
-                    size="large"
-                  />
+                  <div class="value-input-group">
+                    <el-tag
+                      v-for="(value, valueIndex) in label.values"
+                      :key="`label-value-${valueIndex}`"
+                      closable
+                      size="small"
+                      class="value-tag"
+                      @close="removeLabelValue(index, valueIndex)"
+                      :disable-transitions="false"
+                    >
+                      {{ value || '(空值)' }}
+                    </el-tag>
+                    <el-input
+                      v-if="label.inputVisible"
+                      ref="labelValueInputRef"
+                      v-model="label.inputValue"
+                      size="small"
+                      class="value-input"
+                      @keyup.enter="confirmLabelValue(index)"
+                      @blur="confirmLabelValue(index)"
+                      placeholder="输入值"
+                    />
+                    <el-button 
+                      v-else 
+                      size="small" 
+                      @click="showLabelValueInput(index)"
+                      class="add-value-btn"
+                    >
+                      + 添加值
+                    </el-button>
+                  </div>
+                  <div class="value-help-text">
+                    可添加多个值，应用时可选择使用哪个值
+                  </div>
                 </el-form-item>
               </el-col>
               <el-col :xs="24" :sm="2" class="delete-col">
@@ -318,15 +353,46 @@
     >
       <div class="template-info">
         <h4>模板包含的标签:</h4>
-        <div class="template-labels">
-          <el-tag
-            v-for="(value, key) in selectedTemplate?.labels || {}"
-            :key="key"
-            class="label-tag"
-            type="primary"
+        <div class="template-labels-config">
+          <div 
+            v-for="(value, key, index) in selectedTemplate?.labels || {}" 
+            :key="`${key}-${index}`"
+            class="apply-label-item"
           >
-            {{ key }}{{ value ? `=${value}` : '' }}
-          </el-tag>
+            <div class="label-info">
+              <el-tag
+                class="label-tag"
+                type="primary"
+                size="small"
+              >
+                {{ key }}
+              </el-tag>
+            </div>
+            
+            <div v-if="Array.isArray(value) && value.length > 1" class="value-selector">
+              <el-form-item :label="`选择 ${key} 的值:`" style="margin-bottom: 12px;">
+                <el-select 
+                  v-model="selectedTemplate.selectedValues[key]" 
+                  placeholder="选择要应用的值"
+                  style="width: 200px;"
+                  size="small"
+                >
+                  <el-option 
+                    v-for="(val, valueIndex) in value"
+                    :key="valueIndex"
+                    :label="val || '(空值)'"
+                    :value="val"
+                  />
+                </el-select>
+              </el-form-item>
+            </div>
+            
+            <div v-else class="single-value">
+              <span class="value-text">
+                值: {{ Array.isArray(value) ? value[0] : value || '(空值)' }}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -376,7 +442,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive, nextTick } from 'vue'
 import labelApi from '@/api/label'
 import nodeApi from '@/api/node'
 import { useClusterStore } from '@/store/modules/cluster'
@@ -421,7 +487,7 @@ const pagination = reactive({
 const labelForm = reactive({
   name: '',
   description: '',
-  labels: [{ key: '', value: '' }]
+  labels: [{ key: '', values: [''], selectedValue: '', inputVisible: false, inputValue: '' }]
 })
 
 // 搜索筛选
@@ -569,19 +635,73 @@ const resetLabelForm = () => {
   Object.assign(labelForm, {
     name: '',
     description: '',
-    labels: [{ key: '', value: '' }]
+    labels: [{ 
+      key: '', 
+      values: [''], 
+      selectedValue: '',
+      inputVisible: false,
+      inputValue: ''
+    }]
   })
 }
 
 // 添加标签
 const addLabel = () => {
-  labelForm.labels.push({ key: '', value: '' })
+  labelForm.labels.push({ 
+    key: '', 
+    values: [''], 
+    selectedValue: '',
+    inputVisible: false,
+    inputValue: ''
+  })
 }
 
 // 移除标签
 const removeLabel = (index) => {
   if (labelForm.labels.length > 1) {
     labelForm.labels.splice(index, 1)
+  }
+}
+
+// 显示标签值输入框
+const showLabelValueInput = (labelIndex) => {
+  labelForm.labels[labelIndex].inputVisible = true
+  labelForm.labels[labelIndex].inputValue = ''
+  nextTick(() => {
+    // 聚焦到输入框
+    const inputRefs = document.querySelectorAll('.value-input input')
+    if (inputRefs[labelIndex]) {
+      inputRefs[labelIndex].focus()
+    }
+  })
+}
+
+// 确认添加标签值
+const confirmLabelValue = (labelIndex) => {
+  const label = labelForm.labels[labelIndex]
+  const inputValue = label.inputValue?.trim()
+  
+  if (inputValue && !label.values.includes(inputValue)) {
+    // 如果第一个值是空的，替换它
+    if (label.values.length === 1 && label.values[0] === '') {
+      label.values[0] = inputValue
+    } else {
+      label.values.push(inputValue)
+    }
+  }
+  
+  label.inputVisible = false
+  label.inputValue = ''
+}
+
+// 移除标签值
+const removeLabelValue = (labelIndex, valueIndex) => {
+  const label = labelForm.labels[labelIndex]
+  if (label.values.length > 1) {
+    label.values.splice(valueIndex, 1)
+  } else {
+    // 保留至少一个空值
+    label.values = ['']
   }
 }
 
@@ -607,13 +727,37 @@ const handleLabelAction = (command, template) => {
 const editTemplate = (template) => {
   isEditing.value = true
   
-  // 转换标签对象为数组
-  const labelsArray = Object.entries(template.labels || {}).map(([key, value]) => ({ key, value }))
+  // 转换标签对象为数组，支持多值
+  const labelsArray = Object.entries(template.labels || {}).map(([key, value]) => {
+    // 处理可能的多值格式
+    let values = []
+    if (Array.isArray(value)) {
+      values = value
+    } else if (typeof value === 'string') {
+      values = [value]
+    } else {
+      values = ['']
+    }
+    
+    return { 
+      key, 
+      values,
+      selectedValue: '',
+      inputVisible: false,
+      inputValue: ''
+    }
+  })
   
   Object.assign(labelForm, {
     name: template.name,
     description: template.description || '',
-    labels: labelsArray.length > 0 ? labelsArray : [{ key: '', value: '' }]
+    labels: labelsArray.length > 0 ? labelsArray : [{ 
+      key: '', 
+      values: [''], 
+      selectedValue: '',
+      inputVisible: false,
+      inputValue: ''
+    }]
   })
   
   // 保存当前编辑的模板ID
@@ -672,10 +816,18 @@ const handleSaveLabel = async () => {
       return
     }
     
-    // 转换标签数组为对象
+    // 转换标签数组为对象，支持多值
     const labelsObj = {}
     validLabels.forEach(label => {
-      labelsObj[label.key.trim()] = label.value.trim()
+      const key = label.key.trim()
+      const cleanValues = label.values.filter(v => v !== undefined && v !== null).map(v => v.toString().trim())
+      
+      // 如果有多个值，保存为数组；否则保存为字符串以保持向后兼容
+      if (cleanValues.length > 1) {
+        labelsObj[key] = cleanValues
+      } else {
+        labelsObj[key] = cleanValues[0] || ''
+      }
     })
     
     const templateData = {
@@ -728,7 +880,21 @@ const applyTemplateToNodes = (template) => {
 
 // 显示应用对话框
 const showApplyDialog = (template) => {
-  selectedTemplate.value = template
+  // 深拷贝模板以避免修改原始数据
+  const templateCopy = JSON.parse(JSON.stringify(template))
+  
+  // 初始化选中的值
+  templateCopy.selectedValues = {}
+  if (templateCopy.labels) {
+    Object.entries(templateCopy.labels).forEach(([key, value]) => {
+      if (Array.isArray(value) && value.length > 1) {
+        // 默认选择第一个非空值
+        templateCopy.selectedValues[key] = value.find(v => v && v.trim()) || value[0] || ''
+      }
+    })
+  }
+  
+  selectedTemplate.value = templateCopy
   applyDialogVisible.value = true
   fetchNodes() // 获取节点列表
 }
@@ -751,11 +917,26 @@ const handleApplyTemplate = async () => {
     
     applying.value = true
     
+    // 构造应用数据，使用选中的值
+    const labelsToApply = {}
+    if (selectedTemplate.value.labels) {
+      Object.entries(selectedTemplate.value.labels).forEach(([key, value]) => {
+        if (Array.isArray(value) && value.length > 1) {
+          // 使用选中的值
+          labelsToApply[key] = selectedTemplate.value.selectedValues[key] || value[0]
+        } else {
+          // 使用默认值
+          labelsToApply[key] = Array.isArray(value) ? value[0] : value
+        }
+      })
+    }
+    
     const applyData = {
       cluster_name: clusterName,
       node_names: selectedNodes.value,
       template_id: selectedTemplate.value.id,
-      operation: 'add'
+      operation: 'add',
+      labels: labelsToApply // 包含选定的标签值
     }
     
     await labelApi.applyTemplate(applyData)
@@ -1204,5 +1385,103 @@ onMounted(() => {
   .label-row .el-col {
     margin-bottom: 8px;
   }
+}
+
+/* 多值输入组件样式 */
+.value-input-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-height: 32px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 4px 8px;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.value-input-group:hover {
+  border-color: #c0c4cc;
+}
+
+.value-tag {
+  margin: 2px;
+  font-size: 12px;
+  height: 24px;
+  line-height: 22px;
+}
+
+.value-input {
+  flex: 1;
+  min-width: 80px;
+  margin: 2px;
+}
+
+.add-value-btn {
+  height: 24px;
+  line-height: 22px;
+  font-size: 12px;
+  padding: 0 8px;
+  margin: 2px;
+  border-style: dashed;
+}
+
+.value-help-text {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* 应用模板对话框样式 */
+.template-labels-config {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.apply-label-item {
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fafafa;
+}
+
+.label-info {
+  margin-bottom: 8px;
+}
+
+.value-selector {
+  margin-top: 8px;
+}
+
+.value-selector .el-form-item__label {
+  font-size: 13px;
+  color: #606266;
+}
+
+.single-value {
+  margin-top: 8px;
+}
+
+.value-text {
+  font-size: 13px;
+  color: #909399;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+/* 标签标签内部样式 */
+.label-key {
+  font-weight: 600;
+}
+
+.label-values {
+  color: #E6A23C;
+  font-weight: 500;
+}
+
+.label-value {
+  color: #409EFF;
 }
 </style>

@@ -116,7 +116,14 @@
               class="taint-item-tag"
               :type="getTaintEffectType(taint.effect)"
             >
-              {{ taint.key }}{{ taint.value ? `=${taint.value}` : '' }}:{{ taint.effect }}
+              <span class="taint-key">{{ taint.key }}</span>
+              <span v-if="taint.values && taint.values.length > 1" class="taint-values">
+                =[{{ taint.values.filter(v => v !== '').join('|') || '空' }}]
+              </span>
+              <span v-else-if="taint.value || (taint.values && taint.values[0])" class="taint-value">
+                ={{ taint.value || taint.values[0] }}
+              </span>
+              <span class="taint-effect">:{{ taint.effect }}</span>
             </el-tag>
           </div>
         </div>
@@ -184,56 +191,110 @@
             :key="index"
             class="taint-config-item"
           >
-            <el-row :gutter="12" align="middle" class="taint-row">
-              <el-col :xs="24" :sm="8">
+            <el-row :gutter="16" align="middle" class="taint-row">
+              <el-col :xs="24" :sm="24" :md="9" class="taint-key-col">
                 <el-form-item 
                   :prop="`taints.${index}.key`" 
                   :rules="[{ required: true, message: '请输入污点键', trigger: 'blur' }]"
-                  style="margin-bottom: 12px;"
+                  label="污点键"
+                  style="margin-bottom: 16px;"
                 >
                   <el-input
                     v-model="taint.key"
                     placeholder="污点键，如：node-role、dedicated"
                     size="large"
+                    clearable
                   />
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :sm="7">
-                <el-form-item style="margin-bottom: 12px;">
-                  <el-input
-                    v-model="taint.value"
-                    placeholder="污点值，如：master、gpu（可为空）"
-                    size="large"
-                  />
+              <el-col :xs="24" :sm="24" :md="8" class="taint-value-col">
+                <el-form-item 
+                  label="污点值" 
+                  style="margin-bottom: 16px;"
+                >
+                  <div class="value-input-group">
+                    <el-tag
+                      v-for="(value, valueIndex) in taint.values"
+                      :key="`value-${valueIndex}`"
+                      closable
+                      size="small"
+                      class="value-tag"
+                      @close="removeValue(index, valueIndex)"
+                      :disable-transitions="false"
+                    >
+                      {{ value || '(空值)' }}
+                    </el-tag>
+                    <el-input
+                      v-if="taint.inputVisible"
+                      ref="valueInputRef"
+                      v-model="taint.inputValue"
+                      size="small"
+                      class="value-input"
+                      @keyup.enter="confirmValue(index)"
+                      @blur="confirmValue(index)"
+                      placeholder="输入值"
+                    />
+                    <el-button 
+                      v-else 
+                      size="small" 
+                      @click="showValueInput(index)"
+                      class="add-value-btn"
+                    >
+                      + 添加值
+                    </el-button>
+                  </div>
+                  <div class="value-help-text">
+                    可添加多个值，应用时可选择使用哪个值
+                  </div>
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :sm="7">
+              <el-col :xs="24" :sm="20" :md="5" class="taint-effect-col">
                 <el-form-item 
                   :prop="`taints.${index}.effect`" 
                   :rules="[{ required: true, message: '请选择效果', trigger: 'change' }]"
-                  style="margin-bottom: 12px;"
+                  label="效果"
+                  style="margin-bottom: 16px;"
                 >
                   <el-select 
                     v-model="taint.effect" 
-                    placeholder="选择污点效果" 
+                    placeholder="选择效果" 
                     style="width: 100%"
                     size="large"
+                    clearable
                   >
-                    <el-option label="NoSchedule - 禁止调度" value="NoSchedule" />
-                    <el-option label="PreferNoSchedule - 尽量不调度" value="PreferNoSchedule" />
-                    <el-option label="NoExecute - 禁止执行" value="NoExecute" />
+                    <el-option label="NoSchedule" value="NoSchedule">
+                      <div class="effect-option">
+                        <span class="effect-name">NoSchedule</span>
+                        <span class="effect-desc">禁止调度</span>
+                      </div>
+                    </el-option>
+                    <el-option label="PreferNoSchedule" value="PreferNoSchedule">
+                      <div class="effect-option">
+                        <span class="effect-name">PreferNoSchedule</span>
+                        <span class="effect-desc">尽量不调度</span>
+                      </div>
+                    </el-option>
+                    <el-option label="NoExecute" value="NoExecute">
+                      <div class="effect-option">
+                        <span class="effect-name">NoExecute</span>
+                        <span class="effect-desc">禁止执行</span>
+                      </div>
+                    </el-option>
                   </el-select>
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :sm="2" class="delete-col">
-                <el-button
-                  type="danger"
-                  size="large"
-                  :icon="Delete"
-                  circle
-                  @click="removeTaint(index)"
-                  :disabled="taintForm.taints.length === 1"
-                />
+              <el-col :xs="24" :sm="4" :md="2" class="delete-col">
+                <el-form-item style="margin-bottom: 16px;" label=" ">
+                  <el-button
+                    type="danger"
+                    size="large"
+                    :icon="Delete"
+                    circle
+                    @click="removeTaint(index)"
+                    :disabled="taintForm.taints.length === 1"
+                    :title="taintForm.taints.length === 1 ? '至少需要保留一个污点' : '删除此污点'"
+                  />
+                </el-form-item>
               </el-col>
             </el-row>
           </div>
@@ -285,15 +346,46 @@
     >
       <div class="template-info">
         <h4>模板包含的污点:</h4>
-        <div class="template-taints">
-          <el-tag
-            v-for="taint in selectedTemplate?.taints || []"
-            :key="`${taint.key}-${taint.effect}`"
-            class="taint-tag"
-            :type="getTaintEffectType(taint.effect)"
+        <div class="template-taints-config">
+          <div 
+            v-for="(taint, index) in selectedTemplate?.taints || []" 
+            :key="`${taint.key}-${taint.effect}-${index}`"
+            class="apply-taint-item"
           >
-            {{ taint.key }}{{ taint.value ? `=${taint.value}` : '' }}:{{ taint.effect }}
-          </el-tag>
+            <div class="taint-info">
+              <el-tag
+                class="taint-tag"
+                :type="getTaintEffectType(taint.effect)"
+                size="small"
+              >
+                {{ taint.key }}:{{ taint.effect }}
+              </el-tag>
+            </div>
+            
+            <div v-if="taint.values && taint.values.length > 1" class="value-selector">
+              <el-form-item :label="`选择 ${taint.key} 的值:`" style="margin-bottom: 12px;">
+                <el-select 
+                  v-model="taint.selectedValue" 
+                  placeholder="选择要应用的值"
+                  style="width: 200px;"
+                  size="small"
+                >
+                  <el-option 
+                    v-for="(value, valueIndex) in taint.values"
+                    :key="valueIndex"
+                    :label="value || '(空值)'"
+                    :value="value"
+                  />
+                </el-select>
+              </el-form-item>
+            </div>
+            
+            <div v-else class="single-value">
+              <span class="value-text">
+                值: {{ taint.value || taint.values?.[0] || '(空值)' }}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -343,7 +435,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive, nextTick } from 'vue'
 import taintApi from '@/api/taint'
 import nodeApi from '@/api/node'
 import { useClusterStore } from '@/store/modules/cluster'
@@ -376,7 +468,7 @@ const selectedNodes = ref([])
 const taintForm = reactive({
   name: '',
   description: '',
-  taints: [{ key: '', value: '', effect: '' }]
+  taints: [{ key: '', values: [''], effect: '', selectedValue: '' }]
 })
 
 // 表单验证规则
@@ -480,19 +572,75 @@ const resetTaintForm = () => {
   Object.assign(taintForm, {
     name: '',
     description: '',
-    taints: [{ key: '', value: '', effect: '' }]
+    taints: [{ 
+      key: '', 
+      values: [''], 
+      effect: '', 
+      selectedValue: '',
+      inputVisible: false,
+      inputValue: ''
+    }]
   })
 }
 
 // 添加污点
 const addTaint = () => {
-  taintForm.taints.push({ key: '', value: '', effect: '' })
+  taintForm.taints.push({ 
+    key: '', 
+    values: [''], 
+    effect: '', 
+    selectedValue: '',
+    inputVisible: false,
+    inputValue: ''
+  })
 }
 
 // 移除污点
 const removeTaint = (index) => {
   if (taintForm.taints.length > 1) {
     taintForm.taints.splice(index, 1)
+  }
+}
+
+// 显示值输入框
+const showValueInput = (taintIndex) => {
+  taintForm.taints[taintIndex].inputVisible = true
+  taintForm.taints[taintIndex].inputValue = ''
+  nextTick(() => {
+    // 聚焦到输入框
+    const inputRefs = document.querySelectorAll('.value-input input')
+    if (inputRefs[taintIndex]) {
+      inputRefs[taintIndex].focus()
+    }
+  })
+}
+
+// 确认添加值
+const confirmValue = (taintIndex) => {
+  const taint = taintForm.taints[taintIndex]
+  const inputValue = taint.inputValue?.trim()
+  
+  if (inputValue && !taint.values.includes(inputValue)) {
+    // 如果第一个值是空的，替换它
+    if (taint.values.length === 1 && taint.values[0] === '') {
+      taint.values[0] = inputValue
+    } else {
+      taint.values.push(inputValue)
+    }
+  }
+  
+  taint.inputVisible = false
+  taint.inputValue = ''
+}
+
+// 移除值
+const removeValue = (taintIndex, valueIndex) => {
+  const taint = taintForm.taints[taintIndex]
+  if (taint.values.length > 1) {
+    taint.values.splice(valueIndex, 1)
+  } else {
+    // 保留至少一个空值
+    taint.values = ['']
   }
 }
 
@@ -518,10 +666,29 @@ const handleTaintAction = (command, template) => {
 const editTemplate = (template) => {
   isEditing.value = true
   
+  // 转换现有污点数据格式以支持多值
+  const convertedTaints = template.taints && template.taints.length > 0 
+    ? template.taints.map(taint => ({
+        key: taint.key,
+        values: taint.values || [taint.value || ''],
+        effect: taint.effect,
+        selectedValue: '',
+        inputVisible: false,
+        inputValue: ''
+      }))
+    : [{ 
+        key: '', 
+        values: [''], 
+        effect: '', 
+        selectedValue: '',
+        inputVisible: false,
+        inputValue: ''
+      }]
+  
   Object.assign(taintForm, {
     name: template.name,
     description: template.description || '',
-    taints: template.taints && template.taints.length > 0 ? [...template.taints] : [{ key: '', value: '', effect: '' }]
+    taints: convertedTaints
   })
   
   // 保存当前编辑的模板ID
@@ -585,8 +752,10 @@ const handleSaveTaint = async () => {
       description: taintForm.description,
       taints: validTaints.map(taint => ({
         key: taint.key.trim(),
-        value: taint.value.trim(),
-        effect: taint.effect
+        values: taint.values.filter(v => v !== undefined && v !== null).map(v => v.toString().trim()),
+        effect: taint.effect,
+        // 保持向后兼容，设置第一个非空值作为默认value
+        value: taint.values.find(v => v && v.trim()) || ''
       }))
     }
     
@@ -612,7 +781,20 @@ const handleSaveTaint = async () => {
 
 // 应用模板到节点
 const applyTemplateToNodes = (template) => {
-  selectedTemplate.value = template
+  // 深拷贝模板以避免修改原始数据
+  const templateCopy = JSON.parse(JSON.stringify(template))
+  
+  // 初始化选中的值
+  if (templateCopy.taints) {
+    templateCopy.taints.forEach(taint => {
+      if (taint.values && taint.values.length > 1) {
+        // 默认选择第一个非空值
+        taint.selectedValue = taint.values.find(v => v && v.trim()) || taint.values[0] || ''
+      }
+    })
+  }
+  
+  selectedTemplate.value = templateCopy
   applyDialogVisible.value = true
   fetchNodes() // 获取节点列表
 }
@@ -635,11 +817,25 @@ const handleApplyTemplate = async () => {
     
     applying.value = true
     
+    // 构造应用数据，使用选中的值
+    const taintsToApply = selectedTemplate.value.taints.map(taint => {
+      const valueToUse = taint.values && taint.values.length > 1 
+        ? taint.selectedValue 
+        : taint.value || (taint.values && taint.values[0]) || ''
+      
+      return {
+        key: taint.key,
+        value: valueToUse,
+        effect: taint.effect
+      }
+    })
+    
     const applyData = {
       cluster_name: clusterName,
       node_names: selectedNodes.value,
       template_id: selectedTemplate.value.id,
-      operation: 'add'
+      operation: 'add',
+      taints: taintsToApply // 包含选定的污点值
     }
     
     await taintApi.applyTemplate(applyData)
@@ -1018,6 +1214,49 @@ onMounted(() => {
   margin-bottom: 0;
 }
 
+/* 污点效果选项样式 */
+.effect-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.effect-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.effect-desc {
+  font-size: 12px;
+  color: #666;
+  font-weight: normal;
+}
+
+/* 改进的列样式 */
+.taint-key-col .el-form-item__label,
+.taint-value-col .el-form-item__label,
+.taint-effect-col .el-form-item__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+.taint-config-item {
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+  border: 1px solid #e8e8e8;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.taint-config-item:hover {
+  border-color: #1890ff;
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.1);
+}
+
 /* 响应式优化 */
 @media (max-width: 768px) {
   .template-dialog {
@@ -1025,33 +1264,141 @@ onMounted(() => {
     --el-dialog-margin-top: 5vh !important;
   }
   
-  .delete-col {
-    justify-content: flex-start;
-    padding-top: 0;
-    margin-top: 8px;
+  .taint-config-item {
+    padding: 16px;
   }
   
-  .taint-row .el-col {
-    margin-bottom: 8px;
+  .delete-col {
+    text-align: center;
   }
+  
+  .delete-col .el-form-item__label {
+    display: none;
+  }
+}
 
-  /* 在中等屏幕下调整布局 */
-  .taint-row .el-col:nth-child(1) {
-    flex: 0 0 100%;
-    max-width: 100%;
+@media (min-width: 769px) and (max-width: 1024px) {
+  .taint-key-col {
+    flex: 0 0 40%;
+    max-width: 40%;
   }
-  .taint-row .el-col:nth-child(2) {
-    flex: 0 0 48%;
-    max-width: 48%;
+  
+  .taint-value-col {
+    flex: 0 0 30%;
+    max-width: 30%;
   }
-  .taint-row .el-col:nth-child(3) {
-    flex: 0 0 48%;
-    max-width: 48%;
+  
+  .taint-effect-col {
+    flex: 0 0 22%;
+    max-width: 22%;
   }
-  .taint-row .el-col:nth-child(4) {
-    flex: 0 0 100%;
-    max-width: 100%;
+  
+  .delete-col {
+    flex: 0 0 8%;
+    max-width: 8%;
   }
+}
+
+/* 多值输入组件样式 */
+.value-input-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-height: 32px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 4px 8px;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.value-input-group:hover {
+  border-color: #c0c4cc;
+}
+
+.value-tag {
+  margin: 2px;
+  font-size: 12px;
+  height: 24px;
+  line-height: 22px;
+}
+
+.value-input {
+  flex: 1;
+  min-width: 80px;
+  margin: 2px;
+}
+
+.add-value-btn {
+  height: 24px;
+  line-height: 22px;
+  font-size: 12px;
+  padding: 0 8px;
+  margin: 2px;
+  border-style: dashed;
+}
+
+.value-help-text {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* 应用模板对话框样式 */
+.template-taints-config {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.apply-taint-item {
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fafafa;
+}
+
+.taint-info {
+  margin-bottom: 8px;
+}
+
+.value-selector {
+  margin-top: 8px;
+}
+
+.value-selector .el-form-item__label {
+  font-size: 13px;
+  color: #606266;
+}
+
+.single-value {
+  margin-top: 8px;
+}
+
+.value-text {
+  font-size: 13px;
+  color: #909399;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+/* 污点标签内部样式 */
+.taint-key {
+  font-weight: 600;
+}
+
+.taint-values {
+  color: #E6A23C;
+  font-weight: 500;
+}
+
+.taint-value {
+  color: #409EFF;
+}
+
+.taint-effect {
+  font-weight: 500;
 }
 
 @media (max-width: 576px) {
