@@ -10,6 +10,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// BatchLabelRequest 批量标签请求
+type BatchLabelRequest struct {
+	Nodes   []string                 `json:"nodes" binding:"required"`
+	Labels  []map[string]interface{} `json:"labels" binding:"required"`
+	Cluster string                   `json:"cluster"`
+}
+
 // Handler 标签管理处理器
 type Handler struct {
 	labelSvc *label.Service
@@ -301,7 +308,7 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 // @Router /labels/templates [get]
 func (h *Handler) ListTemplates(c *gin.Context) {
 	var req label.TemplateListRequest
-	
+
 	// 解析查询参数
 	if pageStr := c.Query("page"); pageStr != "" {
 		if page, err := strconv.Atoi(pageStr); err == nil {
@@ -468,7 +475,7 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 		Page:     1,
 		PageSize: 100,
 	}
-	
+
 	result, err := h.labelSvc.ListTemplates(listReq, userID.(uint))
 	if err != nil {
 		h.logger.Error("Failed to get label template: %v", err)

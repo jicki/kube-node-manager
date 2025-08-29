@@ -115,6 +115,12 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		nodes.GET("", handlers.Node.List)
 		nodes.GET("/:cluster_id/:node_name", handlers.Node.Get)
 		nodes.GET("/:cluster_id/stats", handlers.Node.GetSummary)
+		// 批量标签操作
+		nodes.POST("/labels/batch-add", handlers.Label.BatchAddLabels)
+		nodes.POST("/labels/batch-delete", handlers.Label.BatchDeleteLabels)
+		// 批量污点操作
+		nodes.POST("/taints/batch-add", handlers.Taint.BatchAddTaints)
+		nodes.POST("/taints/batch-delete", handlers.Taint.BatchDeleteTaints)
 	}
 
 	labels := protected.Group("/labels")
