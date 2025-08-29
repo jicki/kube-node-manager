@@ -129,7 +129,7 @@ func (s *Service) UpdateNodeTaints(req UpdateTaintsRequest, userID uint) error {
 	// 获取当前节点信息
 	currentNode, err := s.k8sSvc.GetNode(req.ClusterName, req.NodeName)
 	if err != nil {
-		s.logger.Error("Failed to get node %s: %v", req.NodeName, err)
+		s.logger.Errorf("Failed to get node %s: %v", req.NodeName, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			NodeName:     req.NodeName,
@@ -199,7 +199,7 @@ func (s *Service) UpdateNodeTaints(req UpdateTaintsRequest, userID uint) error {
 	}
 
 	if err := s.k8sSvc.UpdateNodeTaints(req.ClusterName, updateReq); err != nil {
-		s.logger.Error("Failed to update node taints: %v", err)
+		s.logger.Errorf("Failed to update node taints: %v", err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			NodeName:     req.NodeName,
@@ -212,7 +212,7 @@ func (s *Service) UpdateNodeTaints(req UpdateTaintsRequest, userID uint) error {
 		return fmt.Errorf("failed to update node taints: %w", err)
 	}
 
-	s.logger.Info("Successfully updated taints for node %s", req.NodeName)
+	s.logger.Infof("Successfully updated taints for node %s", req.NodeName)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		NodeName:     req.NodeName,
@@ -240,7 +240,7 @@ func (s *Service) BatchUpdateTaints(req BatchUpdateRequest, userID uint) error {
 		if err := s.UpdateNodeTaints(updateReq, userID); err != nil {
 			errorMsg := fmt.Sprintf("Node %s: %v", nodeName, err)
 			errors = append(errors, errorMsg)
-			s.logger.Error("Failed to update taints for node %s: %v", nodeName, err)
+			s.logger.Errorf("Failed to update taints for node %s: %v", nodeName, err)
 		}
 	}
 
@@ -297,7 +297,7 @@ func (s *Service) CreateTemplate(req TemplateCreateRequest, userID uint) (*Templ
 	}
 
 	if err := s.db.Create(&template).Error; err != nil {
-		s.logger.Error("Failed to create taint template %s: %v", req.Name, err)
+		s.logger.Errorf("Failed to create taint template %s: %v", req.Name, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			Action:       model.ActionCreate,
@@ -315,7 +315,7 @@ func (s *Service) CreateTemplate(req TemplateCreateRequest, userID uint) (*Templ
 		return nil, err
 	}
 
-	s.logger.Info("Successfully created taint template: %s", template.Name)
+	s.logger.Infof("Successfully created taint template: %s", template.Name)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		Action:       model.ActionCreate,
@@ -368,7 +368,7 @@ func (s *Service) UpdateTemplate(id uint, req TemplateUpdateRequest, userID uint
 
 	if len(updates) > 0 {
 		if err := s.db.Model(&template).Updates(updates).Error; err != nil {
-			s.logger.Error("Failed to update taint template %s: %v", template.Name, err)
+			s.logger.Errorf("Failed to update taint template %s: %v", template.Name, err)
 			s.auditSvc.Log(audit.LogRequest{
 				UserID:       userID,
 				Action:       model.ActionUpdate,
@@ -391,7 +391,7 @@ func (s *Service) UpdateTemplate(id uint, req TemplateUpdateRequest, userID uint
 		return nil, err
 	}
 
-	s.logger.Info("Successfully updated taint template: %s", template.Name)
+	s.logger.Infof("Successfully updated taint template: %s", template.Name)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		Action:       model.ActionUpdate,
@@ -414,7 +414,7 @@ func (s *Service) DeleteTemplate(id uint, userID uint) error {
 	}
 
 	if err := s.db.Delete(&template).Error; err != nil {
-		s.logger.Error("Failed to delete taint template %s: %v", template.Name, err)
+		s.logger.Errorf("Failed to delete taint template %s: %v", template.Name, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			Action:       model.ActionDelete,
@@ -426,7 +426,7 @@ func (s *Service) DeleteTemplate(id uint, userID uint) error {
 		return fmt.Errorf("failed to delete template: %w", err)
 	}
 
-	s.logger.Info("Successfully deleted taint template: %s", template.Name)
+	s.logger.Infof("Successfully deleted taint template: %s", template.Name)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		Action:       model.ActionDelete,
@@ -469,7 +469,7 @@ func (s *Service) ListTemplates(req TemplateListRequest, userID uint) (*Template
 	for _, template := range templates {
 		info, err := s.getTemplateInfo(&template)
 		if err != nil {
-			s.logger.Error("Failed to parse template %s: %v", template.Name, err)
+			s.logger.Errorf("Failed to parse template %s: %v", template.Name, err)
 			continue
 		}
 		templateInfos = append(templateInfos, *info)
@@ -612,6 +612,9 @@ func (s *Service) validateTaints(taints []k8s.TaintInfo) error {
 		TaintEffectNoExecute:        true,
 	}
 
+	// 用于检查相同key的污点值
+	keyValueMap := make(map[string][]string)
+
 	for i, taint := range taints {
 		if taint.Key == "" {
 			return fmt.Errorf("taint %d: key cannot be empty", i+1)
@@ -625,6 +628,27 @@ func (s *Service) validateTaints(taints []k8s.TaintInfo) error {
 		// 检查键名格式
 		if strings.Contains(taint.Key, " ") {
 			return fmt.Errorf("taint %d: key cannot contain spaces", i+1)
+		}
+
+		// 记录相同key的所有值
+		keyValueMap[taint.Key] = append(keyValueMap[taint.Key], taint.Value)
+	}
+
+	// 检查同一个key的污点值不能同时包含空值和非空值
+	for key, values := range keyValueMap {
+		hasEmpty := false
+		hasNonEmpty := false
+		
+		for _, value := range values {
+			if value == "" {
+				hasEmpty = true
+			} else {
+				hasNonEmpty = true
+			}
+		}
+		
+		if hasEmpty && hasNonEmpty {
+			return fmt.Errorf("taint key '%s': cannot have both empty and non-empty values simultaneously", key)
 		}
 	}
 
@@ -641,7 +665,7 @@ func (s *Service) getTemplateInfo(template *model.TaintTemplate) (*TemplateInfo,
 	// 加载创建者信息
 	var creator model.User
 	if err := s.db.First(&creator, template.CreatedBy).Error; err != nil {
-		s.logger.Error("Failed to load creator for template %s: %v", template.Name, err)
+		s.logger.Errorf("Failed to load creator for template %s: %v", template.Name, err)
 		// 不返回错误，继续处理
 	}
 
