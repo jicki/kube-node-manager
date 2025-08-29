@@ -63,6 +63,7 @@
         :filters="searchFilters"
         :realtime="true"
         @search="handleSearch"
+        @clear="handleSearchClear"
       />
     </el-card>
 
@@ -360,7 +361,8 @@
     <el-dialog
       v-model="applyDialogVisible"
       :title="`应用模板: ${selectedTemplate?.name}`"
-      width="600px"
+      width="1200px"
+      class="apply-dialog"
     >
       <div class="template-info">
         <h4>模板包含的标签:</h4>
@@ -546,9 +548,11 @@ const labelStats = computed(() => {
 
 // 应用高级搜索筛选的最终结果
 const filteredAndSortedLabels = ref([])
+const isSearchActive = ref(false)
 
 // 计算应用筛选和排序后的结果
 const applyFiltersAndSort = (keyword, filters) => {
+  isSearchActive.value = !!(keyword || filters.type)
   let result = [...labels.value]
 
   // 文本搜索
@@ -608,8 +612,8 @@ const applyFiltersAndSort = (keyword, filters) => {
 }
 
 const filteredLabels = computed(() => {
-  const result = filteredAndSortedLabels.value.length > 0 ? 
-    filteredAndSortedLabels.value : labels.value
+  // 如果有搜索条件，使用筛选后的结果，否则使用原始数据
+  const result = isSearchActive.value ? filteredAndSortedLabels.value : labels.value
   
   return result.slice(
     (pagination.current - 1) * pagination.size,
@@ -630,17 +634,21 @@ const fetchLabels = async () => {
       labels.value = data.templates || []
       pagination.total = data.total || 0
       // 初始化筛选结果
-      filteredAndSortedLabels.value = labels.value
+      if (!isSearchActive.value) {
+        filteredAndSortedLabels.value = labels.value
+      }
     } else {
       labels.value = []
       pagination.total = 0
       filteredAndSortedLabels.value = []
+      isSearchActive.value = false
     }
   } catch (error) {
     console.warn('获取标签模板失败:', error)
     labels.value = []
     pagination.total = 0
     filteredAndSortedLabels.value = []
+    isSearchActive.value = false
   } finally {
     loading.value = false
   }
@@ -675,6 +683,11 @@ const refreshData = () => {
 
 const handleSearch = (params) => {
   applyFiltersAndSort(params.keyword, params.filters)
+}
+
+const handleSearchClear = () => {
+  isSearchActive.value = false
+  filteredAndSortedLabels.value = labels.value
 }
 
 const handleSizeChange = (size) => {
@@ -1720,5 +1733,21 @@ onMounted(() => {
   word-break: break-word;
   max-width: 100%;
   display: inline-block;
+}
+
+/* 对话框样式 */
+.apply-dialog {
+  max-width: 90vw;
+}
+
+.apply-dialog .el-dialog__body {
+  padding: 20px 24px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .apply-dialog {
+    width: 95vw !important;
+  }
 }
 </style>

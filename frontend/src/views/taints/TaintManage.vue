@@ -63,6 +63,7 @@
         :filters="searchFilters"
         :realtime="true"
         @search="handleSearch"
+        @clear="handleSearchClear"
       />
     </el-card>
 
@@ -372,7 +373,8 @@
     <el-dialog
       v-model="applyDialogVisible"
       :title="`应用模板: ${selectedTemplate?.name}`"
-      width="600px"
+      width="1200px"
+      class="apply-dialog"
     >
       <div class="template-info">
         <h4>模板包含的污点:</h4>
@@ -703,6 +705,11 @@ const refreshData = () => {
 // 搜索处理函数
 const handleSearch = (params) => {
   applyFiltersAndSort(params.keyword, params.filters)
+}
+
+const handleSearchClear = () => {
+  // 清空搜索时恢复原始数据
+  filteredAndSortedTaints.value = taints.value
 }
 
 // 显示添加对话框
@@ -1123,6 +1130,14 @@ onMounted(() => {
 .empty-search {
   text-align: center;
   padding: 40px 20px;
+}
+
+.apply-dialog {
+  max-width: 90vw;
+}
+
+.apply-dialog .el-dialog__body {
+  padding: 20px 24px;
 }
 
 .stat-card {
