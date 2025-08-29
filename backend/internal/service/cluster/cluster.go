@@ -72,6 +72,25 @@ func NewService(db *gorm.DB, logger *logger.Logger, auditSvc *audit.Service, k8s
 
 // Create 创建集群
 func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error) {
+	// 检查用户权限 - 只有管理员可以创建集群
+	var currentUser model.User
+	if err := s.db.First(&currentUser, userID).Error; err != nil {
+		s.logger.Error("Failed to get current user %d: %v", userID, err)
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	if currentUser.Role != model.RoleAdmin {
+		s.auditSvc.Log(audit.LogRequest{
+			UserID:       userID,
+			Action:       model.ActionCreate,
+			ResourceType: model.ResourceCluster,
+			Details:      fmt.Sprintf("Failed to create cluster %s: insufficient permissions", req.Name),
+			Status:       model.AuditStatusFailed,
+			ErrorMsg:     "only admin users can create clusters",
+		})
+		return nil, fmt.Errorf("insufficient permissions: only admin users can create clusters")
+	}
+
 	// 验证kubeconfig
 	if err := s.k8sSvc.TestConnection(req.KubeConfig); err != nil {
 		s.logger.Error("Invalid kubeconfig for cluster %s: %v", req.Name, err)
@@ -86,16 +105,16 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 		return nil, fmt.Errorf("invalid kubeconfig: %w", err)
 	}
 
-	// 检查集群名称在当前用户下是否已存在
+	// 检查集群名称是否全局已存在
 	var existingCluster model.Cluster
-	if err := s.db.Where("name = ? AND created_by = ?", req.Name, userID).First(&existingCluster).Error; err == nil {
+	if err := s.db.Where("name = ?", req.Name).First(&existingCluster).Error; err == nil {
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			Action:       model.ActionCreate,
 			ResourceType: model.ResourceCluster,
-			Details:      fmt.Sprintf("Failed to create cluster %s: name already exists for user", req.Name),
+			Details:      fmt.Sprintf("Failed to create cluster %s: name already exists", req.Name),
 			Status:       model.AuditStatusFailed,
-			ErrorMsg:     "cluster name already exists for this user",
+			ErrorMsg:     "cluster name already exists",
 		})
 		return nil, fmt.Errorf("cluster name already exists: %s", req.Name)
 	} else if err != gorm.ErrRecordNotFound {
@@ -201,16 +220,23 @@ func (s *Service) Update(id uint, req UpdateRequest, userID uint) (*model.Cluste
 	var cluster model.Cluster
 	query := s.db
 
-	// 检查用户权限
+	// 检查用户权限 - 只有管理员可以更新集群
 	var currentUser model.User
 	if err := s.db.First(&currentUser, userID).Error; err != nil {
 		s.logger.Error("Failed to get current user %d: %v", userID, err)
 		return nil, fmt.Errorf("failed to get current user: %w", err)
 	}
 
-	// 如果不是管理员，只能更新自己创建的集群
 	if currentUser.Role != model.RoleAdmin {
-		query = query.Where("created_by = ?", userID)
+		s.auditSvc.Log(audit.LogRequest{
+			UserID:       userID,
+			Action:       model.ActionUpdate,
+			ResourceType: model.ResourceCluster,
+			Details:      fmt.Sprintf("Failed to update cluster %d: insufficient permissions", id),
+			Status:       model.AuditStatusFailed,
+			ErrorMsg:     "only admin users can update clusters",
+		})
+		return nil, fmt.Errorf("insufficient permissions: only admin users can update clusters")
 	}
 
 	if err := query.First(&cluster, id).Error; err != nil {
@@ -225,9 +251,9 @@ func (s *Service) Update(id uint, req UpdateRequest, userID uint) (*model.Cluste
 
 	// 更新字段
 	if req.Name != "" && req.Name != cluster.Name {
-		// 检查新名称在当前用户下是否已存在
+		// 检查新名称是否全局已存在
 		var existingCluster model.Cluster
-		if err := s.db.Where("name = ? AND created_by = ? AND id != ?", req.Name, userID, id).First(&existingCluster).Error; err == nil {
+		if err := s.db.Where("name = ? AND id != ?", req.Name, id).First(&existingCluster).Error; err == nil {
 			return nil, fmt.Errorf("cluster name already exists: %s", req.Name)
 		} else if err != gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("failed to check cluster name: %w", err)
@@ -312,16 +338,23 @@ func (s *Service) Delete(id uint, userID uint) error {
 	var cluster model.Cluster
 	query := s.db
 
-	// 检查用户权限
+	// 检查用户权限 - 只有管理员可以删除集群
 	var currentUser model.User
 	if err := s.db.First(&currentUser, userID).Error; err != nil {
 		s.logger.Error("Failed to get current user %d: %v", userID, err)
 		return fmt.Errorf("failed to get current user: %w", err)
 	}
 
-	// 如果不是管理员，只能删除自己创建的集群
 	if currentUser.Role != model.RoleAdmin {
-		query = query.Where("created_by = ?", userID)
+		s.auditSvc.Log(audit.LogRequest{
+			UserID:       userID,
+			Action:       model.ActionDelete,
+			ResourceType: model.ResourceCluster,
+			Details:      fmt.Sprintf("Failed to delete cluster %d: insufficient permissions", id),
+			Status:       model.AuditStatusFailed,
+			ErrorMsg:     "only admin users can delete clusters",
+		})
+		return fmt.Errorf("insufficient permissions: only admin users can delete clusters")
 	}
 
 	if err := query.First(&cluster, id).Error; err != nil {
@@ -366,17 +399,7 @@ func (s *Service) Delete(id uint, userID uint) error {
 func (s *Service) List(req ListRequest, userID uint) (*ListResponse, error) {
 	query := s.db.Model(&model.Cluster{}).Preload("Creator")
 
-	// 检查用户权限 - 只有管理员可以看到所有集群，其他用户只能看到自己创建的
-	var currentUser model.User
-	if err := s.db.First(&currentUser, userID).Error; err != nil {
-		s.logger.Error("Failed to get current user %d: %v", userID, err)
-		return nil, fmt.Errorf("failed to get current user: %w", err)
-	}
-
-	// 如果不是管理员，只能看到自己创建的集群
-	if currentUser.Role != model.RoleAdmin {
-		query = query.Where("created_by = ?", userID)
-	}
+	// 所有用户都可以查看集群列表，但只有admin可以管理集群
 
 	// 应用过滤条件
 	if req.Name != "" {
@@ -430,9 +453,17 @@ func (s *Service) Sync(id uint, userID uint) error {
 		return fmt.Errorf("failed to get current user: %w", err)
 	}
 
-	// 如果不是管理员，只能同步自己创建的集群
+	// 只有管理员可以同步集群
 	if currentUser.Role != model.RoleAdmin {
-		query = query.Where("created_by = ?", userID)
+		s.auditSvc.Log(audit.LogRequest{
+			UserID:       userID,
+			Action:       model.ActionUpdate,
+			ResourceType: model.ResourceCluster,
+			Details:      fmt.Sprintf("Failed to sync cluster %d: insufficient permissions", id),
+			Status:       model.AuditStatusFailed,
+			ErrorMsg:     "only admin users can sync clusters",
+		})
+		return fmt.Errorf("insufficient permissions: only admin users can sync clusters")
 	}
 
 	if err := query.First(&cluster, id).Error; err != nil {

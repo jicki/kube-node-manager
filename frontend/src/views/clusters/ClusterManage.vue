@@ -7,7 +7,11 @@
         <p class="page-description">管理Kubernetes集群连接配置</p>
       </div>
       <div class="header-right">
-        <el-button type="primary" @click="showAddDialog">
+        <el-button 
+          v-if="isAdmin" 
+          type="primary" 
+          @click="showAddDialog"
+        >
           <el-icon><Plus /></el-icon>
           添加集群
         </el-button>
@@ -75,7 +79,11 @@
                 <p>您还没有配置任何Kubernetes集群</p>
                 <p>请添加集群配置以开始管理节点</p>
               </template>
-              <el-button type="primary" @click="showAddDialog">
+              <el-button 
+                v-if="isAdmin" 
+                type="primary" 
+                @click="showAddDialog"
+              >
                 <el-icon><Plus /></el-icon>
                 添加集群
               </el-button>
@@ -148,12 +156,18 @@
                 切换
               </el-button>
               
-              <el-button type="text" size="small" @click="showEditDialog(row)">
+              <el-button 
+                v-if="isAdmin" 
+                type="text" 
+                size="small" 
+                @click="showEditDialog(row)"
+              >
                 <el-icon><Edit /></el-icon>
                 编辑
               </el-button>
               
               <el-button 
+                v-if="isAdmin"
                 type="text" 
                 size="small" 
                 class="danger-button"
@@ -238,6 +252,7 @@
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useClusterStore } from '@/store/modules/cluster'
+import { useAuthStore } from '@/store/modules/auth'
 import { formatTime } from '@/utils/format'
 import {
   Plus,
@@ -252,6 +267,7 @@ import {
 } from '@element-plus/icons-vue'
 
 const clusterStore = useClusterStore()
+const authStore = useAuthStore()
 
 // 响应式数据
 const loading = ref(false)
@@ -283,6 +299,7 @@ const formRules = {
 const clusters = computed(() => clusterStore.clusters)
 const clusterStats = computed(() => clusterStore.clusterStats)
 const currentCluster = computed(() => clusterStore.currentCluster)
+const isAdmin = computed(() => authStore.user?.role === 'admin')
 
 // 获取集群数据
 const fetchClusters = async () => {

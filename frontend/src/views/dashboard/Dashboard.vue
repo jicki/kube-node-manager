@@ -128,10 +128,10 @@
               </div>
               <div class="cluster-status">
                 <el-tag
-                  :type="cluster.status === 'Active' ? 'success' : 'danger'"
+                  :type="cluster.status === 'active' ? 'success' : 'danger'"
                   size="small"
                 >
-                  {{ cluster.status === 'Active' ? '正常' : '异常' }}
+                  {{ cluster.status === 'active' ? '正常' : '异常' }}
                 </el-tag>
               </div>
             </div>
@@ -142,7 +142,11 @@
                   <p>您还没有配置任何Kubernetes集群</p>
                   <p>请先添加集群配置以开始管理节点</p>
                 </template>
-                <el-button type="primary" @click="$router.push('/clusters')">
+                <el-button 
+                  v-if="isAdmin" 
+                  type="primary" 
+                  @click="$router.push('/clusters')"
+                >
                   <el-icon><Plus /></el-icon>
                   添加集群
                 </el-button>
@@ -296,6 +300,7 @@ const nodeStats = computed(() => nodeStore.nodeStats)
 const clusterStats = computed(() => clusterStore.clusterStats)
 const clusters = computed(() => clusterStore.clusters)
 const currentCluster = computed(() => clusterStore.currentCluster)
+const isAdmin = computed(() => authStore.user?.role === 'admin')
 
 // 模拟最近操作数据
 const recentActions = ref([
@@ -385,11 +390,21 @@ onMounted(async () => {
   try {
     loading.value = true
     
-    // 并行加载数据
-    await Promise.all([
-      clusterStore.fetchClusters(),
-      nodeStore.fetchNodes()
-    ])
+    // 先加载保存的当前集群
+    clusterStore.loadCurrentCluster()
+    
+    // 获取集群列表
+    await clusterStore.fetchClusters()
+    
+    // 如果没有当前集群但有可用集群，自动设置第一个活跃集群为当前集群
+    if (!clusterStore.currentCluster && clusterStore.activeClusters.length > 0) {
+      clusterStore.setCurrentCluster(clusterStore.activeClusters[0])
+    }
+    
+    // 如果有当前集群，则获取节点数据
+    if (clusterStore.currentCluster) {
+      await nodeStore.fetchNodes()
+    }
   } catch (error) {
     console.error('Dashboard data loading error:', error)
   } finally {
