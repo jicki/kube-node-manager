@@ -86,16 +86,16 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 		return nil, fmt.Errorf("invalid kubeconfig: %w", err)
 	}
 
-	// 检查集群名称是否已存在
+	// 检查集群名称在当前用户下是否已存在
 	var existingCluster model.Cluster
-	if err := s.db.Where("name = ?", req.Name).First(&existingCluster).Error; err == nil {
+	if err := s.db.Where("name = ? AND created_by = ?", req.Name, userID).First(&existingCluster).Error; err == nil {
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			Action:       model.ActionCreate,
 			ResourceType: model.ResourceCluster,
-			Details:      fmt.Sprintf("Failed to create cluster %s: name already exists", req.Name),
+			Details:      fmt.Sprintf("Failed to create cluster %s: name already exists for user", req.Name),
 			Status:       model.AuditStatusFailed,
-			ErrorMsg:     "cluster name already exists",
+			ErrorMsg:     "cluster name already exists for this user",
 		})
 		return nil, fmt.Errorf("cluster name already exists: %s", req.Name)
 	} else if err != gorm.ErrRecordNotFound {
@@ -225,9 +225,9 @@ func (s *Service) Update(id uint, req UpdateRequest, userID uint) (*model.Cluste
 
 	// 更新字段
 	if req.Name != "" && req.Name != cluster.Name {
-		// 检查新名称是否已存在
+		// 检查新名称在当前用户下是否已存在
 		var existingCluster model.Cluster
-		if err := s.db.Where("name = ? AND id != ?", req.Name, id).First(&existingCluster).Error; err == nil {
+		if err := s.db.Where("name = ? AND created_by = ? AND id != ?", req.Name, userID, id).First(&existingCluster).Error; err == nil {
 			return nil, fmt.Errorf("cluster name already exists: %s", req.Name)
 		} else if err != gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("failed to check cluster name: %w", err)
