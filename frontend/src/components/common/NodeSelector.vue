@@ -81,80 +81,95 @@
               :value="node.name"
               :disabled="!node.name"
             >
-              <div class="node-content">
-                <div class="node-info">
-                  <div class="node-name">{{ node.name || '未知节点' }}</div>
-                  <div class="node-meta">
-                    <el-tag 
-                      :type="getStatusType(node.status)" 
-                      size="small"
-                    >
-                      {{ node.status || 'Unknown' }}
-                    </el-tag>
-                    <span v-if="node.roles?.length" class="node-roles">
-                      {{ node.roles.join(', ') }}
-                    </span>
-                  </div>
-                </div>
-                <div class="node-details">
-                  <div v-if="node.internal_ip" class="node-ip">
-                    IP: {{ node.internal_ip }}
-                  </div>
-                  <div v-if="node.labels && showLabels" class="node-labels">
-                    <div class="labels-content">
-                      <el-tag
-                        v-for="(value, key) in getDisplayLabels(node.labels)"
-                        :key="`${node.name}-${key}`"
-                        size="small"
-                        type="info"
-                        class="label-tag"
-                        :title="`${key}=${value}`"
-                      >
-                        <span class="label-key">{{ truncateText(key, 8) }}</span>
-                        <span v-if="value" class="label-separator">=</span>
-                        <span v-if="value" class="label-value">{{ truncateText(value, 8) }}</span>
-                      </el-tag>
-                      <el-tag
-                        v-if="getTotalLabelsCount(node.labels) > maxLabelDisplay"
-                        size="small"
-                        type="warning"
-                        class="more-labels-tag"
-                        :title="`共${getTotalLabelsCount(node.labels)}个标签，点击查看更多`"
-                        @click="showAllLabels(node)"
-                      >
-                        +{{ getTotalLabelsCount(node.labels) - maxLabelDisplay }}
-                      </el-tag>
+                              <div class="node-content">
+                  <div class="node-main-info">
+                    <div class="node-header">
+                      <div class="node-name">{{ node.name || '未知节点' }}</div>
+                      <div class="node-status-section">
+                        <el-tag 
+                          :type="getStatusType(node.status)" 
+                          size="small"
+                          class="node-status-tag"
+                        >
+                          {{ node.status || 'Unknown' }}
+                        </el-tag>
+                        <span v-if="node.roles?.length" class="node-roles">
+                          {{ node.roles.join(', ') }}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div v-if="node.internal_ip" class="node-ip">
+                      <el-icon><Location /></el-icon>
+                      <span>{{ node.internal_ip }}</span>
                     </div>
                   </div>
-                  <div v-if="node.taints && node.taints.length > 0" class="node-taints">
-                    <div class="taints-content">
-                      <el-tag
-                        v-for="(taint, index) in getDisplayTaints(node.taints)"
-                        :key="`${node.name}-taint-${index}`"
-                        size="small"
-                        :type="getTaintType(taint.effect)"
-                        class="taint-tag"
-                        :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
-                      >
-                        <span class="taint-key">{{ truncateText(taint.key, 6) }}</span>
-                        <span v-if="taint.value" class="taint-separator">=</span>
-                        <span v-if="taint.value" class="taint-value">{{ truncateText(taint.value, 6) }}</span>
-                        <span class="taint-effect">:{{ taint.effect.charAt(0) }}</span>
-                      </el-tag>
-                      <el-tag
-                        v-if="node.taints.length > 2"
-                        size="small"
-                        type="danger"
-                        class="more-taints-tag"
-                        :title="`共${node.taints.length}个污点，点击查看更多`"
-                        @click="showAllTaints(node)"
-                      >
-                        +{{ node.taints.length - 2 }}
-                      </el-tag>
+                  
+                  <div class="node-details">
+                    <div v-if="node.labels && showLabels && Object.keys(getDisplayLabels(node.labels)).length > 0" class="node-labels-section">
+                      <div class="labels-header">
+                        <el-icon class="section-icon"><Collection /></el-icon>
+                        <span class="section-label">标签</span>
+                      </div>
+                      <div class="labels-content">
+                        <el-tag
+                          v-for="(value, key) in getDisplayLabels(node.labels)"
+                          :key="`${node.name}-${key}`"
+                          size="small"
+                          type="info"
+                          class="label-tag"
+                          :title="`${key}=${value}`"
+                        >
+                          <span class="label-key">{{ truncateText(key, 12) }}</span>
+                          <span v-if="value" class="label-separator">=</span>
+                          <span v-if="value" class="label-value">{{ truncateText(value, 10) }}</span>
+                        </el-tag>
+                        <el-tag
+                          v-if="getTotalLabelsCount(node.labels) > maxLabelDisplay"
+                          size="small"
+                          type="warning"
+                          class="more-labels-tag"
+                          :title="`共${getTotalLabelsCount(node.labels)}个标签，点击查看更多`"
+                          @click="showAllLabels(node)"
+                        >
+                          +{{ getTotalLabelsCount(node.labels) - maxLabelDisplay }}
+                        </el-tag>
+                      </div>
+                    </div>
+                    
+                    <div v-if="node.taints && node.taints.length > 0" class="node-taints-section">
+                      <div class="taints-header">
+                        <el-icon class="section-icon"><Warning /></el-icon>
+                        <span class="section-label">污点</span>
+                      </div>
+                      <div class="taints-content">
+                        <el-tag
+                          v-for="(taint, index) in getDisplayTaints(node.taints)"
+                          :key="`${node.name}-taint-${index}`"
+                          size="small"
+                          :type="getTaintType(taint.effect)"
+                          class="taint-tag"
+                          :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
+                        >
+                          <span class="taint-key">{{ truncateText(taint.key, 10) }}</span>
+                          <span v-if="taint.value" class="taint-separator">=</span>
+                          <span v-if="taint.value" class="taint-value">{{ truncateText(taint.value, 8) }}</span>
+                          <span class="taint-effect">:{{ taint.effect.substr(0, 2) }}</span>
+                        </el-tag>
+                        <el-tag
+                          v-if="node.taints.length > 2"
+                          size="small"
+                          type="danger"
+                          class="more-taints-tag"
+                          :title="`共${node.taints.length}个污点，点击查看更多`"
+                          @click="showAllTaints(node)"
+                        >
+                          +{{ node.taints.length - 2 }}
+                        </el-tag>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
             </el-checkbox>
           </div>
         </el-checkbox-group>
@@ -178,7 +193,7 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { Search } from '@element-plus/icons-vue'
+import { Search, Location, Collection, Warning } from '@element-plus/icons-vue'
 
 const props = defineProps({
   modelValue: {
@@ -471,9 +486,10 @@ onUnmounted(() => {
 }
 
 .node-item {
-  padding: 12px;
+  padding: 16px;
   border-bottom: 1px solid #f0f0f0;
-  transition: background-color 0.3s;
+  transition: all 0.3s ease;
+  position: relative;
 }
 
 .node-item:last-child {
@@ -482,135 +498,185 @@ onUnmounted(() => {
 
 .node-item:hover {
   background-color: #f8f9fa;
+  border-left: 3px solid #1890ff;
+  padding-left: 13px;
 }
 
 .node-item.selected {
   background-color: #e6f7ff;
+  border-left: 3px solid #1890ff;
+  padding-left: 13px;
 }
 
 .node-content {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 12px;
   margin-left: 8px;
   width: 100%;
-  min-height: 60px;
 }
 
-.node-info {
-  flex: 1;
-  min-width: 0; /* 防止flex子项溢出 */
+.node-main-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.node-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .node-name {
-  font-weight: 500;
+  font-weight: 600;
   color: #333;
-  margin-bottom: 6px;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.4;
-  word-break: break-all; /* 防止长节点名称溢出 */
+  word-break: break-all;
+  flex: 1;
+  margin: 0;
 }
 
-.node-meta {
+.node-status-section {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap; /* 允许换行 */
-  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.node-status-tag {
+  font-weight: 500;
 }
 
 .node-roles {
   font-size: 12px;
   color: #666;
+  background: #f5f5f5;
+  padding: 2px 6px;
+  border-radius: 3px;
   white-space: nowrap;
 }
 
+.node-ip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #666;
+  background: #fafafa;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border-left: 3px solid #52c41a;
+  width: fit-content;
+}
+
+.node-ip .el-icon {
+  font-size: 14px;
+  color: #52c41a;
+}
+
 .node-details {
-  max-width: 320px;
-  min-width: 180px;
-  text-align: right;
-  flex-shrink: 0; /* 防止被压缩 */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.node-labels-section,
+.node-taints-section {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.node-ip {
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 6px;
-  white-space: nowrap;
+.labels-header,
+.taints-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
 }
 
-.node-labels {
-  display: block;
-  margin-bottom: 4px;
+.section-icon {
+  font-size: 13px;
+  color: #666;
+}
+
+.section-label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
 }
 
 .labels-content {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
-  justify-content: flex-end;
-  max-height: 50px;
-  overflow-y: auto;
-}
-
-.node-taints {
-  display: block;
+  gap: 4px;
+  align-items: flex-start;
 }
 
 .taints-content {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
-  justify-content: flex-end;
-  max-height: 40px;
-  overflow-y: auto;
+  gap: 4px;
+  align-items: flex-start;
 }
 
 .label-tag {
-  font-size: 10px;
-  height: 18px;
-  line-height: 16px;
-  padding: 0 4px;
+  font-size: 11px;
+  height: 22px;
+  line-height: 20px;
+  padding: 0 6px;
   font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 2px;
+  border-radius: 4px;
   cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  margin: 1px;
 }
 
 .label-tag:hover {
-  transform: scale(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  border-color: #d9ecff;
   z-index: 10;
   position: relative;
 }
 
 .label-key {
   font-weight: 600;
+  color: #1890ff;
 }
 
 .label-separator {
-  margin: 0 1px;
+  margin: 0 2px;
   opacity: 0.7;
+  color: #666;
 }
 
 .label-value {
-  font-weight: 400;
-  opacity: 0.8;
+  font-weight: 500;
+  opacity: 0.9;
+  color: #52c41a;
 }
 
 .taint-tag {
-  font-size: 10px;
-  height: 18px;
-  line-height: 16px;
-  padding: 0 4px;
+  font-size: 11px;
+  height: 22px;
+  line-height: 20px;
+  padding: 0 6px;
   font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 2px;
+  border-radius: 4px;
   cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  margin: 1px;
 }
 
 .taint-tag:hover {
-  transform: scale(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
   z-index: 10;
   position: relative;
 }
@@ -620,33 +686,38 @@ onUnmounted(() => {
 }
 
 .taint-separator {
-  margin: 0 1px;
+  margin: 0 2px;
   opacity: 0.7;
 }
 
 .taint-value {
-  font-weight: 400;
-  opacity: 0.8;
+  font-weight: 500;
+  opacity: 0.9;
 }
 
 .taint-effect {
-  font-weight: 600;
-  margin-left: 1px;
+  font-weight: 700;
+  margin-left: 2px;
+  text-transform: uppercase;
 }
 
 .more-labels-tag,
 .more-taints-tag {
-  font-size: 10px;
-  height: 18px;
-  line-height: 16px;
-  padding: 0 4px;
+  font-size: 11px;
+  height: 22px;
+  line-height: 20px;
+  padding: 0 6px;
   cursor: pointer;
   font-weight: 600;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  margin: 1px;
 }
 
 .more-labels-tag:hover,
 .more-taints-tag:hover {
-  transform: scale(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
 .empty-nodes, .loading-nodes {
@@ -660,39 +731,56 @@ onUnmounted(() => {
     margin-bottom: 8px;
   }
   
-  .node-content {
-    flex-direction: column;
-    gap: 8px;
-    min-height: auto;
+  .node-item {
+    padding: 14px 12px;
   }
   
-  .node-details {
-    max-width: 100%;
-    min-width: 0;
-    text-align: left;
-    align-self: stretch;
+  .node-content {
+    gap: 10px;
+  }
+  
+  .node-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .node-status-section {
+    align-self: flex-start;
+  }
+  
+  .node-name {
+    font-size: 14px;
+  }
+  
+  .node-ip {
+    padding: 4px 8px;
+    font-size: 12px;
   }
   
   .labels-content,
   .taints-content {
-    justify-content: flex-start;
-    max-height: 35px;
+    gap: 3px;
   }
   
   .label-tag,
   .taint-tag {
-    font-size: 9px;
-    height: 16px;
-    line-height: 14px;
+    font-size: 10px;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 5px;
   }
   
-  .node-details {
-    max-width: 100%;
-    min-width: 0;
+  .more-labels-tag,
+  .more-taints-tag {
+    font-size: 10px;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 5px;
   }
   
-  .node-item {
-    padding: 16px 12px;
+  .section-label {
+    font-size: 11px;
   }
   
   .selector-header {
@@ -705,27 +793,55 @@ onUnmounted(() => {
     margin-bottom: 8px;
   }
   
+  .node-item {
+    padding: 12px 10px;
+  }
+  
+  .node-content {
+    gap: 8px;
+  }
+  
   .node-name {
     font-size: 13px;
   }
   
-  .node-meta {
+  .node-status-section {
     gap: 6px;
+  }
+  
+  .node-roles {
+    font-size: 11px;
+    padding: 1px 4px;
+  }
+  
+  .node-ip {
+    padding: 3px 6px;
+    font-size: 11px;
   }
   
   .label-tag,
   .taint-tag {
-    font-size: 8px;
-    height: 14px;
-    line-height: 12px;
-    padding: 0 3px;
+    font-size: 9px;
+    height: 18px;
+    line-height: 16px;
+    padding: 0 4px;
   }
   
   .more-labels-tag,
   .more-taints-tag {
-    font-size: 8px;
-    height: 14px;
-    line-height: 12px;
+    font-size: 9px;
+    height: 18px;
+    line-height: 16px;
+    padding: 0 4px;
+  }
+  
+  .section-label {
+    font-size: 10px;
+  }
+  
+  .labels-header .el-icon,
+  .taints-header .el-icon {
+    font-size: 12px;
   }
   
   .node-selector {
