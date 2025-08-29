@@ -26,7 +26,8 @@ export const useClusterStore = defineStore('cluster', {
       this.loading = true
       try {
         const response = await clusterApi.getClusters()
-        this.clusters = response.data
+        // 后端返回格式: { code, message, data: [...] }
+        this.clusters = response.data.data || []
         this.updateStats()
         return response
       } catch (error) {
@@ -39,8 +40,13 @@ export const useClusterStore = defineStore('cluster', {
     async addCluster(clusterData) {
       try {
         const response = await clusterApi.addCluster(clusterData)
-        this.clusters.push(response.data)
-        this.updateStats()
+        // 后端返回格式: { code, message, data: {...} }
+        if (response.data.data) {
+          // 确保clusters是数组
+          this.ensureClustersArray()
+          this.clusters.push(response.data.data)
+          this.updateStats()
+        }
         return response
       } catch (error) {
         throw error
@@ -50,9 +56,10 @@ export const useClusterStore = defineStore('cluster', {
     async updateCluster(id, clusterData) {
       try {
         const response = await clusterApi.updateCluster(id, clusterData)
+        // 后端返回格式: { code, message, data: {...} }
         const index = this.clusters.findIndex(cluster => cluster.id === id)
-        if (index !== -1) {
-          this.clusters[index] = response.data
+        if (index !== -1 && response.data.data) {
+          this.clusters[index] = response.data.data
         }
         this.updateStats()
         return response
@@ -94,9 +101,20 @@ export const useClusterStore = defineStore('cluster', {
     },
 
     updateStats() {
+      // 确保clusters是数组
+      if (!Array.isArray(this.clusters)) {
+        this.clusters = []
+      }
       this.clusterStats.total = this.clusters.length
       this.clusterStats.active = this.activeClusters.length
       this.clusterStats.inactive = this.inactiveClusters.length
+    },
+
+    // 确保clusters始终是数组的辅助方法
+    ensureClustersArray() {
+      if (!Array.isArray(this.clusters)) {
+        this.clusters = []
+      }
     }
   }
 })
