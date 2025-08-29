@@ -153,8 +153,8 @@
           <el-table-column prop="created_at" label="时间" width="180">
             <template #default="{ row }">
               <div class="time-info">
-                <div>{{ formatDate(row.created_at) }}</div>
-                <div class="time-ago">{{ formatTimeAgo(row.created_at) }}</div>
+                <div>{{ formatTime(row.created_at) }}</div>
+                <div class="time-ago">{{ formatRelativeTime(row.created_at) }}</div>
               </div>
             </template>
           </el-table-column>
@@ -180,9 +180,9 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Refresh, Plus, Edit, Delete, Login, List, Document } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, Edit, Delete, User, List, Document } from '@element-plus/icons-vue'
 import auditApi from '@/api/audit'
-import { formatDate, formatTimeAgo } from '@/utils/format'
+import { formatTime, formatRelativeTime } from '@/utils/format'
 
 // 响应式数据
 const loading = ref(false)
@@ -280,7 +280,7 @@ const getActionIcon = (action) => {
     case 'CREATE': return Plus
     case 'UPDATE': return Edit
     case 'DELETE': return Delete
-    case 'LOGIN': return Login
+    case 'LOGIN': return User
     case 'LIST': return List
     default: return Document
   }
