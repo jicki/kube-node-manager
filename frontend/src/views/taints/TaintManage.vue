@@ -70,7 +70,7 @@
     <!-- 污点模板列表 -->
     <div class="taint-grid">
       <div
-        v-for="template in filteredAndSortedTaints"
+        v-for="template in paginatedTaints"
         :key="template.id"
         class="taint-card"
       >
@@ -165,7 +165,7 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-if="filteredAndSortedTaints.length === 0 && !searchKeyword" class="empty-state">
+      <div v-if="filteredAndSortedTaints.length === 0 && !searchKeyword" class="empty-state"
         <el-empty description="暂无污点数据" :image-size="80">
           <el-button type="primary" @click="showAddDialog">
             <el-icon><Plus /></el-icon>
@@ -175,11 +175,24 @@
       </div>
 
       <!-- 搜索无结果状态 -->
-      <div v-if="filteredAndSortedTaints.length === 0 && searchKeyword" class="empty-search">
+      <div v-if="filteredAndSortedTaints.length === 0 && searchKeyword" class="empty-search"
         <el-empty description="没有找到匹配的污点模板" :image-size="60">
           <el-button @click="searchKeyword = ''">清空搜索条件</el-button>
         </el-empty>
       </div>
+    </div>
+
+    <!-- 分页 -->
+    <div v-if="filteredAndSortedTaints.length > 0" class="pagination-container">
+      <el-pagination
+        v-model:current-page="pagination.current"
+        v-model:page-size="pagination.size"
+        :page-sizes="[12, 24, 48, 96]"
+        :total="filteredAndSortedTaints.length"
+        layout="total, sizes, prev, pager, next, jumper"
+        @size-change="handleSizeChange"
+        @current-change="handleCurrentChange"
+      />
     </div>
 
     <!-- 添加/编辑污点对话框 -->
@@ -481,6 +494,13 @@ const availableNodes = ref([])
 const selectedTemplate = ref(null)
 const selectedNodes = ref([])
 
+// 分页
+const pagination = reactive({
+  current: 1,
+  size: 24,
+  total: 0
+})
+
 // 搜索和过滤相关
 const searchKeyword = ref('')
 
@@ -585,6 +605,13 @@ const filteredTaints = computed(() => {
 
 // 应用高级搜索筛选的最终结果
 const filteredAndSortedTaints = ref([])
+
+// 分页后的数据
+const paginatedTaints = computed(() => {
+  const start = (pagination.current - 1) * pagination.size
+  const end = start + pagination.size
+  return filteredAndSortedTaints.value.slice(start, end)
+})
 
 // 计算应用筛选和排序后的结果
 const applyFiltersAndSort = (keyword, filters) => {
@@ -710,6 +737,17 @@ const handleSearch = (params) => {
 const handleSearchClear = () => {
   // 清空搜索时恢复原始数据
   filteredAndSortedTaints.value = taints.value
+  pagination.current = 1
+}
+
+// 分页处理方法
+const handleSizeChange = (size) => {
+  pagination.size = size
+  pagination.current = 1
+}
+
+const handleCurrentChange = (current) => {
+  pagination.current = current
 }
 
 // 显示添加对话框
@@ -1597,6 +1635,13 @@ onMounted(() => {
     padding: 20px;
     min-height: 240px;
   }
+}
+
+/* 分页样式 */
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {

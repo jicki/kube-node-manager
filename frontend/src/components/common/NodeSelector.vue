@@ -101,15 +101,57 @@
                     IP: {{ node.internal_ip }}
                   </div>
                   <div v-if="node.labels && showLabels" class="node-labels">
-                    <el-tag
-                      v-for="(value, key) in getFilteredLabels(node.labels)"
-                      :key="`${node.name}-${key}`"
-                      size="small"
-                      type="info"
-                      class="label-tag"
-                    >
-                      {{ key }}={{ value }}
-                    </el-tag>
+                    <div class="labels-content">
+                      <el-tag
+                        v-for="(value, key) in getDisplayLabels(node.labels)"
+                        :key="`${node.name}-${key}`"
+                        size="small"
+                        type="info"
+                        class="label-tag"
+                        :title="`${key}=${value}`"
+                      >
+                        <span class="label-key">{{ truncateText(key, 8) }}</span>
+                        <span v-if="value" class="label-separator">=</span>
+                        <span v-if="value" class="label-value">{{ truncateText(value, 8) }}</span>
+                      </el-tag>
+                      <el-tag
+                        v-if="getTotalLabelsCount(node.labels) > maxLabelDisplay"
+                        size="small"
+                        type="warning"
+                        class="more-labels-tag"
+                        :title="`共${getTotalLabelsCount(node.labels)}个标签，点击查看更多`"
+                        @click="showAllLabels(node)"
+                      >
+                        +{{ getTotalLabelsCount(node.labels) - maxLabelDisplay }}
+                      </el-tag>
+                    </div>
+                  </div>
+                  <div v-if="node.taints && node.taints.length > 0" class="node-taints">
+                    <div class="taints-content">
+                      <el-tag
+                        v-for="(taint, index) in getDisplayTaints(node.taints)"
+                        :key="`${node.name}-taint-${index}`"
+                        size="small"
+                        :type="getTaintType(taint.effect)"
+                        class="taint-tag"
+                        :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
+                      >
+                        <span class="taint-key">{{ truncateText(taint.key, 6) }}</span>
+                        <span v-if="taint.value" class="taint-separator">=</span>
+                        <span v-if="taint.value" class="taint-value">{{ truncateText(taint.value, 6) }}</span>
+                        <span class="taint-effect">:{{ taint.effect.charAt(0) }}</span>
+                      </el-tag>
+                      <el-tag
+                        v-if="node.taints.length > 2"
+                        size="small"
+                        type="danger"
+                        class="more-taints-tag"
+                        :title="`共${node.taints.length}个污点，点击查看更多`"
+                        @click="showAllTaints(node)"
+                      >
+                        +{{ node.taints.length - 2 }}
+                      </el-tag>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -307,20 +349,73 @@ const getStatusType = (status) => {
   return statusMap[status] || 'info'
 }
 
-const getFilteredLabels = (labels) => {
+const getDisplayLabels = (labels) => {
   if (!labels || typeof labels !== 'object') return {}
   try {
     const entries = Object.entries(labels)
-    if (entries.length <= props.maxLabelDisplay) {
-      return labels
-    }
-    // 显示前几个标签
-    const filteredEntries = entries.slice(0, props.maxLabelDisplay)
-    return Object.fromEntries(filteredEntries)
+    const systemLabels = entries.filter(([key]) => 
+      key.startsWith('kubernetes.io/') || 
+      key.startsWith('node.kubernetes.io/') ||
+      key.startsWith('topology.kubernetes.io/')
+    )
+    const customLabels = entries.filter(([key]) => 
+      !key.startsWith('kubernetes.io/') && 
+      !key.startsWith('node.kubernetes.io/') &&
+      !key.startsWith('topology.kubernetes.io/')
+    )
+    
+    // 优先显示自定义标签，再显示系统标签
+    const prioritizedEntries = [...customLabels, ...systemLabels]
+    const displayEntries = prioritizedEntries.slice(0, props.maxLabelDisplay)
+    return Object.fromEntries(displayEntries)
   } catch (error) {
     console.warn('Error filtering labels:', error)
     return {}
   }
+}
+
+const getDisplayTaints = (taints) => {
+  if (!taints || !Array.isArray(taints)) return []
+  return taints.slice(0, 2) // 显示前2个污点
+}
+
+const getTotalLabelsCount = (labels) => {
+  if (!labels || typeof labels !== 'object') return 0
+  return Object.keys(labels).length
+}
+
+const getTaintType = (effect) => {
+  const typeMap = {
+    'NoSchedule': 'danger',
+    'PreferNoSchedule': 'warning', 
+    'NoExecute': 'error'
+  }
+  return typeMap[effect] || 'info'
+}
+
+const truncateText = (text, maxLength) => {
+  if (!text) return ''
+  return text.length > maxLength ? text.substring(0, maxLength) + '..' : text
+}
+
+const showAllLabels = (node) => {
+  // 可以在这里实现显示所有标签的逻辑，比如弹出对话框
+  const labelsText = Object.entries(node.labels || {})
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')
+  ElMessageBox.alert(labelsText, `节点 ${node.name} 的所有标签`, {
+    confirmButtonText: '关闭'
+  })
+}
+
+const showAllTaints = (node) => {
+  // 显示所有污点
+  const taintsText = (node.taints || [])
+    .map(taint => `${taint.key}${taint.value ? '=' + taint.value : ''}:${taint.effect}`)
+    .join('\n')
+  ElMessageBox.alert(taintsText, `节点 ${node.name} 的所有污点`, {
+    confirmButtonText: '关闭'
+  })
 }
 
 // 清理定时器
@@ -420,10 +515,13 @@ onUnmounted(() => {
 }
 
 .node-details {
-  max-width: 250px;
-  min-width: 150px;
+  max-width: 320px;
+  min-width: 180px;
   text-align: right;
   flex-shrink: 0; /* 防止被压缩 */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .node-ip {
@@ -434,21 +532,110 @@ onUnmounted(() => {
 }
 
 .node-labels {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.labels-content {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3px;
   justify-content: flex-end;
-  max-height: 60px;
+  max-height: 50px;
+  overflow-y: auto;
+}
+
+.node-taints {
+  display: block;
+}
+
+.taints-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: flex-end;
+  max-height: 40px;
   overflow-y: auto;
 }
 
 .label-tag {
-  font-size: 11px;
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  line-height: 1.2;
+  font-size: 10px;
+  height: 18px;
+  line-height: 16px;
+  padding: 0 4px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.label-tag:hover {
+  transform: scale(1.1);
+  z-index: 10;
+  position: relative;
+}
+
+.label-key {
+  font-weight: 600;
+}
+
+.label-separator {
+  margin: 0 1px;
+  opacity: 0.7;
+}
+
+.label-value {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.taint-tag {
+  font-size: 10px;
+  height: 18px;
+  line-height: 16px;
+  padding: 0 4px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.taint-tag:hover {
+  transform: scale(1.1);
+  z-index: 10;
+  position: relative;
+}
+
+.taint-key {
+  font-weight: 600;
+}
+
+.taint-separator {
+  margin: 0 1px;
+  opacity: 0.7;
+}
+
+.taint-value {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.taint-effect {
+  font-weight: 600;
+  margin-left: 1px;
+}
+
+.more-labels-tag,
+.more-taints-tag {
+  font-size: 10px;
+  height: 18px;
+  line-height: 16px;
+  padding: 0 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.more-labels-tag:hover,
+.more-taints-tag:hover {
+  transform: scale(1.1);
 }
 
 .empty-nodes, .loading-nodes {
@@ -474,13 +661,22 @@ onUnmounted(() => {
     text-align: left;
   }
   
-  .node-labels {
+  .labels-content,
+  .taints-content {
     justify-content: flex-start;
-    max-height: 40px;
+    max-height: 35px;
   }
   
-  .label-tag {
-    max-width: 120px;
+  .label-tag,
+  .taint-tag {
+    font-size: 9px;
+    height: 16px;
+    line-height: 14px;
+  }
+  
+  .node-details {
+    max-width: 100%;
+    min-width: 0;
   }
   
   .node-item {
@@ -505,9 +701,19 @@ onUnmounted(() => {
     gap: 6px;
   }
   
-  .label-tag {
-    max-width: 100px;
-    font-size: 10px;
+  .label-tag,
+  .taint-tag {
+    font-size: 8px;
+    height: 14px;
+    line-height: 12px;
+    padding: 0 3px;
+  }
+  
+  .more-labels-tag,
+  .more-taints-tag {
+    font-size: 8px;
+    height: 14px;
+    line-height: 12px;
   }
   
   .node-selector {
