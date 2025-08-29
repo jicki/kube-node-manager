@@ -93,7 +93,7 @@ func (s *Service) List(req ListRequest, userID uint) ([]k8s.NodeInfo, error) {
 	filteredNodes := s.filterNodes(nodes, req)
 
 	// 只在有特定过滤条件时记录审计日志，避免频繁记录普通列表查看
-	if req.Status != "" || req.Role != "" || len(req.Labels) > 0 || req.Search != "" {
+	if req.Status != "" || req.Role != "" || req.LabelKey != "" {
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			Action:       model.ActionView,
