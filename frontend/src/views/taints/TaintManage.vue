@@ -54,55 +54,82 @@
       </el-col>
     </el-row>
 
-    <!-- 污点卡片列表 -->
+    <!-- 污点模板列表 -->
     <div class="taint-grid">
       <div
-        v-for="taint in taints"
-        :key="`${taint.key}-${taint.effect}`"
+        v-for="template in taints"
+        :key="template.id"
         class="taint-card"
-        :class="`taint-${taint.effect.toLowerCase().replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()}`"
       >
         <div class="taint-header">
           <div class="taint-key-value">
-            <div class="taint-key">{{ taint.key }}</div>
-            <div class="taint-value">{{ taint.value || '(无值)' }}</div>
+            <div class="taint-key">{{ template.name }}</div>
+            <div class="taint-value">{{ (template.taints || []).length }} 个污点</div>
           </div>
-          <div class="taint-effect">
-            <el-tag
-              :type="getTaintEffectType(taint.effect)"
-              size="small"
-            >
-              {{ formatTaintEffect(taint.effect) }}
-            </el-tag>
+          <div class="taint-actions">
+            <el-dropdown @command="(cmd) => handleTaintAction(cmd, template)">
+              <el-button type="text" size="small">
+                <el-icon><MoreFilled /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit">
+                    <el-icon><Edit /></el-icon>
+                    编辑
+                  </el-dropdown-item>
+                  <el-dropdown-item command="copy">
+                    <el-icon><CopyDocument /></el-icon>
+                    复制
+                  </el-dropdown-item>
+                  <el-dropdown-item command="apply">
+                    <el-icon><Plus /></el-icon>
+                    应用到节点
+                  </el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>
+                    <el-icon><Delete /></el-icon>
+                    删除
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
 
-        <div class="taint-nodes">
-          <div class="nodes-title">关联节点 ({{ taint.nodeCount || 0 }})</div>
-          <div class="nodes-list">
+        <div class="taint-meta">
+          <el-tag type="primary" size="small">
+            污点模板
+          </el-tag>
+          <span class="create-time">{{ template.created_at }}</span>
+        </div>
+
+        <div v-if="template.description" class="taint-description">
+          {{ template.description }}
+        </div>
+
+        <div class="taint-content">
+          <div class="taints-title">包含污点:</div>
+          <div class="taints-list">
             <el-tag
-              v-for="node in (taint.nodes || []).slice(0, 3)"
-              :key="node"
+              v-for="taint in template.taints || []"
+              :key="`${taint.key}-${taint.effect}`"
               size="small"
-              class="node-tag"
+              class="taint-item-tag"
+              :type="getTaintEffectType(taint.effect)"
             >
-              {{ node }}
+              {{ taint.key }}{{ taint.value ? `=${taint.value}` : '' }}:{{ taint.effect }}
             </el-tag>
-            <span v-if="(taint.nodes || []).length > 3" class="more-nodes">
-              +{{ (taint.nodes || []).length - 3 }} 个
-            </span>
           </div>
         </div>
 
         <div class="taint-actions">
           <el-button-group size="small">
-            <el-button @click="editTaint(taint)">
-              <el-icon><Edit /></el-icon>
-              编辑
+            <el-button @click="applyTemplateToNodes(template)">
+              <el-icon><Plus /></el-icon>
+              应用到节点
             </el-button>
-            <el-button type="danger" @click="deleteTaint(taint)">
-              <el-icon><Delete /></el-icon>
-              删除
+            <el-button @click="editTemplate(template)">
+              <el-icon><Edit /></el-icon>
+              编辑模板
             </el-button>
           </el-button-group>
         </div>
@@ -132,62 +159,85 @@
         label-width="110px"
         style="margin-top: 20px;"
       >
-        <el-form-item label="污点键" prop="key">
+        <el-form-item label="模板名称" prop="name">
           <el-input
-            v-model="taintForm.key"
-            placeholder="例如: node-role, dedicated, special"
+            v-model="taintForm.name"
+            placeholder="输入模板名称，如：Master节点污点、GPU节点污点"
           />
         </el-form-item>
 
-        <el-form-item label="污点值" prop="value">
+        <el-form-item label="描述">
           <el-input
-            v-model="taintForm.value"
-            placeholder="例如: master, gpu, database（可为空）"
+            v-model="taintForm.description"
+            type="textarea"
+            :rows="2"
+            placeholder="模板用途描述"
           />
         </el-form-item>
 
-        <el-form-item label="效果" prop="effect">
-          <el-select v-model="taintForm.effect" placeholder="选择污点效果">
-            <el-option label="NoSchedule - 禁止调度" value="NoSchedule" />
-            <el-option label="PreferNoSchedule - 尽量不调度" value="PreferNoSchedule" />
-            <el-option label="NoExecute - 禁止执行" value="NoExecute" />
-          </el-select>
-        </el-form-item>
+        <el-divider content-position="left">污点配置</el-divider>
 
-        <el-form-item label="应用到节点" style="margin-top: 24px;">
-          <el-select
-            v-model="taintForm.selectedNodes"
-            multiple
-            filterable
-            placeholder="选择要应用此污点的节点"
-            style="width: 100%; font-size: 14px;"
-            size="large"
+        <div class="taints-config">
+          <div 
+            v-for="(taint, index) in taintForm.taints" 
+            :key="index"
+            class="taint-config-item"
           >
-            <el-option
-              v-for="node in availableNodes"
-              :key="node.name"
-              :label="`${node.name} (${node.status})`"
-              :value="node.name"
-            >
-              <div class="node-option">
-                <span class="node-name">{{ node.name }}</span>
-                <el-tag 
-                  :type="node.status === 'Ready' ? 'success' : 'danger'" 
+            <el-row :gutter="12" align="middle">
+              <el-col :span="7">
+                <el-form-item :prop="`taints.${index}.key`" :rules="[{ required: true, message: '请输入污点键', trigger: 'blur' }]">
+                  <el-input
+                    v-model="taint.key"
+                    placeholder="污点键"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="7">
+                <el-form-item>
+                  <el-input
+                    v-model="taint.value"
+                    placeholder="污点值（可为空）"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item :prop="`taints.${index}.effect`" :rules="[{ required: true, message: '请选择效果', trigger: 'change' }]">
+                  <el-select v-model="taint.effect" placeholder="效果" style="width: 100%">
+                    <el-option label="NoSchedule" value="NoSchedule" />
+                    <el-option label="PreferNoSchedule" value="PreferNoSchedule" />
+                    <el-option label="NoExecute" value="NoExecute" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="4">
+                <el-button
+                  type="danger"
                   size="small"
-                  style="margin-left: auto;"
-                >
-                  {{ node.status }}
-                </el-tag>
-              </div>
-            </el-option>
-          </el-select>
-        </el-form-item>
+                  :icon="Delete"
+                  circle
+                  @click="removeTaint(index)"
+                  :disabled="taintForm.taints.length === 1"
+                />
+              </el-col>
+            </el-row>
+          </div>
+          
+          <el-button
+            type="dashed"
+            block
+            @click="addTaint"
+            :icon="Plus"
+          >
+            添加污点
+          </el-button>
+        </div>
 
         <el-alert
           title="污点效果说明"
           type="info"
           :closable="false"
           show-icon
+          style="margin-top: 20px;"
         >
           <ul style="margin: 0; padding-left: 20px;">
             <li>NoSchedule: 新的Pod不会调度到该节点，已存在的Pod不受影响</li>
@@ -208,6 +258,69 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 应用模板对话框 -->
+    <el-dialog
+      v-model="applyDialogVisible"
+      :title="`应用模板: ${selectedTemplate?.name}`"
+      width="600px"
+    >
+      <div class="template-info">
+        <h4>模板包含的污点:</h4>
+        <div class="template-taints">
+          <el-tag
+            v-for="taint in selectedTemplate?.taints || []"
+            :key="`${taint.key}-${taint.effect}`"
+            class="taint-tag"
+            :type="getTaintEffectType(taint.effect)"
+          >
+            {{ taint.key }}{{ taint.value ? `=${taint.value}` : '' }}:{{ taint.effect }}
+          </el-tag>
+        </div>
+      </div>
+
+      <el-divider />
+
+      <el-form label-width="100px">
+        <el-form-item label="选择节点" required>
+          <el-select
+            v-model="selectedNodes"
+            multiple
+            filterable
+            placeholder="选择要应用模板的节点"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="node in availableNodes"
+              :key="node.name"
+              :label="`${node.name} (${node.status})`"
+              :value="node.name"
+            >
+              <div class="node-option">
+                <span class="node-name">{{ node.name }}</span>
+                <el-tag 
+                  :type="node.status === 'Ready' ? 'success' : 'danger'" 
+                  size="small"
+                >
+                  {{ node.status }}
+                </el-tag>
+              </div>
+            </el-option>
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="applyDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="applying"
+          @click="handleApplyTemplate"
+        >
+          应用到节点
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -221,35 +334,37 @@ import {
   Plus,
   Refresh,
   Edit,
-  Delete
+  Delete,
+  MoreFilled,
+  CopyDocument
 } from '@element-plus/icons-vue'
 
 // 响应式数据
 const loading = ref(false)
 const saving = ref(false)
+const applying = ref(false)
 const taintDialogVisible = ref(false)
+const applyDialogVisible = ref(false)
 const isEditing = ref(false)
 const taintFormRef = ref()
 
 // 数据
 const taints = ref([])
 const availableNodes = ref([])
+const selectedTemplate = ref(null)
+const selectedNodes = ref([])
 
 // 表单数据
 const taintForm = reactive({
-  key: '',
-  value: '',
-  effect: '',
-  selectedNodes: []
+  name: '',
+  description: '',
+  taints: [{ key: '', value: '', effect: '' }]
 })
 
 // 表单验证规则
 const taintRules = {
-  key: [
-    { required: true, message: '请输入污点键', trigger: 'blur' }
-  ],
-  effect: [
-    { required: true, message: '请选择污点效果', trigger: 'change' }
+  name: [
+    { required: true, message: '请输入模板名称', trigger: 'blur' }
   ]
 }
 
@@ -277,11 +392,15 @@ const getTaintEffectType = (effect) => {
 const fetchTaints = async () => {
   try {
     loading.value = true
-    // 暂时使用空数据，避免404错误
-    // TODO: 实现正确的污点数据获取逻辑
-    taints.value = []
+    const response = await taintApi.getTemplateList()
+    if (response.data && response.data.code === 200) {
+      const data = response.data.data
+      taints.value = data.templates || []
+    } else {
+      taints.value = []
+    }
   } catch (error) {
-    console.warn('获取污点数据失败，使用空列表')
+    console.warn('获取污点模板失败:', error)
     taints.value = []
   } finally {
     loading.value = false
@@ -325,30 +444,77 @@ const showAddDialog = () => {
 // 重置表单
 const resetTaintForm = () => {
   Object.assign(taintForm, {
-    key: '',
-    value: '',
-    effect: '',
-    selectedNodes: []
+    name: '',
+    description: '',
+    taints: [{ key: '', value: '', effect: '' }]
   })
 }
 
-// 编辑污点
-const editTaint = (taint) => {
+// 添加污点
+const addTaint = () => {
+  taintForm.taints.push({ key: '', value: '', effect: '' })
+}
+
+// 移除污点
+const removeTaint = (index) => {
+  if (taintForm.taints.length > 1) {
+    taintForm.taints.splice(index, 1)
+  }
+}
+
+// 处理污点操作
+const handleTaintAction = (command, template) => {
+  switch (command) {
+    case 'edit':
+      editTemplate(template)
+      break
+    case 'copy':
+      copyTemplate(template)
+      break
+    case 'apply':
+      applyTemplateToNodes(template)
+      break
+    case 'delete':
+      deleteTemplate(template)
+      break
+  }
+}
+
+// 编辑模板
+const editTemplate = (template) => {
   isEditing.value = true
+  
   Object.assign(taintForm, {
-    key: taint.key,
-    value: taint.value || '',
-    effect: taint.effect,
-    selectedNodes: taint.nodes || []
+    name: template.name,
+    description: template.description || '',
+    taints: template.taints && template.taints.length > 0 ? [...template.taints] : [{ key: '', value: '', effect: '' }]
   })
+  
+  // 保存当前编辑的模板ID
+  taintForm.id = template.id
+  
   taintDialogVisible.value = true
 }
 
-// 删除污点
-const deleteTaint = (taint) => {
+// 复制模板
+const copyTemplate = (template) => {
+  const taintsText = (template.taints || [])
+    .map(taint => `${taint.key}${taint.value ? `=${taint.value}` : ''}:${taint.effect}`)
+    .join(', ')
+  const text = `${template.name}: ${taintsText}`
+  
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('模板信息已复制到剪贴板')
+  }).catch(() => {
+    ElMessage.error('复制失败')
+  })
+}
+
+// 删除模板
+const deleteTemplate = (template) => {
   ElMessageBox.confirm(
-    `确认删除污点 "${taint.key}:${taint.effect}" 吗？此操作将从所有关联节点中移除该污点。`,
-    '删除污点',
+    `确认删除模板 "${template.name}" 吗？此操作不可撤销。`,
+    '删除模板',
     {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
@@ -356,40 +522,75 @@ const deleteTaint = (taint) => {
     }
   ).then(async () => {
     try {
-      // 获取当前集群名称
-      const clusterStore = useClusterStore()
-      const clusterName = clusterStore.currentClusterName
-      
-      if (!clusterName) {
-        ElMessage.error('请先选择集群')
-        return
-      }
-      
-      // 构建删除请求数据
-      const deleteData = {
-        nodes: taint.nodes || [],
-        keys: [taint.key],
-        cluster: clusterName
-      }
-      
-      await taintApi.batchDeleteTaints(deleteData)
-      ElMessage.success('污点已删除')
+      await taintApi.deleteTemplate(template.id)
+      ElMessage.success('模板已删除')
       refreshData()
     } catch (error) {
-      ElMessage.error(`删除污点失败: ${error.message}`)
+      ElMessage.error(`删除模板失败: ${error.message}`)
     }
   }).catch(() => {
     // 用户取消
   })
 }
 
-// 保存污点
+// 保存模板
 const handleSaveTaint = async () => {
   try {
     await taintFormRef.value.validate()
     saving.value = true
     
-    // 获取当前集群名称
+    // 验证污点配置
+    const validTaints = taintForm.taints.filter(taint => taint.key.trim() && taint.effect)
+    if (validTaints.length === 0) {
+      ElMessage.error('请至少添加一个有效的污点')
+      return
+    }
+    
+    const templateData = {
+      name: taintForm.name,
+      description: taintForm.description,
+      taints: validTaints.map(taint => ({
+        key: taint.key.trim(),
+        value: taint.value.trim(),
+        effect: taint.effect
+      }))
+    }
+    
+    if (isEditing.value) {
+      // 更新模板
+      await taintApi.updateTemplate(taintForm.id, templateData)
+      ElMessage.success('模板更新成功')
+    } else {
+      // 创建新模板
+      await taintApi.createTemplate(templateData)
+      ElMessage.success('模板创建成功')
+    }
+    
+    taintDialogVisible.value = false
+    refreshData()
+    
+  } catch (error) {
+    ElMessage.error(error.message || '保存模板失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+// 应用模板到节点
+const applyTemplateToNodes = (template) => {
+  selectedTemplate.value = template
+  applyDialogVisible.value = true
+  fetchNodes() // 获取节点列表
+}
+
+// 应用模板
+const handleApplyTemplate = async () => {
+  try {
+    if (selectedNodes.value.length === 0) {
+      ElMessage.error('请选择要应用的节点')
+      return
+    }
+    
     const clusterStore = useClusterStore()
     const clusterName = clusterStore.currentClusterName
     
@@ -398,34 +599,23 @@ const handleSaveTaint = async () => {
       return
     }
     
-    if (taintForm.selectedNodes.length === 0) {
-      ElMessage.error('请选择要应用污点的节点')
-      return
+    applying.value = true
+    
+    const applyData = {
+      cluster_name: clusterName,
+      node_names: selectedNodes.value,
+      template_id: selectedTemplate.value.id,
+      operation: 'add'
     }
     
-    const taintData = {
-      key: taintForm.key,
-      value: taintForm.value,
-      effect: taintForm.effect
-    }
-    
-    // 构建请求数据，包含集群名称
-    const requestData = {
-      nodes: taintForm.selectedNodes,
-      taints: [taintData],
-      cluster: clusterName
-    }
-    
-    await taintApi.batchAddTaints(requestData)
-    
-    ElMessage.success(isEditing.value ? '污点更新成功' : '污点创建成功')
-    taintDialogVisible.value = false
-    refreshData()
+    await taintApi.applyTemplate(applyData)
+    ElMessage.success('模板应用成功')
+    applyDialogVisible.value = false
     
   } catch (error) {
-    ElMessage.error(error.message || '保存污点失败')
+    ElMessage.error(`应用模板失败: ${error.message}`)
   } finally {
-    saving.value = false
+    applying.value = false
   }
 }
 
@@ -666,5 +856,78 @@ onMounted(() => {
   .stats-row .el-col {
     margin-bottom: 16px;
   }
+}
+
+/* 新增样式 */
+.taints-config {
+  margin-top: 16px;
+}
+
+.taint-config-item {
+  margin-bottom: 16px;
+}
+
+.create-time {
+  color: #999;
+  font-size: 12px;
+}
+
+.taint-content {
+  margin-bottom: 16px;
+}
+
+.taints-title {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.taints-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.taint-item-tag {
+  font-size: 11px;
+  height: 20px;
+  line-height: 18px;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.template-info {
+  margin-bottom: 16px;
+}
+
+.template-info h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.template-taints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.taint-tag {
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.taint-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.taint-description {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 16px;
+  line-height: 1.5;
 }
 </style>

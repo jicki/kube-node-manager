@@ -129,6 +129,51 @@ const taintApi = {
       url: `/api/v1/nodes/${nodeName}/taints/clear`,
       method: 'post'
     })
+  },
+
+  // 污点模板相关API
+  // 获取污点模板列表
+  getTemplateList(params = {}) {
+    return request({
+      url: '/api/v1/taints/templates',
+      method: 'get',
+      params
+    })
+  },
+
+  // 创建污点模板
+  createTemplate(data) {
+    return request({
+      url: '/api/v1/taints/templates',
+      method: 'post',
+      data
+    })
+  },
+
+  // 更新污点模板
+  updateTemplate(id, data) {
+    return request({
+      url: `/api/v1/taints/templates/${id}`,
+      method: 'put',
+      data
+    })
+  },
+
+  // 删除污点模板
+  deleteTemplate(id) {
+    return request({
+      url: `/api/v1/taints/templates/${id}`,
+      method: 'delete'
+    })
+  },
+
+  // 应用污点模板到节点
+  applyTemplate(data) {
+    return request({
+      url: '/api/v1/taints/templates/apply',
+      method: 'post',
+      data
+    })
   }
 }
 

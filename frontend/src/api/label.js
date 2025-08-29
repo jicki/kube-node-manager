@@ -114,6 +114,51 @@ const labelApi = {
       params,
       responseType: 'blob'
     })
+  },
+
+  // 标签模板相关API
+  // 获取标签模板列表
+  getTemplateList(params = {}) {
+    return request({
+      url: '/api/v1/labels/templates',
+      method: 'get',
+      params
+    })
+  },
+
+  // 创建标签模板
+  createTemplate(data) {
+    return request({
+      url: '/api/v1/labels/templates',
+      method: 'post',
+      data
+    })
+  },
+
+  // 更新标签模板
+  updateTemplate(id, data) {
+    return request({
+      url: `/api/v1/labels/templates/${id}`,
+      method: 'put',
+      data
+    })
+  },
+
+  // 删除标签模板
+  deleteTemplate(id) {
+    return request({
+      url: `/api/v1/labels/templates/${id}`,
+      method: 'delete'
+    })
+  },
+
+  // 应用标签模板到节点
+  applyTemplate(data) {
+    return request({
+      url: '/api/v1/labels/templates/apply',
+      method: 'post',
+      data
+    })
   }
 }
 

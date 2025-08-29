@@ -66,27 +66,26 @@
       />
     </el-card>
 
-    <!-- 标签卡片列表 -->
+    <!-- 标签模板列表 -->
     <div class="label-grid">
       <div
-        v-for="label in filteredLabels"
-        :key="label.key"
+        v-for="template in filteredLabels"
+        :key="template.id"
         class="label-card"
-        :class="{ 'system-label': label.isSystem }"
       >
         <div class="label-header">
           <div class="label-key-value">
-            <div class="label-key">{{ label.key }}</div>
-            <div class="label-value">{{ label.value || '(空值)' }}</div>
+            <div class="label-key">{{ template.name }}</div>
+            <div class="label-value">{{ Object.keys(template.labels || {}).length }} 个标签</div>
           </div>
           <div class="label-actions">
-            <el-dropdown @command="(cmd) => handleLabelAction(cmd, label)">
+            <el-dropdown @command="(cmd) => handleLabelAction(cmd, template)">
               <el-button type="text" size="small">
                 <el-icon><MoreFilled /></el-icon>
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="edit" :disabled="label.isSystem">
+                  <el-dropdown-item command="edit">
                     <el-icon><Edit /></el-icon>
                     编辑
                   </el-dropdown-item>
@@ -94,7 +93,11 @@
                     <el-icon><CopyDocument /></el-icon>
                     复制
                   </el-dropdown-item>
-                  <el-dropdown-item command="delete" :disabled="label.isSystem">
+                  <el-dropdown-item command="apply">
+                    <el-icon><Plus /></el-icon>
+                    应用到节点
+                  </el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>
                     <el-icon><Delete /></el-icon>
                     删除
                   </el-dropdown-item>
@@ -105,57 +108,39 @@
         </div>
 
         <div class="label-meta">
-          <el-tag
-            :type="label.isSystem ? 'info' : 'primary'"
-            size="small"
-          >
-            {{ label.isSystem ? '系统标签' : '自定义标签' }}
+          <el-tag type="primary" size="small">
+            标签模板
           </el-tag>
-          <span class="node-count">{{ label.nodeCount || 0 }} 个节点</span>
+          <span class="create-time">{{ template.created_at }}</span>
         </div>
 
-        <div v-if="label.description" class="label-description">
-          {{ label.description }}
+        <div v-if="template.description" class="label-description">
+          {{ template.description }}
         </div>
 
-        <div class="label-nodes">
-          <div class="nodes-header">
-            <span class="nodes-title">关联节点:</span>
-            <el-button
-              type="text"
-              size="small"
-              @click="showLabelNodes(label)"
-            >
-              查看全部
-            </el-button>
-          </div>
-          <div class="nodes-list">
+        <div class="label-content">
+          <div class="labels-title">包含标签:</div>
+          <div class="labels-list">
             <el-tag
-              v-for="node in (label.nodes || []).slice(0, 5)"
-              :key="node"
+              v-for="(value, key) in template.labels || {}"
+              :key="key"
               size="small"
-              class="node-tag"
+              class="label-item-tag"
             >
-              {{ node }}
+              {{ key }}{{ value ? `=${value}` : '' }}
             </el-tag>
-            <span
-              v-if="(label.nodes || []).length > 5"
-              class="more-nodes"
-            >
-              +{{ (label.nodes || []).length - 5 }} 个
-            </span>
           </div>
         </div>
 
         <div class="label-footer">
           <el-button-group size="small">
-            <el-button @click="applyToNodes(label)">
+            <el-button @click="applyTemplateToNodes(template)">
               <el-icon><Plus /></el-icon>
               应用到节点
             </el-button>
-            <el-button @click="removeFromNodes(label)">
-              <el-icon><Minus /></el-icon>
-              从节点移除
+            <el-button @click="editTemplate(template)">
+              <el-icon><Edit /></el-icon>
+              编辑模板
             </el-button>
           </el-button-group>
         </div>
@@ -198,18 +183,10 @@
         label-width="110px"
         style="margin-top: 20px;"
       >
-        <el-form-item label="标签键" prop="key">
+        <el-form-item label="模板名称" prop="name">
           <el-input
-            v-model="labelForm.key"
-            placeholder="例如: app, version, environment"
-            :disabled="isEditing"
-          />
-        </el-form-item>
-
-        <el-form-item label="标签值" prop="value">
-          <el-input
-            v-model="labelForm.value"
-            placeholder="例如: web, v1.0, production（可为空）"
+            v-model="labelForm.name"
+            placeholder="输入模板名称，如：Web应用标签、生产环境标签"
           />
         </el-form-item>
 
@@ -217,39 +194,58 @@
           <el-input
             v-model="labelForm.description"
             type="textarea"
-            :rows="3"
-            placeholder="标签用途描述"
+            :rows="2"
+            placeholder="模板用途描述"
           />
         </el-form-item>
 
-        <el-form-item label="应用到节点" style="margin-top: 24px;">
-          <el-select
-            v-model="labelForm.selectedNodes"
-            multiple
-            filterable
-            placeholder="选择要应用此标签的节点"
-            style="width: 100%; font-size: 14px;"
-            size="large"
+        <el-divider content-position="left">标签配置</el-divider>
+
+        <div class="labels-config">
+          <div 
+            v-for="(label, index) in labelForm.labels" 
+            :key="index"
+            class="label-config-item"
           >
-            <el-option
-              v-for="node in availableNodes"
-              :key="node.name"
-              :label="`${node.name} (${node.status})`"
-              :value="node.name"
-            >
-              <div class="node-option">
-                <span class="node-name">{{ node.name }}</span>
-                <el-tag 
-                  :type="node.status === 'Ready' ? 'success' : 'danger'" 
+            <el-row :gutter="12" align="middle">
+              <el-col :span="10">
+                <el-form-item :prop="`labels.${index}.key`" :rules="[{ required: true, message: '请输入标签键', trigger: 'blur' }]">
+                  <el-input
+                    v-model="label.key"
+                    placeholder="标签键"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="10">
+                <el-form-item>
+                  <el-input
+                    v-model="label.value"
+                    placeholder="标签值（可为空）"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="4">
+                <el-button
+                  type="danger"
                   size="small"
-                  style="margin-left: auto;"
-                >
-                  {{ node.status }}
-                </el-tag>
-              </div>
-            </el-option>
-          </el-select>
-        </el-form-item>
+                  :icon="Delete"
+                  circle
+                  @click="removeLabel(index)"
+                  :disabled="labelForm.labels.length === 1"
+                />
+              </el-col>
+            </el-row>
+          </div>
+          
+          <el-button
+            type="dashed"
+            block
+            @click="addLabel"
+            :icon="Plus"
+          >
+            添加标签
+          </el-button>
+        </div>
       </el-form>
 
       <template #footer>
@@ -304,6 +300,69 @@
         </el-table-column>
       </el-table>
     </el-dialog>
+
+    <!-- 应用模板对话框 -->
+    <el-dialog
+      v-model="applyDialogVisible"
+      :title="`应用模板: ${selectedTemplate?.name}`"
+      width="600px"
+    >
+      <div class="template-info">
+        <h4>模板包含的标签:</h4>
+        <div class="template-labels">
+          <el-tag
+            v-for="(value, key) in selectedTemplate?.labels || {}"
+            :key="key"
+            class="label-tag"
+            type="primary"
+          >
+            {{ key }}{{ value ? `=${value}` : '' }}
+          </el-tag>
+        </div>
+      </div>
+
+      <el-divider />
+
+      <el-form label-width="100px">
+        <el-form-item label="选择节点" required>
+          <el-select
+            v-model="selectedNodes"
+            multiple
+            filterable
+            placeholder="选择要应用模板的节点"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="node in availableNodes"
+              :key="node.name"
+              :label="`${node.name} (${node.status})`"
+              :value="node.name"
+            >
+              <div class="node-option">
+                <span class="node-name">{{ node.name }}</span>
+                <el-tag 
+                  :type="node.status === 'Ready' ? 'success' : 'danger'" 
+                  size="small"
+                >
+                  {{ node.status }}
+                </el-tag>
+              </div>
+            </el-option>
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="applyDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="applying"
+          @click="handleApplyTemplate"
+        >
+          应用到节点
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -326,9 +385,11 @@ import {
 // 响应式数据
 const loading = ref(false)
 const saving = ref(false)
+const applying = ref(false)
 const searchKeyword = ref('')
 const labelDialogVisible = ref(false)
 const nodesDialogVisible = ref(false)
+const applyDialogVisible = ref(false)
 const isEditing = ref(false)
 const labelFormRef = ref()
 
@@ -337,6 +398,8 @@ const labels = ref([])
 const availableNodes = ref([])
 const selectedLabel = ref(null)
 const selectedLabelNodes = ref([])
+const selectedTemplate = ref(null)
+const selectedNodes = ref([])
 
 // 分页
 const pagination = reactive({
@@ -347,10 +410,9 @@ const pagination = reactive({
 
 // 表单数据
 const labelForm = reactive({
-  key: '',
-  value: '',
+  name: '',
   description: '',
-  selectedNodes: []
+  labels: [{ key: '', value: '' }]
 })
 
 // 搜索筛选
@@ -381,9 +443,8 @@ const searchFilters = ref([
 
 // 表单验证规则
 const labelRules = {
-  key: [
-    { required: true, message: '请输入标签键', trigger: 'blur' },
-    { pattern: /^[a-zA-Z0-9._/-]+$/, message: '标签键只能包含字母、数字、点、下划线、斜杠和横线', trigger: 'blur' }
+  name: [
+    { required: true, message: '请输入模板名称', trigger: 'blur' }
   ]
 }
 
@@ -409,12 +470,20 @@ const filteredLabels = computed(() => {
 const fetchLabels = async () => {
   try {
     loading.value = true
-    // 暂时使用空数据，避免404错误
-    // TODO: 实现正确的标签数据获取逻辑
-    labels.value = []
-    pagination.total = 0
+    const response = await labelApi.getTemplateList({
+      page: pagination.current,
+      page_size: pagination.size
+    })
+    if (response.data && response.data.code === 200) {
+      const data = response.data.data
+      labels.value = data.templates || []
+      pagination.total = data.total || 0
+    } else {
+      labels.value = []
+      pagination.total = 0
+    }
   } catch (error) {
-    console.warn('获取标签数据失败，使用空列表')
+    console.warn('获取标签模板失败:', error)
     labels.value = []
     pagination.total = 0
   } finally {
@@ -473,55 +542,80 @@ const showAddDialog = () => {
 // 重置表单
 const resetLabelForm = () => {
   Object.assign(labelForm, {
-    key: '',
-    value: '',
+    name: '',
     description: '',
-    selectedNodes: []
+    labels: [{ key: '', value: '' }]
   })
 }
 
+// 添加标签
+const addLabel = () => {
+  labelForm.labels.push({ key: '', value: '' })
+}
+
+// 移除标签
+const removeLabel = (index) => {
+  if (labelForm.labels.length > 1) {
+    labelForm.labels.splice(index, 1)
+  }
+}
+
 // 处理标签操作
-const handleLabelAction = (command, label) => {
+const handleLabelAction = (command, template) => {
   switch (command) {
     case 'edit':
-      editLabel(label)
+      editTemplate(template)
       break
     case 'copy':
-      copyLabel(label)
+      copyTemplate(template)
+      break
+    case 'apply':
+      applyTemplateToNodes(template)
       break
     case 'delete':
-      deleteLabel(label)
+      deleteTemplate(template)
       break
   }
 }
 
-// 编辑标签
-const editLabel = (label) => {
+// 编辑模板
+const editTemplate = (template) => {
   isEditing.value = true
+  
+  // 转换标签对象为数组
+  const labelsArray = Object.entries(template.labels || {}).map(([key, value]) => ({ key, value }))
+  
   Object.assign(labelForm, {
-    key: label.key,
-    value: label.value || '',
-    description: label.description || '',
-    selectedNodes: label.nodes || []
+    name: template.name,
+    description: template.description || '',
+    labels: labelsArray.length > 0 ? labelsArray : [{ key: '', value: '' }]
   })
+  
+  // 保存当前编辑的模板ID
+  labelForm.id = template.id
+  
   labelDialogVisible.value = true
 }
 
-// 复制标签
-const copyLabel = (label) => {
-  const text = label.value ? `${label.key}=${label.value}` : label.key
+// 复制模板
+const copyTemplate = (template) => {
+  const labelsText = Object.entries(template.labels || {})
+    .map(([key, value]) => value ? `${key}=${value}` : key)
+    .join(', ')
+  const text = `${template.name}: ${labelsText}`
+  
   navigator.clipboard.writeText(text).then(() => {
-    ElMessage.success('标签已复制到剪贴板')
+    ElMessage.success('模板信息已复制到剪贴板')
   }).catch(() => {
     ElMessage.error('复制失败')
   })
 }
 
-// 删除标签
-const deleteLabel = (label) => {
+// 删除模板
+const deleteTemplate = (template) => {
   ElMessageBox.confirm(
-    `确认删除标签 "${label.key}" 吗？此操作将从所有关联节点中移除该标签。`,
-    '删除标签',
+    `确认删除模板 "${template.name}" 吗？此操作不可撤销。`,
+    '删除模板',
     {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
@@ -529,80 +623,57 @@ const deleteLabel = (label) => {
     }
   ).then(async () => {
     try {
-      // 获取当前集群名称
-      const clusterStore = useClusterStore()
-      const clusterName = clusterStore.currentClusterName
-      
-      if (!clusterName) {
-        ElMessage.error('请先选择集群')
-        return
-      }
-      
-      // 构建删除请求数据
-      const deleteData = {
-        nodes: label.nodes || [],
-        keys: [label.key],
-        cluster: clusterName
-      }
-      
-      await labelApi.batchDeleteLabels(deleteData)
-      ElMessage.success('标签已删除')
+      await labelApi.deleteTemplate(template.id)
+      ElMessage.success('模板已删除')
       refreshData()
     } catch (error) {
-      ElMessage.error(`删除标签失败: ${error.message}`)
+      ElMessage.error(`删除模板失败: ${error.message}`)
     }
   }).catch(() => {
     // 用户取消
   })
 }
 
-// 保存标签
+// 保存模板
 const handleSaveLabel = async () => {
   try {
     await labelFormRef.value.validate()
     saving.value = true
     
-    // 获取当前集群名称
-    const clusterStore = useClusterStore()
-    const clusterName = clusterStore.currentClusterName
-    
-    if (!clusterName) {
-      ElMessage.error('请先选择集群')
+    // 验证标签配置
+    const validLabels = labelForm.labels.filter(label => label.key.trim())
+    if (validLabels.length === 0) {
+      ElMessage.error('请至少添加一个有效的标签')
       return
     }
     
-    if (labelForm.selectedNodes.length === 0) {
-      ElMessage.error('请选择要应用标签的节点')
-      return
-    }
+    // 转换标签数组为对象
+    const labelsObj = {}
+    validLabels.forEach(label => {
+      labelsObj[label.key.trim()] = label.value.trim()
+    })
     
-    const labelData = {
-      key: labelForm.key,
-      value: labelForm.value,
-      description: labelForm.description
-    }
-    
-    // 构建请求数据，包含集群名称
-    const requestData = {
-      nodes: labelForm.selectedNodes,
-      labels: [labelData],
-      cluster: clusterName
+    const templateData = {
+      name: labelForm.name,
+      description: labelForm.description,
+      labels: labelsObj
     }
     
     if (isEditing.value) {
-      // 更新标签
-      await labelApi.batchAddLabels(requestData)
+      // 更新模板
+      await labelApi.updateTemplate(labelForm.id, templateData)
+      ElMessage.success('模板更新成功')
     } else {
-      // 创建新标签
-      await labelApi.batchAddLabels(requestData)
+      // 创建新模板
+      await labelApi.createTemplate(templateData)
+      ElMessage.success('模板创建成功')
     }
     
-    ElMessage.success(isEditing.value ? '标签更新成功' : '标签创建成功')
     labelDialogVisible.value = false
     refreshData()
     
   } catch (error) {
-    ElMessage.error(error.message || '保存标签失败')
+    ElMessage.error(error.message || '保存模板失败')
   } finally {
     saving.value = false
   }
@@ -624,16 +695,53 @@ const showLabelNodes = async (label) => {
   }
 }
 
-// 应用标签到节点
-const applyToNodes = (label) => {
-  // 实现应用标签逻辑
-  ElMessage.info('功能开发中')
+// 应用模板到节点
+const applyTemplateToNodes = (template) => {
+  // 显示节点选择对话框
+  showApplyDialog(template)
 }
 
-// 从节点移除标签
-const removeFromNodes = (label) => {
-  // 实现移除标签逻辑
-  ElMessage.info('功能开发中')
+// 显示应用对话框
+const showApplyDialog = (template) => {
+  selectedTemplate.value = template
+  applyDialogVisible.value = true
+  fetchNodes() // 获取节点列表
+}
+
+// 应用模板
+const handleApplyTemplate = async () => {
+  try {
+    if (selectedNodes.value.length === 0) {
+      ElMessage.error('请选择要应用的节点')
+      return
+    }
+    
+    const clusterStore = useClusterStore()
+    const clusterName = clusterStore.currentClusterName
+    
+    if (!clusterName) {
+      ElMessage.error('请先选择集群')
+      return
+    }
+    
+    applying.value = true
+    
+    const applyData = {
+      cluster_name: clusterName,
+      node_names: selectedNodes.value,
+      template_id: selectedTemplate.value.id,
+      operation: 'add'
+    }
+    
+    await labelApi.applyTemplate(applyData)
+    ElMessage.success('模板应用成功')
+    applyDialogVisible.value = false
+    
+  } catch (error) {
+    ElMessage.error(`应用模板失败: ${error.message}`)
+  } finally {
+    applying.value = false
+  }
 }
 
 // 从单个节点移除标签
@@ -942,5 +1050,63 @@ onMounted(() => {
     flex-direction: column;
     gap: 8px;
   }
+}
+
+/* 新增样式 */
+.labels-config {
+  margin-top: 16px;
+}
+
+.label-config-item {
+  margin-bottom: 16px;
+}
+
+.create-time {
+  color: #999;
+  font-size: 12px;
+}
+
+.label-content {
+  margin-bottom: 16px;
+}
+
+.labels-title {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.labels-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.label-item-tag {
+  font-size: 11px;
+  height: 20px;
+  line-height: 18px;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.template-info {
+  margin-bottom: 16px;
+}
+
+.template-info h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.template-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.label-tag {
+  font-family: 'Monaco', 'Menlo', monospace;
 }
 </style>
