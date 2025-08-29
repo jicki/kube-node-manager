@@ -66,6 +66,8 @@ dev-frontend: ## 启动前端开发服务器
 # 构建
 build: ## 构建应用（多阶段构建单一镜像）
 	@echo "构建应用 [版本: $(VERSION_TAG)]..."
+	@echo "清理 statik 文件..."
+	rm -rf backend/statik/statik.go
 	docker build \
 		--build-arg VITE_API_BASE_URL="$(VITE_API_BASE_URL)" \
 		--build-arg VITE_ENABLE_LDAP="$(VITE_ENABLE_LDAP)" \
@@ -81,6 +83,8 @@ build-backend: ## 构建后端
 	cd backend && go build -o main cmd/main.go
 
 build-frontend: ## 构建前端
+	@echo "清理 statik 文件..."
+	rm -rf backend/statik/statik.go
 	@echo "构建前端..."
 	cd frontend && npm run build
 
@@ -151,6 +155,8 @@ lint-frontend: ## 前端代码检查
 
 # Docker 相关
 docker-build: ## 构建 Docker 镜像（多阶段构建）并推送
+	@echo "清理 statik 文件..."
+	rm -rf backend/statik/statik.go
 	@echo "构建 Docker 镜像 [版本: $(VERSION_TAG)]..."
 	docker build \
 		--build-arg VITE_API_BASE_URL="$(VITE_API_BASE_URL)" \
@@ -161,6 +167,8 @@ docker-build: ## 构建 Docker 镜像（多阶段构建）并推送
 	@$(MAKE) docker-push
 
 docker-build-only: ## 只构建 Docker 镜像，不推送
+	@echo "清理 statik 文件..."
+	rm -rf backend/statik/statik.go
 	@echo "构建 Docker 镜像 [版本: $(VERSION_TAG)]..."
 	docker build \
 		--build-arg VITE_API_BASE_URL="$(VITE_API_BASE_URL)" \
@@ -170,6 +178,8 @@ docker-build-only: ## 只构建 Docker 镜像，不推送
 	@echo "镜像构建完成（未推送）"
 
 docker-build-dev: ## 构建开发环境镜像
+	@echo "清理 statik 文件..."
+	rm -rf backend/statik/statik.go
 	@echo "构建开发环境镜像 [版本: $(VERSION_TAG)]..."
 	docker build -t $(REGISTRY)/kube-node-manager/backend:$(VERSION_TAG)-dev -f backend/Dockerfile.dev backend/
 	docker build -t $(REGISTRY)/kube-node-manager/frontend:$(VERSION_TAG)-dev -f frontend/Dockerfile.dev frontend/
