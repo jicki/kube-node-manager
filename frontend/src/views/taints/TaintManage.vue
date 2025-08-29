@@ -388,10 +388,26 @@ const taintRules = {
 
 // 计算属性
 const taintStats = computed(() => {
-  const total = taints.value.length
-  const noSchedule = taints.value.filter(t => t.effect === 'NoSchedule').length
-  const preferNoSchedule = taints.value.filter(t => t.effect === 'PreferNoSchedule').length
-  const noExecute = taints.value.filter(t => t.effect === 'NoExecute').length
+  // 统计所有模板中的污点数量
+  let total = 0
+  let noSchedule = 0
+  let preferNoSchedule = 0
+  let noExecute = 0
+  
+  taints.value.forEach(template => {
+    if (template.taints && Array.isArray(template.taints)) {
+      template.taints.forEach(taint => {
+        total++
+        if (taint.effect === 'NoSchedule') {
+          noSchedule++
+        } else if (taint.effect === 'PreferNoSchedule') {
+          preferNoSchedule++
+        } else if (taint.effect === 'NoExecute') {
+          noExecute++
+        }
+      })
+    }
+  })
   
   return { total, noSchedule, preferNoSchedule, noExecute }
 })
@@ -1017,6 +1033,24 @@ onMounted(() => {
   
   .taint-row .el-col {
     margin-bottom: 8px;
+  }
+
+  /* 在中等屏幕下调整布局 */
+  .taint-row .el-col:nth-child(1) {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+  .taint-row .el-col:nth-child(2) {
+    flex: 0 0 48%;
+    max-width: 48%;
+  }
+  .taint-row .el-col:nth-child(3) {
+    flex: 0 0 48%;
+    max-width: 48%;
+  }
+  .taint-row .el-col:nth-child(4) {
+    flex: 0 0 100%;
+    max-width: 100%;
   }
 }
 

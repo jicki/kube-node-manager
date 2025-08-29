@@ -32,7 +32,7 @@
         <el-card class="stat-card">
           <div class="stat-content">
             <div class="stat-value">{{ labelStats.active }}</div>
-            <div class="stat-label">使用中</div>
+            <div class="stat-label">模板数</div>
           </div>
         </el-card>
       </el-col>
@@ -459,12 +459,28 @@ const labelRules = {
 
 // 计算属性
 const labelStats = computed(() => {
-  const total = labels.value.length
-  const system = labels.value.filter(l => l.isSystem).length
-  const custom = total - system
-  const active = labels.value.filter(l => l.nodeCount > 0).length
+  // 统计模板数量和标签数量
+  const totalTemplates = labels.value.length
+  let totalLabels = 0
+  let systemLabels = 0
+  let customLabels = 0
   
-  return { total, system, custom, active }
+  labels.value.forEach(template => {
+    if (template.labels && typeof template.labels === 'object') {
+      const labelCount = Object.keys(template.labels).length
+      totalLabels += labelCount
+      // 由于模板中的标签都是自定义的，所以都算作自定义标签
+      customLabels += labelCount
+    }
+  })
+  
+  // 对于模板管理，我们显示模板相关的统计
+  return { 
+    total: totalLabels, // 总标签数
+    active: totalTemplates, // 使用中（模板数）
+    system: systemLabels, // 系统标签（模板中通常为0）
+    custom: customLabels // 自定义标签数
+  }
 })
 
 const filteredLabels = computed(() => {
