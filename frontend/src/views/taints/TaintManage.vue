@@ -175,7 +175,7 @@
       </div>
 
       <!-- 搜索无结果状态 -->
-      <div v-if="filteredAndSortedTaints.length === 0 && searchKeyword" class="empty-search"
+      <div v-if="filteredAndSortedTaints.length === 0 && searchKeyword" class="empty-search">
         <el-empty description="没有找到匹配的污点模板" :image-size="60">
           <el-button @click="searchKeyword = ''">清空搜索条件</el-button>
         </el-empty>
