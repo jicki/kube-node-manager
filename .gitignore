@@ -1,5 +1,8 @@
 # 二进制文件
 .kube-node-manager
+.kube-node-mgr
+backend/kube-node-manager
+backend/kube-node-mgr
 
 # 环境变量和配置
 .env
