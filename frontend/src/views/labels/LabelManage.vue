@@ -121,23 +121,29 @@
         <div class="label-content">
           <div class="labels-title">包含标签:</div>
           <div class="labels-list">
-            <el-tag
+            <div
               v-for="(value, key) in template.labels || {}"
               :key="key"
-              size="small"
-              class="label-item-tag"
+              class="label-item-wrapper"
             >
-              <span class="label-key">{{ key }}</span>
-              <span v-if="typeof value === 'string' && value.includes('|MULTI_VALUE|')" class="label-values">
-                =[{{ value.split('|MULTI_VALUE|').filter(v => v !== '').join('|') || '空' }}]
-              </span>
-              <span v-else-if="Array.isArray(value) && value.length > 1" class="label-values">
-                =[{{ value.filter(v => v !== '').join('|') || '空' }}]
-              </span>
-              <span v-else-if="Array.isArray(value) ? value[0] : value" class="label-value">
-                ={{ Array.isArray(value) ? value[0] : value }}
-              </span>
-            </el-tag>
+              <el-tag
+                size="small"
+                class="label-item-tag"
+              >
+                <div class="label-tag-content">
+                  <span class="label-key">{{ key }}</span>
+                  <span v-if="typeof value === 'string' && value.includes('|MULTI_VALUE|')" class="label-values">
+                    =[{{ value.split('|MULTI_VALUE|').filter(v => v !== '').join('|') || '空' }}]
+                  </span>
+                  <span v-else-if="Array.isArray(value) && value.length > 1" class="label-values">
+                    =[{{ value.filter(v => v !== '').join('|') || '空' }}]
+                  </span>
+                  <span v-else-if="Array.isArray(value) ? value[0] : value" class="label-value">
+                    ={{ Array.isArray(value) ? value[0] : value }}
+                  </span>
+                </div>
+              </el-tag>
+            </div>
           </div>
         </div>
 
@@ -1147,7 +1153,9 @@ onMounted(() => {
   background: #fff;
   transition: all 0.3s;
   position: relative;
-  min-height: 280px;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
 }
 
 .label-card:hover {
@@ -1245,6 +1253,8 @@ onMounted(() => {
 .label-footer {
   border-top: 1px solid #f0f0f0;
   padding-top: 12px;
+  margin-top: auto;
+  flex-shrink: 0;
 }
 
 .empty-state {
@@ -1315,6 +1325,8 @@ onMounted(() => {
 
 .label-content {
   margin-bottom: 16px;
+  flex: 1;
+  overflow: hidden;
 }
 
 .labels-title {
@@ -1326,23 +1338,33 @@ onMounted(() => {
 
 .labels-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
   max-width: 100%;
-  overflow: hidden;
+}
+
+.label-item-wrapper {
+  width: 100%;
 }
 
 .label-item-tag {
   font-size: 12px;
-  height: 28px;
-  line-height: 26px;
+  min-height: 28px;
+  height: auto;
+  line-height: 1.4;
   font-family: 'Monaco', 'Menlo', monospace;
-  max-width: 350px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex-shrink: 0;
-  padding: 0 10px;
+  width: 100%;
+  max-width: 100%;
+  padding: 6px 10px;
+  display: block;
+  white-space: normal;
+  word-break: break-all;
+}
+
+.label-tag-content {
+  display: block;
+  width: 100%;
+  line-height: 1.4;
 }
 
 .template-info {

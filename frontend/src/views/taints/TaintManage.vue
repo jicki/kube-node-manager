@@ -109,25 +109,31 @@
         <div class="taint-content">
           <div class="taints-title">包含污点:</div>
           <div class="taints-list">
-            <el-tag
+            <div
               v-for="taint in template.taints || []"
               :key="`${taint.key}-${taint.effect}`"
-              size="small"
-              class="taint-item-tag"
-              :type="getTaintEffectType(taint.effect)"
+              class="taint-item-wrapper"
             >
-              <span class="taint-key">{{ taint.key }}</span>
-              <span v-if="typeof taint.value === 'string' && taint.value.includes('|MULTI_VALUE|')" class="taint-values">
-                =[{{ taint.value.split('|MULTI_VALUE|').filter(v => v !== '').join('|') || '空' }}]
-              </span>
-              <span v-else-if="taint.values && taint.values.length > 1" class="taint-values">
-                =[{{ taint.values.filter(v => v !== '').join('|') || '空' }}]
-              </span>
-              <span v-else-if="taint.value || (taint.values && taint.values[0])" class="taint-value">
-                ={{ taint.value || taint.values[0] }}
-              </span>
-              <span class="taint-effect">:{{ taint.effect }}</span>
-            </el-tag>
+              <el-tag
+                size="small"
+                class="taint-item-tag"
+                :type="getTaintEffectType(taint.effect)"
+              >
+                <div class="taint-tag-content">
+                  <span class="taint-key">{{ taint.key }}</span>
+                  <span v-if="typeof taint.value === 'string' && taint.value.includes('|MULTI_VALUE|')" class="taint-values">
+                    =[{{ taint.value.split('|MULTI_VALUE|').filter(v => v !== '').join('|') || '空' }}]
+                  </span>
+                  <span v-else-if="taint.values && taint.values.length > 1" class="taint-values">
+                    =[{{ taint.values.filter(v => v !== '').join('|') || '空' }}]
+                  </span>
+                  <span v-else-if="taint.value || (taint.values && taint.values[0])" class="taint-value">
+                    ={{ taint.value || taint.values[0] }}
+                  </span>
+                  <span class="taint-effect">:{{ taint.effect }}</span>
+                </div>
+              </el-tag>
+            </div>
           </div>
         </div>
 
@@ -197,7 +203,7 @@
             class="taint-config-item"
           >
             <el-row :gutter="16" align="middle" class="taint-row">
-              <el-col :xs="24" :sm="24" :md="9" class="taint-key-col">
+              <el-col :xs="24" :sm="24" :md="8" class="taint-key-col">
                 <el-form-item 
                   :prop="`taints.${index}.key`" 
                   :rules="[{ required: true, message: '请输入污点键', trigger: 'blur' }]"
@@ -212,7 +218,7 @@
                   />
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :sm="24" :md="8" class="taint-value-col">
+              <el-col :xs="24" :sm="24" :md="7" class="taint-value-col">
                 <el-form-item 
                   label="污点值" 
                   style="margin-bottom: 16px;"
@@ -253,7 +259,7 @@
                   </div>
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :sm="20" :md="5" class="taint-effect-col">
+              <el-col :xs="24" :sm="16" :md="6" class="taint-effect-col">
                 <el-form-item 
                   :prop="`taints.${index}.effect`" 
                   :rules="[{ required: true, message: '请选择效果', trigger: 'change' }]"
@@ -263,7 +269,7 @@
                   <el-select 
                     v-model="taint.effect" 
                     placeholder="选择效果" 
-                    style="width: 100%"
+                    style="width: 100%; min-width: 180px;"
                     size="large"
                     clearable
                   >
@@ -288,7 +294,7 @@
                   </el-select>
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :sm="4" :md="2" class="delete-col">
+              <el-col :xs="24" :sm="8" :md="3" class="delete-col">
                 <el-form-item style="margin-bottom: 16px;" label=" ">
                   <el-button
                     type="danger"
@@ -1030,7 +1036,9 @@ onMounted(() => {
   padding: 24px;
   background: #fff;
   transition: all 0.3s;
-  min-height: 280px;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
 }
 
 .taint-card:hover {
@@ -1106,6 +1114,8 @@ onMounted(() => {
 .taint-actions {
   border-top: 1px solid #f0f0f0;
   padding-top: 12px;
+  margin-top: auto;
+  flex-shrink: 0;
 }
 
 .empty-state {
@@ -1147,6 +1157,8 @@ onMounted(() => {
 
 .taint-content {
   margin-bottom: 16px;
+  flex: 1;
+  overflow: hidden;
 }
 
 .taints-title {
@@ -1158,23 +1170,33 @@ onMounted(() => {
 
 .taints-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
   max-width: 100%;
-  overflow: hidden;
+}
+
+.taint-item-wrapper {
+  width: 100%;
 }
 
 .taint-item-tag {
   font-size: 12px;
-  height: 28px;
-  line-height: 26px;
+  min-height: 28px;
+  height: auto;
+  line-height: 1.4;
   font-family: 'Monaco', 'Menlo', monospace;
-  max-width: 350px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex-shrink: 0;
-  padding: 0 10px;
+  width: 100%;
+  max-width: 100%;
+  padding: 6px 10px;
+  display: block;
+  white-space: normal;
+  word-break: break-all;
+}
+
+.taint-tag-content {
+  display: block;
+  width: 100%;
+  line-height: 1.4;
 }
 
 .template-info {
@@ -1315,6 +1337,15 @@ onMounted(() => {
   color: #555;
 }
 
+/* 确保效果列有足够空间 */
+.taint-effect-col {
+  min-width: 180px;
+}
+
+.taint-effect-col .el-select {
+  min-width: 180px;
+}
+
 .taint-config-item {
   background-color: white;
   border-radius: 8px;
@@ -1410,8 +1441,8 @@ onMounted(() => {
 
 @media (min-width: 769px) and (max-width: 1024px) {
   .taint-key-col {
-    flex: 0 0 40%;
-    max-width: 40%;
+    flex: 0 0 35%;
+    max-width: 35%;
   }
   
   .taint-value-col {
@@ -1420,8 +1451,9 @@ onMounted(() => {
   }
   
   .taint-effect-col {
-    flex: 0 0 22%;
-    max-width: 22%;
+    flex: 0 0 27%;
+    max-width: 27%;
+    min-width: 180px;
   }
   
   .delete-col {
