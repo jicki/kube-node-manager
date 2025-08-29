@@ -36,20 +36,20 @@ const taintApi = {
   },
 
   // 批量添加污点
-  batchAddTaints(nodeNames, taints) {
+  batchAddTaints(requestData) {
     return request({
       url: '/api/v1/nodes/taints/batch-add',
       method: 'post',
-      data: { nodes: nodeNames, taints }
+      data: requestData
     })
   },
 
   // 批量删除污点
-  batchDeleteTaints(nodeNames, keys) {
+  batchDeleteTaints(requestData) {
     return request({
       url: '/api/v1/nodes/taints/batch-delete',
       method: 'post',
-      data: { nodes: nodeNames, keys }
+      data: requestData
     })
   },
 

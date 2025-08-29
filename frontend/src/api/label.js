@@ -28,28 +28,29 @@ const labelApi = {
   },
 
   // 删除节点标签
-  deleteNodeLabel(nodeName, key) {
+  deleteNodeLabel(nodeName, key, params = {}) {
     return request({
       url: `/api/v1/nodes/${nodeName}/labels/${key}`,
-      method: 'delete'
+      method: 'delete',
+      params
     })
   },
 
   // 批量添加标签
-  batchAddLabels(nodeNames, labels) {
+  batchAddLabels(requestData) {
     return request({
       url: '/api/v1/nodes/labels/batch-add',
       method: 'post',
-      data: { nodes: nodeNames, labels }
+      data: requestData
     })
   },
 
   // 批量删除标签
-  batchDeleteLabels(nodeNames, keys) {
+  batchDeleteLabels(requestData) {
     return request({
       url: '/api/v1/nodes/labels/batch-delete',
       method: 'post',
-      data: { nodes: nodeNames, keys }
+      data: requestData
     })
   },
 

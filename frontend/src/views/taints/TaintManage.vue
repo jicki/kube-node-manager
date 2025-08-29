@@ -356,7 +356,23 @@ const deleteTaint = (taint) => {
     }
   ).then(async () => {
     try {
-      await taintApi.batchDeleteTaints(taint.nodes || [], [taint.key])
+      // 获取当前集群名称
+      const clusterStore = useClusterStore()
+      const clusterName = clusterStore.currentClusterName
+      
+      if (!clusterName) {
+        ElMessage.error('请先选择集群')
+        return
+      }
+      
+      // 构建删除请求数据
+      const deleteData = {
+        nodes: taint.nodes || [],
+        keys: [taint.key],
+        cluster: clusterName
+      }
+      
+      await taintApi.batchDeleteTaints(deleteData)
       ElMessage.success('污点已删除')
       refreshData()
     } catch (error) {
@@ -373,15 +389,34 @@ const handleSaveTaint = async () => {
     await taintFormRef.value.validate()
     saving.value = true
     
+    // 获取当前集群名称
+    const clusterStore = useClusterStore()
+    const clusterName = clusterStore.currentClusterName
+    
+    if (!clusterName) {
+      ElMessage.error('请先选择集群')
+      return
+    }
+    
+    if (taintForm.selectedNodes.length === 0) {
+      ElMessage.error('请选择要应用污点的节点')
+      return
+    }
+    
     const taintData = {
       key: taintForm.key,
       value: taintForm.value,
       effect: taintForm.effect
     }
     
-    if (taintForm.selectedNodes.length > 0) {
-      await taintApi.batchAddTaints(taintForm.selectedNodes, [taintData])
+    // 构建请求数据，包含集群名称
+    const requestData = {
+      nodes: taintForm.selectedNodes,
+      taints: [taintData],
+      cluster: clusterName
     }
+    
+    await taintApi.batchAddTaints(requestData)
     
     ElMessage.success(isEditing.value ? '污点更新成功' : '污点创建成功')
     taintDialogVisible.value = false

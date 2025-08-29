@@ -529,7 +529,23 @@ const deleteLabel = (label) => {
     }
   ).then(async () => {
     try {
-      await labelApi.batchDeleteLabels(label.nodes || [], [label.key])
+      // 获取当前集群名称
+      const clusterStore = useClusterStore()
+      const clusterName = clusterStore.currentClusterName
+      
+      if (!clusterName) {
+        ElMessage.error('请先选择集群')
+        return
+      }
+      
+      // 构建删除请求数据
+      const deleteData = {
+        nodes: label.nodes || [],
+        keys: [label.key],
+        cluster: clusterName
+      }
+      
+      await labelApi.batchDeleteLabels(deleteData)
       ElMessage.success('标签已删除')
       refreshData()
     } catch (error) {
@@ -546,22 +562,39 @@ const handleSaveLabel = async () => {
     await labelFormRef.value.validate()
     saving.value = true
     
+    // 获取当前集群名称
+    const clusterStore = useClusterStore()
+    const clusterName = clusterStore.currentClusterName
+    
+    if (!clusterName) {
+      ElMessage.error('请先选择集群')
+      return
+    }
+    
+    if (labelForm.selectedNodes.length === 0) {
+      ElMessage.error('请选择要应用标签的节点')
+      return
+    }
+    
     const labelData = {
       key: labelForm.key,
       value: labelForm.value,
       description: labelForm.description
     }
     
+    // 构建请求数据，包含集群名称
+    const requestData = {
+      nodes: labelForm.selectedNodes,
+      labels: [labelData],
+      cluster: clusterName
+    }
+    
     if (isEditing.value) {
-      // 更新标签（只更新选中的节点）
-      if (labelForm.selectedNodes.length > 0) {
-        await labelApi.batchAddLabels(labelForm.selectedNodes, [labelData])
-      }
+      // 更新标签
+      await labelApi.batchAddLabels(requestData)
     } else {
       // 创建新标签
-      if (labelForm.selectedNodes.length > 0) {
-        await labelApi.batchAddLabels(labelForm.selectedNodes, [labelData])
-      }
+      await labelApi.batchAddLabels(requestData)
     }
     
     ElMessage.success(isEditing.value ? '标签更新成功' : '标签创建成功')
@@ -606,7 +639,17 @@ const removeFromNodes = (label) => {
 // 从单个节点移除标签
 const removeLabelFromNode = async (node) => {
   try {
-    await labelApi.deleteNodeLabel(node.name, selectedLabel.value.key)
+    // 获取当前集群名称
+    const clusterStore = useClusterStore()
+    const clusterName = clusterStore.currentClusterName
+    
+    if (!clusterName) {
+      ElMessage.error('请先选择集群')
+      return
+    }
+    
+    // 使用URL参数传递cluster_name
+    const response = await labelApi.deleteNodeLabel(node.name, selectedLabel.value.key, { cluster_name: clusterName })
     ElMessage.success(`已从节点 ${node.name} 移除标签`)
     // 刷新数据
     showLabelNodes(selectedLabel.value)
