@@ -77,8 +77,9 @@ export const useNodeStore = defineStore('node', {
         }
         
         const response = await nodeApi.getNodes(queryParams)
-        this.nodes = response.data.items || response.data
-        this.pagination.total = response.data.total || this.nodes.length
+        // 后端返回格式: { code, message, data: [...] } - data直接是节点数组
+        this.nodes = response.data.data || []
+        this.pagination.total = this.nodes.length
         this.updateStats()
         
         return response
