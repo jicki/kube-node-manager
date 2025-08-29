@@ -508,48 +508,44 @@ onUnmounted(() => {
 }
 
 .node-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: block;
   margin-left: 8px;
   width: 100%;
-  min-height: 0;
+  padding: 4px 0;
 }
 
 .node-header {
-  display: flex;
-  flex-direction: column;
+  display: block;
   width: 100%;
+  margin-bottom: 8px;
 }
 
 .node-main-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: block;
 }
 
 .node-name {
   font-weight: 600;
   color: #333;
   font-size: 15px;
-  line-height: 1.3;
+  line-height: 1.4;
   word-break: break-word;
-  margin: 0;
+  margin: 0 0 6px 0;
 }
 
 .node-basic-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .node-ip-row {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
+  gap: 4px;
+  margin: 2px 0;
 }
 
 .node-status-tag {
@@ -568,22 +564,21 @@ onUnmounted(() => {
 }
 
 .node-ip-row {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 4px;
+  font-size: 12px;
   color: #52c41a;
   background: #f6ffed;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
   border: 1px solid #b7eb8f;
   white-space: nowrap;
-  width: fit-content;
-  margin-top: 2px;
+  vertical-align: top;
 }
 
 .ip-icon {
-  font-size: 14px;
+  font-size: 12px;
   color: #52c41a;
   flex-shrink: 0;
 }
@@ -591,31 +586,27 @@ onUnmounted(() => {
 .ip-text {
   font-family: 'Monaco', 'Menlo', monospace;
   font-weight: 500;
-  letter-spacing: 0.5px;
+  font-size: 12px;
 }
 
 .node-attributes {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: block;
   padding-left: 0;
-  border-top: 1px solid #e8e8e8;
-  padding-top: 12px;
-  margin-top: 8px;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 8px;
+  margin-top: 6px;
 }
 
 .attributes-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 4px;
+  display: block;
+  margin-bottom: 8px;
 }
 
 .attributes-header {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 2px;
+  gap: 4px;
+  margin-bottom: 4px;
 }
 
 .section-icon {
@@ -632,26 +623,24 @@ onUnmounted(() => {
 }
 
 .attributes-content {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-  align-items: flex-start;
-  line-height: 1;
+  display: block;
+  line-height: 1.2;
+  margin-top: 2px;
 }
 
 .label-tag {
   font-size: 10px;
-  height: 20px;
-  line-height: 18px;
-  padding: 0 5px;
+  height: 18px;
+  line-height: 16px;
+  padding: 0 4px;
   font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 3px;
+  border-radius: 2px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
   vertical-align: top;
+  margin: 1px 2px 1px 0;
 }
 
 .label-tag:hover {
@@ -681,17 +670,17 @@ onUnmounted(() => {
 
 .taint-tag {
   font-size: 10px;
-  height: 20px;
-  line-height: 18px;
-  padding: 0 5px;
+  height: 18px;
+  line-height: 16px;
+  padding: 0 4px;
   font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 3px;
+  border-radius: 2px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
   vertical-align: top;
+  margin: 1px 2px 1px 0;
 }
 
 .taint-tag:hover {
@@ -724,16 +713,16 @@ onUnmounted(() => {
 .more-labels-tag,
 .more-taints-tag {
   font-size: 10px;
-  height: 20px;
-  line-height: 18px;
-  padding: 0 5px;
+  height: 18px;
+  line-height: 16px;
+  padding: 0 4px;
   cursor: pointer;
   font-weight: 600;
-  border-radius: 3px;
+  border-radius: 2px;
   transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
   vertical-align: top;
+  margin: 1px 2px 1px 0;
 }
 
 .more-labels-tag:hover,

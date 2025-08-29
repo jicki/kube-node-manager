@@ -51,6 +51,12 @@ const router = createRouter({
           name: 'UserManage',
           component: () => import('@/views/users/UserManage.vue'),
           meta: { title: '用户管理', icon: 'User', requiresAuth: true, permission: 'admin' }
+        },
+        {
+          path: 'audit',
+          name: 'AuditLog',
+          component: () => import('@/views/audit/AuditLog.vue'),
+          meta: { title: '审计日志', icon: 'Document', requiresAuth: true }
         }
       ]
     },
