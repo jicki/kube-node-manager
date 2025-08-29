@@ -130,7 +130,9 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		labels.DELETE("/:cluster_id/:node_name", handlers.Label.BatchUpdateLabels)
 		labels.GET("/templates", handlers.Label.ListTemplates)
 		labels.POST("/templates", handlers.Label.CreateTemplate)
+		labels.PUT("/templates/:id", handlers.Label.UpdateTemplate)
 		labels.DELETE("/templates/:id", handlers.Label.DeleteTemplate)
+		labels.POST("/templates/apply", handlers.Label.ApplyTemplate)
 	}
 
 	taints := protected.Group("/taints")
@@ -140,7 +142,9 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		taints.DELETE("/:cluster_id/:node_name", handlers.Taint.RemoveTaint)
 		taints.GET("/templates", handlers.Taint.ListTemplates)
 		taints.POST("/templates", handlers.Taint.CreateTemplate)
+		taints.PUT("/templates/:id", handlers.Taint.UpdateTemplate)
 		taints.DELETE("/templates/:id", handlers.Taint.DeleteTemplate)
+		taints.POST("/templates/apply", handlers.Taint.ApplyTemplate)
 	}
 
 	audit := protected.Group("/audit")

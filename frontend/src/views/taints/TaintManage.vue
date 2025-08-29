@@ -149,8 +149,9 @@
     <!-- 添加/编辑污点对话框 -->
     <el-dialog
       v-model="taintDialogVisible"
-      :title="isEditing ? '编辑污点' : '添加污点'"
-      width="600px"
+      :title="isEditing ? '编辑模板' : '创建模板'"
+      width="900px"
+      class="template-dialog"
     >
               <el-form
         ref="taintFormRef"
@@ -183,36 +184,51 @@
             :key="index"
             class="taint-config-item"
           >
-            <el-row :gutter="12" align="middle">
-              <el-col :span="7">
-                <el-form-item :prop="`taints.${index}.key`" :rules="[{ required: true, message: '请输入污点键', trigger: 'blur' }]">
+            <el-row :gutter="12" align="middle" class="taint-row">
+              <el-col :xs="24" :sm="8">
+                <el-form-item 
+                  :prop="`taints.${index}.key`" 
+                  :rules="[{ required: true, message: '请输入污点键', trigger: 'blur' }]"
+                  style="margin-bottom: 12px;"
+                >
                   <el-input
                     v-model="taint.key"
-                    placeholder="污点键"
+                    placeholder="污点键，如：node-role、dedicated"
+                    size="large"
                   />
                 </el-form-item>
               </el-col>
-              <el-col :span="7">
-                <el-form-item>
+              <el-col :xs="24" :sm="7">
+                <el-form-item style="margin-bottom: 12px;">
                   <el-input
                     v-model="taint.value"
-                    placeholder="污点值（可为空）"
+                    placeholder="污点值，如：master、gpu（可为空）"
+                    size="large"
                   />
                 </el-form-item>
               </el-col>
-              <el-col :span="6">
-                <el-form-item :prop="`taints.${index}.effect`" :rules="[{ required: true, message: '请选择效果', trigger: 'change' }]">
-                  <el-select v-model="taint.effect" placeholder="效果" style="width: 100%">
-                    <el-option label="NoSchedule" value="NoSchedule" />
-                    <el-option label="PreferNoSchedule" value="PreferNoSchedule" />
-                    <el-option label="NoExecute" value="NoExecute" />
+              <el-col :xs="24" :sm="7">
+                <el-form-item 
+                  :prop="`taints.${index}.effect`" 
+                  :rules="[{ required: true, message: '请选择效果', trigger: 'change' }]"
+                  style="margin-bottom: 12px;"
+                >
+                  <el-select 
+                    v-model="taint.effect" 
+                    placeholder="选择污点效果" 
+                    style="width: 100%"
+                    size="large"
+                  >
+                    <el-option label="NoSchedule - 禁止调度" value="NoSchedule" />
+                    <el-option label="PreferNoSchedule - 尽量不调度" value="PreferNoSchedule" />
+                    <el-option label="NoExecute - 禁止执行" value="NoExecute" />
                   </el-select>
                 </el-form-item>
               </el-col>
-              <el-col :span="4">
+              <el-col :xs="24" :sm="2" class="delete-col">
                 <el-button
                   type="danger"
-                  size="small"
+                  size="large"
                   :icon="Delete"
                   circle
                   @click="removeTaint(index)"
@@ -225,8 +241,10 @@
           <el-button
             type="dashed"
             block
+            size="large"
             @click="addTaint"
             :icon="Plus"
+            class="add-taint-btn"
           >
             添加污点
           </el-button>
@@ -929,5 +947,90 @@ onMounted(() => {
   color: #666;
   margin-bottom: 16px;
   line-height: 1.5;
+}
+
+/* 表单优化样式 */
+.template-dialog {
+  --el-dialog-border-radius: 8px;
+}
+
+.template-dialog :deep(.el-dialog__body) {
+  padding: 20px 30px 30px;
+}
+
+.taint-row {
+  margin-bottom: 8px;
+}
+
+.delete-col {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 4px;
+}
+
+.add-taint-btn {
+  margin-top: 12px;
+  height: 44px;
+  border-style: dashed;
+  border-color: #d9d9d9;
+  color: #666;
+  font-size: 14px;
+}
+
+.add-taint-btn:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.taints-config {
+  background-color: #fafafa;
+  border-radius: 6px;
+  padding: 16px;
+  border: 1px solid #f0f0f0;
+}
+
+.taint-config-item {
+  background-color: white;
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #e8e8e8;
+}
+
+.taint-config-item:last-child {
+  margin-bottom: 0;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .template-dialog {
+    --el-dialog-width: 95vw !important;
+    --el-dialog-margin-top: 5vh !important;
+  }
+  
+  .delete-col {
+    justify-content: flex-start;
+    padding-top: 0;
+    margin-top: 8px;
+  }
+  
+  .taint-row .el-col {
+    margin-bottom: 8px;
+  }
+}
+
+@media (max-width: 576px) {
+  .template-dialog {
+    --el-dialog-margin-top: 2vh !important;
+  }
+  
+  .taints-config {
+    padding: 12px;
+  }
+  
+  .taint-config-item {
+    padding: 8px;
+  }
 }
 </style>

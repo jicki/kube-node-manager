@@ -173,8 +173,9 @@
     <!-- 添加/编辑标签对话框 -->
     <el-dialog
       v-model="labelDialogVisible"
-      :title="isEditing ? '编辑标签' : '添加标签'"
-      width="600px"
+      :title="isEditing ? '编辑模板' : '创建模板'"
+      width="800px"
+      class="template-dialog"
     >
               <el-form
         ref="labelFormRef"
@@ -207,27 +208,33 @@
             :key="index"
             class="label-config-item"
           >
-            <el-row :gutter="12" align="middle">
-              <el-col :span="10">
-                <el-form-item :prop="`labels.${index}.key`" :rules="[{ required: true, message: '请输入标签键', trigger: 'blur' }]">
+            <el-row :gutter="12" align="middle" class="label-row">
+              <el-col :xs="24" :sm="11">
+                <el-form-item 
+                  :prop="`labels.${index}.key`" 
+                  :rules="[{ required: true, message: '请输入标签键', trigger: 'blur' }]"
+                  style="margin-bottom: 12px;"
+                >
                   <el-input
                     v-model="label.key"
-                    placeholder="标签键"
+                    placeholder="标签键，如：app、version、environment"
+                    size="large"
                   />
                 </el-form-item>
               </el-col>
-              <el-col :span="10">
-                <el-form-item>
+              <el-col :xs="24" :sm="11">
+                <el-form-item style="margin-bottom: 12px;">
                   <el-input
                     v-model="label.value"
-                    placeholder="标签值（可为空）"
+                    placeholder="标签值，如：web、v1.0、production（可为空）"
+                    size="large"
                   />
                 </el-form-item>
               </el-col>
-              <el-col :span="4">
+              <el-col :xs="24" :sm="2" class="delete-col">
                 <el-button
                   type="danger"
-                  size="small"
+                  size="large"
                   :icon="Delete"
                   circle
                   @click="removeLabel(index)"
@@ -240,8 +247,10 @@
           <el-button
             type="dashed"
             block
+            size="large"
             @click="addLabel"
             :icon="Plus"
+            class="add-label-btn"
           >
             添加标签
           </el-button>
@@ -1108,5 +1117,76 @@ onMounted(() => {
 
 .label-tag {
   font-family: 'Monaco', 'Menlo', monospace;
+}
+
+/* 表单优化样式 */
+.template-dialog {
+  --el-dialog-border-radius: 8px;
+}
+
+.template-dialog :deep(.el-dialog__body) {
+  padding: 20px 30px 30px;
+}
+
+.label-row {
+  margin-bottom: 8px;
+}
+
+.delete-col {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 4px;
+}
+
+.add-label-btn {
+  margin-top: 12px;
+  height: 44px;
+  border-style: dashed;
+  border-color: #d9d9d9;
+  color: #666;
+  font-size: 14px;
+}
+
+.add-label-btn:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.labels-config {
+  background-color: #fafafa;
+  border-radius: 6px;
+  padding: 16px;
+  border: 1px solid #f0f0f0;
+}
+
+.label-config-item {
+  background-color: white;
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #e8e8e8;
+}
+
+.label-config-item:last-child {
+  margin-bottom: 0;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .template-dialog {
+    --el-dialog-width: 95vw !important;
+    --el-dialog-margin-top: 5vh !important;
+  }
+  
+  .delete-col {
+    justify-content: flex-start;
+    padding-top: 0;
+    margin-top: 8px;
+  }
+  
+  .label-row .el-col {
+    margin-bottom: 8px;
+  }
 }
 </style>
