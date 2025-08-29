@@ -165,7 +165,7 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-if="filteredAndSortedTaints.length === 0 && !searchKeyword" class="empty-state"
+      <div v-if="filteredAndSortedTaints.length === 0 && !searchKeyword" class="empty-state">
         <el-empty description="暂无污点数据" :image-size="80">
           <el-button type="primary" @click="showAddDialog">
             <el-icon><Plus /></el-icon>
