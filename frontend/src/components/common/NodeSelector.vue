@@ -82,10 +82,10 @@
               :disabled="!node.name"
             >
                               <div class="node-content">
-                  <div class="node-row">
-                    <div class="node-basic-info">
+                  <div class="node-header">
+                    <div class="node-main-info">
                       <div class="node-name">{{ node.name || '未知节点' }}</div>
-                      <div class="node-meta-row">
+                      <div class="node-basic-row">
                         <el-tag 
                           :type="getStatusType(node.status)" 
                           size="small"
@@ -96,10 +96,10 @@
                         <span v-if="node.roles?.length" class="node-roles">
                           {{ node.roles.join(', ') }}
                         </span>
-                        <div v-if="node.internal_ip" class="node-ip">
-                          <el-icon><Location /></el-icon>
-                          <span>{{ node.internal_ip }}</span>
-                        </div>
+                      </div>
+                      <div v-if="node.internal_ip" class="node-ip-row">
+                        <el-icon class="ip-icon"><Location /></el-icon>
+                        <span class="ip-text">{{ node.internal_ip }}</span>
                       </div>
                     </div>
                   </div>
@@ -510,20 +510,22 @@ onUnmounted(() => {
 .node-content {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   margin-left: 8px;
   width: 100%;
   min-height: 0;
 }
 
-.node-row {
+.node-header {
   display: flex;
+  flex-direction: column;
   width: 100%;
 }
 
-.node-basic-info {
-  flex: 1;
-  min-width: 0;
+.node-main-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .node-name {
@@ -531,16 +533,23 @@ onUnmounted(() => {
   color: #333;
   font-size: 15px;
   line-height: 1.3;
-  word-break: break-all;
-  margin: 0 0 6px 0;
+  word-break: break-word;
+  margin: 0;
 }
 
-.node-meta-row {
+.node-basic-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.node-ip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
 }
 
 .node-status-tag {
@@ -558,38 +567,48 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.node-ip {
+.node-ip-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 13px;
   color: #52c41a;
   background: #f6ffed;
-  padding: 2px 6px;
-  border-radius: 3px;
+  padding: 6px 10px;
+  border-radius: 6px;
   border: 1px solid #b7eb8f;
   white-space: nowrap;
+  width: fit-content;
+  margin-top: 2px;
+}
+
+.ip-icon {
+  font-size: 14px;
+  color: #52c41a;
   flex-shrink: 0;
 }
 
-.node-ip .el-icon {
-  font-size: 12px;
-  color: #52c41a;
+.ip-text {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-weight: 500;
+  letter-spacing: 0.5px;
 }
 
 .node-attributes {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   padding-left: 0;
-  border-top: 1px solid #f0f0f0;
-  padding-top: 8px;
+  border-top: 1px solid #e8e8e8;
+  padding-top: 12px;
+  margin-top: 8px;
 }
 
 .attributes-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
 .attributes-header {
@@ -739,21 +758,24 @@ onUnmounted(() => {
   }
   
   .node-content {
-    gap: 8px;
+    gap: 10px;
   }
   
   .node-name {
     font-size: 14px;
-    margin-bottom: 4px;
   }
   
-  .node-meta-row {
-    gap: 6px;
+  .node-basic-row {
+    gap: 8px;
   }
   
-  .node-ip {
-    padding: 2px 5px;
-    font-size: 11px;
+  .node-ip-row {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  
+  .ip-text {
+    font-size: 12px;
   }
   
   .node-attributes {
@@ -800,27 +822,30 @@ onUnmounted(() => {
   }
   
   .node-content {
-    gap: 6px;
+    gap: 8px;
   }
   
   .node-name {
     font-size: 13px;
-    margin-bottom: 4px;
   }
   
-  .node-meta-row {
-    gap: 4px;
+  .node-basic-row {
+    gap: 6px;
     flex-wrap: wrap;
   }
   
   .node-roles {
     font-size: 11px;
-    padding: 1px 4px;
+    padding: 2px 5px;
   }
   
-  .node-ip {
-    padding: 1px 4px;
-    font-size: 10px;
+  .node-ip-row {
+    padding: 3px 6px;
+    font-size: 11px;
+  }
+  
+  .ip-text {
+    font-size: 11px;
   }
   
   .node-attributes {

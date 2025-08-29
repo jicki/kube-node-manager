@@ -100,7 +100,7 @@ func (h *Handler) List(c *gin.Context) {
 	}
 
 	// 非管理员用户只能查看自己的审计日志
-	if userRole.(string) != "admin" {
+	if userRole.(model.UserRole) != model.RoleAdmin {
 		req.UserID = currentUserID.(uint)
 	}
 
@@ -178,7 +178,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 	}
 
 	// 检查权限 - 非管理员只能查看自己的日志
-	if userRole.(string) != "admin" && auditLog.UserID != currentUserID.(uint) {
+	if userRole.(model.UserRole) != model.RoleAdmin && auditLog.UserID != currentUserID.(uint) {
 		c.JSON(http.StatusForbidden, Response{
 			Code:    http.StatusForbidden,
 			Message: "Permission denied",
@@ -213,7 +213,7 @@ func (h *Handler) GetStats(c *gin.Context) {
 	}
 
 	userRole, roleExists := c.Get("user_role")
-	if !roleExists || userRole.(string) != "admin" {
+	if !roleExists || userRole.(model.UserRole) != model.RoleAdmin {
 		c.JSON(http.StatusForbidden, Response{
 			Code:    http.StatusForbidden,
 			Message: "Admin access required",
@@ -283,7 +283,7 @@ func (h *Handler) GetUserActivity(c *gin.Context) {
 	var targetUserID uint = currentUserID.(uint)
 
 	// 管理员可以查看指定用户的活动
-	if userRole.(string) == "admin" {
+	if userRole.(model.UserRole) == model.RoleAdmin {
 		if userIDStr := c.Query("user_id"); userIDStr != "" {
 			if userID, err := strconv.ParseUint(userIDStr, 10, 32); err == nil {
 				targetUserID = uint(userID)
