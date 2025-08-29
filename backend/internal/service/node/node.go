@@ -46,12 +46,12 @@ type CordonRequest struct {
 
 // NodeMetrics 节点指标
 type NodeMetrics struct {
-	NodeName     string             `json:"node_name"`
-	CPUUsage     string             `json:"cpu_usage"`
-	MemoryUsage  string             `json:"memory_usage"`
-	PodCount     int                `json:"pod_count"`
-	PodCapacity  int                `json:"pod_capacity"`
-	Conditions   []k8s.NodeCondition `json:"conditions"`
+	NodeName    string              `json:"node_name"`
+	CPUUsage    string              `json:"cpu_usage"`
+	MemoryUsage string              `json:"memory_usage"`
+	PodCount    int                 `json:"pod_count"`
+	PodCapacity int                 `json:"pod_capacity"`
+	Conditions  []k8s.NodeCondition `json:"conditions"`
 }
 
 // NodeSummary 节点摘要
@@ -92,13 +92,16 @@ func (s *Service) List(req ListRequest, userID uint) ([]k8s.NodeInfo, error) {
 	// 应用过滤器
 	filteredNodes := s.filterNodes(nodes, req)
 
-	s.auditSvc.Log(audit.LogRequest{
-		UserID:       userID,
-		Action:       model.ActionView,
-		ResourceType: model.ResourceNode,
-		Details:      fmt.Sprintf("Listed %d nodes for cluster %s", len(filteredNodes), req.ClusterName),
-		Status:       model.AuditStatusSuccess,
-	})
+	// 只在有特定过滤条件时记录审计日志，避免频繁记录普通列表查看
+	if req.Status != "" || req.Role != "" || len(req.Labels) > 0 || req.Search != "" {
+		s.auditSvc.Log(audit.LogRequest{
+			UserID:       userID,
+			Action:       model.ActionView,
+			ResourceType: model.ResourceNode,
+			Details:      fmt.Sprintf("Filtered nodes for cluster %s with conditions", req.ClusterName),
+			Status:       model.AuditStatusSuccess,
+		})
+	}
 
 	return filteredNodes, nil
 }
@@ -346,7 +349,7 @@ func (s *Service) GetMetrics(clusterName, nodeName string, userID uint) (*NodeMe
 		NodeName:    node.Name,
 		CPUUsage:    "N/A", // 需要从监控系统获取
 		MemoryUsage: "N/A", // 需要从监控系统获取
-		PodCount:    0,      // 需要统计实际运行的Pod数量
+		PodCount:    0,     // 需要统计实际运行的Pod数量
 		Conditions:  node.Conditions,
 	}
 

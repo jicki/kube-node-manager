@@ -584,14 +584,8 @@ func (s *Service) GetNodes(id uint, userID uint) ([]k8s.NodeInfo, error) {
 		return nil, fmt.Errorf("failed to get nodes: %w", err)
 	}
 
-	s.auditSvc.Log(audit.LogRequest{
-		UserID:       userID,
-		ClusterID:    &cluster.ID,
-		Action:       model.ActionView,
-		ResourceType: model.ResourceNode,
-		Details:      fmt.Sprintf("Viewed nodes for cluster %s", cluster.Name),
-		Status:       model.AuditStatusSuccess,
-	})
+	// 移除频繁的节点列表查看审计日志，减少日志噪音
+	// 如果需要审计，可以在具体的节点操作中记录
 
 	return nodes, nil
 }

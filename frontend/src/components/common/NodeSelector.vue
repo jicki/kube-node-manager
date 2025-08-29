@@ -508,29 +508,35 @@ onUnmounted(() => {
 }
 
 .node-content {
-  display: block;
+  display: flex;
+  flex-direction: column;
   margin-left: 8px;
-  width: 100%;
-  padding: 4px 0;
+  width: calc(100% - 8px);
+  gap: 8px;
+  padding: 2px 0;
 }
 
 .node-header {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   width: 100%;
-  margin-bottom: 8px;
 }
 
 .node-main-info {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .node-name {
   font-weight: 600;
   color: #333;
   font-size: 15px;
-  line-height: 1.4;
+  line-height: 1.3;
   word-break: break-word;
-  margin: 0 0 6px 0;
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .node-basic-row {
@@ -538,14 +544,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 6px;
-}
-
-.node-ip-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 2px 0;
+  min-height: 24px;
 }
 
 .node-status-tag {
@@ -561,6 +560,10 @@ onUnmounted(() => {
   border-radius: 3px;
   white-space: nowrap;
   flex-shrink: 0;
+  height: 20px;
+  line-height: 16px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .node-ip-row {
@@ -574,7 +577,9 @@ onUnmounted(() => {
   border-radius: 4px;
   border: 1px solid #b7eb8f;
   white-space: nowrap;
-  vertical-align: top;
+  flex-shrink: 0;
+  height: 20px;
+  line-height: 16px;
 }
 
 .ip-icon {
@@ -590,28 +595,30 @@ onUnmounted(() => {
 }
 
 .node-attributes {
-  display: block;
-  padding-left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   border-top: 1px solid #f0f0f0;
   padding-top: 8px;
-  margin-top: 6px;
+  margin-top: 2px;
 }
 
 .attributes-section {
-  display: block;
-  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .attributes-header {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 4px;
-  margin-bottom: 4px;
 }
 
 .section-icon {
   font-size: 12px;
   color: #999;
+  flex-shrink: 0;
 }
 
 .section-label {
@@ -620,12 +627,15 @@ onUnmounted(() => {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  flex-shrink: 0;
 }
 
 .attributes-content {
-  display: block;
-  line-height: 1.2;
-  margin-top: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-start;
+  line-height: 1;
 }
 
 .label-tag {

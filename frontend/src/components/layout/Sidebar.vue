@@ -78,6 +78,11 @@
         <template #title>污点管理</template>
       </el-menu-item>
       
+      <el-menu-item index="/audit">
+        <el-icon><DocumentCopy /></el-icon>
+        <template #title>审计日志</template>
+      </el-menu-item>
+      
       <el-menu-item 
         v-if="hasPermission('admin')"
         index="/users"
@@ -109,7 +114,8 @@ import {
   User,
   ArrowLeft,
   ArrowRight,
-  Connection
+  Connection,
+  DocumentCopy
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
