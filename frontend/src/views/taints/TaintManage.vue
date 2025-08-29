@@ -476,7 +476,11 @@ import {
   Edit,
   Delete,
   MoreFilled,
-  CopyDocument
+  CopyDocument,
+  Collection,
+  Monitor,
+  Select,
+  Check
 } from '@element-plus/icons-vue'
 
 // 响应式数据
@@ -1076,6 +1080,11 @@ const handleApplyTemplate = async () => {
   }
 }
 
+// 移除选中的节点
+const removeSelectedNode = (nodeName) => {
+  selectedNodes.value = selectedNodes.value.filter(name => name !== nodeName)
+}
+
 onMounted(() => {
   refreshData()
   // 初始化筛选结果
@@ -1170,13 +1179,240 @@ onMounted(() => {
   padding: 40px 20px;
 }
 
-.apply-dialog {
-  max-width: 90vw;
-}
-
-.apply-dialog .el-dialog__body {
-  padding: 20px 24px;
-}
+  /* 应用对话框样式 */
+  .apply-dialog {
+    max-width: 95vw;
+    --el-dialog-padding-primary: 0;
+  }
+  
+  .apply-dialog :deep(.el-dialog__header) {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    margin: 0;
+  }
+  
+  .apply-dialog :deep(.el-dialog__body) {
+    padding: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  
+  .apply-dialog :deep(.el-dialog__footer) {
+    padding: 16px 24px 20px;
+    border-top: 1px solid #f0f0f0;
+    margin: 0;
+  }
+  
+  .apply-dialog-content {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 20px 24px;
+  }
+  
+  .template-info-section {
+    background: #fafbfc;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #e8e8e8;
+  }
+  
+  .node-selection-section {
+    flex: 1;
+  }
+  
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 0 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e8f4fd;
+  }
+  
+  .template-taints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  
+  .template-taint-tag {
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 13px;
+    height: 32px;
+    line-height: 30px;
+    padding: 0 12px;
+    border-radius: 6px;
+    transition: all 0.3s;
+  }
+  
+  .template-taint-tag:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  
+  .template-taint-tag .taint-key {
+    font-weight: 600;
+  }
+  
+  .template-taint-tag .taint-separator {
+    margin: 0 2px;
+    opacity: 0.7;
+  }
+  
+  .template-taint-tag .taint-value {
+    font-weight: 500;
+  }
+  
+  .template-taint-tag .taint-effect {
+    font-weight: 600;
+    margin-left: 2px;
+  }
+  
+  .template-description {
+    margin-top: 12px;
+    padding: 12px;
+    background: white;
+    border-radius: 6px;
+    border-left: 4px solid #007bff;
+  }
+  
+  .template-description p {
+    margin: 0;
+    color: #6c757d;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  
+  .node-selector-wrapper {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e8e8e8;
+    padding: 16px;
+  }
+  
+  .selected-summary {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  
+  .summary-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .summary-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #0284c7;
+    font-size: 14px;
+  }
+  
+  .summary-nodes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  
+  .selected-node-tag {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    color: #1e40af;
+    font-size: 12px;
+  }
+  
+  .more-nodes-tag {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+    color: #6b7280;
+    font-size: 12px;
+  }
+  
+  .dialog-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .footer-info {
+    flex: 1;
+  }
+  
+  .selection-count {
+    color: #6b7280;
+    font-size: 14px;
+  }
+  
+  .selection-count strong {
+    color: #1f2937;
+  }
+  
+  .footer-actions {
+    display: flex;
+    gap: 12px;
+  }
+  
+  /* 响应式设计 */
+  @media (max-width: 1024px) {
+    .apply-dialog {
+      width: 95vw !important;
+    }
+    
+    .apply-dialog-content {
+      gap: 20px;
+      padding: 16px 20px;
+    }
+    
+    .template-info-section {
+      padding: 16px;
+    }
+    
+    .node-selector-wrapper {
+      padding: 12px;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .apply-dialog {
+      width: 98vw !important;
+      margin: 10px auto;
+    }
+    
+    .apply-dialog-content {
+      gap: 16px;
+      padding: 12px 16px;
+    }
+    
+    .section-title {
+      font-size: 15px;
+    }
+    
+    .template-taint-tag {
+      font-size: 12px;
+      height: 28px;
+      line-height: 26px;
+      padding: 0 10px;
+    }
+    
+    .dialog-footer {
+      flex-direction: column;
+      gap: 12px;
+      align-items: stretch;
+    }
+    
+    .footer-actions {
+      justify-content: center;
+    }
+  }
 
 .stat-card {
   text-align: center;

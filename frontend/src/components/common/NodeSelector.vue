@@ -404,7 +404,12 @@ const showAllLabels = (node) => {
     .map(([key, value]) => `${key}=${value}`)
     .join('\n')
   ElMessageBox.alert(labelsText, `节点 ${node.name} 的所有标签`, {
-    confirmButtonText: '关闭'
+    confirmButtonText: '关闭',
+    customStyle: {
+      'white-space': 'pre-line',
+      'font-family': 'Monaco, Menlo, monospace',
+      'font-size': '12px'
+    }
   })
 }
 
@@ -414,7 +419,12 @@ const showAllTaints = (node) => {
     .map(taint => `${taint.key}${taint.value ? '=' + taint.value : ''}:${taint.effect}`)
     .join('\n')
   ElMessageBox.alert(taintsText, `节点 ${node.name} 的所有污点`, {
-    confirmButtonText: '关闭'
+    confirmButtonText: '关闭',
+    customStyle: {
+      'white-space': 'pre-line',
+      'font-family': 'Monaco, Menlo, monospace',
+      'font-size': '12px'
+    }
   })
 }
 
@@ -457,6 +467,7 @@ onUnmounted(() => {
   border: 1px solid #e8e8e8;
   border-radius: 6px;
   background: #fff;
+  position: relative;
 }
 
 .node-item {
@@ -659,6 +670,7 @@ onUnmounted(() => {
     max-width: 100%;
     min-width: 0;
     text-align: left;
+    align-self: stretch;
   }
   
   .labels-content,
