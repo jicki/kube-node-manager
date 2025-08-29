@@ -160,8 +160,10 @@
     <el-dialog
       v-model="taintDialogVisible"
       :title="isEditing ? '编辑模板' : '创建模板'"
-      width="900px"
+      width="1100px"
       class="template-dialog"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
     >
               <el-form
         ref="taintFormRef"
@@ -1017,17 +1019,18 @@ onMounted(() => {
 
 .taint-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 24px;
   margin-bottom: 24px;
 }
 
 .taint-card {
   border: 1px solid #e8e8e8;
   border-radius: 8px;
-  padding: 20px;
+  padding: 24px;
   background: #fff;
   transition: all 0.3s;
+  min-height: 280px;
 }
 
 .taint-card:hover {
@@ -1162,15 +1165,16 @@ onMounted(() => {
 }
 
 .taint-item-tag {
-  font-size: 11px;
-  height: 24px;
-  line-height: 22px;
+  font-size: 12px;
+  height: 28px;
+  line-height: 26px;
   font-family: 'Monaco', 'Menlo', monospace;
-  max-width: 280px;
+  max-width: 350px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex-shrink: 0;
+  padding: 0 10px;
 }
 
 .template-info {
@@ -1211,10 +1215,32 @@ onMounted(() => {
 /* 表单优化样式 */
 .template-dialog {
   --el-dialog-border-radius: 8px;
+  --el-dialog-padding-primary: 0;
+}
+
+.template-dialog :deep(.el-dialog) {
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .template-dialog :deep(.el-dialog__body) {
-  padding: 20px 30px 30px;
+  padding: 20px 40px 30px;
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(90vh - 160px);
+}
+
+.template-dialog :deep(.el-dialog__header) {
+  padding: 20px 40px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.template-dialog :deep(.el-dialog__footer) {
+  padding: 15px 40px 20px;
+  border-top: 1px solid #f0f0f0;
+  flex-shrink: 0;
 }
 
 .taint-row {
@@ -1305,14 +1331,42 @@ onMounted(() => {
 }
 
 /* 响应式优化 */
-@media (max-width: 768px) {
+@media (max-width: 1200px) {
   .template-dialog {
     --el-dialog-width: 95vw !important;
-    --el-dialog-margin-top: 5vh !important;
+    --el-dialog-margin-top: 3vh !important;
+  }
+  
+  .template-dialog :deep(.el-dialog__body) {
+    padding: 15px 25px 20px;
+  }
+  
+  .template-dialog :deep(.el-dialog__header) {
+    padding: 15px 25px 10px;
+  }
+  
+  .template-dialog :deep(.el-dialog__footer) {
+    padding: 12px 25px 15px;
+  }
+}
+
+@media (max-width: 768px) {
+  .template-dialog {
+    --el-dialog-width: 98vw !important;
+    --el-dialog-margin-top: 2vh !important;
   }
   
   .template-dialog :deep(.el-dialog__body) {
     padding: 15px 20px 20px;
+    max-height: calc(90vh - 140px);
+  }
+  
+  .template-dialog :deep(.el-dialog__header) {
+    padding: 15px 20px 10px;
+  }
+  
+  .template-dialog :deep(.el-dialog__footer) {
+    padding: 12px 20px 15px;
   }
   
   .taint-config-item {
@@ -1341,6 +1395,16 @@ onMounted(() => {
     height: 24px;
     line-height: 22px;
     padding: 0 8px;
+  }
+  
+  .taint-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .taint-card {
+    padding: 20px;
+    min-height: 240px;
   }
 }
 
