@@ -26,8 +26,8 @@ export const useClusterStore = defineStore('cluster', {
       this.loading = true
       try {
         const response = await clusterApi.getClusters()
-        // 后端返回格式: { code, message, data: [...] }
-        this.clusters = response.data.data || []
+        // 后端返回格式: { code, message, data: { clusters: [...], total, page, page_size } }
+        this.clusters = response.data.data?.clusters || []
         this.updateStats()
         return response
       } catch (error) {
