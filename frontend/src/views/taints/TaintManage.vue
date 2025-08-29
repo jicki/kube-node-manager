@@ -1156,14 +1156,21 @@ onMounted(() => {
 .taints-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .taint-item-tag {
   font-size: 11px;
-  height: 20px;
-  line-height: 18px;
+  height: 24px;
+  line-height: 22px;
   font-family: 'Monaco', 'Menlo', monospace;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .template-info {
@@ -1304,6 +1311,10 @@ onMounted(() => {
     --el-dialog-margin-top: 5vh !important;
   }
   
+  .template-dialog :deep(.el-dialog__body) {
+    padding: 15px 20px 20px;
+  }
+  
   .taint-config-item {
     padding: 16px;
   }
@@ -1314,6 +1325,22 @@ onMounted(() => {
   
   .delete-col .el-form-item__label {
     display: none;
+  }
+  
+  .value-input-group {
+    min-height: 36px;
+    padding: 6px 10px;
+  }
+  
+  .value-tag {
+    height: 24px;
+    line-height: 22px;
+  }
+  
+  .add-value-btn {
+    height: 24px;
+    line-height: 22px;
+    padding: 0 8px;
   }
 }
 
@@ -1343,40 +1370,68 @@ onMounted(() => {
 .value-input-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  min-height: 32px;
+  gap: 8px;
+  align-items: flex-start;
+  min-height: 40px;
+  max-height: 200px;
+  overflow-y: auto;
   border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  padding: 4px 8px;
+  border-radius: 6px;
+  padding: 8px 12px;
   background: #fff;
   transition: border-color 0.2s;
+  box-sizing: border-box;
 }
 
 .value-input-group:hover {
   border-color: #c0c4cc;
 }
 
+.value-input-group:focus-within {
+  border-color: #409EFF;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+}
+
 .value-tag {
-  margin: 2px;
+  margin: 2px 0;
   font-size: 12px;
-  height: 24px;
-  line-height: 22px;
+  height: 26px;
+  line-height: 24px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .value-input {
   flex: 1;
-  min-width: 80px;
-  margin: 2px;
+  min-width: 100px;
+  margin: 2px 0;
+  border: none;
+  outline: none;
+}
+
+.value-input :deep(.el-input__wrapper) {
+  box-shadow: none;
+  background: transparent;
+  padding: 4px 8px;
 }
 
 .add-value-btn {
-  height: 24px;
-  line-height: 22px;
+  height: 26px;
+  line-height: 24px;
   font-size: 12px;
-  padding: 0 8px;
-  margin: 2px;
+  padding: 0 12px;
+  margin: 2px 0;
   border-style: dashed;
+  border-color: #d9d9d9;
+  flex-shrink: 0;
+}
+
+.add-value-btn:hover {
+  border-color: #409EFF;
+  color: #409EFF;
 }
 
 .value-help-text {
@@ -1431,10 +1486,16 @@ onMounted(() => {
 .taint-values {
   color: #E6A23C;
   font-weight: 500;
+  word-break: break-all;
+  max-width: 100%;
+  display: inline-block;
 }
 
 .taint-value {
   color: #409EFF;
+  word-break: break-word;
+  max-width: 100%;
+  display: inline-block;
 }
 
 .taint-effect {
