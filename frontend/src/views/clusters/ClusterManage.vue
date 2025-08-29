@@ -94,15 +94,13 @@
 
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
 
-        <el-table-column prop="endpoint" label="API地址" min-width="200" show-overflow-tooltip />
-
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag
-              :type="row.status === 'Active' ? 'success' : 'danger'"
+              :type="row.status === 'active' ? 'success' : 'danger'"
               size="small"
             >
-              {{ row.status === 'Active' ? '正常' : '异常' }}
+              {{ row.status === 'active' ? '正常' : '异常' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -133,8 +131,8 @@
               <el-button 
                 type="text" 
                 size="small" 
-                :loading="testingClusters[row.id]"
-                @click="testConnection(row)"
+                disabled
+                title="测试连接功能暂时不可用"
               >
                 <el-icon><Connection /></el-icon>
                 测试连接
@@ -199,48 +197,13 @@
           />
         </el-form-item>
         
-        <el-form-item label="API地址" prop="endpoint">
+        <el-form-item label="Kubeconfig" prop="kube_config">
           <el-input
-            v-model="form.endpoint"
-            placeholder="https://kubernetes.api.example.com:6443"
-          />
-        </el-form-item>
-        
-        <el-form-item label="认证方式" prop="authType">
-          <el-radio-group v-model="form.authType">
-            <el-radio label="token">Token认证</el-radio>
-            <el-radio label="kubeconfig">Kubeconfig文件</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        
-        <el-form-item 
-          v-if="form.authType === 'token'" 
-          label="访问Token" 
-          prop="token"
-        >
-          <el-input
-            v-model="form.token"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入Kubernetes访问Token"
-          />
-        </el-form-item>
-        
-        <el-form-item 
-          v-if="form.authType === 'kubeconfig'" 
-          label="Kubeconfig" 
-          prop="kubeconfig"
-        >
-          <el-input
-            v-model="form.kubeconfig"
+            v-model="form.kube_config"
             type="textarea"
             :rows="8"
             placeholder="请粘贴Kubeconfig文件内容"
           />
-        </el-form-item>
-        
-        <el-form-item label="忽略TLS验证">
-          <el-switch v-model="form.insecure" />
         </el-form-item>
       </el-form>
       
@@ -284,11 +247,7 @@ const testingClusters = ref({})
 const form = reactive({
   name: '',
   description: '',
-  endpoint: '',
-  authType: 'token',
-  token: '',
-  kubeconfig: '',
-  insecure: false
+  kube_config: ''
 })
 
 // 表单验证规则
@@ -297,37 +256,8 @@ const formRules = {
     { required: true, message: '请输入集群名称', trigger: 'blur' },
     { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
   ],
-  endpoint: [
-    { required: true, message: '请输入API地址', trigger: 'blur' },
-    { type: 'url', message: '请输入正确的URL地址', trigger: 'blur' }
-  ],
-  token: [
-    { 
-      required: true,
-      message: '请输入访问Token',
-      trigger: 'blur',
-      validator: (rule, value, callback) => {
-        if (form.authType === 'token' && !value) {
-          callback(new Error('请输入访问Token'))
-        } else {
-          callback()
-        }
-      }
-    }
-  ],
-  kubeconfig: [
-    {
-      required: true,
-      message: '请输入Kubeconfig内容',
-      trigger: 'blur',
-      validator: (rule, value, callback) => {
-        if (form.authType === 'kubeconfig' && !value) {
-          callback(new Error('请输入Kubeconfig内容'))
-        } else {
-          callback()
-        }
-      }
-    }
+  kube_config: [
+    { required: true, message: '请输入Kubeconfig内容', trigger: 'blur' }
   ]
 }
 
@@ -370,11 +300,7 @@ const showEditDialog = (cluster) => {
     id: cluster.id,
     name: cluster.name,
     description: cluster.description || '',
-    endpoint: cluster.endpoint,
-    authType: cluster.authType || 'token',
-    token: cluster.token || '',
-    kubeconfig: cluster.kubeconfig || '',
-    insecure: cluster.insecure || false
+    kube_config: cluster.kube_config || ''
   })
 }
 
@@ -384,11 +310,7 @@ const resetForm = () => {
     id: null,
     name: '',
     description: '',
-    endpoint: '',
-    authType: 'token',
-    token: '',
-    kubeconfig: '',
-    insecure: false
+    kube_config: ''
   })
   
   if (formRef.value) {

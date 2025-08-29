@@ -32,10 +32,10 @@
           <div class="cluster-option">
             <span class="cluster-name">{{ cluster.name }}</span>
             <el-tag 
-              :type="cluster.status === 'Active' ? 'success' : 'danger'" 
+              :type="cluster.status === 'active' ? 'success' : 'danger'" 
               size="small"
             >
-              {{ cluster.status === 'Active' ? '正常' : '异常' }}
+              {{ cluster.status === 'active' ? '正常' : '异常' }}
             </el-tag>
           </div>
         </el-option>

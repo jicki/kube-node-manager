@@ -26,7 +26,7 @@
       <!-- 集群状态指示器 -->
       <div v-if="currentCluster" class="cluster-status">
         <el-tag 
-          :type="currentCluster.status === 'Active' ? 'success' : 'danger'"
+          :type="currentCluster.status === 'active' ? 'success' : 'danger'"
           size="small"
         >
           <el-icon class="cluster-icon">
