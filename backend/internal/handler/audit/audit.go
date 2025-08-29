@@ -106,7 +106,7 @@ func (h *Handler) List(c *gin.Context) {
 
 	result, err := h.auditSvc.List(req)
 	if err != nil {
-		h.logger.Error("Failed to list audit logs: %v", err)
+		h.logger.Errorf("Failed to list audit logs: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    http.StatusInternalServerError,
 			Message: "Failed to list audit logs: " + err.Error(),
@@ -162,7 +162,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 
 	auditLog, err := h.auditSvc.GetByID(uint(id))
 	if err != nil {
-		h.logger.Error("Failed to get audit log: %v", err)
+		h.logger.Errorf("Failed to get audit log: %v", err)
 		if err.Error() == "record not found" {
 			c.JSON(http.StatusNotFound, Response{
 				Code:    http.StatusNotFound,
@@ -234,7 +234,7 @@ func (h *Handler) GetStats(c *gin.Context) {
 
 	result, err := h.auditSvc.List(req)
 	if err != nil {
-		h.logger.Error("Failed to get audit stats: %v", err)
+		h.logger.Errorf("Failed to get audit stats: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    http.StatusInternalServerError,
 			Message: "Failed to get audit stats: " + err.Error(),
@@ -307,7 +307,7 @@ func (h *Handler) GetUserActivity(c *gin.Context) {
 
 	result, err := h.auditSvc.List(req)
 	if err != nil {
-		h.logger.Error("Failed to get user activity: %v", err)
+		h.logger.Errorf("Failed to get user activity: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    http.StatusInternalServerError,
 			Message: "Failed to get user activity: " + err.Error(),

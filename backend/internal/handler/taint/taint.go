@@ -370,6 +370,8 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 // @Param page query int false "页码" default(1)
 // @Param page_size query int false "每页数量" default(10)
 // @Param name query string false "模板名称筛选"
+// @Param search query string false "搜索关键词（名称、描述、污点Key）"
+// @Param effect query string false "按效果筛选（NoSchedule|PreferNoSchedule|NoExecute）"
 // @Success 200 {object} Response
 // @Router /taints/templates [get]
 func (h *Handler) ListTemplates(c *gin.Context) {
@@ -387,6 +389,8 @@ func (h *Handler) ListTemplates(c *gin.Context) {
 		}
 	}
 	req.Name = c.Query("name")
+	req.Search = c.Query("search")
+	req.Effect = c.Query("effect")
 
 	userID, exists := c.Get("user_id")
 	if !exists {

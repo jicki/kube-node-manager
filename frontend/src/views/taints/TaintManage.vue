@@ -54,10 +54,58 @@
       </el-col>
     </el-row>
 
+    <!-- 搜索和过滤 -->
+    <el-card class="search-card">
+      <el-row :gutter="16" class="search-row">
+        <el-col :xs="24" :sm="8">
+          <el-input
+            v-model="searchQuery"
+            placeholder="搜索模板名称、描述或污点Key"
+            clearable
+            @input="handleSearch"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </el-col>
+        <el-col :xs="24" :sm="6">
+          <el-select
+            v-model="filterEffect"
+            placeholder="按效果筛选"
+            clearable
+            @change="handleFilterChange"
+          >
+            <el-option label="全部效果" value="" />
+            <el-option label="NoSchedule" value="NoSchedule" />
+            <el-option label="PreferNoSchedule" value="PreferNoSchedule" />
+            <el-option label="NoExecute" value="NoExecute" />
+          </el-select>
+        </el-col>
+        <el-col :xs="24" :sm="6">
+          <el-select
+            v-model="sortBy"
+            placeholder="排序方式"
+            @change="handleSortChange"
+          >
+            <el-option label="按创建时间" value="created_at" />
+            <el-option label="按名称" value="name" />
+            <el-option label="按污点数量" value="taint_count" />
+          </el-select>
+        </el-col>
+        <el-col :xs="24" :sm="4">
+          <el-button @click="resetFilters">
+            <el-icon><RefreshLeft /></el-icon>
+            重置
+          </el-button>
+        </el-col>
+      </el-row>
+    </el-card>
+
     <!-- 污点模板列表 -->
     <div class="taint-grid">
       <div
-        v-for="template in taints"
+        v-for="template in filteredTaints"
         :key="template.id"
         class="taint-card"
       >
@@ -152,12 +200,19 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-if="taints.length === 0" class="empty-state">
+      <div v-if="filteredTaints.length === 0 && !searchQuery && !filterEffect" class="empty-state">
         <el-empty description="暂无污点数据" :image-size="80">
           <el-button type="primary" @click="showAddDialog">
             <el-icon><Plus /></el-icon>
             添加第一个污点
           </el-button>
+        </el-empty>
+      </div>
+
+      <!-- 搜索无结果状态 -->
+      <div v-if="filteredTaints.length === 0 && (searchQuery || filterEffect)" class="empty-search">
+        <el-empty description="没有找到匹配的污点模板" :image-size="60">
+          <el-button @click="resetFilters">清空筛选条件</el-button>
         </el-empty>
       </div>
     </div>
@@ -457,7 +512,9 @@ import {
   Edit,
   Delete,
   MoreFilled,
-  CopyDocument
+  CopyDocument,
+  Search,
+  RefreshLeft
 } from '@element-plus/icons-vue'
 
 // 响应式数据
@@ -474,6 +531,11 @@ const taints = ref([])
 const availableNodes = ref([])
 const selectedTemplate = ref(null)
 const selectedNodes = ref([])
+
+// 搜索和过滤相关
+const searchQuery = ref('')
+const filterEffect = ref('')
+const sortBy = ref('created_at')
 
 // 表单数据
 const taintForm = reactive({
@@ -513,6 +575,61 @@ const taintStats = computed(() => {
   })
   
   return { total, noSchedule, preferNoSchedule, noExecute }
+})
+
+// 过滤和搜索的计算属性
+const filteredTaints = computed(() => {
+  let result = [...taints.value]
+
+  // 文本搜索
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    result = result.filter(template => {
+      // 搜索模板名称
+      if (template.name && template.name.toLowerCase().includes(query)) {
+        return true
+      }
+      
+      // 搜索描述
+      if (template.description && template.description.toLowerCase().includes(query)) {
+        return true
+      }
+      
+      // 搜索污点Key
+      if (template.taints && Array.isArray(template.taints)) {
+        return template.taints.some(taint => 
+          taint.key && taint.key.toLowerCase().includes(query)
+        )
+      }
+      
+      return false
+    })
+  }
+
+  // 按效果筛选
+  if (filterEffect.value) {
+    result = result.filter(template => {
+      if (!template.taints || !Array.isArray(template.taints)) return false
+      return template.taints.some(taint => taint.effect === filterEffect.value)
+    })
+  }
+
+  // 排序
+  result.sort((a, b) => {
+    switch (sortBy.value) {
+      case 'name':
+        return (a.name || '').localeCompare(b.name || '')
+      case 'taint_count':
+        const countA = (a.taints || []).length
+        const countB = (b.taints || []).length
+        return countB - countA
+      case 'created_at':
+      default:
+        return new Date(b.created_at) - new Date(a.created_at)
+    }
+  })
+
+  return result
 })
 
 // 获取污点效果类型
@@ -569,6 +686,28 @@ const fetchNodes = async () => {
 const refreshData = () => {
   fetchTaints()
   fetchNodes()
+}
+
+// 搜索处理函数
+const handleSearch = () => {
+  // 搜索是响应式的，不需要额外处理
+}
+
+// 筛选处理函数
+const handleFilterChange = () => {
+  // 筛选是响应式的，不需要额外处理
+}
+
+// 排序处理函数
+const handleSortChange = () => {
+  // 排序是响应式的，不需要额外处理
+}
+
+// 重置筛选条件
+const resetFilters = () => {
+  searchQuery.value = ''
+  filterEffect.value = ''
+  sortBy.value = 'created_at'
 }
 
 // 显示添加对话框
@@ -978,6 +1117,23 @@ onMounted(() => {
 
 .stats-row {
   margin-bottom: 24px;
+}
+
+.search-card {
+  margin-bottom: 24px;
+}
+
+.search-row {
+  align-items: center;
+}
+
+.search-row .el-col {
+  margin-bottom: 8px;
+}
+
+.empty-search {
+  text-align: center;
+  padding: 40px 20px;
 }
 
 .stat-card {

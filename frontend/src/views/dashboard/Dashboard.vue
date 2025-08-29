@@ -309,16 +309,16 @@ const recentActions = ref([])
 // 获取最近操作数据
 const fetchRecentActions = async () => {
   try {
-    const response = await auditApi.getLogs({
+    const response = await auditApi.getAuditLogs({
       page: 1,
-      size: 5 // 只获取最近5条记录
+      page_size: 5 // 只获取最近5条记录
     })
-    if (response.data && response.data.data) {
-      recentActions.value = response.data.data.map(log => ({
+    if (response.data && response.data.data && response.data.data.logs) {
+      recentActions.value = response.data.data.logs.map(log => ({
         id: log.id,
         type: getActionType(log.action, log.resource_type),
         description: log.details || `${log.action} ${log.resource_type}`,
-        user: log.user_name || 'Unknown',
+        user: log.user?.username || log.user?.name || 'Unknown',
         time: new Date(log.created_at),
         status: log.status === 'success' ? 'success' : 'failure'
       }))

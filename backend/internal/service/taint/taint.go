@@ -56,6 +56,8 @@ type TemplateListRequest struct {
 	Page     int    `json:"page"`
 	PageSize int    `json:"page_size"`
 	Name     string `json:"name"`
+	Search   string `json:"search"`   // 搜索关键词
+	Effect   string `json:"effect"`   // 按效果筛选
 }
 
 // TemplateListResponse 模板列表响应
@@ -446,6 +448,12 @@ func (s *Service) ListTemplates(req TemplateListRequest, userID uint) (*Template
 		query = query.Where("name LIKE ?", "%"+req.Name+"%")
 	}
 
+	// 搜索功能：搜索名称和描述
+	if req.Search != "" {
+		searchTerm := "%" + req.Search + "%"
+		query = query.Where("name LIKE ? OR description LIKE ?", searchTerm, searchTerm)
+	}
+
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, fmt.Errorf("failed to count templates: %w", err)
@@ -472,6 +480,43 @@ func (s *Service) ListTemplates(req TemplateListRequest, userID uint) (*Template
 			s.logger.Errorf("Failed to parse template %s: %v", template.Name, err)
 			continue
 		}
+
+		// 按效果筛选
+		if req.Effect != "" {
+			hasEffect := false
+			for _, taint := range info.Taints {
+				if taint.Effect == req.Effect {
+					hasEffect = true
+					break
+				}
+			}
+			if !hasEffect {
+				continue
+			}
+		}
+
+		// 搜索污点Key（如果有搜索词）
+		if req.Search != "" {
+			searchTerm := strings.ToLower(req.Search)
+			// 如果已经通过名称或描述匹配，则直接添加
+			nameMatch := strings.Contains(strings.ToLower(template.Name), searchTerm)
+			descMatch := strings.Contains(strings.ToLower(template.Description), searchTerm)
+			
+			if !nameMatch && !descMatch {
+				// 检查是否匹配污点Key
+				keyMatch := false
+				for _, taint := range info.Taints {
+					if strings.Contains(strings.ToLower(taint.Key), searchTerm) {
+						keyMatch = true
+						break
+					}
+				}
+				if !keyMatch {
+					continue
+				}
+			}
+		}
+
 		templateInfos = append(templateInfos, *info)
 	}
 

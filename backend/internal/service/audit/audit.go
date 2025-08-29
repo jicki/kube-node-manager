@@ -71,7 +71,7 @@ func (s *Service) Log(req LogRequest) {
 	}
 
 	if err := s.db.Create(&auditLog).Error; err != nil {
-		s.logger.Error("Failed to create audit log:", err)
+		s.logger.Errorf("Failed to create audit log: %v", err)
 	}
 }
 
