@@ -58,6 +58,11 @@
         <template #title>概览</template>
       </el-menu-item>
       
+      <el-menu-item index="/clusters">
+        <el-icon><Connection /></el-icon>
+        <template #title>集群管理</template>
+      </el-menu-item>
+      
       <el-menu-item index="/nodes">
         <el-icon><Monitor /></el-icon>
         <template #title>节点管理</template>
@@ -103,7 +108,8 @@ import {
   WarningFilled,
   User,
   ArrowLeft,
-  ArrowRight
+  ArrowRight,
+  Connection
 } from '@element-plus/icons-vue'
 
 const props = defineProps({

@@ -23,6 +23,12 @@ const router = createRouter({
           meta: { title: '概览', icon: 'Monitor', requiresAuth: true }
         },
         {
+          path: 'clusters',
+          name: 'ClusterManage',
+          component: () => import('@/views/clusters/ClusterManage.vue'),
+          meta: { title: '集群管理', icon: 'Connection', requiresAuth: true }
+        },
+        {
           path: 'nodes',
           name: 'NodeList',
           component: () => import('@/views/nodes/NodeList.vue'),
