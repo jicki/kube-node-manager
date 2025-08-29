@@ -150,7 +150,21 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 // GetByID 根据ID获取集群
 func (s *Service) GetByID(id uint, userID uint) (*ClusterWithNodes, error) {
 	var cluster model.Cluster
-	if err := s.db.Preload("Creator").First(&cluster, id).Error; err != nil {
+	query := s.db.Preload("Creator")
+
+	// 检查用户权限
+	var currentUser model.User
+	if err := s.db.First(&currentUser, userID).Error; err != nil {
+		s.logger.Error("Failed to get current user %d: %v", userID, err)
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	// 如果不是管理员，只能访问自己创建的集群
+	if currentUser.Role != model.RoleAdmin {
+		query = query.Where("created_by = ?", userID)
+	}
+
+	if err := query.First(&cluster, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("cluster not found")
 		}
@@ -185,7 +199,21 @@ func (s *Service) GetByID(id uint, userID uint) (*ClusterWithNodes, error) {
 // Update 更新集群
 func (s *Service) Update(id uint, req UpdateRequest, userID uint) (*model.Cluster, error) {
 	var cluster model.Cluster
-	if err := s.db.First(&cluster, id).Error; err != nil {
+	query := s.db
+
+	// 检查用户权限
+	var currentUser model.User
+	if err := s.db.First(&currentUser, userID).Error; err != nil {
+		s.logger.Error("Failed to get current user %d: %v", userID, err)
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	// 如果不是管理员，只能更新自己创建的集群
+	if currentUser.Role != model.RoleAdmin {
+		query = query.Where("created_by = ?", userID)
+	}
+
+	if err := query.First(&cluster, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("cluster not found")
 		}
@@ -282,7 +310,21 @@ func (s *Service) Update(id uint, req UpdateRequest, userID uint) (*model.Cluste
 // Delete 删除集群
 func (s *Service) Delete(id uint, userID uint) error {
 	var cluster model.Cluster
-	if err := s.db.First(&cluster, id).Error; err != nil {
+	query := s.db
+
+	// 检查用户权限
+	var currentUser model.User
+	if err := s.db.First(&currentUser, userID).Error; err != nil {
+		s.logger.Error("Failed to get current user %d: %v", userID, err)
+		return fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	// 如果不是管理员，只能删除自己创建的集群
+	if currentUser.Role != model.RoleAdmin {
+		query = query.Where("created_by = ?", userID)
+	}
+
+	if err := query.First(&cluster, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("cluster not found")
 		}
@@ -323,6 +365,18 @@ func (s *Service) Delete(id uint, userID uint) error {
 // List 获取集群列表
 func (s *Service) List(req ListRequest, userID uint) (*ListResponse, error) {
 	query := s.db.Model(&model.Cluster{}).Preload("Creator")
+
+	// 检查用户权限 - 只有管理员可以看到所有集群，其他用户只能看到自己创建的
+	var currentUser model.User
+	if err := s.db.First(&currentUser, userID).Error; err != nil {
+		s.logger.Error("Failed to get current user %d: %v", userID, err)
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	// 如果不是管理员，只能看到自己创建的集群
+	if currentUser.Role != model.RoleAdmin {
+		query = query.Where("created_by = ?", userID)
+	}
 
 	// 应用过滤条件
 	if req.Name != "" {
@@ -367,7 +421,21 @@ func (s *Service) List(req ListRequest, userID uint) (*ListResponse, error) {
 // Sync 同步集群信息
 func (s *Service) Sync(id uint, userID uint) error {
 	var cluster model.Cluster
-	if err := s.db.First(&cluster, id).Error; err != nil {
+	query := s.db
+
+	// 检查用户权限
+	var currentUser model.User
+	if err := s.db.First(&currentUser, userID).Error; err != nil {
+		s.logger.Error("Failed to get current user %d: %v", userID, err)
+		return fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	// 如果不是管理员，只能同步自己创建的集群
+	if currentUser.Role != model.RoleAdmin {
+		query = query.Where("created_by = ?", userID)
+	}
+
+	if err := query.First(&cluster, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("cluster not found")
 		}
@@ -458,7 +526,21 @@ func (s *Service) SyncAll() error {
 // GetNodes 获取集群节点
 func (s *Service) GetNodes(id uint, userID uint) ([]k8s.NodeInfo, error) {
 	var cluster model.Cluster
-	if err := s.db.First(&cluster, id).Error; err != nil {
+	query := s.db
+
+	// 检查用户权限
+	var currentUser model.User
+	if err := s.db.First(&currentUser, userID).Error; err != nil {
+		s.logger.Error("Failed to get current user %d: %v", userID, err)
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	// 如果不是管理员，只能查看自己创建的集群节点
+	if currentUser.Role != model.RoleAdmin {
+		query = query.Where("created_by = ?", userID)
+	}
+
+	if err := query.First(&cluster, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("cluster not found")
 		}
