@@ -411,30 +411,13 @@
 
       <el-form label-width="100px">
         <el-form-item label="选择节点" required>
-          <el-select
+          <NodeSelector
             v-model="selectedNodes"
-            multiple
-            filterable
-            placeholder="选择要应用模板的节点"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="node in availableNodes"
-              :key="node.name"
-              :label="`${node.name} (${node.status})`"
-              :value="node.name"
-            >
-              <div class="node-option">
-                <span class="node-name">{{ node.name }}</span>
-                <el-tag 
-                  :type="node.status === 'Ready' ? 'success' : 'danger'" 
-                  size="small"
-                >
-                  {{ node.status }}
-                </el-tag>
-              </div>
-            </el-option>
-          </el-select>
+            :nodes="availableNodes"
+            :loading="loading"
+            :show-labels="true"
+            :max-label-display="2"
+          />
         </el-form-item>
       </el-form>
 
@@ -458,6 +441,7 @@ import labelApi from '@/api/label'
 import nodeApi from '@/api/node'
 import { useClusterStore } from '@/store/modules/cluster'
 import SearchBox from '@/components/common/SearchBox.vue'
+import NodeSelector from '@/components/common/NodeSelector.vue'
 import {
   Plus,
   Refresh,
@@ -560,9 +544,74 @@ const labelStats = computed(() => {
   }
 })
 
+// 应用高级搜索筛选的最终结果
+const filteredAndSortedLabels = ref([])
+
+// 计算应用筛选和排序后的结果
+const applyFiltersAndSort = (keyword, filters) => {
+  let result = [...labels.value]
+
+  // 文本搜索
+  if (keyword) {
+    const query = keyword.toLowerCase()
+    result = result.filter(template => {
+      // 搜索模板名称
+      if (template.name && template.name.toLowerCase().includes(query)) {
+        return true
+      }
+      
+      // 搜索描述
+      if (template.description && template.description.toLowerCase().includes(query)) {
+        return true
+      }
+      
+      // 搜索标签Key
+      if (template.labels && typeof template.labels === 'object') {
+        return Object.keys(template.labels).some(key => 
+          key.toLowerCase().includes(query)
+        )
+      }
+      
+      return false
+    })
+  }
+
+  // 按类型筛选
+  if (filters.type) {
+    if (filters.type === 'system') {
+      result = result.filter(template => {
+        // 系统标签通常以特定前缀开头
+        if (template.labels && typeof template.labels === 'object') {
+          return Object.keys(template.labels).some(key => 
+            key.startsWith('kubernetes.io/') || 
+            key.startsWith('node.kubernetes.io/') ||
+            key.startsWith('topology.kubernetes.io/')
+          )
+        }
+        return false
+      })
+    } else if (filters.type === 'custom') {
+      result = result.filter(template => {
+        if (template.labels && typeof template.labels === 'object') {
+          return !Object.keys(template.labels).every(key => 
+            key.startsWith('kubernetes.io/') || 
+            key.startsWith('node.kubernetes.io/') ||
+            key.startsWith('topology.kubernetes.io/')
+          )
+        }
+        return true
+      })
+    }
+  }
+
+  filteredAndSortedLabels.value = result
+}
+
 const filteredLabels = computed(() => {
-  // 这里可以添加搜索和筛选逻辑
-  return labels.value.slice(
+  const result = filteredAndSortedLabels.value.length > 0 ? 
+    filteredAndSortedLabels.value : labels.value
+  
+  return result.slice(
     (pagination.current - 1) * pagination.size,
     pagination.current * pagination.size
   )
@@ -580,14 +629,18 @@ const fetchLabels = async () => {
       const data = response.data.data
       labels.value = data.templates || []
       pagination.total = data.total || 0
+      // 初始化筛选结果
+      filteredAndSortedLabels.value = labels.value
     } else {
       labels.value = []
       pagination.total = 0
+      filteredAndSortedLabels.value = []
     }
   } catch (error) {
     console.warn('获取标签模板失败:', error)
     labels.value = []
     pagination.total = 0
+    filteredAndSortedLabels.value = []
   } finally {
     loading.value = false
   }
@@ -621,8 +674,7 @@ const refreshData = () => {
 }
 
 const handleSearch = (params) => {
-  // 实现搜索逻辑
-  console.log('Search params:', params)
+  applyFiltersAndSort(params.keyword, params.filters)
 }
 
 const handleSizeChange = (size) => {
