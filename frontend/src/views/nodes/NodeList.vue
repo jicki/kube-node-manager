@@ -156,30 +156,22 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="资源使用" min-width="200">
+        <el-table-column label="资源配置" min-width="200">
           <template #default="{ row }">
             <div class="resource-usage">
               <div class="resource-item">
                 <span class="resource-label">CPU:</span>
-                <el-progress
-                  :percentage="row.resources?.cpu?.usage || 0"
-                  :stroke-width="4"
-                  size="small"
-                />
                 <span class="resource-text">
-                  {{ formatCPU(row.resources?.cpu?.used) }} / {{ formatCPU(row.resources?.cpu?.total) }}
+                  {{ row.allocatable?.cpu || 'N/A' }} / {{ row.capacity?.cpu || 'N/A' }}
                 </span>
+                <span class="resource-subtext">(可分配/总量)</span>
               </div>
               <div class="resource-item">
                 <span class="resource-label">内存:</span>
-                <el-progress
-                  :percentage="row.resources?.memory?.usage || 0"
-                  :stroke-width="4"
-                  size="small"
-                />
                 <span class="resource-text">
-                  {{ formatMemory(row.resources?.memory?.used) }} / {{ formatMemory(row.resources?.memory?.total) }}
+                  {{ formatMemory(row.allocatable?.memory) }} / {{ formatMemory(row.capacity?.memory) }}
                 </span>
+                <span class="resource-subtext">(可分配/总量)</span>
               </div>
             </div>
           </template>
@@ -668,24 +660,25 @@ onMounted(() => {
 
 .resource-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
   font-size: 12px;
 }
 
 .resource-label {
-  width: 40px;
   color: #666;
-}
-
-.resource-item :deep(.el-progress) {
-  flex: 1;
-  max-width: 60px;
+  font-weight: 500;
 }
 
 .resource-text {
-  color: #666;
+  color: #333;
+  font-family: 'Monaco', 'Menlo', monospace;
   white-space: nowrap;
+}
+
+.resource-subtext {
+  color: #999;
+  font-size: 10px;
 }
 
 .version-text {

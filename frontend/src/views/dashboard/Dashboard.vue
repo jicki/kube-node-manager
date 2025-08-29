@@ -273,6 +273,7 @@ import { useAuthStore } from '@/store/modules/auth'
 import { useClusterStore } from '@/store/modules/cluster'
 import { useNodeStore } from '@/store/modules/node'
 import { formatRelativeTime } from '@/utils/format'
+import auditApi from '@/api/audit'
 import {
   Monitor,
   Check,
@@ -302,33 +303,51 @@ const clusters = computed(() => clusterStore.clusters)
 const currentCluster = computed(() => clusterStore.currentCluster)
 const isAdmin = computed(() => authStore.user?.role === 'admin')
 
-// 模拟最近操作数据
-const recentActions = ref([
-  {
-    id: 1,
-    type: 'label_add',
-    description: '为节点 worker-01 添加标签 env=production',
-    user: 'admin',
-    time: new Date(Date.now() - 5 * 60 * 1000),
-    status: 'success'
-  },
-  {
-    id: 2,
-    type: 'node_cordon',
-    description: '封锁节点 worker-02',
-    user: 'operator',
-    time: new Date(Date.now() - 15 * 60 * 1000),
-    status: 'success'
-  },
-  {
-    id: 3,
-    type: 'taint_add',
-    description: '为节点 master-01 添加污点',
-    user: 'admin',
-    time: new Date(Date.now() - 30 * 60 * 1000),
-    status: 'failure'
+// 最近操作数据
+const recentActions = ref([])
+
+// 获取最近操作数据
+const fetchRecentActions = async () => {
+  try {
+    const response = await auditApi.getLogs({
+      page: 1,
+      size: 5 // 只获取最近5条记录
+    })
+    if (response.data && response.data.data) {
+      recentActions.value = response.data.data.map(log => ({
+        id: log.id,
+        type: getActionType(log.action, log.resource_type),
+        description: log.details || `${log.action} ${log.resource_type}`,
+        user: log.user_name || 'Unknown',
+        time: new Date(log.created_at),
+        status: log.status === 'success' ? 'success' : 'failure'
+      }))
+    }
+  } catch (error) {
+    console.error('Failed to fetch recent actions:', error)
+    // 如果获取失败，保持空数组
+    recentActions.value = []
   }
-])
+}
+
+// 根据action和resource_type生成操作类型
+const getActionType = (action, resourceType) => {
+  const key = `${action}_${resourceType}`.toLowerCase()
+  const typeMap = {
+    'create_label': 'label_add',
+    'update_label': 'label_add', 
+    'delete_label': 'label_delete',
+    'cordon_node': 'node_cordon',
+    'uncordon_node': 'node_cordon',
+    'drain_node': 'node_drain',
+    'create_taint': 'taint_add',
+    'update_taint': 'taint_add',
+    'delete_taint': 'taint_delete',
+    'create_user': 'user_create',
+    'update_user': 'user_update'
+  }
+  return typeMap[key] || 'default'
+}
 
 // 权限检查
 const hasPermission = (permission) => {
@@ -345,9 +364,10 @@ const getActionIcon = (type) => {
     taint_add: WarningFilled,
     taint_delete: Delete,
     user_create: User,
-    user_update: Edit
+    user_update: Edit,
+    default: Monitor
   }
-  return iconMap[type] || Edit
+  return iconMap[type] || Monitor
 }
 
 // 获取操作图标样式类
@@ -360,9 +380,10 @@ const getActionIconClass = (type) => {
     taint_add: 'action-icon-warning',
     taint_delete: 'action-icon-danger',
     user_create: 'action-icon-success',
-    user_update: 'action-icon-info'
+    user_update: 'action-icon-info',
+    default: 'action-icon-info'
   }
-  return classMap[type] || 'action-icon-default'
+  return classMap[type] || 'action-icon-info'
 }
 
 // 刷新节点统计
@@ -405,6 +426,9 @@ onMounted(async () => {
     if (clusterStore.currentCluster) {
       await nodeStore.fetchNodes()
     }
+    
+    // 获取最近操作数据
+    await fetchRecentActions()
   } catch (error) {
     console.error('Dashboard data loading error:', error)
   } finally {

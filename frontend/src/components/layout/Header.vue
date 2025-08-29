@@ -200,15 +200,7 @@ const currentPage = computed(() => {
 })
 
 // 通知相关
-const notifications = ref([
-  {
-    id: 1,
-    title: '节点状态异常',
-    message: 'worker-node-01 节点状态变为 NotReady',
-    time: new Date(),
-    type: 'warning'
-  }
-])
+const notifications = ref([])
 
 const notificationCount = computed(() => notifications.value.length)
 
