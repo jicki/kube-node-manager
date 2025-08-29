@@ -2,21 +2,21 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 metadata:
-  name: kube-node-manager
+  name: kube-node-mgr
 
 resources:
-  - configmap.yaml
-  - k8s-statefulset.yaml
-  - k8s-service.yaml
-  - k8s-ingress.yaml
+  - kube-node-mgr-configmap.yaml
+  - kube-node-mgr-statefulset.yaml
+  - kube-node-mgr-service.yaml
+  - kube-node-mgr-ingress.yaml
 
 commonLabels:
-  app: kube-node-manager
+  app: kube-node-mgr
   version: v1.0.14
 
-namespace: default
+namespace: kube-node-mgr
 
 images:
-  - name: kube-node-manager
-    newName: reg.deeproute.ai/deeproute-public/zzh/kube-node-manager
+  - name: kube-node-mgr
+    newName: reg.deeproute.ai/deeproute-public/zzh/kube-node-mgr
     newTag: latest

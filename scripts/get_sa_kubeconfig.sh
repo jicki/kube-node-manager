@@ -23,8 +23,8 @@ show_help() {
 用法: $0 [选项]
 
 选项:
-    -n, --name NAME           ServiceAccount 名称 (默认: kube-node-manager)
-    -s, --namespace NAMESPACE 命名空间 (默认: kube-node-manager)
+    -n, --name NAME           ServiceAccount 名称 (默认: kube-node-mgr)
+    -s, --namespace NAMESPACE 命名空间 (默认: kube-node-mgr)
     -o, --output FILE         输出的 kubeconfig 文件名
     -i, --insecure            跳过 TLS 证书验证 (不安全，仅用于测试)
     -f, --force               强制重新创建 Secret
@@ -37,8 +37,8 @@ EOF
 }
 
 # 默认参数
-SERVICE_ACCOUNT_NAME="kube-node-manager"
-NAMESPACE="kube-node-manager"
+SERVICE_ACCOUNT_NAME="kube-node-mgr"
+NAMESPACE="kube-node-mgr"
 INSECURE=false
 FORCE=false
 OUTPUT_FILE=""

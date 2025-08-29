@@ -3,9 +3,9 @@
 # Kubernetes 清理脚本
 set -e
 
-NAMESPACE=${NAMESPACE:-default}
+NAMESPACE=${NAMESPACE:-kube-node-mgr}
 
-echo "🗑️  开始清理 kube-node-manager Kubernetes 资源..."
+echo "🗑️  开始清理 kube-node-mgr Kubernetes 资源..."
 
 # 检查 kubectl 命令
 check_kubectl() {
@@ -30,32 +30,32 @@ show_resources() {
     echo ""
     
     echo "Pod:"
-    kubectl get pods -l app=kube-node-manager -n ${NAMESPACE} 2>/dev/null || echo "  无"
+    kubectl get pods -l app=kube-node-mgr -n ${NAMESPACE} 2>/dev/null || echo "  无"
     
     echo ""
     echo "StatefulSet:"
-    kubectl get statefulset -l app=kube-node-manager -n ${NAMESPACE} 2>/dev/null || echo "  无"
+    kubectl get statefulset -l app=kube-node-mgr -n ${NAMESPACE} 2>/dev/null || echo "  无"
     
     echo ""
     echo "Service:"
-    kubectl get svc -l app=kube-node-manager -n ${NAMESPACE} 2>/dev/null || echo "  无"
+    kubectl get svc -l app=kube-node-mgr -n ${NAMESPACE} 2>/dev/null || echo "  无"
     
     echo ""
     echo "Ingress:"
-    kubectl get ingress -l app=kube-node-manager -n ${NAMESPACE} 2>/dev/null || echo "  无"
+    kubectl get ingress -l app=kube-node-mgr -n ${NAMESPACE} 2>/dev/null || echo "  无"
     
     echo ""
     echo "PVC:"
-    kubectl get pvc -l app=kube-node-manager -n ${NAMESPACE} 2>/dev/null || echo "  无"
+    kubectl get pvc -l app=kube-node-mgr -n ${NAMESPACE} 2>/dev/null || echo "  无"
     
     echo ""
     echo "Secret:"
-    kubectl get secret kube-node-manager-secret -n ${NAMESPACE} 2>/dev/null || echo "  无"
-    kubectl get secret kube-node-manager-kubeconfig -n ${NAMESPACE} 2>/dev/null || echo "  无"
+    kubectl get secret kube-node-mgr-secret -n ${NAMESPACE} 2>/dev/null || echo "  无"
+    kubectl get secret kube-node-mgr-kubeconfig -n ${NAMESPACE} 2>/dev/null || echo "  无"
     
     echo ""
     echo "ConfigMap:"
-    kubectl get configmap kube-node-manager-config -n ${NAMESPACE} 2>/dev/null || echo "  无"
+    kubectl get configmap kube-node-mgr-config -n ${NAMESPACE} 2>/dev/null || echo "  无"
 }
 
 # 确认删除
@@ -88,7 +88,7 @@ delete_persistent_volumes() {
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo "🗑️  删除 PVC..."
-        kubectl delete pvc -l app=kube-node-manager -n ${NAMESPACE} 2>/dev/null || echo "⚠️  PVC 删除失败或不存在"
+        kubectl delete pvc -l app=kube-node-mgr -n ${NAMESPACE} 2>/dev/null || echo "⚠️  PVC 删除失败或不存在"
         echo "✅ PVC 删除完成"
     else
         echo "ℹ️  保留 PVC，数据将被保留"
@@ -100,10 +100,10 @@ delete_rbac_resources() {
     echo "🗑️  删除 RBAC 资源..."
     
     # 删除 ClusterRoleBinding
-    kubectl delete clusterrolebinding kube-node-manager 2>/dev/null || echo "⚠️  ClusterRoleBinding 不存在"
+    kubectl delete clusterrolebinding kube-node-mgr 2>/dev/null || echo "⚠️  ClusterRoleBinding 不存在"
     
     # 删除 ClusterRole
-    kubectl delete clusterrole kube-node-manager 2>/dev/null || echo "⚠️  ClusterRole 不存在"
+    kubectl delete clusterrole kube-node-mgr 2>/dev/null || echo "⚠️  ClusterRole 不存在"
     
     echo "✅ RBAC 资源清理完成"
 }
@@ -115,15 +115,15 @@ verify_cleanup() {
     # 检查是否还有相关资源
     REMAINING_RESOURCES=""
     
-    if kubectl get pods -l app=kube-node-manager -n ${NAMESPACE} 2>/dev/null | grep -q kube-node-manager; then
+    if kubectl get pods -l app=kube-node-mgr -n ${NAMESPACE} 2>/dev/null | grep -q kube-node-mgr; then
         REMAINING_RESOURCES="${REMAINING_RESOURCES}\n  - Pod"
     fi
     
-    if kubectl get statefulset -l app=kube-node-manager -n ${NAMESPACE} 2>/dev/null | grep -q kube-node-manager; then
+    if kubectl get statefulset -l app=kube-node-mgr -n ${NAMESPACE} 2>/dev/null | grep -q kube-node-mgr; then
         REMAINING_RESOURCES="${REMAINING_RESOURCES}\n  - StatefulSet"
     fi
     
-    if kubectl get svc -l app=kube-node-manager -n ${NAMESPACE} 2>/dev/null | grep -q kube-node-manager; then
+    if kubectl get svc -l app=kube-node-mgr -n ${NAMESPACE} 2>/dev/null | grep -q kube-node-mgr; then
         REMAINING_RESOURCES="${REMAINING_RESOURCES}\n  - Service"
     fi
     

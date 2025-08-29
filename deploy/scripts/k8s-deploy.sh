@@ -3,11 +3,11 @@
 # Kubernetes 部署脚本
 set -e
 
-NAMESPACE=${NAMESPACE:-default}
-DOMAIN=${DOMAIN:-kube-node-manager.example.com}
+NAMESPACE=${NAMESPACE:-kube-node-mgr}
+DOMAIN=${DOMAIN:-kube-node-mgr.example.com}
 IMAGE_TAG=${IMAGE_TAG:-latest}
 
-echo "🚀 开始部署 kube-node-manager 到 Kubernetes..."
+echo "🚀 开始部署 kube-node-mgr 到 Kubernetes..."
 
 # 检查 kubectl 命令
 check_kubectl() {
@@ -57,7 +57,7 @@ update_config() {
     rm -f deploy/k8s/kustomization.yaml.bak
     
     # 更新 Ingress 域名
-    sed -i.bak "s/kube-node-manager.example.com/${DOMAIN}/g" deploy/k8s/k8s-ingress.yaml
+    sed -i.bak "s/kube-node-mgr.example.com/${DOMAIN}/g" deploy/k8s/k8s-ingress.yaml
     rm -f deploy/k8s/k8s-ingress.yaml.bak
     
     echo "✅ 配置更新完成"
@@ -78,7 +78,7 @@ wait_for_deployment() {
     echo "⏳ 等待 Pod 就绪..."
     
     # 等待 StatefulSet 就绪
-    kubectl wait --for=condition=ready pod -l app=kube-node-manager -n ${NAMESPACE} --timeout=300s
+    kubectl wait --for=condition=ready pod -l app=kube-node-mgr -n ${NAMESPACE} --timeout=300s
     
     echo "✅ Pod 已就绪"
 }
@@ -96,30 +96,30 @@ show_deployment_info() {
     
     # 显示 Pod 状态
     echo "📊 Pod 状态:"
-    kubectl get pods -l app=kube-node-manager -n ${NAMESPACE}
+    kubectl get pods -l app=kube-node-mgr -n ${NAMESPACE}
     
     echo ""
     echo "📊 Service 状态:"
-    kubectl get svc -l app=kube-node-manager -n ${NAMESPACE}
+    kubectl get svc -l app=kube-node-mgr -n ${NAMESPACE}
     
     echo ""
     echo "📊 Ingress 状态:"
-    kubectl get ingress kube-node-manager -n ${NAMESPACE} 2>/dev/null || echo "   Ingress 未配置"
+    kubectl get ingress kube-node-mgr -n ${NAMESPACE} 2>/dev/null || echo "   Ingress 未配置"
     
     echo ""
     echo "🔗 访问地址:"
-    if [ "${DOMAIN}" != "kube-node-manager.example.com" ]; then
+    if [ "${DOMAIN}" != "kube-node-mgr.example.com" ]; then
         echo "   https://${DOMAIN}"
     else
         echo "   请配置域名或使用 Port Forward:"
-        echo "   kubectl port-forward svc/kube-node-manager 8080:80 -n ${NAMESPACE}"
+        echo "   kubectl port-forward svc/kube-node-mgr 8080:80 -n ${NAMESPACE}"
         echo "   然后访问: http://localhost:8080"
     fi
     
     echo ""
     echo "📚 管理命令:"
-    echo "   查看日志: kubectl logs -l app=kube-node-manager -n ${NAMESPACE} -f"
-    echo "   重启应用: kubectl rollout restart statefulset/kube-node-manager -n ${NAMESPACE}"
+    echo "   查看日志: kubectl logs -l app=kube-node-mgr -n ${NAMESPACE} -f"
+    echo "   重启应用: kubectl rollout restart statefulset/kube-node-mgr -n ${NAMESPACE}"
     echo "   删除应用: kubectl delete -k deploy/k8s/ -n ${NAMESPACE}"
 }
 
