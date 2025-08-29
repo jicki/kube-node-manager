@@ -119,10 +119,18 @@ func (s *Service) CreateClient(clusterName, kubeconfig string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err = clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
+	// 使用基础的API版本检查来验证连接
+	_, err = clientset.Discovery().ServerVersion()
 	if err != nil {
 		s.logger.Error("Failed to test connection for cluster %s: %v", clusterName, err)
 		return fmt.Errorf("failed to connect to kubernetes cluster: %w", err)
+	}
+
+	// 尝试检查节点权限（可选）
+	_, err = clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
+	if err != nil {
+		s.logger.Warning("Limited permissions for cluster %s: cannot list nodes: %v", clusterName, err)
+		// 不阻止客户端创建，只是记录警告
 	}
 
 	s.clients[clusterName] = clientset
@@ -546,9 +554,26 @@ func (s *Service) TestConnection(kubeconfig string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err = clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
+	// 尝试多种权限验证方法，从最基础开始
+	// 1. 首先尝试获取API版本信息（几乎所有用户都有此权限）
+	_, err = clientset.Discovery().ServerVersion()
 	if err != nil {
 		return fmt.Errorf("failed to connect to kubernetes cluster: %w", err)
+	}
+
+	// 2. 尝试列出节点（需要nodes权限，可选）
+	_, err = clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
+	if err != nil {
+		s.logger.Warning("Cannot list nodes with this kubeconfig (limited permissions): %v", err)
+		// 不返回错误，只是记录警告
+		// 对于只有特定权限的service account，这是正常的
+
+		// 3. 尝试列出命名空间（更基础的权限）
+		_, err = clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{Limit: 1})
+		if err != nil {
+			s.logger.Warning("Cannot list namespaces with this kubeconfig: %v", err)
+			// 仍然不返回错误，继续验证其他权限
+		}
 	}
 
 	return nil

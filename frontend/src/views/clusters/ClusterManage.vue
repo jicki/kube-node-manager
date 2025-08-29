@@ -204,6 +204,24 @@
             :rows="8"
             placeholder="请粘贴Kubeconfig文件内容"
           />
+          <div class="form-help-text">
+            <el-alert
+              title="权限要求"
+              type="info"
+              :closable="false"
+              show-icon
+            >
+              <template #default>
+                <p>为了正常使用节点管理功能，您的Kubeconfig需要包含以下权限：</p>
+                <ul>
+                  <li><strong>必需权限</strong>：API服务器连接权限</li>
+                  <li><strong>推荐权限</strong>：nodes资源的get、list、patch权限（用于节点管理）</li>
+                  <li><strong>可选权限</strong>：namespaces资源的list权限</li>
+                </ul>
+                <p><strong>建议</strong>：使用具有cluster-admin角色的Kubeconfig以获得完整功能。</p>
+              </template>
+            </el-alert>
+          </div>
         </el-form-item>
       </el-form>
       
@@ -337,9 +355,31 @@ const handleSubmit = async () => {
     fetchClusters()
     
   } catch (error) {
-    if (error.message) {
-      ElMessage.error(error.message)
+    console.error('集群操作失败:', error)
+    
+    // 解析不同类型的错误并提供友好的错误信息
+    let errorMessage = '操作失败'
+    
+    if (error.response?.data?.message) {
+      const serverMessage = error.response.data.message
+      
+      // 检查是否是权限相关错误
+      if (serverMessage.includes('forbidden') && serverMessage.includes('nodes')) {
+        errorMessage = '集群连接失败：您的Kubeconfig没有列出节点的权限。请确保使用具有cluster-admin权限或包含nodes资源读取权限的Kubeconfig。'
+      } else if (serverMessage.includes('invalid kubeconfig')) {
+        errorMessage = '集群连接失败：Kubeconfig格式无效或权限不足。请检查Kubeconfig内容。'
+      } else if (serverMessage.includes('failed to connect')) {
+        errorMessage = '集群连接失败：无法连接到Kubernetes集群。请检查网络连接和API地址是否正确。'
+      } else if (serverMessage.includes('already exists')) {
+        errorMessage = '集群名称已存在，请使用不同的名称。'
+      } else {
+        errorMessage = serverMessage
+      }
+    } else if (error.message) {
+      errorMessage = error.message
     }
+    
+    ElMessage.error(errorMessage)
   } finally {
     submitting.value = false
   }
@@ -534,6 +574,25 @@ onMounted(() => {
 
 .danger-button:hover {
   color: #ff4d4f;
+}
+
+/* 表单帮助文本样式 */
+.form-help-text {
+  margin-top: 8px;
+}
+
+.form-help-text .el-alert {
+  margin-top: 8px;
+}
+
+.form-help-text ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.form-help-text li {
+  margin: 4px 0;
+  line-height: 1.4;
 }
 
 /* 响应式设计 */
