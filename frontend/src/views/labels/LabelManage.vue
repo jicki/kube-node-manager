@@ -128,7 +128,10 @@
               class="label-item-tag"
             >
               <span class="label-key">{{ key }}</span>
-              <span v-if="Array.isArray(value) && value.length > 1" class="label-values">
+              <span v-if="typeof value === 'string' && value.includes('|MULTI_VALUE|')" class="label-values">
+                =[{{ value.split('|MULTI_VALUE|').filter(v => v !== '').join('|') || '空' }}]
+              </span>
+              <span v-else-if="Array.isArray(value) && value.length > 1" class="label-values">
                 =[{{ value.filter(v => v !== '').join('|') || '空' }}]
               </span>
               <span v-else-if="Array.isArray(value) ? value[0] : value" class="label-value">
@@ -369,7 +372,7 @@
               </el-tag>
             </div>
             
-            <div v-if="Array.isArray(value) && value.length > 1" class="value-selector">
+            <div v-if="getValueArray(value).length > 1" class="value-selector">
               <el-form-item :label="`选择 ${key} 的值:`" style="margin-bottom: 12px;">
                 <el-select 
                   v-model="selectedTemplate.selectedValues[key]" 
@@ -378,7 +381,7 @@
                   size="small"
                 >
                   <el-option 
-                    v-for="(val, valueIndex) in value"
+                    v-for="(val, valueIndex) in getValueArray(value)"
                     :key="valueIndex"
                     :label="val || '(空值)'"
                     :value="val"
@@ -389,7 +392,7 @@
             
             <div v-else class="single-value">
               <span class="value-text">
-                值: {{ Array.isArray(value) ? value[0] : value || '(空值)' }}
+                值: {{ getSingleValue(value) || '(空值)' }}
               </span>
             </div>
           </div>
@@ -734,7 +737,12 @@ const editTemplate = (template) => {
     if (Array.isArray(value)) {
       values = value
     } else if (typeof value === 'string') {
-      values = [value]
+      // 检查是否是用分隔符连接的多值
+      if (value.includes('|MULTI_VALUE|')) {
+        values = value.split('|MULTI_VALUE|').filter(v => v.trim() !== '')
+      } else {
+        values = [value]
+      }
     } else {
       values = ['']
     }
@@ -816,15 +824,15 @@ const handleSaveLabel = async () => {
       return
     }
     
-    // 转换标签数组为对象，支持多值
+    // 转换标签数组为对象，后端只支持string类型，所以多值用分隔符连接
     const labelsObj = {}
     validLabels.forEach(label => {
       const key = label.key.trim()
-      const cleanValues = label.values.filter(v => v !== undefined && v !== null).map(v => v.toString().trim())
+      const cleanValues = label.values.filter(v => v !== undefined && v !== null && v !== '').map(v => v.toString().trim())
       
-      // 如果有多个值，保存为数组；否则保存为字符串以保持向后兼容
+      // 如果有多个值，用特殊分隔符连接（用于标识这是多值）
       if (cleanValues.length > 1) {
-        labelsObj[key] = cleanValues
+        labelsObj[key] = cleanValues.join('|MULTI_VALUE|')
       } else {
         labelsObj[key] = cleanValues[0] || ''
       }
@@ -872,6 +880,27 @@ const showLabelNodes = async (label) => {
   }
 }
 
+// 获取值数组的辅助方法
+const getValueArray = (value) => {
+  if (Array.isArray(value)) {
+    return value
+  } else if (typeof value === 'string' && value.includes('|MULTI_VALUE|')) {
+    return value.split('|MULTI_VALUE|').filter(v => v.trim() !== '')
+  }
+  return [value]
+}
+
+// 获取单个值的辅助方法
+const getSingleValue = (value) => {
+  if (Array.isArray(value)) {
+    return value[0]
+  } else if (typeof value === 'string' && value.includes('|MULTI_VALUE|')) {
+    const values = value.split('|MULTI_VALUE|').filter(v => v.trim() !== '')
+    return values[0]
+  }
+  return value
+}
+
 // 应用模板到节点
 const applyTemplateToNodes = (template) => {
   // 显示节点选择对话框
@@ -887,9 +916,17 @@ const showApplyDialog = (template) => {
   templateCopy.selectedValues = {}
   if (templateCopy.labels) {
     Object.entries(templateCopy.labels).forEach(([key, value]) => {
-      if (Array.isArray(value) && value.length > 1) {
+      let values = []
+      
+      if (Array.isArray(value)) {
+        values = value
+      } else if (typeof value === 'string' && value.includes('|MULTI_VALUE|')) {
+        values = value.split('|MULTI_VALUE|').filter(v => v.trim() !== '')
+      }
+      
+      if (values.length > 1) {
         // 默认选择第一个非空值
-        templateCopy.selectedValues[key] = value.find(v => v && v.trim()) || value[0] || ''
+        templateCopy.selectedValues[key] = values.find(v => v && v.trim()) || values[0] || ''
       }
     })
   }
@@ -921,12 +958,13 @@ const handleApplyTemplate = async () => {
     const labelsToApply = {}
     if (selectedTemplate.value.labels) {
       Object.entries(selectedTemplate.value.labels).forEach(([key, value]) => {
-        if (Array.isArray(value) && value.length > 1) {
+        const valueArray = getValueArray(value)
+        if (valueArray.length > 1) {
           // 使用选中的值
-          labelsToApply[key] = selectedTemplate.value.selectedValues[key] || value[0]
+          labelsToApply[key] = selectedTemplate.value.selectedValues[key] || valueArray[0]
         } else {
           // 使用默认值
-          labelsToApply[key] = Array.isArray(value) ? value[0] : value
+          labelsToApply[key] = getSingleValue(value)
         }
       })
     }

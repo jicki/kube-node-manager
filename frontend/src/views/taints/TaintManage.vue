@@ -117,7 +117,10 @@
               :type="getTaintEffectType(taint.effect)"
             >
               <span class="taint-key">{{ taint.key }}</span>
-              <span v-if="taint.values && taint.values.length > 1" class="taint-values">
+              <span v-if="typeof taint.value === 'string' && taint.value.includes('|MULTI_VALUE|')" class="taint-values">
+                =[{{ taint.value.split('|MULTI_VALUE|').filter(v => v !== '').join('|') || '空' }}]
+              </span>
+              <span v-else-if="taint.values && taint.values.length > 1" class="taint-values">
                 =[{{ taint.values.filter(v => v !== '').join('|') || '空' }}]
               </span>
               <span v-else-if="taint.value || (taint.values && taint.values[0])" class="taint-value">
@@ -362,7 +365,7 @@
               </el-tag>
             </div>
             
-            <div v-if="taint.values && taint.values.length > 1" class="value-selector">
+            <div v-if="getTaintValueArray(taint).length > 1" class="value-selector">
               <el-form-item :label="`选择 ${taint.key} 的值:`" style="margin-bottom: 12px;">
                 <el-select 
                   v-model="taint.selectedValue" 
@@ -371,7 +374,7 @@
                   size="small"
                 >
                   <el-option 
-                    v-for="(value, valueIndex) in taint.values"
+                    v-for="(value, valueIndex) in getTaintValueArray(taint)"
                     :key="valueIndex"
                     :label="value || '(空值)'"
                     :value="value"
@@ -382,7 +385,7 @@
             
             <div v-else class="single-value">
               <span class="value-text">
-                值: {{ taint.value || taint.values?.[0] || '(空值)' }}
+                值: {{ getTaintSingleValue(taint) || '(空值)' }}
               </span>
             </div>
           </div>
@@ -668,14 +671,30 @@ const editTemplate = (template) => {
   
   // 转换现有污点数据格式以支持多值
   const convertedTaints = template.taints && template.taints.length > 0 
-    ? template.taints.map(taint => ({
-        key: taint.key,
-        values: taint.values || [taint.value || ''],
-        effect: taint.effect,
-        selectedValue: '',
-        inputVisible: false,
-        inputValue: ''
-      }))
+    ? template.taints.map(taint => {
+        let values = []
+        if (taint.values && Array.isArray(taint.values)) {
+          values = taint.values
+        } else if (taint.value && typeof taint.value === 'string') {
+          // 检查是否是用分隔符连接的多值
+          if (taint.value.includes('|MULTI_VALUE|')) {
+            values = taint.value.split('|MULTI_VALUE|').filter(v => v.trim() !== '')
+          } else {
+            values = [taint.value]
+          }
+        } else {
+          values = ['']
+        }
+        
+        return {
+          key: taint.key,
+          values,
+          effect: taint.effect,
+          selectedValue: '',
+          inputVisible: false,
+          inputValue: ''
+        }
+      })
     : [{ 
         key: '', 
         values: [''], 
@@ -750,13 +769,16 @@ const handleSaveTaint = async () => {
     const templateData = {
       name: taintForm.name,
       description: taintForm.description,
-      taints: validTaints.map(taint => ({
-        key: taint.key.trim(),
-        values: taint.values.filter(v => v !== undefined && v !== null).map(v => v.toString().trim()),
-        effect: taint.effect,
-        // 保持向后兼容，设置第一个非空值作为默认value
-        value: taint.values.find(v => v && v.trim()) || ''
-      }))
+      taints: validTaints.map(taint => {
+        const cleanValues = taint.values.filter(v => v !== undefined && v !== null && v !== '').map(v => v.toString().trim())
+        
+        return {
+          key: taint.key.trim(),
+          effect: taint.effect,
+          // 如果有多个值，用分隔符连接；否则使用单个值
+          value: cleanValues.length > 1 ? cleanValues.join('|MULTI_VALUE|') : (cleanValues[0] || '')
+        }
+      })
     }
     
     if (isEditing.value) {
@@ -779,6 +801,22 @@ const handleSaveTaint = async () => {
   }
 }
 
+// 获取污点值数组的辅助方法
+const getTaintValueArray = (taint) => {
+  if (taint.values && Array.isArray(taint.values)) {
+    return taint.values
+  } else if (taint.value && typeof taint.value === 'string' && taint.value.includes('|MULTI_VALUE|')) {
+    return taint.value.split('|MULTI_VALUE|').filter(v => v.trim() !== '')
+  }
+  return [taint.value || '']
+}
+
+// 获取污点单个值的辅助方法
+const getTaintSingleValue = (taint) => {
+  const values = getTaintValueArray(taint)
+  return values[0] || ''
+}
+
 // 应用模板到节点
 const applyTemplateToNodes = (template) => {
   // 深拷贝模板以避免修改原始数据
@@ -787,9 +825,10 @@ const applyTemplateToNodes = (template) => {
   // 初始化选中的值
   if (templateCopy.taints) {
     templateCopy.taints.forEach(taint => {
-      if (taint.values && taint.values.length > 1) {
+      const valueArray = getTaintValueArray(taint)
+      if (valueArray.length > 1) {
         // 默认选择第一个非空值
-        taint.selectedValue = taint.values.find(v => v && v.trim()) || taint.values[0] || ''
+        taint.selectedValue = valueArray.find(v => v && v.trim()) || valueArray[0] || ''
       }
     })
   }
@@ -819,9 +858,10 @@ const handleApplyTemplate = async () => {
     
     // 构造应用数据，使用选中的值
     const taintsToApply = selectedTemplate.value.taints.map(taint => {
-      const valueToUse = taint.values && taint.values.length > 1 
+      const valueArray = getTaintValueArray(taint)
+      const valueToUse = valueArray.length > 1 
         ? taint.selectedValue 
-        : taint.value || (taint.values && taint.values[0]) || ''
+        : getTaintSingleValue(taint)
       
       return {
         key: taint.key,
