@@ -25,6 +25,7 @@ type Service struct {
 type NodeInfo struct {
 	Name             string            `json:"name"`
 	Status           string            `json:"status"`
+	Schedulable      bool              `json:"schedulable"`
 	Roles            []string          `json:"roles"`
 	Age              string            `json:"age"`
 	Version          string            `json:"version"`
@@ -448,6 +449,7 @@ func (s *Service) nodeToNodeInfo(node *corev1.Node) NodeInfo {
 	return NodeInfo{
 		Name:             node.Name,
 		Status:           status,
+		Schedulable:      !node.Spec.Unschedulable,
 		Roles:            roles,
 		Age:              s.getAge(node.CreationTimestamp.Time),
 		Version:          node.Status.NodeInfo.KubeletVersion,

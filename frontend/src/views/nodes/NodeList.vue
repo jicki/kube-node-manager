@@ -144,14 +144,17 @@
         <el-table-column
           prop="schedulable"
           label="可调度"
-          width="80"
+          width="90"
         >
           <template #default="{ row }">
             <el-tag
-              :type="row.schedulable ? 'success' : 'info'"
+              :type="row.schedulable ? 'success' : 'warning'"
               size="small"
             >
-              {{ row.schedulable ? '是' : '否' }}
+              <el-icon style="margin-right: 4px;">
+                <component :is="row.schedulable ? 'Check' : 'Lock'" />
+              </el-icon>
+              {{ row.schedulable ? '可调度' : '已封锁' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -160,18 +163,28 @@
           <template #default="{ row }">
             <div class="resource-usage">
               <div class="resource-item">
-                <span class="resource-label">CPU:</span>
-                <span class="resource-text">
-                  {{ row.allocatable?.cpu || 'N/A' }} / {{ row.capacity?.cpu || 'N/A' }}
-                </span>
-                <span class="resource-subtext">(可分配/总量)</span>
+                <div class="resource-header">
+                  <el-icon class="resource-icon cpu-icon"><Monitor /></el-icon>
+                  <span class="resource-label">CPU</span>
+                </div>
+                <div class="resource-content">
+                  <span class="resource-value">{{ row.allocatable?.cpu || 'N/A' }}</span>
+                  <span class="resource-divider">/</span>
+                  <span class="resource-total">{{ row.capacity?.cpu || 'N/A' }}</span>
+                </div>
+                <span class="resource-subtext">可分配 / 总量</span>
               </div>
               <div class="resource-item">
-                <span class="resource-label">内存:</span>
-                <span class="resource-text">
-                  {{ formatMemory(row.allocatable?.memory) }} / {{ formatMemory(row.capacity?.memory) }}
-                </span>
-                <span class="resource-subtext">(可分配/总量)</span>
+                <div class="resource-header">
+                  <el-icon class="resource-icon memory-icon"><Monitor /></el-icon>
+                  <span class="resource-label">内存</span>
+                </div>
+                <div class="resource-content">
+                  <span class="resource-value">{{ formatMemory(row.allocatable?.memory) }}</span>
+                  <span class="resource-divider">/</span>
+                  <span class="resource-total">{{ formatMemory(row.capacity?.memory) }}</span>
+                </div>
+                <span class="resource-subtext">可分配 / 总量</span>
               </div>
             </div>
           </template>
@@ -303,7 +316,9 @@ import {
   MoreFilled,
   CollectionTag,
   WarningFilled,
-  Plus
+  Plus,
+  Check,
+  Monitor
 } from '@element-plus/icons-vue'
 
 const nodeStore = useNodeStore()
@@ -629,72 +644,194 @@ onMounted(() => {
   padding: 0;
 }
 
+.table-card :deep(.el-table) {
+  border-radius: 8px;
+}
+
+.table-card :deep(.el-table__header) {
+  background: #fafafa;
+}
+
+.table-card :deep(.el-table__header-wrapper) th {
+  background: #fafafa;
+  font-weight: 600;
+  color: #262626;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.table-card :deep(.el-table__body-wrapper) tr {
+  transition: all 0.2s ease;
+}
+
+.table-card :deep(.el-table__body-wrapper) tr:hover {
+  background: #f8f8f8;
+}
+
+.table-card :deep(.el-table td) {
+  border-bottom: 1px solid #f5f5f5;
+  padding: 12px 0;
+}
+
 .node-name-cell {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .node-name-link {
-  font-weight: 500;
+  font-weight: 600;
   padding: 0;
   height: auto;
+  color: #1890ff;
+  font-size: 14px;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.node-name-link:hover {
+  color: #40a9ff;
+  text-decoration: underline;
 }
 
 .node-labels {
   display: flex;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .role-tag {
-  font-size: 11px;
-  height: 18px;
-  line-height: 16px;
+  font-size: 10px;
+  height: 20px;
+  line-height: 18px;
+  font-weight: 500;
+  border-radius: 10px;
+  padding: 0 8px;
 }
 
 .resource-usage {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .resource-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  padding: 6px 8px;
+  background: #fafafa;
+  border-radius: 4px;
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.resource-item:hover {
+  background: #f0f9ff;
+  border-left-color: #1890ff;
+}
+
+.resource-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.resource-icon {
   font-size: 12px;
+  padding: 2px;
+  border-radius: 2px;
+}
+
+.cpu-icon {
+  color: #52c41a;
+  background: rgba(82, 196, 26, 0.1);
+}
+
+.memory-icon {
+  color: #1890ff;
+  background: rgba(24, 144, 255, 0.1);
 }
 
 .resource-label {
   color: #666;
   font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.resource-text {
+.resource-content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0;
+}
+
+.resource-value {
   color: #333;
   font-family: 'Monaco', 'Menlo', monospace;
-  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.resource-divider {
+  color: #d9d9d9;
+  font-weight: 300;
+}
+
+.resource-total {
+  color: #666;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
 }
 
 .resource-subtext {
   color: #999;
-  font-size: 10px;
+  font-size: 9px;
+  font-style: italic;
 }
 
 .version-text {
   font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 12px;
+  font-size: 11px;
   color: #666;
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  display: inline-block;
+  font-weight: 500;
 }
 
 .time-text {
-  font-size: 13px;
-  color: #666;
+  font-size: 12px;
+  color: #999;
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .action-buttons {
   display: flex;
-  gap: 4px;
+  gap: 6px;
+  align-items: center;
+}
+
+.action-buttons .el-button {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+.action-buttons .el-button--text {
+  color: #666;
+  background: #f5f5f5;
+  border-color: #e8e8e8;
+  transition: all 0.2s ease;
+}
+
+.action-buttons .el-button--text:hover {
+  color: #1890ff;
+  background: #e6f7ff;
+  border-color: #91d5ff;
 }
 
 .pagination-container {
