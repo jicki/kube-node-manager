@@ -654,9 +654,12 @@ onMounted(() => {
 
 .table-card :deep(.el-table__header-wrapper) th {
   background: #fafafa;
-  font-weight: 600;
+  font-weight: 700;
   color: #262626;
+  font-size: 14px;
   border-bottom: 1px solid #f0f0f0;
+  padding: 18px 0;
+  letter-spacing: 0.3px;
 }
 
 .table-card :deep(.el-table__body-wrapper) tr {
@@ -669,7 +672,9 @@ onMounted(() => {
 
 .table-card :deep(.el-table td) {
   border-bottom: 1px solid #f5f5f5;
-  padding: 12px 0;
+  padding: 16px 0;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .node-name-cell {
@@ -683,9 +688,10 @@ onMounted(() => {
   padding: 0;
   height: auto;
   color: #1890ff;
-  font-size: 14px;
+  font-size: 15px;
   text-align: left;
   justify-content: flex-start;
+  letter-spacing: 0.3px;
 }
 
 .node-name-link:hover {
@@ -700,12 +706,13 @@ onMounted(() => {
 }
 
 .role-tag {
-  font-size: 10px;
-  height: 20px;
-  line-height: 18px;
+  font-size: 11px;
+  height: 22px;
+  line-height: 20px;
   font-weight: 500;
-  border-radius: 10px;
-  padding: 0 8px;
+  border-radius: 11px;
+  padding: 0 10px;
+  letter-spacing: 0.2px;
 }
 
 .resource-usage {
@@ -754,10 +761,10 @@ onMounted(() => {
 
 .resource-label {
   color: #666;
-  font-weight: 500;
-  font-size: 11px;
+  font-weight: 600;
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
 }
 
 .resource-content {
@@ -769,20 +776,24 @@ onMounted(() => {
 
 .resource-value {
   color: #333;
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 12px;
-  font-weight: 600;
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
 }
 
 .resource-divider {
   color: #d9d9d9;
   font-weight: 300;
+  margin: 0 2px;
 }
 
 .resource-total {
   color: #666;
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 12px;
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
 }
 
 .resource-subtext {
@@ -815,10 +826,12 @@ onMounted(() => {
 }
 
 .action-buttons .el-button {
-  padding: 4px 8px;
-  font-size: 12px;
-  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 6px;
   border: 1px solid transparent;
+  font-weight: 500;
+  letter-spacing: 0.2px;
 }
 
 .action-buttons .el-button--text {

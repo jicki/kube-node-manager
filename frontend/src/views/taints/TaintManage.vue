@@ -125,11 +125,12 @@
       :title="isEditing ? '编辑污点' : '添加污点'"
       width="600px"
     >
-      <el-form
+              <el-form
         ref="taintFormRef"
         :model="taintForm"
         :rules="taintRules"
-        label-width="100px"
+        label-width="110px"
+        style="margin-top: 20px;"
       >
         <el-form-item label="污点键" prop="key">
           <el-input
@@ -153,20 +154,32 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="应用到节点">
+        <el-form-item label="应用到节点" style="margin-top: 24px;">
           <el-select
             v-model="taintForm.selectedNodes"
             multiple
             filterable
             placeholder="选择要应用此污点的节点"
-            style="width: 100%"
+            style="width: 100%; font-size: 14px;"
+            size="large"
           >
             <el-option
               v-for="node in availableNodes"
               :key="node.name"
               :label="`${node.name} (${node.status})`"
               :value="node.name"
-            />
+            >
+              <div class="node-option">
+                <span class="node-name">{{ node.name }}</span>
+                <el-tag 
+                  :type="node.status === 'Ready' ? 'success' : 'danger'" 
+                  size="small"
+                  style="margin-left: auto;"
+                >
+                  {{ node.status }}
+                </el-tag>
+              </div>
+            </el-option>
           </el-select>
         </el-form-item>
 
@@ -289,7 +302,8 @@ const fetchNodes = async () => {
     const response = await nodeApi.getNodes({
       cluster_name: clusterName
     })
-    availableNodes.value = response.data?.items || response.data || []
+    // 后端返回格式: { code, message, data: [...] } - data直接是节点数组
+    availableNodes.value = response.data.data || []
   } catch (error) {
     console.error('获取节点数据失败:', error)
     availableNodes.value = []
@@ -386,6 +400,46 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.node-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 14px;
+}
+
+.node-name {
+  font-weight: 500;
+  color: #333;
+  letter-spacing: 0.3px;
+}
+
+:deep(.el-form-item) {
+  margin-bottom: 22px;
+}
+
+:deep(.el-form-item__label) {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  letter-spacing: 0.2px;
+  line-height: 1.6;
+}
+
+:deep(.el-input__wrapper) {
+  font-size: 14px;
+  padding: 12px 15px;
+}
+
+:deep(.el-select) {
+  font-size: 14px;
+}
+
+:deep(.el-select__wrapper) {
+  padding: 8px 15px;
+  min-height: 44px;
+}
+
 .taint-manage {
   padding: 0;
 }
