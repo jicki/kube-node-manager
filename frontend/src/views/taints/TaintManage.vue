@@ -1055,14 +1055,37 @@ const applyTemplateToNodes = (template) => {
   // 深拷贝模板以避免修改原始数据
   const templateCopy = JSON.parse(JSON.stringify(template))
   
-  // 初始化选中的值
+  // 初始化选中的值，并预先清理所有值
   if (templateCopy.taints) {
-    templateCopy.taints.forEach(taint => {
+    templateCopy.taints = templateCopy.taints.map(taint => {
       const valueArray = getTaintValueArray(taint)
-      if (valueArray.length > 1) {
-        // 默认选择第一个非空值
-        taint.selectedValue = valueArray.find(v => v && v.trim()) || valueArray[0] || ''
+      
+      // 清理每个值，确保符合Kubernetes格式
+      const cleanedValues = valueArray.map(v => {
+        const cleanValue = String(v || '').trim()
+        if (cleanValue && !isValidTaintValue(cleanValue)) {
+          console.warn(`模板中的污点值不符合格式，将被清理: ${cleanValue}`)
+          return sanitizeTaintValue(cleanValue)
+        }
+        return cleanValue
+      }).filter(v => v !== '') // 移除清理后的空值
+      
+      // 更新污点值
+      let cleanedTaint = { ...taint }
+      if (cleanedValues.length > 1) {
+        // 重新用分隔符连接多值
+        cleanedTaint.value = cleanedValues.join('|MULTI_VALUE|')
+        // 设置默认选择值
+        cleanedTaint.selectedValue = cleanedValues[0]
+      } else if (cleanedValues.length === 1) {
+        // 单值直接设置
+        cleanedTaint.value = cleanedValues[0]
+      } else {
+        // 没有有效值，设置为空
+        cleanedTaint.value = ''
       }
+      
+      return cleanedTaint
     })
   }
   
@@ -1129,6 +1152,8 @@ const handleApplyTemplate = async () => {
     applyDialogVisible.value = false
     
   } catch (error) {
+    console.error('应用污点模板失败:', error)
+    console.error('发送到后端的数据:', applyData)
     ElMessage.error(`应用模板失败: ${error.message}`)
   } finally {
     applying.value = false

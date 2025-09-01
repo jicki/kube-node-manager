@@ -635,7 +635,42 @@ const fetchLabels = async () => {
     })
     if (response.data && response.data.code === 200) {
       const data = response.data.data
-      labels.value = data.templates || []
+      // 清理从后端获取的模板数据
+      const cleanedTemplates = (data.templates || []).map(template => {
+        if (template.labels) {
+          const cleanedLabels = {}
+          Object.entries(template.labels).forEach(([key, value]) => {
+            if (typeof value === 'string' && value.includes('|MULTI_VALUE|')) {
+              // 分离并清理多值
+              const values = value.split('|MULTI_VALUE|').filter(v => v.trim() !== '')
+              const cleanedValues = values.map(v => {
+                if (!isValidLabelValue(v)) {
+                  console.warn(`从后端获取的标签值不符合格式，将被清理: ${v}`)
+                  return sanitizeLabelValue(v)
+                }
+                return v
+              }).filter(v => v !== '')
+              
+              // 重新连接清理后的值
+              cleanedLabels[key] = cleanedValues.length > 1 
+                ? cleanedValues.join('|MULTI_VALUE|')
+                : (cleanedValues[0] || '')
+            } else {
+              // 验证单值
+              if (!isValidLabelValue(value)) {
+                console.warn(`从后端获取的标签值不符合格式，将被清理: ${value}`)
+                cleanedLabels[key] = sanitizeLabelValue(value)
+              } else {
+                cleanedLabels[key] = value
+              }
+            }
+          })
+          template.labels = cleanedLabels
+        }
+        return template
+      })
+      
+      labels.value = cleanedTemplates
       pagination.total = data.total || 0
       // 初始化筛选结果
       if (!isSearchActive.value) {
@@ -1031,9 +1066,11 @@ const showApplyDialog = (template) => {
   // 深拷贝模板以避免修改原始数据
   const templateCopy = JSON.parse(JSON.stringify(template))
   
-  // 初始化选中的值
+  // 初始化选中的值，并预先清理所有值
   templateCopy.selectedValues = {}
   if (templateCopy.labels) {
+    // 预处理模板标签，清理不符合格式的值
+    const cleanedLabels = {}
     Object.entries(templateCopy.labels).forEach(([key, value]) => {
       let values = []
       
@@ -1041,13 +1078,35 @@ const showApplyDialog = (template) => {
         values = value
       } else if (typeof value === 'string' && value.includes('|MULTI_VALUE|')) {
         values = value.split('|MULTI_VALUE|').filter(v => v.trim() !== '')
+      } else {
+        values = [value]
       }
       
-      if (values.length > 1) {
-        // 默认选择第一个非空值
-        templateCopy.selectedValues[key] = values.find(v => v && v.trim()) || values[0] || ''
+      // 清理每个值，确保符合Kubernetes格式
+      const cleanedValues = values.map(v => {
+        const cleanValue = String(v || '').trim()
+        if (!isValidLabelValue(cleanValue)) {
+          console.warn(`模板中的标签值不符合格式，将被清理: ${cleanValue}`)
+          return sanitizeLabelValue(cleanValue)
+        }
+        return cleanValue
+      }).filter(v => v !== '') // 移除清理后的空值
+      
+      if (cleanedValues.length > 0) {
+        // 如果有多个清理后的值，重新用分隔符连接
+        cleanedLabels[key] = cleanedValues.length > 1 
+          ? cleanedValues.join('|MULTI_VALUE|') 
+          : cleanedValues[0]
+        
+        // 为多值标签设置默认选择
+        if (cleanedValues.length > 1) {
+          templateCopy.selectedValues[key] = cleanedValues[0]
+        }
       }
     })
+    
+    // 使用清理后的标签
+    templateCopy.labels = cleanedLabels
   }
   
   selectedTemplate.value = templateCopy
@@ -1113,6 +1172,8 @@ const handleApplyTemplate = async () => {
     applyDialogVisible.value = false
     
   } catch (error) {
+    console.error('应用标签模板失败:', error)
+    console.error('发送到后端的数据:', applyData)
     ElMessage.error(`应用模板失败: ${error.message}`)
   } finally {
     applying.value = false
