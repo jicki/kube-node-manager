@@ -176,12 +176,12 @@
                       size="small"
                       :type="getTaintType(taint.effect)"
                       class="attribute-tag taint-tag"
-                      :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
+                      :title="`${taint.key}${taint.value ? '=' + taint.value : ''}:${taint.effect}`"
                     >
-                      <span class="tag-key">{{ truncateText(taint.key, 10) }}</span>
-                      <span v-if="taint.value" class="tag-separator">=</span>
-                      <span v-if="taint.value" class="tag-value">{{ truncateText(taint.value, 8) }}</span>
-                      <span class="taint-effect">:{{ taint.effect.substr(0, 2) }}</span>
+                      <span class="tag-key">{{ smartFormatTaint(taint).key }}</span>
+                      <span v-if="smartFormatTaint(taint).value" class="tag-separator">=</span>
+                      <span v-if="smartFormatTaint(taint).value" class="tag-value">{{ smartFormatTaint(taint).value }}</span>
+                      <span class="taint-effect">:{{ smartFormatTaint(taint).effect }}</span>
                     </el-tag>
                     
                     <el-dropdown
@@ -545,46 +545,112 @@ const truncateText = (text, maxLength) => {
 }
 
 // 智能截断标签键值，保留关键信息
-const smartTruncateLabel = (key, value, maxKeyLength = 25, maxValueLength = 15) => {
+const smartTruncateLabel = (key, value, maxKeyLength = 35, maxValueLength = 20) => {
   let truncatedKey = key
   let truncatedValue = value
   
-  // 特殊处理：保留完整的标签key，只在必要时才截断
-  // 对于常见的标签key，我们希望显示完整信息
+  // 重要标签列表：这些标签应该完整显示，不被截断
   const importantKeys = [
     'deeproute.cn/instance-type',
     'deeproute.cn/user-type', 
+    'deeproute.cn/node-type',
     'kubernetes.io/hostname',
-    'node.kubernetes.io/instance-type'
+    'kubernetes.io/arch',
+    'kubernetes.io/os',
+    'node.kubernetes.io/instance-type',
+    'nvidia.com/gpu'
   ]
   
-  // 如果是重要的标签key，尽量保持完整
+  // 重要标签完全不截断
   if (importantKeys.includes(key)) {
-    // 只在超出限制时才截断，且给更大的空间
+    // 对于重要标签，保持完整显示
+    truncatedKey = key
+  } else {
+    // 其他标签在超出限制时进行智能截断
     if (key.length > maxKeyLength) {
-      // 对于deeproute标签，优化显示方式
-      if (key.includes('deeproute.cn/')) {
+      // 对于带命名空间的标签，尝试保留关键部分
+      if (key.includes('/')) {
         const parts = key.split('/')
         if (parts.length === 2) {
-          truncatedKey = `${parts[0].substring(0, 12)}.../${parts[1]}`
+          const namespace = parts[0]
+          const name = parts[1]
+          // 如果命名空间太长，截断命名空间但保留名称
+          if (namespace.length > 20) {
+            truncatedKey = `${namespace.substring(0, 15)}.../${name}`
+          } else {
+            truncatedKey = key.substring(0, maxKeyLength) + '..'
+          }
+        } else {
+          truncatedKey = key.substring(0, maxKeyLength) + '..'
         }
       } else {
         truncatedKey = key.substring(0, maxKeyLength) + '..'
       }
     }
-  } else {
-    // 其他标签保持原有逻辑，但增加最大长度
-    if (key.length > maxKeyLength) {
-      truncatedKey = key.substring(0, maxKeyLength) + '..'
-    }
   }
   
-  // 截断值
+  // 值的截断也更宽松
   if (truncatedValue && truncatedValue.length > maxValueLength) {
     truncatedValue = truncatedValue.substring(0, maxValueLength) + '..'
   }
   
   return { key: truncatedKey, value: truncatedValue }
+}
+
+// 智能格式化污点显示
+const smartFormatTaint = (taint) => {
+  if (!taint) return { key: '', value: '', effect: '' }
+  
+  // 重要的污点key不截断
+  const importantTaintKeys = [
+    'nvidia.com/gpu',
+    'node-role.kubernetes.io/master',
+    'node-role.kubernetes.io/control-plane',
+    'node.kubernetes.io/not-ready',
+    'node.kubernetes.io/unreachable',
+    'node.kubernetes.io/memory-pressure',
+    'node.kubernetes.io/disk-pressure',
+    'node.kubernetes.io/pid-pressure',
+    'node.kubernetes.io/network-unavailable'
+  ]
+  
+  let formattedKey = taint.key
+  let formattedValue = taint.value || ''
+  let formattedEffect = taint.effect || ''
+  
+  // 重要污点key保持完整
+  if (!importantTaintKeys.includes(taint.key)) {
+    // 只有非重要污点才进行截断，且给更大空间
+    if (taint.key.length > 25) {
+      if (taint.key.includes('/')) {
+        const parts = taint.key.split('/')
+        if (parts.length === 2) {
+          const namespace = parts[0]
+          const name = parts[1]
+          if (namespace.length > 15) {
+            formattedKey = `${namespace.substring(0, 12)}.../${name}`
+          }
+        }
+      } else {
+        formattedKey = taint.key.substring(0, 22) + '...'
+      }
+    }
+  }
+  
+  // 值的处理更宽松
+  if (formattedValue.length > 15) {
+    formattedValue = formattedValue.substring(0, 12) + '...'
+  }
+  
+  // 效果不截断，显示完整名称
+  const effectMap = {
+    'NoSchedule': 'NoSchedule',
+    'PreferNoSchedule': 'PreferNoSchedule', 
+    'NoExecute': 'NoExecute'
+  }
+  formattedEffect = effectMap[taint.effect] || taint.effect
+  
+  return { key: formattedKey, value: formattedValue, effect: formattedEffect }
 }
 
 // 判断是否应该显示属性区域
@@ -788,6 +854,9 @@ onUnmounted(() => {
   font-family: 'Monaco', 'Menlo', monospace;
   border-radius: 4px;
   transition: all 0.2s ease;
+  max-width: none;
+  word-wrap: break-word;
+  white-space: normal;
 }
 
 .attribute-tag:hover {
@@ -946,6 +1015,7 @@ onUnmounted(() => {
   
   .attribute-tag {
     font-size: 10px;
+    max-width: none;
   }
   
   .arrow-icon {
@@ -1025,7 +1095,8 @@ onUnmounted(() => {
   
   .attribute-tag {
     font-size: 9px;
-    max-width: 180px;
+    max-width: none;
+    word-break: break-all;
   }
   
   .arrow-icon {
