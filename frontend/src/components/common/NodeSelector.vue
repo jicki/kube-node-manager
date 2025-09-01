@@ -120,9 +120,9 @@
                           class="label-tag"
                           :title="`${key}=${value}`"
                         >
-                          <span class="label-key">{{ truncateText(key, 12) }}</span>
+                          <span class="label-key">{{ smartTruncateLabel(key, value).key }}</span>
                           <span v-if="value" class="label-separator">=</span>
-                          <span v-if="value" class="label-value">{{ truncateText(value, 10) }}</span>
+                          <span v-if="value" class="label-value">{{ smartTruncateLabel(key, value).value }}</span>
                         </el-tag>
                         <el-dropdown
                           v-if="getTotalLabelsCount(node.labels) > 0"
@@ -448,8 +448,8 @@ const getCompactDisplayLabels = (labels) => {
   if (!labels || typeof labels !== 'object') return {}
   try {
     const entries = Object.entries(labels)
-    // 只显示 cluster 和 deeproute.cn/user-type 标签，最多2个
-    const priorityKeys = ['cluster', 'deeproute.cn/user-type']
+    // 按优先级显示关键标签
+    const priorityKeys = ['cluster', 'deeproute.cn/user-type', 'deeproute.cn/instance-type']
     const priorityEntries = entries.filter(([key]) => priorityKeys.includes(key)).slice(0, 2)
     return Object.fromEntries(priorityEntries)
   } catch (error) {
@@ -471,7 +471,7 @@ const getCompactDisplayTaints = (taints) => {
 const getTotalLabelsCount = (labels) => {
   if (!labels || typeof labels !== 'object') return 0
   // 返回除了优先显示标签外的总数
-  const priorityKeys = ['cluster', 'deeproute.cn/user-type']
+  const priorityKeys = ['cluster', 'deeproute.cn/user-type', 'deeproute.cn/instance-type']
   const allKeys = Object.keys(labels)
   const otherLabelsCount = allKeys.filter(key => !priorityKeys.includes(key)).length
   return otherLabelsCount
@@ -482,9 +482,21 @@ const getOtherLabels = (labels) => {
   try {
     const entries = Object.entries(labels)
     // 返回除了优先显示标签外的所有其他标签
-    const priorityKeys = ['cluster', 'deeproute.cn/user-type']
+    const priorityKeys = ['cluster', 'deeproute.cn/user-type', 'deeproute.cn/instance-type']
     const otherEntries = entries.filter(([key]) => !priorityKeys.includes(key))
-    return Object.fromEntries(otherEntries)
+    // 按重要性排序：系统标签优先，自定义标签在后
+    const systemLabels = otherEntries.filter(([key]) => 
+      key.startsWith('kubernetes.io/') || 
+      key.startsWith('node.kubernetes.io/') ||
+      key.startsWith('topology.kubernetes.io/')
+    )
+    const customLabels = otherEntries.filter(([key]) => 
+      !key.startsWith('kubernetes.io/') && 
+      !key.startsWith('node.kubernetes.io/') &&
+      !key.startsWith('topology.kubernetes.io/')
+    )
+    const sortedEntries = [...systemLabels, ...customLabels]
+    return Object.fromEntries(sortedEntries)
   } catch (error) {
     console.warn('Error filtering other labels:', error)
     return {}
@@ -503,6 +515,31 @@ const getTaintType = (effect) => {
 const truncateText = (text, maxLength) => {
   if (!text) return ''
   return text.length > maxLength ? text.substring(0, maxLength) + '..' : text
+}
+
+// 智能截断标签键值，保留关键信息
+const smartTruncateLabel = (key, value, maxKeyLength = 15, maxValueLength = 12) => {
+  let truncatedKey = key
+  let truncatedValue = value
+  
+  // 对于deeproute相关的键，保留关键部分
+  if (key.includes('deeproute.cn/')) {
+    const parts = key.split('/')
+    if (parts.length > 1) {
+      truncatedKey = parts[parts.length - 1] // 只显示最后一部分
+    }
+  }
+  
+  // 截断键和值
+  if (truncatedKey.length > maxKeyLength) {
+    truncatedKey = truncatedKey.substring(0, maxKeyLength) + '..'
+  }
+  
+  if (truncatedValue && truncatedValue.length > maxValueLength) {
+    truncatedValue = truncatedValue.substring(0, maxValueLength) + '..'
+  }
+  
+  return { key: truncatedKey, value: truncatedValue }
 }
 
 const showAllLabels = (node) => {
@@ -598,12 +635,12 @@ onUnmounted(() => {
 .node-item {
   display: block !important;
   width: 100% !important;
-  padding: 16px;
-  margin: 0 0 8px 0 !important;
+  padding: 18px 16px;
+  margin: 0 0 12px 0 !important;
   border-bottom: 1px solid #f0f0f0;
   transition: all 0.3s ease;
   position: static !important; /* 强制静态定位 */
-  min-height: 60px;
+  min-height: 80px; /* 增加最小高度 */
   height: auto;
   box-sizing: border-box;
   clear: both;
@@ -674,16 +711,18 @@ onUnmounted(() => {
   display: block;
   margin-left: 32px; /* 为checkbox留出空间 */
   width: calc(100% - 40px);
-  padding: 6px 0;
+  padding: 8px 0;
   position: static;
   clear: left;
+  line-height: 1.5; /* 增加行高 */
 }
 
 .node-header {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
+  margin-bottom: 8px; /* 增加与下方的间距 */
 }
 
 .node-main-info {
@@ -760,16 +799,20 @@ onUnmounted(() => {
 .node-attributes {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   border-top: 1px solid #f0f0f0;
-  padding-top: 10px;
-  margin-top: 4px;
+  padding-top: 12px;
+  margin-top: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .attributes-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .attributes-header {
@@ -795,26 +838,34 @@ onUnmounted(() => {
 
 .attributes-content {
   display: flex;
-  flex-wrap: nowrap; /* 不换行，通过折叠控制 */
-  gap: 6px;
-  align-items: center;
-  line-height: 1;
-  overflow: hidden; /* 防止溢出 */
+  flex-wrap: wrap; /* 允许换行但控制行数 */
+  gap: 8px 6px; /* 行间距8px，列间距6px */
+  align-items: flex-start;
+  line-height: 1.4;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 24px; /* 确保最小高度 */
 }
 
 .label-tag {
-  font-size: 10px;
-  height: 20px;
-  line-height: 18px;
-  padding: 0 6px;
+  font-size: 11px;
+  height: 22px;
+  line-height: 20px;
+  padding: 0 8px;
   font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
-  display: inline-flex; /* 保证垂直居中且不叠压 */
+  display: inline-flex;
   align-items: center;
   vertical-align: top;
+  white-space: nowrap;
+  flex-shrink: 0; /* 防止被压缩 */
+  max-width: 200px; /* 限制最大宽度 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 2px 0; /* 增加上下边距 */
 }
 
 .label-tag:hover {
@@ -886,13 +937,13 @@ onUnmounted(() => {
 
 .more-labels-tag,
 .more-taints-tag {
-  font-size: 10px;
-  height: 20px;
-  line-height: 18px;
-  padding: 0 6px;
+  font-size: 11px;
+  height: 22px;
+  line-height: 20px;
+  padding: 0 8px;
   cursor: pointer;
   font-weight: 600;
-  border-radius: 3px;
+  border-radius: 4px;
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
@@ -901,6 +952,8 @@ onUnmounted(() => {
   border: 1px solid #d9d9d9 !important;
   color: #666 !important;
   flex-shrink: 0;
+  white-space: nowrap;
+  margin: 2px 0; /* 增加上下边距 */
 }
 
 .more-labels-tag:hover,
@@ -978,11 +1031,18 @@ onUnmounted(() => {
   }
   
   .node-item {
-    padding: 14px 12px;
+    padding: 16px 12px;
+    min-height: 70px;
   }
   
   .node-content {
-    gap: 10px;
+    padding: 6px 0;
+    line-height: 1.4;
+  }
+  
+  .node-header {
+    gap: 6px;
+    margin-bottom: 6px;
   }
   
   .node-name {
@@ -1003,28 +1063,35 @@ onUnmounted(() => {
   }
   
   .node-attributes {
+    gap: 8px;
+    padding-top: 8px;
+  }
+  
+  .attributes-section {
     gap: 6px;
-    padding-top: 6px;
   }
   
   .attributes-content {
-    gap: 2px;
+    gap: 6px 4px;
+    min-height: 20px;
   }
   
   .label-tag,
   .taint-tag {
-    font-size: 9px;
-    height: 18px;
-    line-height: 16px;
-    padding: 0 4px;
+    font-size: 10px;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 6px;
+    margin: 1px 0;
   }
   
   .more-labels-tag,
   .more-taints-tag {
-    font-size: 9px;
-    height: 18px;
-    line-height: 16px;
-    padding: 0 4px;
+    font-size: 10px;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 6px;
+    margin: 1px 0;
   }
   
   .more-icon {
@@ -1057,11 +1124,19 @@ onUnmounted(() => {
   }
   
   .node-item {
-    padding: 12px 10px;
+    padding: 14px 10px;
+    min-height: 60px;
   }
   
   .node-content {
-    gap: 8px;
+    padding: 4px 0;
+    margin-left: 28px;
+    width: calc(100% - 32px);
+  }
+  
+  .node-header {
+    gap: 4px;
+    margin-bottom: 4px;
   }
   
   .node-name {
@@ -1088,28 +1163,36 @@ onUnmounted(() => {
   }
   
   .node-attributes {
+    gap: 6px;
+    padding-top: 6px;
+  }
+  
+  .attributes-section {
     gap: 4px;
-    padding-top: 4px;
   }
   
   .attributes-content {
-    gap: 2px;
+    gap: 4px 3px;
+    min-height: 18px;
   }
   
   .label-tag,
   .taint-tag {
-    font-size: 8px;
-    height: 16px;
-    line-height: 14px;
-    padding: 0 3px;
+    font-size: 9px;
+    height: 18px;
+    line-height: 16px;
+    padding: 0 4px;
+    margin: 1px 0;
+    max-width: 120px;
   }
   
   .more-labels-tag,
   .more-taints-tag {
-    font-size: 8px;
-    height: 16px;
-    line-height: 14px;
-    padding: 0 3px;
+    font-size: 9px;
+    height: 18px;
+    line-height: 16px;
+    padding: 0 4px;
+    margin: 1px 0;
   }
   
   .more-icon {
