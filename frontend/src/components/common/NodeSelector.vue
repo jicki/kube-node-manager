@@ -515,7 +515,7 @@ onUnmounted(() => {
   border-bottom: 1px solid #f0f0f0;
   transition: all 0.3s ease;
   position: relative;
-  min-height: 60px; /* 确保最小高度 */
+  min-height: 72px; /* 提高最小高度，避免上下元素挤压 */
 }
 
 .node-item:last-child {
@@ -558,8 +558,8 @@ onUnmounted(() => {
   flex-direction: column;
   margin-left: 8px;
   width: calc(100% - 8px);
-  gap: 8px;
-  padding: 4px 0;
+  gap: 10px;
+  padding: 6px 0;
   flex: 1; /* 确保内容区域占满可用空间 */
 }
 
@@ -646,8 +646,8 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   border-top: 1px solid #f0f0f0;
-  padding-top: 8px;
-  margin-top: 2px;
+  padding-top: 10px;
+  margin-top: 4px;
 }
 
 .attributes-section {
@@ -680,24 +680,24 @@ onUnmounted(() => {
 .attributes-content {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px 6px; /* 行列间距更大，避免层叠 */
   align-items: flex-start;
-  line-height: 1;
+  line-height: 1.2; /* 提升行高 */
 }
 
 .label-tag {
   font-size: 10px;
-  height: 18px;
-  line-height: 16px;
-  padding: 0 4px;
+  height: 20px;
+  line-height: 18px;
+  padding: 0 6px;
   font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 2px;
+  border-radius: 3px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
-  display: inline-block;
+  display: inline-flex; /* 保证垂直居中且不叠压 */
+  align-items: center;
   vertical-align: top;
-  margin: 1px 2px 1px 0;
 }
 
 .label-tag:hover {
@@ -727,17 +727,17 @@ onUnmounted(() => {
 
 .taint-tag {
   font-size: 10px;
-  height: 18px;
-  line-height: 16px;
-  padding: 0 4px;
+  height: 20px;
+  line-height: 18px;
+  padding: 0 6px;
   font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 2px;
+  border-radius: 3px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
-  display: inline-block;
+  display: inline-flex; /* 保证垂直居中且不叠压 */
+  align-items: center;
   vertical-align: top;
-  margin: 1px 2px 1px 0;
 }
 
 .taint-tag:hover {
@@ -770,16 +770,16 @@ onUnmounted(() => {
 .more-labels-tag,
 .more-taints-tag {
   font-size: 10px;
-  height: 18px;
-  line-height: 16px;
-  padding: 0 4px;
+  height: 20px;
+  line-height: 18px;
+  padding: 0 6px;
   cursor: pointer;
   font-weight: 600;
-  border-radius: 2px;
+  border-radius: 3px;
   transition: all 0.2s ease;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   vertical-align: top;
-  margin: 1px 2px 1px 0;
 }
 
 .more-labels-tag:hover,
