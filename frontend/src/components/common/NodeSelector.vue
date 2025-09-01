@@ -69,24 +69,24 @@
     <!-- 节点列表 -->
     <div class="node-list">
       <el-scrollbar height="300px">
-        <div class="node-container">
-          <div
-            v-for="node in filteredNodes"
-            :key="node?.name || node?.id || Math.random()"
-            class="node-item"
-            :class="{ 'selected': node?.name && selectedNodes.includes(node.name) }"
-          >
-            <el-checkbox 
-              v-if="node?.name" 
-              v-model="selectedNodes"
-              :value="node.name"
-              :disabled="!node.name"
-              class="node-checkbox"
-            />
+        <el-checkbox-group v-model="selectedNodes" @change="handleSelectionChange">
+          <div class="node-container">
+            <div
+              v-for="node in filteredNodes"
+              :key="node?.name || node?.id || Math.random()"
+              class="node-item"
+              :class="{ 'selected': getNodeName(node) && selectedNodes.includes(getNodeName(node)) }"
+            >
+              <el-checkbox 
+                v-if="getNodeName(node)" 
+                :value="getNodeName(node)"
+                :disabled="!getNodeName(node)"
+                class="node-checkbox"
+              />
             
             <div class="node-content">
               <div class="node-header">
-                <h4 class="node-name">{{ node.name || '未知节点' }}</h4>
+                <h4 class="node-name">{{ getNodeName(node) || '未知节点' }}</h4>
                 
                 <div class="node-basic-info">
                   <el-tag 
@@ -222,6 +222,7 @@
             </div>
           </div>
         </div>
+        </el-checkbox-group>
         
         <!-- 空状态 -->
         <div v-if="filteredNodes.length === 0 && !loading" class="empty-nodes">
@@ -296,16 +297,27 @@ watch(selectedNodes, (newValue) => {
   }, 10)
 })
 
-// 数据验证函数
-const validateNodeData = (node) => {
-  return node && 
-         typeof node === 'object' && 
-         node.name && 
-         typeof node.name === 'string' &&
-         node.name.trim().length > 0
+// 获取节点名称的统一函数
+const getNodeName = (node) => {
+  return node?.name || node?.node_name || node?.nodeName || null
 }
 
-// 计算属性 - 优化过滤逻辑，减少不必要的计算
+// 数据验证函数 - 临时放宽验证条件
+const validateNodeData = (node) => {
+  // 更宽松的验证：只要有node对象和某种形式的名称即可
+  const isValid = node && 
+         typeof node === 'object' && 
+         getNodeName(node)
+  
+  // 如果验证失败，可在开发模式下调试
+  // if (!isValid && node && process.env.NODE_ENV === 'development') {
+  //   console.warn('NodeSelector: 无效的节点数据格式:', node)
+  // }
+  
+  return isValid
+}
+
+// 计算属性 - 优化过滤逻辑，减少不必要的计算  
 const filteredNodes = computed(() => {
   if (!props.nodes || props.nodes.length === 0) {
     return []
@@ -318,7 +330,7 @@ const filteredNodes = computed(() => {
   if (searchQuery.value?.trim()) {
     const query = searchQuery.value.toLowerCase().trim()
     result = result.filter(node => 
-      node?.name?.toLowerCase().includes(query)
+      getNodeName(node)?.toLowerCase().includes(query)
     )
   }
 
@@ -361,7 +373,7 @@ const selectAll = computed({
     if (!filteredNodes.value?.length) return false
     
     // 优化检查，避免每次都遍历整个数组
-    const filteredNodeNames = filteredNodes.value.map(node => node?.name).filter(Boolean)
+    const filteredNodeNames = filteredNodes.value.map(node => getNodeName(node)).filter(Boolean)
     return filteredNodeNames.length > 0 && 
            filteredNodeNames.every(name => selectedNodes.value.includes(name))
   },
@@ -369,13 +381,13 @@ const selectAll = computed({
     if (value) {
       // 全选：将筛选后的节点添加到选中列表
       const allNodeNames = filteredNodes.value
-        .map(node => node?.name)
+        .map(node => getNodeName(node))
         .filter(Boolean)
       selectedNodes.value = [...new Set([...selectedNodes.value, ...allNodeNames])]
     } else {
       // 取消选择筛选后的节点
       const filteredNodeNames = filteredNodes.value
-        .map(node => node?.name)
+        .map(node => getNodeName(node))
         .filter(Boolean)
       selectedNodes.value = selectedNodes.value.filter(name => 
         !filteredNodeNames.includes(name)
@@ -388,7 +400,7 @@ const indeterminate = computed(() => {
   if (!filteredNodes.value?.length) return false
   
   const selectedInFiltered = filteredNodes.value.filter(node => 
-    node?.name && selectedNodes.value.includes(node.name)
+    getNodeName(node) && selectedNodes.value.includes(getNodeName(node))
   ).length
   return selectedInFiltered > 0 && selectedInFiltered < filteredNodes.value.length
 })
@@ -598,6 +610,12 @@ onUnmounted(() => {
   border: 1px solid #e8e8e8;
   border-radius: 6px;
   background: #fff;
+}
+
+/* 确保checkbox-group不影响布局 */
+.node-list :deep(.el-checkbox-group) {
+  display: block;
+  width: 100%;
 }
 
 .node-container {
