@@ -82,16 +82,18 @@
       </div>
 
       <!-- 标签信息 -->
-      <div style="margin-top: 20px;" v-if="node.labels">
+      <div class="labels-section" v-if="node.labels">
         <h4>标签</h4>
-        <el-tag 
-          v-for="(value, key) in node.labels" 
-          :key="key" 
-          style="margin: 2px;"
-          size="small"
-        >
-          {{ key }}: {{ value }}
-        </el-tag>
+        <div class="labels-container">
+          <el-tag 
+            v-for="(value, key) in node.labels" 
+            :key="key" 
+            class="label-tag"
+            size="small"
+          >
+            {{ key }}: {{ value }}
+          </el-tag>
+        </div>
       </div>
 
       <!-- 污点信息 -->
@@ -178,5 +180,36 @@ h4 {
   margin: 10px 0;
   color: #606266;
   font-weight: 600;
+}
+
+.labels-section {
+  margin-top: 20px;
+}
+
+.labels-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+.label-tag {
+  margin: 0;
+  font-size: 12px;
+  height: 24px;
+  line-height: 22px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  background: #f0f9ff;
+  color: #0958d9;
+  border: 1px solid #91d5ff;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>
