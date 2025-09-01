@@ -179,6 +179,19 @@
                   {{ formatLabelDisplay(label.key, label.value) }}
                 </el-tag>
                 
+                <!-- 显示所有污点 -->
+                <el-tag
+                  v-for="taint in (row.taints || [])"
+                  :key="`taint-${taint.key}`"
+                  size="small"
+                  type="warning"
+                  class="taint-tag"
+                  :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
+                >
+                  <el-icon style="margin-right: 2px;"><Warning /></el-icon>
+                  {{ formatTaintDisplay(taint) }}
+                </el-tag>
+                
                 <!-- 其他标签折叠按钮（如果有额外标签） -->
                 <el-dropdown 
                   v-if="hasOtherLabels(row)"
@@ -418,6 +431,7 @@ import {
   MoreFilled,
   CollectionTag,
   WarningFilled,
+  Warning,
   Plus,
   Check,
   Monitor,
@@ -726,6 +740,27 @@ const formatLabelDisplay = (key, value) => {
   return `${key}: ${value}`
 }
 
+// 格式化污点显示（简化版本）
+const formatTaintDisplay = (taint) => {
+  if (!taint) return ''
+  
+  // 显示关键信息：key 和 effect
+  const key = taint.key.length > 20 ? taint.key.substring(0, 20) + '...' : taint.key
+  return `${key}:${taint.effect}`
+}
+
+// 格式化污点显示（完整版本）
+const formatTaintFullDisplay = (taint) => {
+  if (!taint) return ''
+  
+  let display = taint.key
+  if (taint.value) {
+    display += `=${taint.value}`
+  }
+  display += `:${taint.effect}`
+  return display
+}
+
 // 获取节点角色类型
 const getNodeRoleType = (role) => {
   if (role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')) {
@@ -989,6 +1024,35 @@ onMounted(() => {
   box-shadow: 0 2px 4px rgba(19, 194, 194, 0.1);
 }
 
+.taint-tag {
+  font-size: 11px;
+  height: 22px;
+  line-height: 20px;
+  font-weight: 600;
+  border-radius: 11px;
+  padding: 0 8px;
+  letter-spacing: 0.2px;
+  margin: 0;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  background: #fff7e6 !important;
+  border-color: #ffd591 !important;
+  color: #d46b08 !important;
+}
+
+.taint-tag:hover {
+  background: #fff1b8 !important;
+  border-color: #ffc53d !important;
+  color: #ad4e00 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(212, 107, 8, 0.15);
+}
+
+.taint-tag .el-icon {
+  font-size: 10px;
+}
+
 /* 下拉菜单样式 */
 .labels-dropdown {
   min-width: 280px;
@@ -1114,31 +1178,32 @@ onMounted(() => {
 .resource-value {
   color: #1890ff;
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 16px;
+  font-weight: 700;
   letter-spacing: 0.3px;
   text-shadow: 0 1px 2px rgba(24, 144, 255, 0.1);
 }
 
 .resource-divider {
-  color: #bfbfbf;
-  font-weight: 400;
-  margin: 0 4px;
-  font-size: 14px;
+  color: #8c8c8c;
+  font-weight: 500;
+  margin: 0 6px;
+  font-size: 16px;
 }
 
 .resource-total {
   color: #595959;
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.2px;
 }
 
 .resource-subtext {
-  color: #999;
-  font-size: 9px;
-  font-style: italic;
+  color: #8c8c8c;
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 2px;
 }
 
 .version-text {
