@@ -635,22 +635,33 @@ onUnmounted(() => {
 .node-item {
   display: block !important;
   width: 100% !important;
-  padding: 20px 16px;
-  margin: 0 0 16px 0 !important;
-  border-bottom: 1px solid #f0f0f0;
-  transition: all 0.3s ease;
-  position: static !important; /* 强制静态定位 */
-  min-height: 100px; /* 进一步增加最小高度 */
-  height: auto;
+  margin: 0 0 20px 0 !important;
+  position: static !important;
   box-sizing: border-box;
   clear: both;
   float: none !important;
-  overflow: visible; /* 确保内容不被裁剪 */
+  overflow: visible;
+}
+
+.node-card {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+  transition: all 0.3s ease;
+}
+
+.node-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  border-color: #d4edda;
 }
 
 .node-item:last-child {
-  border-bottom: none;
-  margin-bottom: 0; /* 最后一个节点不需要下边距 */
+  margin-bottom: 0;
 }
 
 .node-checkbox {
@@ -702,87 +713,91 @@ onUnmounted(() => {
   padding-left: 13px;
 }
 
-.node-item.selected {
+.node-item.selected .node-card {
   background-color: #e6f7ff;
-  border-left: 3px solid #1890ff;
-  padding-left: 13px;
+  border-color: #1890ff;
+  border-left: 4px solid #1890ff;
 }
 
-.node-content {
+/* 复选框区域 */
+.node-checkbox-section {
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+/* 内容区域 */
+.node-content-section {
   display: block;
-  margin-left: 32px; /* 为checkbox留出空间 */
-  width: calc(100% - 40px);
-  padding: 10px 0;
-  position: static;
-  clear: left;
-  line-height: 1.6; /* 进一步增加行高 */
-  min-height: 60px; /* 确保内容区域最小高度 */
+  flex: 1;
+  min-width: 0;
 }
 
-.node-header {
-  display: block; /* 改为block布局避免flex问题 */
-  width: 100%;
-  margin-bottom: 12px; /* 进一步增加与下方的间距 */
-  line-height: 1.6;
-}
-
-.node-main-info {
-  display: block; /* 改为block布局 */
-  margin-bottom: 8px;
+/* 节点名称行 */
+.node-name-row {
+  margin-bottom: 16px;
 }
 
 .node-name {
   font-weight: 600;
   color: #333;
-  font-size: 15px;
-  line-height: 1.4;
+  font-size: 16px;
+  line-height: 1.5;
   word-break: break-word;
-  margin: 0 0 8px 0; /* 增加下边距 */
-  display: block;
-  min-height: 20px;
+  margin: 0;
 }
 
-.node-basic-row {
-  display: block; /* 改为block布局 */
-  margin: 6px 0;
-  min-height: 28px;
-  line-height: 1.5;
+/* 状态和角色行 */
+.node-status-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.status-tags {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.role-tags {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .node-status-tag {
   font-weight: 500;
-  display: inline-block;
-  margin-right: 8px;
-  margin-bottom: 4px;
+  flex-shrink: 0;
 }
 
 .node-roles {
   font-size: 12px;
   color: #666;
   background: #f5f5f5;
-  padding: 2px 6px;
-  border-radius: 3px;
+  padding: 4px 8px;
+  border-radius: 4px;
   white-space: nowrap;
-  height: 20px;
-  line-height: 16px;
-  display: inline-block;
-  margin-right: 8px;
-  margin-bottom: 4px;
+  flex-shrink: 0;
 }
 
 .node-ip-row {
-  display: block;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
   color: #52c41a;
   background: #f6ffed;
-  padding: 4px 8px;
+  padding: 6px 12px;
   border-radius: 4px;
   border: 1px solid #b7eb8f;
   white-space: nowrap;
-  height: auto;
-  line-height: 1.4;
-  margin: 6px 0;
   width: fit-content;
+  margin-bottom: 20px;
 }
 
 .ip-icon {
@@ -797,73 +812,113 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-.node-attributes {
-  display: block; /* 改为block布局 */
-  border-top: 1px solid #f0f0f0;
-  padding-top: 16px;
-  margin-top: 12px;
+/* 标签和污点区域 */
+.node-attributes-section {
+  border-top: 1px solid #e8e8e8;
+  padding-top: 24px;
+  margin-top: 20px;
   width: 100%;
-  box-sizing: border-box;
-  min-height: 40px; /* 确保最小高度 */
+  clear: both;
 }
 
-.attributes-section {
-  display: block; /* 改为block布局 */
+/* 标签块 */
+.labels-block {
+  margin-bottom: 28px;
   width: 100%;
-  box-sizing: border-box;
-  margin-bottom: 16px; /* 增加节之间的间距 */
+  clear: both;
 }
 
-.attributes-header {
-  display: block;
-  margin-bottom: 8px;
-  line-height: 1.4;
+/* 污点块 */
+.taints-block {
+  margin-bottom: 28px;
+  width: 100%;
+  clear: both;
+}
+
+/* 区块标题 */
+.block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .section-icon {
-  font-size: 12px;
-  color: #999;
-  display: inline-block;
-  margin-right: 4px;
-  vertical-align: middle;
+  font-size: 14px;
+  color: #666;
+  flex-shrink: 0;
 }
 
-.section-label {
-  font-size: 11px;
-  color: #999;
-  font-weight: 500;
+.block-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  display: inline-block;
-  vertical-align: middle;
+  flex-shrink: 0;
 }
 
-.attributes-content {
-  display: block; /* 改为block布局，避免flex问题 */
+/* 标签列表 */
+.labels-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   width: 100%;
-  box-sizing: border-box;
-  min-height: 32px; /* 增加最小高度 */
-  line-height: 1.6;
+}
+
+/* 污点列表 */
+.taints-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+/* 标签项 */
+.label-item {
+  display: block;
+  width: 100%;
   padding: 4px 0;
+  min-height: 32px;
+  align-items: center;
+}
+
+/* 污点项 */
+.taint-item {
+  display: block;
+  width: 100%;
+  padding: 4px 0;
+  min-height: 32px;
+  align-items: center;
+}
+
+/* 更多项 */
+.more-item {
+  display: block;
+  width: 100%;
+  padding: 4px 0;
+  min-height: 32px;
+  align-items: center;
 }
 
 .label-tag {
-  font-size: 11px;
-  height: 24px;
-  line-height: 22px;
-  padding: 0 10px;
+  font-size: 12px;
+  height: 28px;
+  line-height: 26px;
+  padding: 0 12px;
   font-family: 'Monaco', 'Menlo', monospace;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
-  display: inline-block; /* 改为inline-block */
-  vertical-align: top;
+  display: inline-flex;
+  align-items: center;
   white-space: nowrap;
-  max-width: 180px; /* 稍微减小最大宽度 */
+  max-width: 300px;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin: 2px 6px 6px 0; /* 增加右边距和下边距 */
 }
 
 .label-tag:hover {
@@ -892,18 +947,21 @@ onUnmounted(() => {
 }
 
 .taint-tag {
-  font-size: 10px;
-  height: 20px;
-  line-height: 18px;
-  padding: 0 6px;
+  font-size: 12px;
+  height: 28px;
+  line-height: 26px;
+  padding: 0 12px;
   font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
-  display: inline-flex; /* 保证垂直居中且不叠压 */
+  display: inline-flex;
   align-items: center;
-  vertical-align: top;
+  white-space: nowrap;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .taint-tag:hover {
@@ -935,21 +993,20 @@ onUnmounted(() => {
 
 .more-labels-tag,
 .more-taints-tag {
-  font-size: 11px;
-  height: 24px;
-  line-height: 22px;
-  padding: 0 10px;
+  font-size: 12px;
+  height: 28px;
+  line-height: 26px;
+  padding: 0 12px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
   border-radius: 4px;
   transition: all 0.2s ease;
-  display: inline-block; /* 改为inline-block */
-  vertical-align: top;
-  background: #f0f0f0 !important;
-  border: 1px solid #d9d9d9 !important;
-  color: #666 !important;
+  display: inline-flex;
+  align-items: center;
+  background: #f8f9fa !important;
+  border: 1px solid #dee2e6 !important;
+  color: #6c757d !important;
   white-space: nowrap;
-  margin: 2px 6px 6px 0; /* 增加右边距和下边距 */
 }
 
 .more-labels-tag:hover,
