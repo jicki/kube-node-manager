@@ -124,8 +124,9 @@
                           <span v-if="value" class="label-separator">=</span>
                           <span v-if="value" class="label-value">{{ smartTruncateLabel(key, value).value }}</span>
                         </el-tag>
+                      <!-- 更多标签下拉 -->
+                      <div v-if="getTotalLabelsCount(node.labels) > 0" class="more-item">
                         <el-dropdown
-                          v-if="getTotalLabelsCount(node.labels) > 0"
                           trigger="click"
                           placement="bottom-start"
                         >
@@ -142,21 +143,26 @@
                             <el-dropdown-menu class="labels-dropdown">
                               <div class="dropdown-header">其他节点标签</div>
                               <div class="dropdown-content">
-                                <el-tag
+                                <div
                                   v-for="(value, key) in getOtherLabels(node.labels) || {}"
                                   :key="`dropdown-${node.name}-${key}`"
-                                  size="small"
-                                  type="info"
-                                  class="dropdown-label-tag"
+                                  class="dropdown-item"
                                 >
-                                  {{ key }}={{ value }}
-                                </el-tag>
+                                  <el-tag
+                                    size="small"
+                                    type="info"
+                                    class="dropdown-label-tag"
+                                  >
+                                    {{ key }}={{ value }}
+                                  </el-tag>
+                                </div>
                               </div>
                             </el-dropdown-menu>
                           </template>
                         </el-dropdown>
                       </div>
                     </div>
+                  </div>
                     
                     <div v-if="node.taints && node.taints.length > 0" class="attributes-section">
                       <div class="attributes-header">
@@ -635,24 +641,28 @@ onUnmounted(() => {
 .node-item {
   display: block !important;
   width: 100% !important;
-  margin: 0 0 20px 0 !important;
+  margin: 0 0 30px 0 !important;
   position: static !important;
   box-sizing: border-box;
-  clear: both;
+  clear: both !important;
   float: none !important;
-  overflow: visible;
+  overflow: visible !important;
+  min-height: 150px !important; /* 强制最小高度 */
+  border: 2px solid #f0f0f0 !important; /* 强制边框防重叠 */
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  padding: 20px !important;
 }
 
 .node-card {
-  display: flex;
-  flex-direction: row;
-  width: 100%;
-  background: #ffffff;
-  border: 1px solid #e8e8e8;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.06);
-  transition: all 0.3s ease;
+  display: block !important; /* 强制块级布局 */
+  width: 100% !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
 }
 
 .node-card:hover {
@@ -713,26 +723,26 @@ onUnmounted(() => {
   padding-left: 13px;
 }
 
-.node-item.selected .node-card {
-  background-color: #e6f7ff;
-  border-color: #1890ff;
-  border-left: 4px solid #1890ff;
+.node-item.selected {
+  background-color: #e6f7ff !important;
+  border-color: #1890ff !important;
+  border-left: 4px solid #1890ff !important;
 }
 
-/* 复选框区域 */
-.node-checkbox-section {
-  display: flex;
-  align-items: flex-start;
-  padding-top: 2px;
-  margin-right: 16px;
-  flex-shrink: 0;
+/* 所有元素强制分离 */
+.node-checkbox {
+  display: block !important;
+  margin-bottom: 15px !important;
+  clear: both !important;
+  width: 100% !important;
 }
 
-/* 内容区域 */
-.node-content-section {
-  display: block;
-  flex: 1;
-  min-width: 0;
+.node-content {
+  display: block !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  clear: both !important;
 }
 
 /* 节点名称行 */
@@ -741,63 +751,79 @@ onUnmounted(() => {
 }
 
 .node-name {
-  font-weight: 600;
-  color: #333;
-  font-size: 16px;
-  line-height: 1.5;
+  font-weight: 600 !important;
+  color: #333 !important;
+  font-size: 16px !important;
+  line-height: 2 !important; /* 强制大行高 */
   word-break: break-word;
-  margin: 0;
+  margin: 0 0 15px 0 !important; /* 强制下边距 */
+  display: block !important;
+  clear: both !important;
+  width: 100% !important;
+  min-height: 30px !important; /* 强制最小高度 */
+  border-bottom: 1px solid #f0f0f0 !important; /* 分隔线 */
+  padding-bottom: 10px !important;
 }
 
-/* 状态和角色行 */
+/* 状态和角色行 - 强制分离 */
 .node-status-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
+  display: block !important; /* 强制块级布局 */
+  width: 100% !important;
+  margin-bottom: 20px !important;
+  clear: both !important;
+  min-height: 40px !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+  padding-bottom: 15px !important;
 }
 
 .status-tags {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+  display: block !important;
+  width: 100% !important;
+  margin-bottom: 10px !important;
+  clear: both !important;
 }
 
 .role-tags {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+  display: block !important;
+  width: 100% !important;
+  clear: both !important;
 }
 
 .node-status-tag {
-  font-weight: 500;
-  flex-shrink: 0;
+  font-weight: 500 !important;
+  display: block !important;
+  width: fit-content !important;
+  margin: 5px 0 !important;
+  clear: both !important;
 }
 
 .node-roles {
-  font-size: 12px;
-  color: #666;
-  background: #f5f5f5;
-  padding: 4px 8px;
-  border-radius: 4px;
-  white-space: nowrap;
-  flex-shrink: 0;
+  font-size: 12px !important;
+  color: #666 !important;
+  background: #f5f5f5 !important;
+  padding: 8px 12px !important;
+  border-radius: 4px !important;
+  white-space: nowrap !important;
+  display: block !important;
+  width: fit-content !important;
+  margin: 5px 0 !important;
+  clear: both !important;
 }
 
 .node-ip-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #52c41a;
-  background: #f6ffed;
-  padding: 6px 12px;
-  border-radius: 4px;
-  border: 1px solid #b7eb8f;
-  white-space: nowrap;
-  width: fit-content;
-  margin-bottom: 20px;
+  display: block !important;
+  font-size: 13px !important;
+  color: #52c41a !important;
+  background: #f6ffed !important;
+  padding: 10px 15px !important;
+  border-radius: 4px !important;
+  border: 1px solid #b7eb8f !important;
+  white-space: nowrap !important;
+  width: fit-content !important;
+  margin: 15px 0 25px 0 !important;
+  clear: both !important;
+  min-height: 35px !important;
+  line-height: 2 !important;
 }
 
 .ip-icon {
@@ -812,13 +838,15 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-/* 标签和污点区域 */
+/* 标签和污点区域 - 强制分离 */
 .node-attributes-section {
-  border-top: 1px solid #e8e8e8;
-  padding-top: 24px;
-  margin-top: 20px;
-  width: 100%;
-  clear: both;
+  border-top: 2px solid #e8e8e8 !important;
+  padding-top: 30px !important;
+  margin-top: 30px !important;
+  width: 100% !important;
+  clear: both !important;
+  display: block !important;
+  min-height: 50px !important;
 }
 
 /* 标签块 */
@@ -876,49 +904,56 @@ onUnmounted(() => {
   width: 100%;
 }
 
-/* 标签项 */
+/* 强制每个标签独立一行 */
 .label-item {
-  display: block;
-  width: 100%;
-  padding: 4px 0;
-  min-height: 32px;
-  align-items: center;
+  display: block !important;
+  width: 100% !important;
+  padding: 10px 0 !important;
+  min-height: 50px !important;
+  clear: both !important;
+  margin: 8px 0 !important;
+  border-bottom: 1px dotted #e0e0e0 !important;
 }
 
-/* 污点项 */
+/* 强制每个污点独立一行 */
 .taint-item {
-  display: block;
-  width: 100%;
-  padding: 4px 0;
-  min-height: 32px;
-  align-items: center;
+  display: block !important;
+  width: 100% !important;
+  padding: 10px 0 !important;
+  min-height: 50px !important;
+  clear: both !important;
+  margin: 8px 0 !important;
+  border-bottom: 1px dotted #e0e0e0 !important;
 }
 
-/* 更多项 */
+/* 更多项也强制独立 */
 .more-item {
-  display: block;
-  width: 100%;
-  padding: 4px 0;
-  min-height: 32px;
-  align-items: center;
+  display: block !important;
+  width: 100% !important;
+  padding: 10px 0 !important;
+  min-height: 50px !important;
+  clear: both !important;
+  margin: 8px 0 !important;
+  border-bottom: 1px dotted #e0e0e0 !important;
 }
 
 .label-tag {
-  font-size: 12px;
-  height: 28px;
-  line-height: 26px;
-  padding: 0 12px;
-  font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 13px !important;
+  height: 35px !important;
+  line-height: 33px !important;
+  padding: 0 15px !important;
+  font-family: 'Monaco', 'Menlo', monospace !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  border: 2px solid #d0d0d0 !important;
+  display: block !important; /* 强制块级显示 */
+  width: 100% !important; /* 占满宽度 */
+  text-align: left !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  clear: both !important;
+  margin: 0 !important;
 }
 
 .label-tag:hover {
@@ -947,21 +982,22 @@ onUnmounted(() => {
 }
 
 .taint-tag {
-  font-size: 12px;
-  height: 28px;
-  line-height: 26px;
-  padding: 0 12px;
-  font-family: 'Monaco', 'Menlo', monospace;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 13px !important;
+  height: 35px !important;
+  line-height: 33px !important;
+  padding: 0 15px !important;
+  font-family: 'Monaco', 'Menlo', monospace !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  border: 2px solid #d0d0d0 !important;
+  display: block !important; /* 强制块级显示 */
+  width: 100% !important; /* 占满宽度 */
+  text-align: left !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  clear: both !important;
+  margin: 0 !important;
 }
 
 .taint-tag:hover {
@@ -993,20 +1029,22 @@ onUnmounted(() => {
 
 .more-labels-tag,
 .more-taints-tag {
-  font-size: 12px;
-  height: 28px;
-  line-height: 26px;
-  padding: 0 12px;
-  cursor: pointer;
-  font-weight: 500;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
+  font-size: 13px !important;
+  height: 35px !important;
+  line-height: 33px !important;
+  padding: 0 15px !important;
+  cursor: pointer !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  display: block !important; /* 强制块级显示 */
+  width: 100% !important; /* 占满宽度 */
+  text-align: left !important;
   background: #f8f9fa !important;
-  border: 1px solid #dee2e6 !important;
+  border: 2px solid #dee2e6 !important;
   color: #6c757d !important;
-  white-space: nowrap;
+  white-space: nowrap !important;
+  clear: both !important;
+  margin: 0 !important;
 }
 
 .more-labels-tag:hover,
