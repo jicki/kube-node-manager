@@ -113,27 +113,48 @@
                       </div>
                       <div class="attributes-content">
                         <el-tag
-                          v-for="(value, key) in getDisplayLabels(node.labels)"
+                          v-for="(value, key) in getCompactDisplayLabels(node.labels)"
                           :key="`${node.name}-${key}`"
                           size="small"
                           type="info"
                           class="label-tag"
                           :title="`${key}=${value}`"
                         >
-                          <span class="label-key">{{ truncateText(key, 15) }}</span>
+                          <span class="label-key">{{ truncateText(key, 12) }}</span>
                           <span v-if="value" class="label-separator">=</span>
-                          <span v-if="value" class="label-value">{{ truncateText(value, 12) }}</span>
+                          <span v-if="value" class="label-value">{{ truncateText(value, 10) }}</span>
                         </el-tag>
-                        <el-tag
-                          v-if="getTotalLabelsCount(node.labels) > maxLabelDisplay"
-                          size="small"
-                          type="warning"
-                          class="more-labels-tag"
-                          :title="`共${getTotalLabelsCount(node.labels)}个标签，点击查看更多`"
-                          @click="showAllLabels(node)"
+                        <el-dropdown
+                          v-if="getTotalLabelsCount(node.labels) > 2"
+                          trigger="click"
+                          placement="bottom-start"
                         >
-                          +{{ getTotalLabelsCount(node.labels) - maxLabelDisplay }}
-                        </el-tag>
+                          <el-tag
+                            size="small"
+                            type="warning"
+                            class="more-labels-tag"
+                            :title="`共${getTotalLabelsCount(node.labels)}个标签，点击查看更多`"
+                          >
+                            +{{ getTotalLabelsCount(node.labels) - 2 }}
+                            <el-icon class="more-icon"><ArrowDown /></el-icon>
+                          </el-tag>
+                          <template #dropdown>
+                            <el-dropdown-menu class="labels-dropdown">
+                              <div class="dropdown-header">节点标签</div>
+                              <div class="dropdown-content">
+                                <el-tag
+                                  v-for="(value, key) in node.labels || {}"
+                                  :key="`dropdown-${node.name}-${key}`"
+                                  size="small"
+                                  type="info"
+                                  class="dropdown-label-tag"
+                                >
+                                  {{ key }}={{ value }}
+                                </el-tag>
+                              </div>
+                            </el-dropdown-menu>
+                          </template>
+                        </el-dropdown>
                       </div>
                     </div>
                     
@@ -144,28 +165,49 @@
                       </div>
                       <div class="attributes-content">
                         <el-tag
-                          v-for="(taint, index) in getDisplayTaints(node.taints)"
+                          v-for="(taint, index) in getCompactDisplayTaints(node.taints)"
                           :key="`${node.name}-taint-${index}`"
                           size="small"
                           :type="getTaintType(taint.effect)"
                           class="taint-tag"
                           :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
                         >
-                          <span class="taint-key">{{ truncateText(taint.key, 12) }}</span>
+                          <span class="taint-key">{{ truncateText(taint.key, 10) }}</span>
                           <span v-if="taint.value" class="taint-separator">=</span>
-                          <span v-if="taint.value" class="taint-value">{{ truncateText(taint.value, 10) }}</span>
+                          <span v-if="taint.value" class="taint-value">{{ truncateText(taint.value, 8) }}</span>
                           <span class="taint-effect">:{{ taint.effect.substr(0, 2) }}</span>
                         </el-tag>
-                        <el-tag
-                          v-if="node.taints.length > 2"
-                          size="small"
-                          type="danger"
-                          class="more-taints-tag"
-                          :title="`共${node.taints.length}个污点，点击查看更多`"
-                          @click="showAllTaints(node)"
+                        <el-dropdown
+                          v-if="node.taints && node.taints.length > 1"
+                          trigger="click"
+                          placement="bottom-start"
                         >
-                          +{{ node.taints.length - 2 }}
-                        </el-tag>
+                          <el-tag
+                            size="small"
+                            type="danger"
+                            class="more-taints-tag"
+                            :title="`共${node.taints.length}个污点，点击查看更多`"
+                          >
+                            +{{ node.taints.length - 1 }}
+                            <el-icon class="more-icon"><ArrowDown /></el-icon>
+                          </el-tag>
+                          <template #dropdown>
+                            <el-dropdown-menu class="taints-dropdown">
+                              <div class="dropdown-header">节点污点</div>
+                              <div class="dropdown-content">
+                                <el-tag
+                                  v-for="(taint, index) in node.taints || []"
+                                  :key="`dropdown-${node.name}-taint-${index}`"
+                                  size="small"
+                                  :type="getTaintType(taint.effect)"
+                                  class="dropdown-taint-tag"
+                                >
+                                  {{ taint.key }}{{ taint.value ? '=' + taint.value : '' }}:{{ taint.effect }}
+                                </el-tag>
+                              </div>
+                            </el-dropdown-menu>
+                          </template>
+                        </el-dropdown>
                       </div>
                     </div>
                   </div>
@@ -193,7 +235,7 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { Search, Location, Collection, Warning } from '@element-plus/icons-vue'
+import { Search, Location, Collection, Warning, ArrowDown } from '@element-plus/icons-vue'
 
 const props = defineProps({
   modelValue: {
@@ -413,9 +455,39 @@ const getDisplayLabels = (labels) => {
   }
 }
 
+const getCompactDisplayLabels = (labels) => {
+  if (!labels || typeof labels !== 'object') return {}
+  try {
+    const entries = Object.entries(labels)
+    const systemLabels = entries.filter(([key]) => 
+      key.startsWith('kubernetes.io/') || 
+      key.startsWith('node.kubernetes.io/') ||
+      key.startsWith('topology.kubernetes.io/')
+    )
+    const customLabels = entries.filter(([key]) => 
+      !key.startsWith('kubernetes.io/') && 
+      !key.startsWith('node.kubernetes.io/') &&
+      !key.startsWith('topology.kubernetes.io/')
+    )
+    
+    // 优先显示自定义标签，限制为2个
+    const prioritizedEntries = [...customLabels, ...systemLabels]
+    const displayEntries = prioritizedEntries.slice(0, 2)
+    return Object.fromEntries(displayEntries)
+  } catch (error) {
+    console.warn('Error filtering labels:', error)
+    return {}
+  }
+}
+
 const getDisplayTaints = (taints) => {
   if (!taints || !Array.isArray(taints)) return []
   return taints.slice(0, 2) // 显示前2个污点
+}
+
+const getCompactDisplayTaints = (taints) => {
+  if (!taints || !Array.isArray(taints)) return []
+  return taints.slice(0, 1) // 只显示第1个污点，其余折叠
 }
 
 const getTotalLabelsCount = (labels) => {
@@ -515,7 +587,8 @@ onUnmounted(() => {
   border-bottom: 1px solid #f0f0f0;
   transition: all 0.3s ease;
   position: relative;
-  min-height: 72px; /* 提高最小高度，避免上下元素挤压 */
+  min-height: 60px; /* 基础最小高度 */
+  height: auto; /* 允许内容自适应高度 */
 }
 
 .node-item:last-child {
@@ -679,10 +752,11 @@ onUnmounted(() => {
 
 .attributes-content {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 6px; /* 行列间距更大，避免层叠 */
-  align-items: flex-start;
-  line-height: 1.2; /* 提升行高 */
+  flex-wrap: nowrap; /* 不换行，通过折叠控制 */
+  gap: 6px;
+  align-items: center;
+  line-height: 1;
+  overflow: hidden; /* 防止溢出 */
 }
 
 .label-tag {
@@ -780,13 +854,67 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   vertical-align: top;
+  background: #f0f0f0 !important;
+  border: 1px solid #d9d9d9 !important;
+  color: #666 !important;
+  flex-shrink: 0;
 }
 
 .more-labels-tag:hover,
 .more-taints-tag:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background: #e6f7ff !important;
+  border-color: #91d5ff !important;
+  color: #1890ff !important;
 }
+
+.more-icon {
+  font-size: 8px;
+  margin-left: 2px;
+  transition: transform 0.2s ease;
+}
+
+/* 下拉菜单样式 */
+.labels-dropdown,
+.taints-dropdown {
+  min-width: 260px;
+  max-width: 400px;
+}
+
+.dropdown-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  background: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dropdown-content {
+  padding: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dropdown-label-tag,
+.dropdown-taint-tag {
+  font-size: 11px;
+  height: 22px;
+  line-height: 20px;
+  padding: 0 8px;
+  border-radius: 11px;
+  font-weight: 500;
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', monospace;
+  word-break: break-all;
+  max-width: 100%;
+}
+
+
 
 .empty-nodes, .loading-nodes {
   padding: 20px;
@@ -847,6 +975,21 @@ onUnmounted(() => {
     height: 18px;
     line-height: 16px;
     padding: 0 4px;
+  }
+  
+  .more-icon {
+    font-size: 7px;
+    margin-left: 1px;
+  }
+  
+  .labels-dropdown,
+  .taints-dropdown {
+    min-width: 200px;
+    max-width: 280px;
+  }
+  
+  .dropdown-content {
+    max-height: 150px;
   }
   
   .section-label {
@@ -917,6 +1060,29 @@ onUnmounted(() => {
     height: 16px;
     line-height: 14px;
     padding: 0 3px;
+  }
+  
+  .more-icon {
+    font-size: 6px;
+    margin-left: 1px;
+  }
+  
+  .labels-dropdown,
+  .taints-dropdown {
+    min-width: 180px;
+    max-width: 240px;
+  }
+  
+  .dropdown-content {
+    max-height: 120px;
+  }
+  
+  .dropdown-label-tag,
+  .dropdown-taint-tag {
+    font-size: 10px;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 6px;
   }
   
   .section-label {
