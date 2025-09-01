@@ -81,7 +81,7 @@
               :value="node.name"
               :disabled="!node.name"
             >
-                              <div class="node-content">
+              <div class="node-content">
                   <div class="node-header">
                     <div class="node-main-info">
                       <div class="node-name">{{ node.name || '未知节点' }}</div>
@@ -176,7 +176,7 @@
         <!-- 空状态 -->
         <div v-if="filteredNodes.length === 0 && !loading" class="empty-nodes">
           <el-empty 
-            :description="nodes.length === 0 ? '暂无节点数据' : '没有找到匹配的节点'" 
+            :description="getEmptyDescription()" 
             :image-size="60"
           />
         </div>
@@ -246,13 +246,23 @@ watch(selectedNodes, (newValue) => {
   }, 10)
 })
 
+// 数据验证函数
+const validateNodeData = (node) => {
+  return node && 
+         typeof node === 'object' && 
+         node.name && 
+         typeof node.name === 'string' &&
+         node.name.trim().length > 0
+}
+
 // 计算属性 - 优化过滤逻辑，减少不必要的计算
 const filteredNodes = computed(() => {
   if (!props.nodes || props.nodes.length === 0) {
     return []
   }
   
-  let result = props.nodes
+  // 首先过滤掉无效的节点数据
+  let result = props.nodes.filter(validateNodeData)
 
   // 文本搜索
   if (searchQuery.value?.trim()) {
@@ -352,6 +362,20 @@ const handleSelectionChange = () => {
 
 const clearSelection = () => {
   selectedNodes.value = []
+}
+
+const getEmptyDescription = () => {
+  if (!props.nodes || props.nodes.length === 0) {
+    return '暂无节点数据'
+  }
+  
+  // 检查是否有无效数据被过滤掉
+  const validNodes = props.nodes.filter(validateNodeData)
+  if (validNodes.length === 0) {
+    return '节点数据格式无效，请刷新重试'
+  }
+  
+  return '没有找到匹配的节点'
 }
 
 const getStatusType = (status) => {
