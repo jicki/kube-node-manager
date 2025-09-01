@@ -579,6 +579,19 @@ onUnmounted(() => {
   border-radius: 6px;
   background: #fff;
   position: relative;
+  overflow: hidden; /* 防止内容溢出 */
+}
+
+/* 确保节点列表中的每一项都正确堆叠 */
+.node-list .el-scrollbar__view {
+  position: relative;
+  z-index: 1;
+}
+
+.node-list .el-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0; /* 移除额外间距 */
 }
 
 .node-item {
@@ -589,6 +602,8 @@ onUnmounted(() => {
   position: relative;
   min-height: 60px; /* 基础最小高度 */
   height: auto; /* 允许内容自适应高度 */
+  z-index: 1; /* 确保基础层级 */
+  clear: both; /* 防止浮动元素影响 */
 }
 
 .node-item:last-child {
@@ -601,6 +616,8 @@ onUnmounted(() => {
   align-items: flex-start;
   width: 100%;
   min-height: 100%; /* 确保checkbox占满整个节点项高度 */
+  position: relative; /* 确保checkbox定位正确 */
+  z-index: 1; /* 基础层级 */
 }
 
 /* 确保Element Plus的checkbox组件不会影响布局 */
@@ -614,16 +631,32 @@ onUnmounted(() => {
   line-height: normal;
 }
 
+/* 确保Element Plus dropdown组件的z-index正确 */
+:deep(.el-dropdown) {
+  position: relative;
+  z-index: 3;
+}
+
+:deep(.el-dropdown-menu) {
+  z-index: 9999 !important;
+}
+
+:deep(.el-popper) {
+  z-index: 9999 !important;
+}
+
 .node-item:hover {
   background-color: #f8f9fa;
   border-left: 3px solid #1890ff;
   padding-left: 13px;
+  z-index: 2; /* 悬停时提升层级但不遮挡其他项 */
 }
 
 .node-item.selected {
   background-color: #e6f7ff;
   border-left: 3px solid #1890ff;
   padding-left: 13px;
+  z-index: 2; /* 选中状态提升层级但不遮挡其他项 */
 }
 
 .node-content {
@@ -634,6 +667,8 @@ onUnmounted(() => {
   gap: 10px;
   padding: 6px 0;
   flex: 1; /* 确保内容区域占满可用空间 */
+  position: relative; /* 确保内容区域定位正确 */
+  overflow: hidden; /* 防止内容溢出导致重叠 */
 }
 
 .node-header {
@@ -778,7 +813,7 @@ onUnmounted(() => {
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   border-color: #d9ecff;
-  z-index: 10;
+  z-index: 5; /* 降低z-index避免遮挡其他节点 */
   position: relative;
 }
 
@@ -817,7 +852,7 @@ onUnmounted(() => {
 .taint-tag:hover {
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  z-index: 10;
+  z-index: 5; /* 降低z-index避免遮挡其他节点 */
   position: relative;
 }
 
@@ -878,6 +913,13 @@ onUnmounted(() => {
 .taints-dropdown {
   min-width: 260px;
   max-width: 400px;
+  z-index: 9999 !important; /* 确保下拉菜单在最顶层 */
+}
+
+/* 确保下拉菜单触发器不会遮挡其他节点 */
+.more-labels-tag.el-dropdown__trigger,
+.more-taints-tag.el-dropdown__trigger {
+  z-index: 6 !important;
 }
 
 .dropdown-header {
