@@ -125,25 +125,25 @@
                           <span v-if="value" class="label-value">{{ truncateText(value, 10) }}</span>
                         </el-tag>
                         <el-dropdown
-                          v-if="getTotalLabelsCount(node.labels) > 2"
+                          v-if="getTotalLabelsCount(node.labels) > 0"
                           trigger="click"
                           placement="bottom-start"
                         >
                           <el-tag
                             size="small"
-                            type="warning"
+                            type="info"
                             class="more-labels-tag"
-                            :title="`共${getTotalLabelsCount(node.labels)}个标签，点击查看更多`"
+                            :title="`还有${getTotalLabelsCount(node.labels)}个其他标签，点击查看详情`"
                           >
-                            +{{ getTotalLabelsCount(node.labels) - 2 }}
+                            详情({{ getTotalLabelsCount(node.labels) }})
                             <el-icon class="more-icon"><ArrowDown /></el-icon>
                           </el-tag>
                           <template #dropdown>
                             <el-dropdown-menu class="labels-dropdown">
-                              <div class="dropdown-header">节点标签</div>
+                              <div class="dropdown-header">其他节点标签</div>
                               <div class="dropdown-content">
                                 <el-tag
-                                  v-for="(value, key) in node.labels || {}"
+                                  v-for="(value, key) in getOtherLabels(node.labels) || {}"
                                   :key="`dropdown-${node.name}-${key}`"
                                   size="small"
                                   type="info"
@@ -434,21 +434,10 @@ const getDisplayLabels = (labels) => {
   if (!labels || typeof labels !== 'object') return {}
   try {
     const entries = Object.entries(labels)
-    const systemLabels = entries.filter(([key]) => 
-      key.startsWith('kubernetes.io/') || 
-      key.startsWith('node.kubernetes.io/') ||
-      key.startsWith('topology.kubernetes.io/')
-    )
-    const customLabels = entries.filter(([key]) => 
-      !key.startsWith('kubernetes.io/') && 
-      !key.startsWith('node.kubernetes.io/') &&
-      !key.startsWith('topology.kubernetes.io/')
-    )
-    
-    // 优先显示自定义标签，再显示系统标签
-    const prioritizedEntries = [...customLabels, ...systemLabels]
-    const displayEntries = prioritizedEntries.slice(0, props.maxLabelDisplay)
-    return Object.fromEntries(displayEntries)
+    // 只显示 cluster 和 deeproute.cn/user-type 标签
+    const priorityKeys = ['cluster', 'deeproute.cn/user-type']
+    const priorityEntries = entries.filter(([key]) => priorityKeys.includes(key))
+    return Object.fromEntries(priorityEntries)
   } catch (error) {
     console.warn('Error filtering labels:', error)
     return {}
@@ -459,21 +448,10 @@ const getCompactDisplayLabels = (labels) => {
   if (!labels || typeof labels !== 'object') return {}
   try {
     const entries = Object.entries(labels)
-    const systemLabels = entries.filter(([key]) => 
-      key.startsWith('kubernetes.io/') || 
-      key.startsWith('node.kubernetes.io/') ||
-      key.startsWith('topology.kubernetes.io/')
-    )
-    const customLabels = entries.filter(([key]) => 
-      !key.startsWith('kubernetes.io/') && 
-      !key.startsWith('node.kubernetes.io/') &&
-      !key.startsWith('topology.kubernetes.io/')
-    )
-    
-    // 优先显示自定义标签，限制为2个
-    const prioritizedEntries = [...customLabels, ...systemLabels]
-    const displayEntries = prioritizedEntries.slice(0, 2)
-    return Object.fromEntries(displayEntries)
+    // 只显示 cluster 和 deeproute.cn/user-type 标签，最多2个
+    const priorityKeys = ['cluster', 'deeproute.cn/user-type']
+    const priorityEntries = entries.filter(([key]) => priorityKeys.includes(key)).slice(0, 2)
+    return Object.fromEntries(priorityEntries)
   } catch (error) {
     console.warn('Error filtering labels:', error)
     return {}
@@ -492,7 +470,25 @@ const getCompactDisplayTaints = (taints) => {
 
 const getTotalLabelsCount = (labels) => {
   if (!labels || typeof labels !== 'object') return 0
-  return Object.keys(labels).length
+  // 返回除了优先显示标签外的总数
+  const priorityKeys = ['cluster', 'deeproute.cn/user-type']
+  const allKeys = Object.keys(labels)
+  const otherLabelsCount = allKeys.filter(key => !priorityKeys.includes(key)).length
+  return otherLabelsCount
+}
+
+const getOtherLabels = (labels) => {
+  if (!labels || typeof labels !== 'object') return {}
+  try {
+    const entries = Object.entries(labels)
+    // 返回除了优先显示标签外的所有其他标签
+    const priorityKeys = ['cluster', 'deeproute.cn/user-type']
+    const otherEntries = entries.filter(([key]) => !priorityKeys.includes(key))
+    return Object.fromEntries(otherEntries)
+  } catch (error) {
+    console.warn('Error filtering other labels:', error)
+    return {}
+  }
 }
 
 const getTaintType = (effect) => {
@@ -579,31 +575,39 @@ onUnmounted(() => {
   border-radius: 6px;
   background: #fff;
   position: relative;
-  overflow: hidden; /* 防止内容溢出 */
 }
 
-/* 确保节点列表中的每一项都正确堆叠 */
-.node-list .el-scrollbar__view {
-  position: relative;
-  z-index: 1;
+/* 强制垂直布局，防止层叠 */
+.node-list :deep(.el-scrollbar__view) {
+  display: block !important;
+  position: static !important;
 }
 
-.node-list .el-checkbox-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0; /* 移除额外间距 */
+.node-list :deep(.el-checkbox-group) {
+  display: block !important;
+  position: static !important;
+}
+
+.node-list :deep(.el-checkbox-group .el-checkbox) {
+  display: block !important;
+  width: 100% !important;
+  position: static !important;
+  margin: 0 !important;
 }
 
 .node-item {
+  display: block !important;
+  width: 100% !important;
   padding: 16px;
-  margin-bottom: 8px;
+  margin: 0 0 8px 0 !important;
   border-bottom: 1px solid #f0f0f0;
   transition: all 0.3s ease;
-  position: relative;
-  min-height: 60px; /* 基础最小高度 */
-  height: auto; /* 允许内容自适应高度 */
-  z-index: 1; /* 确保基础层级 */
-  clear: both; /* 防止浮动元素影响 */
+  position: static !important; /* 强制静态定位 */
+  min-height: 60px;
+  height: auto;
+  box-sizing: border-box;
+  clear: both;
+  float: none !important;
 }
 
 .node-item:last-child {
@@ -612,23 +616,32 @@ onUnmounted(() => {
 }
 
 .node-checkbox {
-  display: flex;
-  align-items: flex-start;
-  width: 100%;
-  min-height: 100%; /* 确保checkbox占满整个节点项高度 */
-  position: relative; /* 确保checkbox定位正确 */
-  z-index: 1; /* 基础层级 */
+  display: block !important;
+  width: 100% !important;
+  min-height: 100%;
+  position: static !important;
 }
 
 /* 确保Element Plus的checkbox组件不会影响布局 */
 .node-checkbox :deep(.el-checkbox__label) {
-  width: 100%;
-  padding-left: 0;
+  width: 100% !important;
+  padding-left: 0 !important;
+  display: block !important;
+  position: static !important;
 }
 
 .node-checkbox :deep(.el-checkbox) {
-  white-space: normal;
-  line-height: normal;
+  white-space: normal !important;
+  line-height: normal !important;
+  display: block !important;
+  position: static !important;
+  float: none !important;
+}
+
+.node-checkbox :deep(.el-checkbox__input) {
+  position: static !important;
+  float: left;
+  margin-right: 8px;
 }
 
 /* 确保Element Plus dropdown组件的z-index正确 */
@@ -649,26 +662,21 @@ onUnmounted(() => {
   background-color: #f8f9fa;
   border-left: 3px solid #1890ff;
   padding-left: 13px;
-  z-index: 2; /* 悬停时提升层级但不遮挡其他项 */
 }
 
 .node-item.selected {
   background-color: #e6f7ff;
   border-left: 3px solid #1890ff;
   padding-left: 13px;
-  z-index: 2; /* 选中状态提升层级但不遮挡其他项 */
 }
 
 .node-content {
-  display: flex;
-  flex-direction: column;
-  margin-left: 8px;
-  width: calc(100% - 8px);
-  gap: 10px;
+  display: block;
+  margin-left: 32px; /* 为checkbox留出空间 */
+  width: calc(100% - 40px);
   padding: 6px 0;
-  flex: 1; /* 确保内容区域占满可用空间 */
-  position: relative; /* 确保内容区域定位正确 */
-  overflow: hidden; /* 防止内容溢出导致重叠 */
+  position: static;
+  clear: left;
 }
 
 .node-header {
