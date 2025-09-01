@@ -155,87 +155,97 @@
               >
                 {{ row.name }}
               </el-button>
-              <div class="node-labels">
-                <!-- 显示主要角色标签 -->
-                <el-tag
-                  v-for="role in getVisibleRoles(row.roles)"
-                  :key="role"
-                  :type="getNodeRoleType(role)"
-                  size="small"
-                  class="role-tag"
-                >
-                  {{ formatNodeRoles([role]) }}
-                </el-tag>
-                
-                <!-- 显示重要标签不折叠 -->
-                <el-tag
-                  v-for="label in getVisibleImportantLabels(row)"
-                  :key="`label-${label.key}`"
-                  size="small"
-                  type="success"
-                  class="important-label-tag"
-                  :title="`${label.key}=${label.value}`"
-                >
-                  {{ formatLabelDisplay(label.key, label.value) }}
-                </el-tag>
-                
-                <!-- 显示所有污点 -->
-                <el-tag
-                  v-for="taint in (row.taints || [])"
-                  :key="`taint-${taint.key}`"
-                  size="small"
-                  type="warning"
-                  class="taint-tag"
-                  :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
-                >
-                  <el-icon style="margin-right: 2px;"><Warning /></el-icon>
-                  {{ formatTaintDisplay(taint) }}
-                </el-tag>
-                
-                <!-- 其他标签折叠按钮（如果有额外标签） -->
-                <el-dropdown 
-                  v-if="hasOtherLabels(row)"
-                  trigger="click" 
-                  placement="bottom-start"
-                  @command="(cmd) => handleLabelCommand(cmd, row)"
-                >
+              
+              <!-- 标签行 -->
+              <div class="node-info-row" v-if="hasLabelsToShow(row)">
+                <span class="info-label">标签:</span>
+                <div class="info-tags">
+                  <!-- 显示主要角色标签 -->
                   <el-tag
+                    v-for="role in getVisibleRoles(row.roles)"
+                    :key="role"
+                    :type="getNodeRoleType(role)"
                     size="small"
-                    class="more-labels-tag"
-                    type="info"
+                    class="role-tag"
                   >
-                    <span>+{{ getOtherLabelsCount(row) }}</span>
-                    <el-icon class="more-icon"><ArrowDown /></el-icon>
+                    {{ formatNodeRoles([role]) }}
                   </el-tag>
-                  <template #dropdown>
-                    <el-dropdown-menu class="labels-dropdown">
-                      <div class="dropdown-header">其他节点标签</div>
-                      <div class="dropdown-content">
-                        <!-- 其他标签 -->
-                        <div v-if="getOtherLabels(row).length > 0" class="label-group">
-                          <div class="group-title">系统标签</div>
-                          <el-tag
-                            v-for="label in getOtherLabels(row)"
-                            :key="`other-${label.key}`"
-                            size="small"
-                            class="dropdown-tag"
-                          >
-                            {{ label.key }}: {{ label.value }}
-                          </el-tag>
+                  
+                  <!-- 显示重要标签不折叠 -->
+                  <el-tag
+                    v-for="label in getVisibleImportantLabels(row)"
+                    :key="`label-${label.key}`"
+                    size="small"
+                    type="success"
+                    class="important-label-tag"
+                    :title="`${label.key}=${label.value}`"
+                  >
+                    {{ formatLabelDisplay(label.key, label.value) }}
+                  </el-tag>
+                  
+                  <!-- 其他标签折叠按钮（如果有额外标签） -->
+                  <el-dropdown 
+                    v-if="hasOtherLabels(row)"
+                    trigger="click" 
+                    placement="bottom-start"
+                    @command="(cmd) => handleLabelCommand(cmd, row)"
+                  >
+                    <el-tag
+                      size="small"
+                      class="more-labels-tag"
+                      type="info"
+                    >
+                      <span>+{{ getOtherLabelsCount(row) }}</span>
+                      <el-icon class="more-icon"><ArrowDown /></el-icon>
+                    </el-tag>
+                    <template #dropdown>
+                      <el-dropdown-menu class="labels-dropdown">
+                        <div class="dropdown-header">其他节点标签</div>
+                        <div class="dropdown-content">
+                          <!-- 其他标签 -->
+                          <div v-if="getOtherLabels(row).length > 0" class="label-group">
+                            <div class="group-title">系统标签</div>
+                            <el-tag
+                              v-for="label in getOtherLabels(row)"
+                              :key="`other-${label.key}`"
+                              size="small"
+                              class="dropdown-tag"
+                            >
+                              {{ label.key }}: {{ label.value }}
+                            </el-tag>
+                          </div>
                         </div>
-                      </div>
-                      <div class="dropdown-footer">
-                        <el-button 
-                          type="text" 
-                          size="small"
-                          @click="viewNodeDetail(row)"
-                        >
-                          查看详情
-                        </el-button>
-                      </div>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
+                        <div class="dropdown-footer">
+                          <el-button 
+                            type="text" 
+                            size="small"
+                            @click="viewNodeDetail(row)"
+                          >
+                            查看详情
+                          </el-button>
+                        </div>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </div>
+              </div>
+              
+              <!-- 污点行 -->
+              <div class="node-info-row" v-if="hasTaintsToShow(row)">
+                <span class="info-label">污点:</span>
+                <div class="info-tags">
+                  <el-tag
+                    v-for="taint in (row.taints || [])"
+                    :key="`taint-${taint.key}`"
+                    size="small"
+                    type="warning"
+                    class="taint-tag"
+                    :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
+                  >
+                    <el-icon style="margin-right: 2px;"><Warning /></el-icon>
+                    {{ formatTaintDisplay(taint) }}
+                  </el-tag>
+                </div>
               </div>
             </div>
           </template>
@@ -729,6 +739,19 @@ const getOtherLabelsCount = (node) => {
   return getOtherLabels(node).length
 }
 
+// 判断是否有标签需要显示
+const hasLabelsToShow = (node) => {
+  // 检查是否有角色标签、重要标签或其他标签
+  return (node.roles && node.roles.length > 0) || 
+         getVisibleImportantLabels(node).length > 0 || 
+         hasOtherLabels(node)
+}
+
+// 判断是否有污点需要显示
+const hasTaintsToShow = (node) => {
+  return node.taints && node.taints.length > 0
+}
+
 // 格式化标签显示
 const formatLabelDisplay = (key, value) => {
   if (key === 'cluster') {
@@ -933,14 +956,30 @@ onMounted(() => {
   text-decoration: underline;
 }
 
-.node-labels {
+.node-info-row {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
   align-items: flex-start;
+  gap: 8px;
   margin-top: 6px;
   line-height: 1.5;
   min-height: 24px;
+}
+
+.info-label {
+  color: #666;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding-top: 2px;
+  min-width: 32px;
+}
+
+.info-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  flex: 1;
 }
 
 .role-tag {
@@ -1293,9 +1332,13 @@ onMounted(() => {
     gap: 8px;
   }
   
-  .node-labels {
-    gap: 8px;
+  .node-info-row {
+    margin-top: 4px;
     min-height: 20px;
+  }
+  
+  .info-tags {
+    gap: 6px;
   }
   
   .role-tag {
