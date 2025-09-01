@@ -30,8 +30,19 @@ export const useNodeStore = defineStore('node', {
     readyNodes: (state) => state.nodes.filter(node => node.status === 'Ready'),
     notReadyNodes: (state) => state.nodes.filter(node => node.status === 'NotReady'),
     unknownNodes: (state) => state.nodes.filter(node => node.status === 'Unknown'),
-    masterNodes: (state) => state.nodes.filter(node => node.roles.includes('master')),
-    workerNodes: (state) => state.nodes.filter(node => node.roles.includes('worker')),
+    masterNodes: (state) => state.nodes.filter(node => {
+      if (!node.roles || !Array.isArray(node.roles)) return false
+      return node.roles.some(role => 
+        role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')
+      )
+    }),
+    workerNodes: (state) => state.nodes.filter(node => {
+      if (!node.roles || !Array.isArray(node.roles)) return true // 无角色默认为worker
+      // 如果不包含master相关角色，则为worker
+      return !node.roles.some(role => 
+        role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')
+      )
+    }),
     filteredNodes: (state) => {
       let result = state.nodes
       
@@ -46,7 +57,25 @@ export const useNodeStore = defineStore('node', {
       }
       
       if (state.filters.role) {
-        result = result.filter(node => node.roles.includes(state.filters.role))
+        result = result.filter(node => {
+          if (!node.roles || !Array.isArray(node.roles)) {
+            return state.filters.role === 'worker' // 无角色视为worker
+          }
+          
+          if (state.filters.role === 'master') {
+            // 检查是否为master相关角色
+            return node.roles.some(role => 
+              role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')
+            )
+          } else if (state.filters.role === 'worker') {
+            // 检查是否为worker (不包含master相关角色)
+            return !node.roles.some(role => 
+              role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')
+            )
+          }
+          
+          return false
+        })
       }
       
       return result

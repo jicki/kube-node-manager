@@ -16,16 +16,61 @@
 
     <!-- 搜索和筛选 -->
     <el-card class="search-card">
-      <SearchBox
-        v-model="searchKeyword"
-        placeholder="搜索节点名称..."
-        :advanced-search="true"
-        :filters="searchFilters"
-        :realtime="true"
-        :debounce="500"
-        @search="handleSearch"
-        @filter-change="handleFilterChange"
-      />
+      <div class="search-section">
+        <el-input
+          v-model="searchKeyword"
+          placeholder="搜索节点名称..."
+          clearable
+          @input="handleSearch"
+          @clear="handleSearch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+      </div>
+      
+      <div class="filter-section">
+        <el-row :gutter="12">
+          <el-col :span="8">
+            <el-select
+              v-model="statusFilter"
+              placeholder="状态筛选"
+              clearable
+              @change="handleFilterChange"
+            >
+              <el-option label="全部状态" value="" />
+              <el-option label="Ready" value="Ready" />
+              <el-option label="NotReady" value="NotReady" />
+              <el-option label="Unknown" value="Unknown" />
+            </el-select>
+          </el-col>
+          <el-col :span="8">
+            <el-select
+              v-model="roleFilter"
+              placeholder="角色筛选"
+              clearable
+              @change="handleFilterChange"
+            >
+              <el-option label="全部角色" value="" />
+              <el-option label="Master" value="master" />
+              <el-option label="Worker" value="worker" />
+            </el-select>
+          </el-col>
+          <el-col :span="8">
+            <el-select
+              v-model="schedulableFilter"
+              placeholder="调度状态"
+              clearable
+              @change="handleFilterChange"
+            >
+              <el-option label="全部状态" value="" />
+              <el-option label="可调度" value="schedulable" />
+              <el-option label="不可调度" value="unschedulable" />
+            </el-select>
+          </el-col>
+        </el-row>
+      </div>
     </el-card>
 
     <!-- 批量操作栏 -->
@@ -364,7 +409,6 @@ import { ref, computed, onMounted, reactive } from 'vue'
 import { useNodeStore } from '@/store/modules/node'
 import { useClusterStore } from '@/store/modules/cluster'
 import { formatTime, formatNodeStatus, formatNodeRoles, formatCPU, formatMemory } from '@/utils/format'
-import SearchBox from '@/components/common/SearchBox.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import NodeDetailDialog from './components/NodeDetailDialog.vue'
 import {
@@ -379,7 +423,8 @@ import {
   Plus,
   Check,
   Monitor,
-  ArrowDown
+  ArrowDown,
+  Search
 } from '@element-plus/icons-vue'
 
 const nodeStore = useNodeStore()
@@ -388,6 +433,9 @@ const clusterStore = useClusterStore()
 // 响应式数据
 const loading = ref(false)
 const searchKeyword = ref('')
+const statusFilter = ref('')
+const roleFilter = ref('')
+const schedulableFilter = ref('')
 const selectedNode = ref(null)
 const detailDialogVisible = ref(false)
 const drainConfirmVisible = ref(false)
@@ -401,40 +449,7 @@ const batchLoading = reactive({
   drain: false
 })
 
-// 搜索筛选配置
-const searchFilters = ref([
-  {
-    key: 'status',
-    label: '状态',
-    type: 'select',
-    placeholder: '选择状态',
-    options: [
-      { label: '正常', value: 'Ready' },
-      { label: '异常', value: 'NotReady' },
-      { label: '未知', value: 'Unknown' }
-    ]
-  },
-  {
-    key: 'role',
-    label: '角色',
-    type: 'select',
-    placeholder: '选择角色',
-    options: [
-      { label: '主节点', value: 'master' },
-      { label: '工作节点', value: 'worker' }
-    ]
-  },
-  {
-    key: 'schedulable',
-    label: '可调度',
-    type: 'select',
-    placeholder: '选择调度状态',
-    options: [
-      { label: '可调度', value: 'true' },
-      { label: '不可调度', value: 'false' }
-    ]
-  }
-])
+// 搜索和筛选处理函数
 
 // 计算属性
 const nodes = computed(() => nodeStore.nodes)
@@ -446,14 +461,18 @@ const filteredNodes = computed(() => {
 })
 
 // 处理搜索
-const handleSearch = (params) => {
-  nodeStore.setFilters({ name: params.keyword, ...params.filters })
-  fetchNodes()
+const handleSearch = () => {
+  nodeStore.setFilters({
+    name: searchKeyword.value,
+    status: statusFilter.value,
+    role: roleFilter.value,
+    schedulable: schedulableFilter.value
+  })
 }
 
 // 处理筛选变化
-const handleFilterChange = (filters) => {
-  nodeStore.setFilters(filters)
+const handleFilterChange = () => {
+  handleSearch() // 统一调用搜索处理
 }
 
 // 处理选择变化
@@ -721,6 +740,14 @@ onMounted(() => {
 
 .search-card {
   margin-bottom: 16px;
+}
+
+.search-section {
+  margin-bottom: 12px;
+}
+
+.filter-section {
+  margin-bottom: 12px;
 }
 
 .batch-actions {

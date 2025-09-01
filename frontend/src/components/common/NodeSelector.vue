@@ -337,10 +337,23 @@ const filteredNodes = computed(() => {
   // 角色筛选
   if (roleFilter.value) {
     result = result.filter(node => {
-      if (!node?.roles?.length) return false
-      return node.roles.some(role => 
-        role?.toLowerCase().includes(roleFilter.value.toLowerCase())
-      )
+      if (!node?.roles || !Array.isArray(node.roles)) {
+        return roleFilter.value === 'worker' // 无角色视为worker
+      }
+      
+      if (roleFilter.value === 'master') {
+        // 检查是否为master相关角色
+        return node.roles.some(role => 
+          role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')
+        )
+      } else if (roleFilter.value === 'worker') {
+        // 检查是否为worker (不包含master相关角色)
+        return !node.roles.some(role => 
+          role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')
+        )
+      }
+      
+      return false
     })
   }
 
