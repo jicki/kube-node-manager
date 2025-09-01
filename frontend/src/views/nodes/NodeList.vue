@@ -294,11 +294,11 @@
                   <span class="resource-label">CPU</span>
                 </div>
                 <div class="resource-content">
-                  <span class="resource-value">{{ formatCPU(row.allocatable?.cpu) || 'N/A' }}</span>
-                  <span class="resource-divider">/</span>
                   <span class="resource-total">{{ formatCPU(row.capacity?.cpu) || 'N/A' }}</span>
+                  <span class="resource-divider">/</span>
+                  <span class="resource-value">{{ formatCPU(row.allocatable?.cpu) || 'N/A' }}</span>
                 </div>
-                <span class="resource-subtext">可分配 / 总量</span>
+                <span class="resource-subtext">总量 / 可分配</span>
               </div>
               <div class="resource-item">
                 <div class="resource-header">
@@ -306,11 +306,11 @@
                   <span class="resource-label">内存</span>
                 </div>
                 <div class="resource-content">
-                  <span class="resource-value">{{ formatMemoryCorrect(row.allocatable?.memory) }}</span>
-                  <span class="resource-divider">/</span>
                   <span class="resource-total">{{ formatMemoryCorrect(row.capacity?.memory) }}</span>
+                  <span class="resource-divider">/</span>
+                  <span class="resource-value">{{ formatMemoryCorrect(row.allocatable?.memory) }}</span>
                 </div>
-                <span class="resource-subtext">可分配 / 总量</span>
+                <span class="resource-subtext">总量 / 可分配</span>
               </div>
               <div class="resource-item">
                 <div class="resource-header">
@@ -318,11 +318,11 @@
                   <span class="resource-label">Pods</span>
                 </div>
                 <div class="resource-content">
-                  <span class="resource-value">{{ row.allocatable?.pods || '0' }}</span>
-                  <span class="resource-divider">/</span>
                   <span class="resource-total">{{ row.capacity?.pods || '0' }}</span>
+                  <span class="resource-divider">/</span>
+                  <span class="resource-value">{{ row.allocatable?.pods || '0' }}</span>
                 </div>
-                <span class="resource-subtext">可分配 / 总量</span>
+                <span class="resource-subtext">总量 / 可分配</span>
               </div>
               <div class="resource-item" v-if="hasGPUResources(row)">
                 <div class="resource-header">
@@ -330,11 +330,11 @@
                   <span class="resource-label">GPU</span>
                 </div>
                 <div class="resource-content">
-                  <span class="resource-value">{{ getGPUCount(row.allocatable) || '0' }}</span>
-                  <span class="resource-divider">/</span>
                   <span class="resource-total">{{ getGPUCount(row.capacity) || '0' }}</span>
+                  <span class="resource-divider">/</span>
+                  <span class="resource-value">{{ getGPUCount(row.allocatable) || '0' }}</span>
                 </div>
-                <span class="resource-subtext">可分配 / 总量</span>
+                <span class="resource-subtext">总量 / 可分配</span>
               </div>
             </div>
           </template>
@@ -559,7 +559,24 @@ const fetchNodes = async (params = {}) => {
 }
 
 // 刷新数据
-const refreshData = () => {
+const refreshData = async () => {
+  try {
+    // 重新加载集群信息
+    await clusterStore.fetchClusters()
+    clusterStore.loadCurrentCluster()
+    
+    // 如果没有当前集群，尝试设置第一个活跃集群
+    if (!clusterStore.hasCurrentCluster && clusterStore.hasCluster) {
+      const firstActiveCluster = clusterStore.activeClusters[0] || clusterStore.clusters[0]
+      if (firstActiveCluster) {
+        clusterStore.setCurrentCluster(firstActiveCluster)
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to refresh cluster info:', error)
+  }
+  
+  // 然后刷新节点数据
   fetchNodes()
 }
 
@@ -793,23 +810,12 @@ const formatLabelDisplay = (key, value) => {
 const formatTaintDisplay = (taint) => {
   if (!taint) return ''
   
-  // 显示完整信息：key=value:effect
+  // 显示完整信息：key=value:effect，不截断
   let display = taint.key
   if (taint.value) {
     display += `=${taint.value}`
   }
   display += `:${taint.effect}`
-  
-  // 如果太长则截断但保持可读性
-  if (display.length > 35) {
-    const key = taint.key.length > 15 ? taint.key.substring(0, 15) + '...' : taint.key
-    const value = taint.value && taint.value.length > 8 ? taint.value.substring(0, 8) + '...' : taint.value
-    display = key
-    if (value) {
-      display += `=${value}`
-    }
-    display += `:${taint.effect}`
-  }
   
   return display
 }
@@ -931,7 +937,24 @@ const getGPUCount = (resources) => {
   return 0
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 先加载集群信息
+  try {
+    await clusterStore.fetchClusters()
+    clusterStore.loadCurrentCluster()
+    
+    // 如果没有当前集群，尝试设置第一个活跃集群
+    if (!clusterStore.hasCurrentCluster && clusterStore.hasCluster) {
+      const firstActiveCluster = clusterStore.activeClusters[0] || clusterStore.clusters[0]
+      if (firstActiveCluster) {
+        clusterStore.setCurrentCluster(firstActiveCluster)
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load cluster info:', error)
+  }
+  
+  // 然后获取节点数据
   fetchNodes()
 })
 </script>
@@ -1190,19 +1213,23 @@ onMounted(() => {
 
 .taint-tag {
   font-size: 11px;
-  height: 22px;
+  height: auto;
+  min-height: 22px;
   line-height: 20px;
   font-weight: 600;
   border-radius: 11px;
-  padding: 0 8px;
+  padding: 2px 8px;
   letter-spacing: 0.2px;
   margin: 0;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-all;
   display: inline-flex;
   align-items: center;
   background: #fff7e6 !important;
   border-color: #ffd591 !important;
   color: #d46b08 !important;
+  max-width: none;
+  flex-wrap: wrap;
 }
 
 .taint-tag:hover {
@@ -1350,12 +1377,12 @@ onMounted(() => {
 }
 
 .resource-value {
-  color: #1890ff;
+  color: #52c41a;
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.3px;
-  text-shadow: 0 1px 2px rgba(24, 144, 255, 0.1);
+  text-shadow: 0 1px 2px rgba(82, 196, 26, 0.1);
 }
 
 .resource-divider {
@@ -1366,11 +1393,12 @@ onMounted(() => {
 }
 
 .resource-total {
-  color: #595959;
+  color: #1890ff;
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
   font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 2px rgba(24, 144, 255, 0.1);
 }
 
 .resource-subtext {
