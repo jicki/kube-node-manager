@@ -160,16 +160,28 @@
                 <el-tag
                   v-for="role in getVisibleRoles(row.roles)"
                   :key="role"
-                  :type="role === 'master' ? 'danger' : 'primary'"
+                  :type="getNodeRoleType(role)"
                   size="small"
                   class="role-tag"
                 >
                   {{ formatNodeRoles([role]) }}
                 </el-tag>
                 
-                <!-- 标签折叠按钮 -->
+                <!-- 显示重要标签不折叠 -->
+                <el-tag
+                  v-for="label in getVisibleImportantLabels(row)"
+                  :key="`label-${label.key}`"
+                  size="small"
+                  type="success"
+                  class="important-label-tag"
+                  :title="`${label.key}=${label.value}`"
+                >
+                  {{ formatLabelDisplay(label.key, label.value) }}
+                </el-tag>
+                
+                <!-- 其他标签折叠按钮（如果有额外标签） -->
                 <el-dropdown 
-                  v-if="hasMoreLabels(row)"
+                  v-if="hasOtherLabels(row)"
                   trigger="click" 
                   placement="bottom-start"
                   @command="(cmd) => handleLabelCommand(cmd, row)"
@@ -179,33 +191,19 @@
                     class="more-labels-tag"
                     type="info"
                   >
-                    <span>+{{ getMoreLabelsCount(row) }}</span>
+                    <span>+{{ getOtherLabelsCount(row) }}</span>
                     <el-icon class="more-icon"><ArrowDown /></el-icon>
                   </el-tag>
                   <template #dropdown>
                     <el-dropdown-menu class="labels-dropdown">
-                      <div class="dropdown-header">节点标签</div>
+                      <div class="dropdown-header">其他节点标签</div>
                       <div class="dropdown-content">
-                        <!-- 所有角色标签 -->
-                        <div v-if="row.roles && row.roles.length > 0" class="label-group">
-                          <div class="group-title">角色</div>
+                        <!-- 其他标签 -->
+                        <div v-if="getOtherLabels(row).length > 0" class="label-group">
+                          <div class="group-title">系统标签</div>
                           <el-tag
-                            v-for="role in row.roles"
-                            :key="`role-${role}`"
-                            :type="role === 'master' ? 'danger' : 'primary'"
-                            size="small"
-                            class="dropdown-tag"
-                          >
-                            {{ formatNodeRoles([role]) }}
-                          </el-tag>
-                        </div>
-                        
-                        <!-- 其他重要标签 -->
-                        <div v-if="getImportantLabels(row).length > 0" class="label-group">
-                          <div class="group-title">重要标签</div>
-                          <el-tag
-                            v-for="label in getImportantLabels(row)"
-                            :key="`label-${label.key}`"
+                            v-for="label in getOtherLabels(row)"
+                            :key="`other-${label.key}`"
                             size="small"
                             class="dropdown-tag"
                           >
@@ -672,22 +670,73 @@ const getMoreLabelsCount = (node) => {
   return roleCount + importantLabelsCount
 }
 
-const getImportantLabels = (node) => {
+// 获取直接显示的重要标签（不折叠）
+const getVisibleImportantLabels = (node) => {
   if (!node.labels) return []
   
-  const importantKeys = [
-    'node.kubernetes.io/instance-type',
-    'topology.kubernetes.io/zone',
-    'kubernetes.io/arch',
-    'node.kubernetes.io/node-type',
-    'node-role.kubernetes.io/gpu',
-    'nvidia.com/gpu.present'
+  const visibleKeys = ['cluster', 'deeproute.cn/user-type']
+  
+  return Object.entries(node.labels)
+    .filter(([key]) => visibleKeys.includes(key))
+    .map(([key, value]) => ({ key, value }))
+}
+
+// 获取其他标签（折叠显示）
+const getOtherLabels = (node) => {
+  if (!node.labels) return []
+  
+  const visibleKeys = ['cluster', 'deeproute.cn/user-type']
+  const systemKeys = [
+    'node.kubernetes.io',
+    'topology.kubernetes.io', 
+    'kubernetes.io',
+    'node-role.kubernetes.io',
+    'beta.kubernetes.io'
   ]
   
   return Object.entries(node.labels)
-    .filter(([key]) => importantKeys.some(importantKey => key.includes(importantKey)))
+    .filter(([key]) => {
+      // 排除已直接显示的重要标签
+      if (visibleKeys.includes(key)) return false
+      // 包含系统标签
+      return systemKeys.some(sysKey => key.startsWith(sysKey))
+    })
     .map(([key, value]) => ({ key, value }))
-    .slice(0, 10) // 限制显示数量
+    .slice(0, 15) // 限制显示数量
+}
+
+// 判断是否有其他标签
+const hasOtherLabels = (node) => {
+  return getOtherLabels(node).length > 0
+}
+
+// 获取其他标签数量
+const getOtherLabelsCount = (node) => {
+  return getOtherLabels(node).length
+}
+
+// 格式化标签显示
+const formatLabelDisplay = (key, value) => {
+  if (key === 'cluster') {
+    return `集群: ${value}`
+  }
+  if (key === 'deeproute.cn/user-type') {
+    return `类型: ${value}`
+  }
+  return `${key}: ${value}`
+}
+
+// 获取节点角色类型
+const getNodeRoleType = (role) => {
+  if (role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')) {
+    return 'danger'
+  }
+  return 'primary'
+}
+
+// 保留旧函数用于兼容
+const getImportantLabels = (node) => {
+  return getOtherLabels(node)
 }
 
 const handleLabelCommand = (command, node) => {
@@ -911,6 +960,35 @@ onMounted(() => {
   transform: translateY(1px);
 }
 
+/* 重要标签样式 */
+.important-label-tag {
+  font-size: 11px;
+  height: 22px;
+  line-height: 20px;
+  font-weight: 600;
+  border-radius: 11px;
+  padding: 0 8px;
+  letter-spacing: 0.2px;
+  margin: 0;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  min-width: fit-content;
+  flex-shrink: 0;
+  background: #f6ffed !important;
+  border: 1px solid #b7eb8f !important;
+  color: #389e0d !important;
+  transition: all 0.2s ease;
+}
+
+.important-label-tag:hover {
+  background: #e6fffb !important;
+  border-color: #87e8de !important;
+  color: #13c2c2 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(19, 194, 194, 0.1);
+}
+
 /* 下拉菜单样式 */
 .labels-dropdown {
   min-width: 280px;
@@ -1034,24 +1112,26 @@ onMounted(() => {
 }
 
 .resource-value {
-  color: #333;
+  color: #1890ff;
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 2px rgba(24, 144, 255, 0.1);
 }
 
 .resource-divider {
-  color: #d9d9d9;
-  font-weight: 300;
-  margin: 0 2px;
+  color: #bfbfbf;
+  font-weight: 400;
+  margin: 0 4px;
+  font-size: 14px;
 }
 
 .resource-total {
-  color: #666;
+  color: #595959;
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   letter-spacing: 0.2px;
 }
 
