@@ -69,6 +69,7 @@
     <!-- 节点列表 -->
     <div class="node-list">
       <el-scrollbar height="300px">
+        
         <el-checkbox-group v-model="selectedNodes" @change="handleSelectionChange">
           <div class="node-container">
             <div
@@ -78,8 +79,7 @@
               :class="{ 'selected': getNodeName(node) && selectedNodes.includes(getNodeName(node)) }"
             >
               <el-checkbox 
-                v-if="getNodeName(node)" 
-                :value="getNodeName(node)"
+                :value="getNodeName(node) || `node-${Math.random()}`"
                 :disabled="!getNodeName(node)"
                 class="node-checkbox"
               />
@@ -299,20 +299,15 @@ watch(selectedNodes, (newValue) => {
 
 // 获取节点名称的统一函数
 const getNodeName = (node) => {
-  return node?.name || node?.node_name || node?.nodeName || null
+  return node?.name || node?.node_name || node?.nodeName || node?.metadata?.name || null
 }
 
-// 数据验证函数 - 临时放宽验证条件
+// 数据验证函数 - 宽松但合理的验证
 const validateNodeData = (node) => {
-  // 更宽松的验证：只要有node对象和某种形式的名称即可
+  // 宽松验证：有对象且有某种名称字段即可
   const isValid = node && 
          typeof node === 'object' && 
-         getNodeName(node)
-  
-  // 如果验证失败，可在开发模式下调试
-  // if (!isValid && node && process.env.NODE_ENV === 'development') {
-  //   console.warn('NodeSelector: 无效的节点数据格式:', node)
-  // }
+         (node.name || node.node_name || node.nodeName || node.metadata?.name)
   
   return isValid
 }
@@ -568,7 +563,7 @@ const shouldShowAttributes = (node) => {
 
 // 判断是否应该显示标签
 const shouldShowLabels = (node) => {
-  return node.labels && showLabels && Object.keys(getDisplayLabels(node.labels)).length > 0
+  return node.labels && props.showLabels && Object.keys(getDisplayLabels(node.labels)).length > 0
 }
 
 // 清理定时器
