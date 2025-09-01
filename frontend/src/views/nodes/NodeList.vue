@@ -66,6 +66,7 @@
             >
               <el-option label="全部状态" value="" />
               <el-option label="可调度" value="schedulable" />
+              <el-option label="有限调度" value="limited" />
               <el-option label="不可调度" value="unschedulable" />
             </el-select>
           </el-col>
@@ -269,18 +270,18 @@
 
         <el-table-column
           prop="schedulable"
-          label="可调度"
-          width="90"
+          label="调度状态"
+          width="100"
         >
           <template #default="{ row }">
             <el-tag
-              :type="row.schedulable ? 'success' : 'warning'"
+              :type="getSchedulingStatus(row).type"
               size="small"
             >
               <el-icon style="margin-right: 4px;">
-                <component :is="row.schedulable ? 'Check' : 'Lock'" />
+                <component :is="getSchedulingStatus(row).icon" />
               </el-icon>
-              {{ row.schedulable ? '可调度' : '已封锁' }}
+              {{ getSchedulingStatus(row).text }}
             </el-tag>
           </template>
         </el-table-column>
@@ -374,6 +375,7 @@
                 type="text"
                 size="small"
                 @click="cordonNode(row)"
+                :title="getSchedulingStatus(row).value === 'limited' ? '节点有污点但仍可调度，封锁后完全不可调度' : '封锁节点使其不可调度'"
               >
                 <el-icon><Lock /></el-icon>
                 封锁
@@ -384,6 +386,7 @@
                 type="text"
                 size="small"
                 @click="uncordonNode(row)"
+                title="解封节点使其恢复调度能力"
               >
                 <el-icon><Unlock /></el-icon>
                 解封
@@ -472,7 +475,8 @@ import {
   ArrowDown,
   Search,
   Grid,
-  VideoPlay
+  VideoPlay,
+  QuestionFilled
 } from '@element-plus/icons-vue'
 
 const nodeStore = useNodeStore()
@@ -830,6 +834,43 @@ const formatTaintFullDisplay = (taint) => {
   }
   display += `:${taint.effect}`
   return display
+}
+
+// 获取智能调度状态
+const getSchedulingStatus = (node) => {
+  // 如果节点被cordon（不可调度）
+  if (!node.schedulable) {
+    return {
+      text: '不可调度',
+      type: 'danger',
+      icon: 'Lock',
+      value: 'unschedulable'
+    }
+  }
+  
+  // 检查是否有影响调度的污点
+  const hasSchedulingTaints = node.taints && node.taints.length > 0 && 
+    node.taints.some(taint => 
+      taint.effect === 'NoSchedule' || 
+      taint.effect === 'PreferNoSchedule'
+    )
+  
+  if (hasSchedulingTaints) {
+    return {
+      text: '有限调度',
+      type: 'warning', 
+      icon: 'QuestionFilled',
+      value: 'limited'
+    }
+  }
+  
+  // 没有污点且可调度
+  return {
+    text: '可调度',
+    type: 'success',
+    icon: 'Check',
+    value: 'schedulable'
+  }
 }
 
 // 获取节点角色类型
@@ -1238,6 +1279,22 @@ onMounted(async () => {
   color: #ad4e00 !important;
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(212, 107, 8, 0.15);
+}
+
+/* 调度状态相关样式 */
+.scheduling-status-tooltip {
+  max-width: 300px;
+  word-wrap: break-word;
+}
+
+.limited-scheduling-info {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: #fff7e6;
+  border-radius: 4px;
+  border-left: 3px solid #faad14;
 }
 
 .taint-tag .el-icon {

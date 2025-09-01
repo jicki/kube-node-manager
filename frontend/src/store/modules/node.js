@@ -2,6 +2,28 @@ import { defineStore } from 'pinia'
 import nodeApi from '@/api/node'
 import { useClusterStore } from './cluster'
 
+// 获取智能调度状态的辅助函数
+function getSmartSchedulingStatus(node) {
+  // 如果节点被cordon（不可调度）
+  if (!node.schedulable) {
+    return 'unschedulable'
+  }
+  
+  // 检查是否有影响调度的污点
+  const hasSchedulingTaints = node.taints && node.taints.length > 0 && 
+    node.taints.some(taint => 
+      taint.effect === 'NoSchedule' || 
+      taint.effect === 'PreferNoSchedule'
+    )
+  
+  if (hasSchedulingTaints) {
+    return 'limited'
+  }
+  
+  // 没有污点且可调度
+  return 'schedulable'
+}
+
 export const useNodeStore = defineStore('node', {
   state: () => ({
     nodes: [],
@@ -10,7 +32,10 @@ export const useNodeStore = defineStore('node', {
       total: 0,
       ready: 0,
       notReady: 0,
-      unknown: 0
+      unknown: 0,
+      schedulable: 0,
+      limited: 0,
+      unschedulable: 0
     },
     pagination: {
       current: 1,
@@ -43,6 +68,10 @@ export const useNodeStore = defineStore('node', {
         role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')
       )
     }),
+    // 调度状态统计
+    schedulableNodes: (state) => state.nodes.filter(node => getSmartSchedulingStatus(node) === 'schedulable'),
+    limitedNodes: (state) => state.nodes.filter(node => getSmartSchedulingStatus(node) === 'limited'),
+    unschedulableNodes: (state) => state.nodes.filter(node => getSmartSchedulingStatus(node) === 'unschedulable'),
     filteredNodes: (state) => {
       let result = state.nodes
       
@@ -75,6 +104,14 @@ export const useNodeStore = defineStore('node', {
           }
           
           return false
+        })
+      }
+      
+      // 调度状态筛选
+      if (state.filters.schedulable) {
+        result = result.filter(node => {
+          const schedulingStatus = getSmartSchedulingStatus(node)
+          return schedulingStatus === state.filters.schedulable
         })
       }
       
@@ -199,6 +236,9 @@ export const useNodeStore = defineStore('node', {
       this.nodeStats.ready = this.readyNodes.length
       this.nodeStats.notReady = this.notReadyNodes.length
       this.nodeStats.unknown = this.unknownNodes.length
+      this.nodeStats.schedulable = this.schedulableNodes.length
+      this.nodeStats.limited = this.limitedNodes.length
+      this.nodeStats.unschedulable = this.unschedulableNodes.length
     },
 
     resetFilters() {
