@@ -80,6 +80,7 @@
               v-if="node?.name" 
               :value="node.name"
               :disabled="!node.name"
+              class="node-checkbox"
             >
               <div class="node-content">
                   <div class="node-header">
@@ -510,13 +511,34 @@ onUnmounted(() => {
 
 .node-item {
   padding: 16px;
+  margin-bottom: 8px;
   border-bottom: 1px solid #f0f0f0;
   transition: all 0.3s ease;
   position: relative;
+  min-height: 60px; /* 确保最小高度 */
 }
 
 .node-item:last-child {
   border-bottom: none;
+  margin-bottom: 0; /* 最后一个节点不需要下边距 */
+}
+
+.node-checkbox {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 100%; /* 确保checkbox占满整个节点项高度 */
+}
+
+/* 确保Element Plus的checkbox组件不会影响布局 */
+.node-checkbox :deep(.el-checkbox__label) {
+  width: 100%;
+  padding-left: 0;
+}
+
+.node-checkbox :deep(.el-checkbox) {
+  white-space: normal;
+  line-height: normal;
 }
 
 .node-item:hover {
@@ -537,7 +559,8 @@ onUnmounted(() => {
   margin-left: 8px;
   width: calc(100% - 8px);
   gap: 8px;
-  padding: 2px 0;
+  padding: 4px 0;
+  flex: 1; /* 确保内容区域占满可用空间 */
 }
 
 .node-header {
