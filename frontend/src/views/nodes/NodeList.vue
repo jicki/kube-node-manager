@@ -767,10 +767,19 @@ onMounted(() => {
   border-bottom: 1px solid #f0f0f0;
   padding: 18px 0;
   letter-spacing: 0.3px;
+  height: auto;
 }
 
+/* 确保表格行有足够高度 */
 .table-card :deep(.el-table__body-wrapper) tr {
   transition: all 0.2s ease;
+  height: auto;
+  min-height: 80px;
+}
+
+.table-card :deep(.el-table__body-wrapper) .el-table__row {
+  height: auto !important;
+  min-height: 80px !important;
 }
 
 .table-card :deep(.el-table__body-wrapper) tr:hover {
@@ -779,19 +788,22 @@ onMounted(() => {
 
 .table-card :deep(.el-table td) {
   border-bottom: 1px solid #f5f5f5;
-  padding: 20px 0;
+  padding: 24px 0;
   font-size: 14px;
   line-height: 1.6;
-  vertical-align: middle;
+  vertical-align: top;
+  height: auto;
+  min-height: 80px;
 }
 
 .node-name-cell {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 4px 0;
-  min-height: 60px;
-  justify-content: center;
+  gap: 12px;
+  padding: 8px 0;
+  min-height: 70px;
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .node-name-link {
@@ -812,37 +824,39 @@ onMounted(() => {
 
 .node-labels {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  align-items: center;
-  margin-top: 2px;
-  line-height: 1.4;
+  align-items: flex-start;
+  margin-top: 6px;
+  line-height: 1.5;
+  min-height: 24px;
 }
 
 .role-tag {
   font-size: 11px;
-  height: 20px;
-  line-height: 18px;
+  height: 22px;
+  line-height: 20px;
   font-weight: 500;
-  border-radius: 10px;
-  padding: 0 8px;
+  border-radius: 11px;
+  padding: 0 10px;
   letter-spacing: 0.2px;
-  margin: 1px 0;
+  margin: 0;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   min-width: fit-content;
+  flex-shrink: 0;
 }
 
 .more-labels-tag {
   font-size: 11px;
-  height: 20px;
-  line-height: 18px;
+  height: 22px;
+  line-height: 20px;
   font-weight: 500;
-  border-radius: 10px;
-  padding: 0 6px;
+  border-radius: 11px;
+  padding: 0 8px;
   letter-spacing: 0.2px;
-  margin: 1px 0;
+  margin: 0;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
@@ -851,6 +865,7 @@ onMounted(() => {
   border: 1px solid #d9d9d9 !important;
   color: #666 !important;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .more-labels-tag:hover {
@@ -1097,30 +1112,32 @@ onMounted(() => {
   }
   
   .table-card :deep(.el-table td) {
-    padding: 16px 0;
+    padding: 20px 0;
+    min-height: 70px;
   }
   
   .node-name-cell {
-    min-height: 50px;
-    gap: 6px;
+    min-height: 60px;
+    gap: 8px;
   }
   
   .node-labels {
-    gap: 6px;
+    gap: 8px;
+    min-height: 20px;
   }
   
   .role-tag {
     font-size: 10px;
-    height: 18px;
-    line-height: 16px;
-    padding: 0 6px;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 8px;
   }
   
   .more-labels-tag {
     font-size: 10px;
-    height: 18px;
-    line-height: 16px;
-    padding: 0 4px;
+    height: 20px;
+    line-height: 18px;
+    padding: 0 6px;
   }
   
   .labels-dropdown {
