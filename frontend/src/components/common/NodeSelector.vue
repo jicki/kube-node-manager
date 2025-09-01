@@ -69,7 +69,7 @@
     <!-- 节点列表 -->
     <div class="node-list">
       <el-scrollbar height="300px">
-        <el-checkbox-group v-model="selectedNodes" @change="handleSelectionChange">
+        <div class="node-container">
           <div
             v-for="node in filteredNodes"
             :key="node?.name || node?.id || Math.random()"
@@ -78,149 +78,150 @@
           >
             <el-checkbox 
               v-if="node?.name" 
+              v-model="selectedNodes"
               :value="node.name"
               :disabled="!node.name"
               class="node-checkbox"
-            >
-              <div class="node-content">
-                  <div class="node-header">
-                    <div class="node-main-info">
-                      <div class="node-name">{{ node.name || '未知节点' }}</div>
-                      <div class="node-basic-row">
-                        <el-tag 
-                          :type="getStatusType(node.status)" 
-                          size="small"
-                          class="node-status-tag"
-                        >
-                          {{ node.status || 'Unknown' }}
-                        </el-tag>
-                        <span v-if="node.roles?.length" class="node-roles">
-                          {{ node.roles.join(', ') }}
-                        </span>
-                      </div>
-                      <div v-if="node.internal_ip" class="node-ip-row">
-                        <el-icon class="ip-icon"><Location /></el-icon>
-                        <span class="ip-text">{{ node.internal_ip }}</span>
-                      </div>
-                    </div>
+            />
+            
+            <div class="node-content">
+              <div class="node-header">
+                <h4 class="node-name">{{ node.name || '未知节点' }}</h4>
+                
+                <div class="node-basic-info">
+                  <el-tag 
+                    :type="getStatusType(node.status)" 
+                    size="small"
+                    class="status-tag"
+                  >
+                    {{ node.status || 'Unknown' }}
+                  </el-tag>
+                  <span v-if="node.roles?.length" class="node-roles">
+                    {{ node.roles.join(', ') }}
+                  </span>
+                </div>
+                
+                <div v-if="node.internal_ip" class="node-ip">
+                  <el-icon class="ip-icon"><Location /></el-icon>
+                  <span class="ip-text">{{ node.internal_ip }}</span>
+                </div>
+              </div>
+              
+              <div v-if="shouldShowAttributes(node)" class="node-attributes">
+                <!-- 标签区域 -->
+                <div v-if="shouldShowLabels(node)" class="labels-section">
+                  <div class="section-header">
+                    <el-icon class="section-icon"><Collection /></el-icon>
+                    <span class="section-title">标签</span>
                   </div>
-                  
-                  <div v-if="(node.labels && showLabels && Object.keys(getDisplayLabels(node.labels)).length > 0) || (node.taints && node.taints.length > 0)" class="node-attributes">
-                    <div v-if="node.labels && showLabels && Object.keys(getDisplayLabels(node.labels)).length > 0" class="attributes-section">
-                      <div class="attributes-header">
-                        <el-icon class="section-icon"><Collection /></el-icon>
-                        <span class="section-label">标签</span>
-                      </div>
-                      <div class="attributes-content">
-                        <el-tag
-                          v-for="(value, key) in getCompactDisplayLabels(node.labels)"
-                          :key="`${node.name}-${key}`"
-                          size="small"
-                          type="info"
-                          class="label-tag"
-                          :title="`${key}=${value}`"
-                        >
-                          <span class="label-key">{{ smartTruncateLabel(key, value).key }}</span>
-                          <span v-if="value" class="label-separator">=</span>
-                          <span v-if="value" class="label-value">{{ smartTruncateLabel(key, value).value }}</span>
-                        </el-tag>
-                      <!-- 更多标签下拉 -->
-                      <div v-if="getTotalLabelsCount(node.labels) > 0" class="more-item">
-                        <el-dropdown
-                          trigger="click"
-                          placement="bottom-start"
-                        >
-                          <el-tag
-                            size="small"
-                            type="info"
-                            class="more-labels-tag"
-                            :title="`还有${getTotalLabelsCount(node.labels)}个其他标签，点击查看详情`"
-                          >
-                            详情({{ getTotalLabelsCount(node.labels) }})
-                            <el-icon class="more-icon"><ArrowDown /></el-icon>
-                          </el-tag>
-                          <template #dropdown>
-                            <el-dropdown-menu class="labels-dropdown">
-                              <div class="dropdown-header">其他节点标签</div>
-                              <div class="dropdown-content">
-                                <div
-                                  v-for="(value, key) in getOtherLabels(node.labels) || {}"
-                                  :key="`dropdown-${node.name}-${key}`"
-                                  class="dropdown-item"
-                                >
-                                  <el-tag
-                                    size="small"
-                                    type="info"
-                                    class="dropdown-label-tag"
-                                  >
-                                    {{ key }}={{ value }}
-                                  </el-tag>
-                                </div>
-                              </div>
-                            </el-dropdown-menu>
-                          </template>
-                        </el-dropdown>
-                      </div>
-                    </div>
-                  </div>
+                  <div class="tags-container">
+                    <el-tag
+                      v-for="(value, key) in getCompactDisplayLabels(node.labels)"
+                      :key="`${node.name}-${key}`"
+                      size="small"
+                      type="info"
+                      class="attribute-tag label-tag"
+                      :title="`${key}=${value}`"
+                    >
+                      <span class="tag-key">{{ smartTruncateLabel(key, value).key }}</span>
+                      <span v-if="value" class="tag-separator">=</span>
+                      <span v-if="value" class="tag-value">{{ smartTruncateLabel(key, value).value }}</span>
+                    </el-tag>
                     
-                    <div v-if="node.taints && node.taints.length > 0" class="attributes-section">
-                      <div class="attributes-header">
-                        <el-icon class="section-icon"><Warning /></el-icon>
-                        <span class="section-label">污点</span>
-                      </div>
-                      <div class="attributes-content">
-                        <el-tag
-                          v-for="(taint, index) in getCompactDisplayTaints(node.taints)"
-                          :key="`${node.name}-taint-${index}`"
-                          size="small"
-                          :type="getTaintType(taint.effect)"
-                          class="taint-tag"
-                          :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
-                        >
-                          <span class="taint-key">{{ truncateText(taint.key, 10) }}</span>
-                          <span v-if="taint.value" class="taint-separator">=</span>
-                          <span v-if="taint.value" class="taint-value">{{ truncateText(taint.value, 8) }}</span>
-                          <span class="taint-effect">:{{ taint.effect.substr(0, 2) }}</span>
-                        </el-tag>
-                        <el-dropdown
-                          v-if="node.taints && node.taints.length > 1"
-                          trigger="click"
-                          placement="bottom-start"
-                        >
-                          <el-tag
-                            size="small"
-                            type="danger"
-                            class="more-taints-tag"
-                            :title="`共${node.taints.length}个污点，点击查看更多`"
-                          >
-                            +{{ node.taints.length - 1 }}
-                            <el-icon class="more-icon"><ArrowDown /></el-icon>
-                          </el-tag>
-                          <template #dropdown>
-                            <el-dropdown-menu class="taints-dropdown">
-                              <div class="dropdown-header">节点污点</div>
-                              <div class="dropdown-content">
-                                <el-tag
-                                  v-for="(taint, index) in node.taints || []"
-                                  :key="`dropdown-${node.name}-taint-${index}`"
-                                  size="small"
-                                  :type="getTaintType(taint.effect)"
-                                  class="dropdown-taint-tag"
-                                >
-                                  {{ taint.key }}{{ taint.value ? '=' + taint.value : '' }}:{{ taint.effect }}
-                                </el-tag>
-                              </div>
-                            </el-dropdown-menu>
-                          </template>
-                        </el-dropdown>
-                      </div>
-                    </div>
+                    <el-dropdown
+                      v-if="getTotalLabelsCount(node.labels) > 0"
+                      trigger="click"
+                      placement="bottom-start"
+                      class="more-dropdown"
+                    >
+                      <el-tag
+                        size="small"
+                        type="info"
+                        class="attribute-tag more-tag"
+                        :title="`还有${getTotalLabelsCount(node.labels)}个其他标签，点击查看详情`"
+                      >
+                        详情({{ getTotalLabelsCount(node.labels) }})
+                        <el-icon class="arrow-icon"><ArrowDown /></el-icon>
+                      </el-tag>
+                      <template #dropdown>
+                        <el-dropdown-menu class="attributes-dropdown">
+                          <div class="dropdown-header">其他节点标签</div>
+                          <div class="dropdown-body">
+                            <el-tag
+                              v-for="(value, key) in getOtherLabels(node.labels) || {}"
+                              :key="`dropdown-${node.name}-${key}`"
+                              size="small"
+                              type="info"
+                              class="dropdown-tag"
+                            >
+                              {{ key }}={{ value }}
+                            </el-tag>
+                          </div>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
                   </div>
                 </div>
-            </el-checkbox>
+                
+                <!-- 污点区域 -->
+                <div v-if="node.taints && node.taints.length > 0" class="taints-section">
+                  <div class="section-header">
+                    <el-icon class="section-icon"><Warning /></el-icon>
+                    <span class="section-title">污点</span>
+                  </div>
+                  <div class="tags-container">
+                    <el-tag
+                      v-for="(taint, index) in getCompactDisplayTaints(node.taints)"
+                      :key="`${node.name}-taint-${index}`"
+                      size="small"
+                      :type="getTaintType(taint.effect)"
+                      class="attribute-tag taint-tag"
+                      :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
+                    >
+                      <span class="tag-key">{{ truncateText(taint.key, 10) }}</span>
+                      <span v-if="taint.value" class="tag-separator">=</span>
+                      <span v-if="taint.value" class="tag-value">{{ truncateText(taint.value, 8) }}</span>
+                      <span class="taint-effect">:{{ taint.effect.substr(0, 2) }}</span>
+                    </el-tag>
+                    
+                    <el-dropdown
+                      v-if="node.taints && node.taints.length > 1"
+                      trigger="click"
+                      placement="bottom-start"
+                      class="more-dropdown"
+                    >
+                      <el-tag
+                        size="small"
+                        type="danger"
+                        class="attribute-tag more-tag"
+                        :title="`共${node.taints.length}个污点，点击查看更多`"
+                      >
+                        +{{ node.taints.length - 1 }}
+                        <el-icon class="arrow-icon"><ArrowDown /></el-icon>
+                      </el-tag>
+                      <template #dropdown>
+                        <el-dropdown-menu class="attributes-dropdown">
+                          <div class="dropdown-header">节点污点</div>
+                          <div class="dropdown-body">
+                            <el-tag
+                              v-for="(taint, index) in node.taints || []"
+                              :key="`dropdown-${node.name}-taint-${index}`"
+                              size="small"
+                              :type="getTaintType(taint.effect)"
+                              class="dropdown-tag"
+                            >
+                              {{ taint.key }}{{ taint.value ? '=' + taint.value : '' }}:{{ taint.effect }}
+                            </el-tag>
+                          </div>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </el-checkbox-group>
+        </div>
         
         <!-- 空状态 -->
         <div v-if="filteredNodes.length === 0 && !loading" class="empty-nodes">
@@ -548,34 +549,14 @@ const smartTruncateLabel = (key, value, maxKeyLength = 15, maxValueLength = 12) 
   return { key: truncatedKey, value: truncatedValue }
 }
 
-const showAllLabels = (node) => {
-  // 可以在这里实现显示所有标签的逻辑，比如弹出对话框
-  const labelsText = Object.entries(node.labels || {})
-    .map(([key, value]) => `${key}=${value}`)
-    .join('\n')
-  ElMessageBox.alert(labelsText, `节点 ${node.name} 的所有标签`, {
-    confirmButtonText: '关闭',
-    customStyle: {
-      'white-space': 'pre-line',
-      'font-family': 'Monaco, Menlo, monospace',
-      'font-size': '12px'
-    }
-  })
+// 判断是否应该显示属性区域
+const shouldShowAttributes = (node) => {
+  return shouldShowLabels(node) || (node.taints && node.taints.length > 0)
 }
 
-const showAllTaints = (node) => {
-  // 显示所有污点
-  const taintsText = (node.taints || [])
-    .map(taint => `${taint.key}${taint.value ? '=' + taint.value : ''}:${taint.effect}`)
-    .join('\n')
-  ElMessageBox.alert(taintsText, `节点 ${node.name} 的所有污点`, {
-    confirmButtonText: '关闭',
-    customStyle: {
-      'white-space': 'pre-line',
-      'font-family': 'Monaco, Menlo, monospace',
-      'font-size': '12px'
-    }
-  })
+// 判断是否应该显示标签
+const shouldShowLabels = (node) => {
+  return node.labels && showLabels && Object.keys(getDisplayLabels(node.labels)).length > 0
 }
 
 // 清理定时器
@@ -617,219 +598,98 @@ onUnmounted(() => {
   border: 1px solid #e8e8e8;
   border-radius: 6px;
   background: #fff;
-  position: relative;
 }
 
-/* 强制垂直布局，防止层叠 */
-.node-list :deep(.el-scrollbar__view) {
-  display: block !important;
-  position: static !important;
-}
-
-.node-list :deep(.el-checkbox-group) {
-  display: block !important;
-  position: static !important;
-}
-
-.node-list :deep(.el-checkbox-group .el-checkbox) {
-  display: block !important;
-  width: 100% !important;
-  position: static !important;
-  margin: 0 !important;
+.node-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
 }
 
 .node-item {
-  display: block !important;
-  width: 100% !important;
-  margin: 0 0 30px 0 !important;
-  position: static !important;
-  box-sizing: border-box;
-  clear: both !important;
-  float: none !important;
-  overflow: visible !important;
-  min-height: 150px !important; /* 强制最小高度 */
-  border: 2px solid #f0f0f0 !important; /* 强制边框防重叠 */
-  border-radius: 8px !important;
-  background: #ffffff !important;
-  padding: 20px !important;
-}
-
-.node-card {
-  display: block !important; /* 强制块级布局 */
-  width: 100% !important;
-  background: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  box-shadow: none !important;
-}
-
-.node-card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  border-color: #d4edda;
-}
-
-.node-item:last-child {
-  margin-bottom: 0;
-}
-
-.node-checkbox {
-  display: block !important;
-  width: 100% !important;
-  min-height: 100%;
-  position: static !important;
-}
-
-/* 确保Element Plus的checkbox组件不会影响布局 */
-.node-checkbox :deep(.el-checkbox__label) {
-  width: 100% !important;
-  padding-left: 0 !important;
-  display: block !important;
-  position: static !important;
-}
-
-.node-checkbox :deep(.el-checkbox) {
-  white-space: normal !important;
-  line-height: normal !important;
-  display: block !important;
-  position: static !important;
-  float: none !important;
-}
-
-.node-checkbox :deep(.el-checkbox__input) {
-  position: static !important;
-  float: left;
-  margin-right: 8px;
-}
-
-/* 确保Element Plus dropdown组件的z-index正确 */
-:deep(.el-dropdown) {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  background: #ffffff;
+  transition: all 0.2s ease;
   position: relative;
-  z-index: 3;
-}
-
-:deep(.el-dropdown-menu) {
-  z-index: 9999 !important;
-}
-
-:deep(.el-popper) {
-  z-index: 9999 !important;
 }
 
 .node-item:hover {
   background-color: #f8f9fa;
-  border-left: 3px solid #1890ff;
-  padding-left: 13px;
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
 }
 
 .node-item.selected {
-  background-color: #e6f7ff !important;
-  border-color: #1890ff !important;
-  border-left: 4px solid #1890ff !important;
+  background-color: #e6f7ff;
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
 }
 
-/* 所有元素强制分离 */
 .node-checkbox {
-  display: block !important;
-  margin-bottom: 15px !important;
-  clear: both !important;
-  width: 100% !important;
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .node-content {
-  display: block !important;
-  width: 100% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  clear: both !important;
+  flex: 1;
+  min-width: 0;
 }
 
-/* 节点名称行 */
-.node-name-row {
-  margin-bottom: 16px;
+.node-header {
+  margin-bottom: 12px;
 }
 
 .node-name {
-  font-weight: 600 !important;
-  color: #333 !important;
-  font-size: 16px !important;
-  line-height: 2 !important; /* 强制大行高 */
-  word-break: break-word;
-  margin: 0 0 15px 0 !important; /* 强制下边距 */
-  display: block !important;
-  clear: both !important;
-  width: 100% !important;
-  min-height: 30px !important; /* 强制最小高度 */
-  border-bottom: 1px solid #f0f0f0 !important; /* 分隔线 */
-  padding-bottom: 10px !important;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 8px 0;
+  line-height: 1.4;
 }
 
-/* 状态和角色行 - 强制分离 */
-.node-status-row {
-  display: block !important; /* 强制块级布局 */
-  width: 100% !important;
-  margin-bottom: 20px !important;
-  clear: both !important;
-  min-height: 40px !important;
-  border-bottom: 1px solid #f0f0f0 !important;
-  padding-bottom: 15px !important;
+.node-basic-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
-.status-tags {
-  display: block !important;
-  width: 100% !important;
-  margin-bottom: 10px !important;
-  clear: both !important;
-}
-
-.role-tags {
-  display: block !important;
-  width: 100% !important;
-  clear: both !important;
-}
-
-.node-status-tag {
-  font-weight: 500 !important;
-  display: block !important;
-  width: fit-content !important;
-  margin: 5px 0 !important;
-  clear: both !important;
+.status-tag {
+  font-weight: 500;
 }
 
 .node-roles {
-  font-size: 12px !important;
-  color: #666 !important;
-  background: #f5f5f5 !important;
-  padding: 8px 12px !important;
-  border-radius: 4px !important;
-  white-space: nowrap !important;
-  display: block !important;
-  width: fit-content !important;
-  margin: 5px 0 !important;
-  clear: both !important;
+  font-size: 12px;
+  color: #666;
+  background: #f5f5f5;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
-.node-ip-row {
-  display: block !important;
-  font-size: 13px !important;
-  color: #52c41a !important;
-  background: #f6ffed !important;
-  padding: 10px 15px !important;
-  border-radius: 4px !important;
-  border: 1px solid #b7eb8f !important;
-  white-space: nowrap !important;
-  width: fit-content !important;
-  margin: 15px 0 25px 0 !important;
-  clear: both !important;
-  min-height: 35px !important;
-  line-height: 2 !important;
+.node-ip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #52c41a;
+  background: #f6ffed;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid #b7eb8f;
+  width: fit-content;
 }
 
 .ip-icon {
   font-size: 12px;
   color: #52c41a;
-  flex-shrink: 0;
 }
 
 .ip-text {
@@ -838,240 +698,125 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-/* 标签和污点区域 - 强制分离 */
-.node-attributes-section {
-  border-top: 2px solid #e8e8e8 !important;
-  padding-top: 30px !important;
-  margin-top: 30px !important;
-  width: 100% !important;
-  clear: both !important;
-  display: block !important;
-  min-height: 50px !important;
+.node-attributes {
+  border-top: 1px solid #f0f0f0;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-/* 标签块 */
-.labels-block {
-  margin-bottom: 28px;
-  width: 100%;
-  clear: both;
+.labels-section,
+.taints-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-/* 污点块 */
-.taints-block {
-  margin-bottom: 28px;
-  width: 100%;
-  clear: both;
-}
-
-/* 区块标题 */
-.block-header {
+.section-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding: 6px 0;
-  border-bottom: 1px solid #f0f0f0;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .section-icon {
-  font-size: 14px;
-  color: #666;
-  flex-shrink: 0;
+  font-size: 12px;
 }
 
-.block-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #333;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  flex-shrink: 0;
+.section-title {
+  font-size: 11px;
 }
 
-/* 标签列表 */
-.labels-list {
+.tags-container {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
-/* 污点列表 */
-.taints-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
+.attribute-tag {
+  font-size: 11px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  border-radius: 4px;
+  transition: all 0.2s ease;
 }
 
-/* 强制每个标签独立一行 */
-.label-item {
-  display: block !important;
-  width: 100% !important;
-  padding: 10px 0 !important;
-  min-height: 50px !important;
-  clear: both !important;
-  margin: 8px 0 !important;
-  border-bottom: 1px dotted #e0e0e0 !important;
-}
-
-/* 强制每个污点独立一行 */
-.taint-item {
-  display: block !important;
-  width: 100% !important;
-  padding: 10px 0 !important;
-  min-height: 50px !important;
-  clear: both !important;
-  margin: 8px 0 !important;
-  border-bottom: 1px dotted #e0e0e0 !important;
-}
-
-/* 更多项也强制独立 */
-.more-item {
-  display: block !important;
-  width: 100% !important;
-  padding: 10px 0 !important;
-  min-height: 50px !important;
-  clear: both !important;
-  margin: 8px 0 !important;
-  border-bottom: 1px dotted #e0e0e0 !important;
-}
-
-.label-tag {
-  font-size: 13px !important;
-  height: 35px !important;
-  line-height: 33px !important;
-  padding: 0 15px !important;
-  font-family: 'Monaco', 'Menlo', monospace !important;
-  border-radius: 6px !important;
-  cursor: pointer !important;
-  border: 2px solid #d0d0d0 !important;
-  display: block !important; /* 强制块级显示 */
-  width: 100% !important; /* 占满宽度 */
-  text-align: left !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  clear: both !important;
-  margin: 0 !important;
-}
-
-.label-tag:hover {
+.attribute-tag:hover {
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  border-color: #d9ecff;
-  z-index: 5; /* 降低z-index避免遮挡其他节点 */
-  position: relative;
 }
 
-.label-key {
+.label-tag .tag-key {
   font-weight: 600;
   color: #1890ff;
 }
 
-.label-separator {
-  margin: 0 1px;
+.tag-separator {
+  margin: 0 2px;
   opacity: 0.7;
   color: #666;
 }
 
-.label-value {
+.label-tag .tag-value {
   font-weight: 500;
-  opacity: 0.9;
   color: #52c41a;
 }
 
-.taint-tag {
-  font-size: 13px !important;
-  height: 35px !important;
-  line-height: 33px !important;
-  padding: 0 15px !important;
-  font-family: 'Monaco', 'Menlo', monospace !important;
-  border-radius: 6px !important;
-  cursor: pointer !important;
-  border: 2px solid #d0d0d0 !important;
-  display: block !important; /* 强制块级显示 */
-  width: 100% !important; /* 占满宽度 */
-  text-align: left !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  clear: both !important;
-  margin: 0 !important;
-}
-
-.taint-tag:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  z-index: 5; /* 降低z-index避免遮挡其他节点 */
-  position: relative;
-}
-
-.taint-key {
+.taint-tag .tag-key {
   font-weight: 600;
 }
 
-.taint-separator {
-  margin: 0 1px;
-  opacity: 0.7;
-}
-
-.taint-value {
+.taint-tag .tag-value {
   font-weight: 500;
   opacity: 0.9;
 }
 
 .taint-effect {
   font-weight: 700;
-  margin-left: 1px;
+  margin-left: 2px;
   text-transform: uppercase;
 }
 
-.more-labels-tag,
-.more-taints-tag {
-  font-size: 13px !important;
-  height: 35px !important;
-  line-height: 33px !important;
-  padding: 0 15px !important;
-  cursor: pointer !important;
-  font-weight: 600 !important;
-  border-radius: 6px !important;
-  display: block !important; /* 强制块级显示 */
-  width: 100% !important; /* 占满宽度 */
-  text-align: left !important;
-  background: #f8f9fa !important;
-  border: 2px solid #dee2e6 !important;
-  color: #6c757d !important;
-  white-space: nowrap !important;
-  clear: both !important;
-  margin: 0 !important;
+.more-tag {
+  font-weight: 600;
+  cursor: pointer;
+  background: #f8f9fa;
+  border-color: #dee2e6;
+  color: #6c757d;
 }
 
-.more-labels-tag:hover,
-.more-taints-tag:hover {
-  background: #e6f7ff !important;
-  border-color: #91d5ff !important;
-  color: #1890ff !important;
+.more-tag:hover {
+  background: #e6f7ff;
+  border-color: #91d5ff;
+  color: #1890ff;
 }
 
-.more-icon {
+.arrow-icon {
   font-size: 8px;
-  margin-left: 2px;
+  margin-left: 4px;
   transition: transform 0.2s ease;
 }
 
-/* 下拉菜单样式 */
-.labels-dropdown,
-.taints-dropdown {
-  min-width: 260px;
-  max-width: 400px;
-  z-index: 9999 !important; /* 确保下拉菜单在最顶层 */
+.more-dropdown {
+  position: relative;
 }
 
-/* 确保下拉菜单触发器不会遮挡其他节点 */
-.more-labels-tag.el-dropdown__trigger,
-.more-taints-tag.el-dropdown__trigger {
-  z-index: 6 !important;
+:deep(.el-dropdown-menu) {
+  z-index: 9999;
+}
+
+:deep(.el-popper) {
+  z-index: 9999;
+}
+
+.attributes-dropdown {
+  min-width: 260px;
+  max-width: 400px;
 }
 
 .dropdown-header {
@@ -1085,7 +830,7 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
 }
 
-.dropdown-content {
+.dropdown-body {
   padding: 10px;
   max-height: 200px;
   overflow-y: auto;
@@ -1094,26 +839,19 @@ onUnmounted(() => {
   gap: 4px;
 }
 
-.dropdown-label-tag,
-.dropdown-taint-tag {
+.dropdown-tag {
   font-size: 11px;
-  height: 22px;
-  line-height: 20px;
-  padding: 0 8px;
-  border-radius: 11px;
-  font-weight: 500;
-  margin: 0;
   font-family: 'Monaco', 'Menlo', monospace;
+  border-radius: 4px;
+  margin: 0;
   word-break: break-all;
-  max-width: 100%;
 }
-
-
 
 .empty-nodes, .loading-nodes {
   padding: 20px;
   text-align: center;
 }
+
 
 /* 响应式设计 */
 @media (max-width: 768px) {
@@ -1121,30 +859,25 @@ onUnmounted(() => {
     margin-bottom: 8px;
   }
   
+  .node-container {
+    gap: 12px;
+    padding: 12px;
+  }
+  
   .node-item {
-    padding: 16px 12px;
-    min-height: 70px;
-  }
-  
-  .node-content {
-    padding: 6px 0;
-    line-height: 1.4;
-  }
-  
-  .node-header {
-    gap: 6px;
-    margin-bottom: 6px;
+    padding: 12px;
+    gap: 8px;
   }
   
   .node-name {
     font-size: 14px;
   }
   
-  .node-basic-row {
+  .node-basic-info {
     gap: 8px;
   }
   
-  .node-ip-row {
+  .node-ip {
     padding: 4px 8px;
     font-size: 12px;
   }
@@ -1158,49 +891,34 @@ onUnmounted(() => {
     padding-top: 8px;
   }
   
-  .attributes-section {
+  .labels-section,
+  .taints-section {
     gap: 6px;
   }
   
-  .attributes-content {
-    gap: 6px 4px;
-    min-height: 20px;
+  .tags-container {
+    gap: 4px;
   }
   
-  .label-tag,
-  .taint-tag {
+  .attribute-tag {
     font-size: 10px;
-    height: 20px;
-    line-height: 18px;
-    padding: 0 6px;
-    margin: 1px 0;
   }
   
-  .more-labels-tag,
-  .more-taints-tag {
-    font-size: 10px;
-    height: 20px;
-    line-height: 18px;
-    padding: 0 6px;
-    margin: 1px 0;
-  }
-  
-  .more-icon {
+  .arrow-icon {
     font-size: 7px;
-    margin-left: 1px;
+    margin-left: 2px;
   }
   
-  .labels-dropdown,
-  .taints-dropdown {
+  .attributes-dropdown {
     min-width: 200px;
     max-width: 280px;
   }
   
-  .dropdown-content {
+  .dropdown-body {
     max-height: 150px;
   }
   
-  .section-label {
+  .section-title {
     font-size: 10px;
   }
   
@@ -1214,37 +932,31 @@ onUnmounted(() => {
     margin-bottom: 8px;
   }
   
+  .node-container {
+    gap: 8px;
+    padding: 8px;
+  }
+  
   .node-item {
-    padding: 14px 10px;
-    min-height: 60px;
-  }
-  
-  .node-content {
-    padding: 4px 0;
-    margin-left: 28px;
-    width: calc(100% - 32px);
-  }
-  
-  .node-header {
-    gap: 4px;
-    margin-bottom: 4px;
+    padding: 10px;
+    gap: 6px;
   }
   
   .node-name {
     font-size: 13px;
   }
   
-  .node-basic-row {
+  .node-basic-info {
     gap: 6px;
     flex-wrap: wrap;
   }
   
   .node-roles {
     font-size: 11px;
-    padding: 2px 5px;
+    padding: 2px 6px;
   }
   
-  .node-ip-row {
+  .node-ip {
     padding: 3px 6px;
     font-size: 11px;
   }
@@ -1258,62 +970,43 @@ onUnmounted(() => {
     padding-top: 6px;
   }
   
-  .attributes-section {
+  .labels-section,
+  .taints-section {
     gap: 4px;
   }
   
-  .attributes-content {
-    gap: 4px 3px;
-    min-height: 18px;
+  .tags-container {
+    gap: 3px;
   }
   
-  .label-tag,
-  .taint-tag {
+  .attribute-tag {
     font-size: 9px;
-    height: 18px;
-    line-height: 16px;
-    padding: 0 4px;
-    margin: 1px 0;
     max-width: 120px;
   }
   
-  .more-labels-tag,
-  .more-taints-tag {
-    font-size: 9px;
-    height: 18px;
-    line-height: 16px;
-    padding: 0 4px;
-    margin: 1px 0;
-  }
-  
-  .more-icon {
+  .arrow-icon {
     font-size: 6px;
     margin-left: 1px;
   }
   
-  .labels-dropdown,
-  .taints-dropdown {
+  .attributes-dropdown {
     min-width: 180px;
     max-width: 240px;
   }
   
-  .dropdown-content {
+  .dropdown-body {
     max-height: 120px;
   }
   
-  .dropdown-label-tag,
-  .dropdown-taint-tag {
+  .dropdown-tag {
     font-size: 10px;
-    height: 20px;
-    line-height: 18px;
-    padding: 0 6px;
   }
   
-  .section-label {
+  .section-title {
     font-size: 9px;
   }
   
-  .attributes-header .el-icon {
+  .section-icon {
     font-size: 10px;
   }
   
