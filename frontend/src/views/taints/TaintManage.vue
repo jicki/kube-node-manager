@@ -963,11 +963,21 @@ const handleSaveTaint = async () => {
       taints: validTaints.map(taint => {
         const cleanValues = taint.values.filter(v => v !== undefined && v !== null && v !== '').map(v => v.toString().trim())
         
+        // 验证和清理每个值，确保符合Kubernetes格式
+        const validCleanValues = cleanValues.map(value => {
+          if (!isValidTaintValue(value)) {
+            console.warn(`污点值不符合Kubernetes格式，将被清理: ${value}`)
+            return sanitizeTaintValue(value)
+          }
+          return value
+        }).filter(v => v !== '') // 移除清理后的空值
+        
         return {
           key: taint.key.trim(),
           effect: taint.effect,
           // 如果有多个值，用分隔符连接；否则使用单个值
-          value: cleanValues.length > 1 ? cleanValues.join('|MULTI_VALUE|') : (cleanValues[0] || '')
+          // 注意：这只是为了内部存储，应用时会被分离
+          value: validCleanValues.length > 1 ? validCleanValues.join('|MULTI_VALUE|') : (validCleanValues[0] || '')
         }
       })
     }
@@ -1006,6 +1016,38 @@ const getTaintValueArray = (taint) => {
 const getTaintSingleValue = (taint) => {
   const values = getTaintValueArray(taint)
   return values[0] || ''
+}
+
+// 验证污点值是否符合Kubernetes格式
+const isValidTaintValue = (value) => {
+  if (!value || typeof value !== 'string') return true // 空值是合法的
+  
+  // Kubernetes污点值的格式要求与标签值相同
+  // 必须是空字符串或包含字母数字字符、'-'、'_' 或 '.'，并且必须以字母数字字符开始和结束
+  const taintValueRegex = /^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$/
+  
+  return taintValueRegex.test(value) && value.length <= 63 // Kubernetes限制污点值最大长度为63字符
+}
+
+// 清理污点值，移除不合法字符
+const sanitizeTaintValue = (value) => {
+  if (!value || typeof value !== 'string') return ''
+  
+  // 移除 |MULTI_VALUE| 分隔符和其他不合法字符
+  let cleaned = value.replace(/\|MULTI_VALUE\|/g, '').trim()
+  
+  // 只保留字母数字字符、'-'、'_' 和 '.'
+  cleaned = cleaned.replace(/[^A-Za-z0-9\-_.]/g, '')
+  
+  // 确保以字母数字字符开始和结束
+  cleaned = cleaned.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '')
+  
+  // 限制长度
+  if (cleaned.length > 63) {
+    cleaned = cleaned.substring(0, 63)
+  }
+  
+  return cleaned
 }
 
 // 应用模板到节点
@@ -1047,16 +1089,29 @@ const handleApplyTemplate = async () => {
     
     applying.value = true
     
-    // 构造应用数据，使用选中的值
+    // 构造应用数据，使用选中的值，并确保值符合Kubernetes污点格式
     const taintsToApply = selectedTemplate.value.taints.map(taint => {
       const valueArray = getTaintValueArray(taint)
-      const valueToUse = valueArray.length > 1 
+      let valueToUse = valueArray.length > 1 
         ? taint.selectedValue 
         : getTaintSingleValue(taint)
       
+      // 确保选中的值也经过处理，移除MULTI_VALUE分隔符
+      if (typeof valueToUse === 'string' && valueToUse.includes('|MULTI_VALUE|')) {
+        const cleanValues = valueToUse.split('|MULTI_VALUE|').filter(v => v.trim() !== '')
+        valueToUse = cleanValues[0] || ''
+      }
+      
+      // 验证和清理污点值
+      let cleanValue = valueToUse || ''
+      if (cleanValue && !isValidTaintValue(cleanValue)) {
+        console.warn(`污点值不符合Kubernetes格式，将被清理: ${cleanValue}`)
+        cleanValue = sanitizeTaintValue(cleanValue)
+      }
+      
       return {
         key: taint.key,
-        value: valueToUse,
+        value: cleanValue,
         effect: taint.effect
       }
     })

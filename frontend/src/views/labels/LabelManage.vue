@@ -907,11 +907,21 @@ const handleSaveLabel = async () => {
       const key = label.key.trim()
       const cleanValues = label.values.filter(v => v !== undefined && v !== null && v !== '').map(v => v.toString().trim())
       
+      // 验证和清理每个值，确保符合Kubernetes格式
+      const validCleanValues = cleanValues.map(value => {
+        if (!isValidLabelValue(value)) {
+          console.warn(`标签值不符合Kubernetes格式，将被清理: ${value}`)
+          return sanitizeLabelValue(value)
+        }
+        return value
+      }).filter(v => v !== '') // 移除清理后的空值
+      
       // 如果有多个值，用特殊分隔符连接（用于标识这是多值）
-      if (cleanValues.length > 1) {
-        labelsObj[key] = cleanValues.join('|MULTI_VALUE|')
+      // 注意：这只是为了内部存储，应用时会被分离
+      if (validCleanValues.length > 1) {
+        labelsObj[key] = validCleanValues.join('|MULTI_VALUE|')
       } else {
-        labelsObj[key] = cleanValues[0] || ''
+        labelsObj[key] = validCleanValues[0] || ''
       }
     })
     
@@ -978,6 +988,38 @@ const getSingleValue = (value) => {
   return value
 }
 
+// 验证标签值是否符合Kubernetes格式
+const isValidLabelValue = (value) => {
+  if (!value || typeof value !== 'string') return true // 空值是合法的
+  
+  // Kubernetes标签值的正则表达式
+  // 必须是空字符串或包含字母数字字符、'-'、'_' 或 '.'，并且必须以字母数字字符开始和结束
+  const labelValueRegex = /^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$/
+  
+  return labelValueRegex.test(value) && value.length <= 63 // Kubernetes限制标签值最大长度为63字符
+}
+
+// 清理标签值，移除不合法字符
+const sanitizeLabelValue = (value) => {
+  if (!value || typeof value !== 'string') return ''
+  
+  // 移除 |MULTI_VALUE| 分隔符和其他不合法字符
+  let cleaned = value.replace(/\|MULTI_VALUE\|/g, '').trim()
+  
+  // 只保留字母数字字符、'-'、'_' 和 '.'
+  cleaned = cleaned.replace(/[^A-Za-z0-9\-_.]/g, '')
+  
+  // 确保以字母数字字符开始和结束
+  cleaned = cleaned.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9]+$/, '')
+  
+  // 限制长度
+  if (cleaned.length > 63) {
+    cleaned = cleaned.substring(0, 63)
+  }
+  
+  return cleaned
+}
+
 // 应用模板到节点
 const applyTemplateToNodes = (template) => {
   // 显示节点选择对话框
@@ -1031,17 +1073,29 @@ const handleApplyTemplate = async () => {
     
     applying.value = true
     
-    // 构造应用数据，使用选中的值
+    // 构造应用数据，使用选中的值，并确保值符合Kubernetes标签格式
     const labelsToApply = {}
     if (selectedTemplate.value.labels) {
       Object.entries(selectedTemplate.value.labels).forEach(([key, value]) => {
         const valueArray = getValueArray(value)
+        let finalValue = ''
+        
         if (valueArray.length > 1) {
-          // 使用选中的值
-          labelsToApply[key] = selectedTemplate.value.selectedValues[key] || valueArray[0]
+          // 使用选中的值，但要确保它是单一值
+          const selectedValue = selectedTemplate.value.selectedValues[key] || valueArray[0]
+          finalValue = getSingleValue(selectedValue) // 确保选中的值也经过处理
         } else {
           // 使用默认值
-          labelsToApply[key] = getSingleValue(value)
+          finalValue = getSingleValue(value)
+        }
+        
+        // 验证最终值符合Kubernetes标签格式
+        if (finalValue && isValidLabelValue(finalValue)) {
+          labelsToApply[key] = finalValue
+        } else if (finalValue) {
+          // 如果值不符合格式，记录警告并使用清理后的值
+          console.warn(`标签值不符合Kubernetes格式，将被清理: ${finalValue}`)
+          labelsToApply[key] = sanitizeLabelValue(finalValue)
         }
       })
     }
