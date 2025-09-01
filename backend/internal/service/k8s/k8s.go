@@ -45,9 +45,10 @@ type NodeInfo struct {
 
 // ResourceInfo 资源信息
 type ResourceInfo struct {
-	CPU    string `json:"cpu"`
-	Memory string `json:"memory"`
-	Pods   string `json:"pods"`
+	CPU    string            `json:"cpu"`
+	Memory string            `json:"memory"`
+	Pods   string            `json:"pods"`
+	GPU    map[string]string `json:"gpu,omitempty"` // 支持多种GPU类型
 }
 
 // TaintInfo 污点信息
@@ -463,11 +464,13 @@ func (s *Service) nodeToNodeInfo(node *corev1.Node) NodeInfo {
 			CPU:    node.Status.Capacity.Cpu().String(),
 			Memory: node.Status.Capacity.Memory().String(),
 			Pods:   node.Status.Capacity.Pods().String(),
+			GPU:    s.extractGPUResources(node.Status.Capacity),
 		},
 		Allocatable: ResourceInfo{
 			CPU:    node.Status.Allocatable.Cpu().String(),
 			Memory: node.Status.Allocatable.Memory().String(),
 			Pods:   node.Status.Allocatable.Pods().String(),
+			GPU:    s.extractGPUResources(node.Status.Allocatable),
 		},
 		Labels:     node.Labels,
 		Taints:     taints,
@@ -579,4 +582,25 @@ func (s *Service) TestConnection(kubeconfig string) error {
 	}
 
 	return nil
+}
+
+// extractGPUResources 提取GPU资源信息
+func (s *Service) extractGPUResources(resources corev1.ResourceList) map[string]string {
+	gpuResources := make(map[string]string)
+
+	// 常见的GPU资源类型
+	gpuResourceKeys := []string{
+		"nvidia.com/gpu",
+		"amd.com/gpu",
+		"intel.com/gpu",
+		"gpu",
+	}
+
+	for _, key := range gpuResourceKeys {
+		if quantity, exists := resources[corev1.ResourceName(key)]; exists {
+			gpuResources[key] = quantity.String()
+		}
+	}
+
+	return gpuResources
 }

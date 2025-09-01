@@ -240,7 +240,7 @@
                     size="small"
                     type="warning"
                     class="taint-tag"
-                    :title="`${taint.key}=${taint.value || ''}:${taint.effect}`"
+                    :title="formatTaintFullDisplay(taint)"
                   >
                     <el-icon style="margin-right: 2px;"><Warning /></el-icon>
                     {{ formatTaintDisplay(taint) }}
@@ -285,7 +285,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="资源配置" min-width="200">
+        <el-table-column label="资源配置" min-width="280">
           <template #default="{ row }">
             <div class="resource-usage">
               <div class="resource-item">
@@ -294,9 +294,9 @@
                   <span class="resource-label">CPU</span>
                 </div>
                 <div class="resource-content">
-                  <span class="resource-value">{{ row.allocatable?.cpu || 'N/A' }}</span>
+                  <span class="resource-value">{{ formatCPU(row.allocatable?.cpu) || 'N/A' }}</span>
                   <span class="resource-divider">/</span>
-                  <span class="resource-total">{{ row.capacity?.cpu || 'N/A' }}</span>
+                  <span class="resource-total">{{ formatCPU(row.capacity?.cpu) || 'N/A' }}</span>
                 </div>
                 <span class="resource-subtext">可分配 / 总量</span>
               </div>
@@ -306,9 +306,33 @@
                   <span class="resource-label">内存</span>
                 </div>
                 <div class="resource-content">
-                  <span class="resource-value">{{ formatMemory(row.allocatable?.memory) }}</span>
+                  <span class="resource-value">{{ formatMemoryCorrect(row.allocatable?.memory) }}</span>
                   <span class="resource-divider">/</span>
-                  <span class="resource-total">{{ formatMemory(row.capacity?.memory) }}</span>
+                  <span class="resource-total">{{ formatMemoryCorrect(row.capacity?.memory) }}</span>
+                </div>
+                <span class="resource-subtext">可分配 / 总量</span>
+              </div>
+              <div class="resource-item">
+                <div class="resource-header">
+                  <el-icon class="resource-icon pods-icon"><Grid /></el-icon>
+                  <span class="resource-label">Pods</span>
+                </div>
+                <div class="resource-content">
+                  <span class="resource-value">{{ row.allocatable?.pods || '0' }}</span>
+                  <span class="resource-divider">/</span>
+                  <span class="resource-total">{{ row.capacity?.pods || '0' }}</span>
+                </div>
+                <span class="resource-subtext">可分配 / 总量</span>
+              </div>
+              <div class="resource-item" v-if="hasGPUResources(row)">
+                <div class="resource-header">
+                  <el-icon class="resource-icon gpu-icon"><VideoPlay /></el-icon>
+                  <span class="resource-label">GPU</span>
+                </div>
+                <div class="resource-content">
+                  <span class="resource-value">{{ getGPUCount(row.allocatable) || '0' }}</span>
+                  <span class="resource-divider">/</span>
+                  <span class="resource-total">{{ getGPUCount(row.capacity) || '0' }}</span>
                 </div>
                 <span class="resource-subtext">可分配 / 总量</span>
               </div>
@@ -446,7 +470,9 @@ import {
   Check,
   Monitor,
   ArrowDown,
-  Search
+  Search,
+  Grid,
+  VideoPlay
 } from '@element-plus/icons-vue'
 
 const nodeStore = useNodeStore()
@@ -763,16 +789,32 @@ const formatLabelDisplay = (key, value) => {
   return `${key}: ${value}`
 }
 
-// 格式化污点显示（简化版本）
+// 格式化污点显示（完整版本）
 const formatTaintDisplay = (taint) => {
   if (!taint) return ''
   
-  // 显示关键信息：key 和 effect
-  const key = taint.key.length > 20 ? taint.key.substring(0, 20) + '...' : taint.key
-  return `${key}:${taint.effect}`
+  // 显示完整信息：key=value:effect
+  let display = taint.key
+  if (taint.value) {
+    display += `=${taint.value}`
+  }
+  display += `:${taint.effect}`
+  
+  // 如果太长则截断但保持可读性
+  if (display.length > 35) {
+    const key = taint.key.length > 15 ? taint.key.substring(0, 15) + '...' : taint.key
+    const value = taint.value && taint.value.length > 8 ? taint.value.substring(0, 8) + '...' : taint.value
+    display = key
+    if (value) {
+      display += `=${value}`
+    }
+    display += `:${taint.effect}`
+  }
+  
+  return display
 }
 
-// 格式化污点显示（完整版本）
+// 格式化污点完整显示（用于tooltip）
 const formatTaintFullDisplay = (taint) => {
   if (!taint) return ''
   
@@ -804,6 +846,89 @@ const handleLabelCommand = (command, node) => {
       viewNodeDetail(node)
       break
   }
+}
+
+// 正确的内存格式化函数，处理Kubernetes内存格式
+const formatMemoryCorrect = (value) => {
+  if (!value) return 'N/A'
+  
+  // 解析Kubernetes内存格式（例如：3906252Ki, 4Gi等）
+  const memStr = String(value).trim()
+  
+  // 匹配数字和单位
+  const match = memStr.match(/^(\d+(?:\.\d+)?)(.*)?$/)
+  if (!match) return value
+  
+  const [, numStr, unit = ''] = match
+  const num = parseFloat(numStr)
+  
+  // 单位转换表（字节）
+  const unitMap = {
+    'Ki': 1024,
+    'Mi': 1024 * 1024,  
+    'Gi': 1024 * 1024 * 1024,
+    'Ti': 1024 * 1024 * 1024 * 1024,
+    'K': 1000,
+    'M': 1000 * 1000,
+    'G': 1000 * 1000 * 1000,
+    'T': 1000 * 1000 * 1000 * 1000,
+    '': 1 // 如果没有单位，假设为字节
+  }
+  
+  const multiplier = unitMap[unit] || 1
+  const bytes = num * multiplier
+  
+  // 转换为适合显示的单位
+  if (bytes >= 1024 * 1024 * 1024 * 1024) {
+    return (bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1) + ' Ti'
+  } else if (bytes >= 1024 * 1024 * 1024) {
+    return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' Gi'
+  } else if (bytes >= 1024 * 1024) {
+    return (bytes / (1024 * 1024)).toFixed(1) + ' Mi'
+  } else if (bytes >= 1024) {
+    return (bytes / 1024).toFixed(1) + ' Ki'
+  } else {
+    return bytes + ' B'
+  }
+}
+
+// 检查节点是否有GPU资源
+const hasGPUResources = (node) => {
+  return getGPUCount(node.capacity) > 0 || getGPUCount(node.allocatable) > 0
+}
+
+// 获取GPU数量
+const getGPUCount = (resources) => {
+  if (!resources) return 0
+  
+  // 检查直接的GPU字段（新的API格式）
+  if (resources.gpu && typeof resources.gpu === 'object') {
+    let totalGPU = 0
+    for (const [key, value] of Object.entries(resources.gpu)) {
+      const count = parseInt(value)
+      if (!isNaN(count)) {
+        totalGPU += count
+      }
+    }
+    if (totalGPU > 0) return totalGPU
+  }
+  
+  // 支持多种GPU资源类型（旧格式兼容）
+  const gpuKeys = [
+    'nvidia.com/gpu',
+    'amd.com/gpu', 
+    'intel.com/gpu',
+    'gpu'
+  ]
+  
+  for (const key of gpuKeys) {
+    if (resources[key]) {
+      const count = parseInt(resources[key])
+      return isNaN(count) ? 0 : count
+    }
+  }
+  
+  return 0
 }
 
 onMounted(() => {
@@ -1197,6 +1322,16 @@ onMounted(() => {
 .memory-icon {
   color: #1890ff;
   background: rgba(24, 144, 255, 0.1);
+}
+
+.pods-icon {
+  color: #722ed1;
+  background: rgba(114, 46, 209, 0.1);
+}
+
+.gpu-icon {
+  color: #f5222d;
+  background: rgba(245, 34, 45, 0.1);
 }
 
 .resource-label {
