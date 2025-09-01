@@ -635,16 +635,17 @@ onUnmounted(() => {
 .node-item {
   display: block !important;
   width: 100% !important;
-  padding: 18px 16px;
-  margin: 0 0 12px 0 !important;
+  padding: 20px 16px;
+  margin: 0 0 16px 0 !important;
   border-bottom: 1px solid #f0f0f0;
   transition: all 0.3s ease;
   position: static !important; /* 强制静态定位 */
-  min-height: 80px; /* 增加最小高度 */
+  min-height: 100px; /* 进一步增加最小高度 */
   height: auto;
   box-sizing: border-box;
   clear: both;
   float: none !important;
+  overflow: visible; /* 确保内容不被裁剪 */
 }
 
 .node-item:last-child {
@@ -711,47 +712,48 @@ onUnmounted(() => {
   display: block;
   margin-left: 32px; /* 为checkbox留出空间 */
   width: calc(100% - 40px);
-  padding: 8px 0;
+  padding: 10px 0;
   position: static;
   clear: left;
-  line-height: 1.5; /* 增加行高 */
+  line-height: 1.6; /* 进一步增加行高 */
+  min-height: 60px; /* 确保内容区域最小高度 */
 }
 
 .node-header {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: block; /* 改为block布局避免flex问题 */
   width: 100%;
-  margin-bottom: 8px; /* 增加与下方的间距 */
+  margin-bottom: 12px; /* 进一步增加与下方的间距 */
+  line-height: 1.6;
 }
 
 .node-main-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: block; /* 改为block布局 */
+  margin-bottom: 8px;
 }
 
 .node-name {
   font-weight: 600;
   color: #333;
   font-size: 15px;
-  line-height: 1.3;
+  line-height: 1.4;
   word-break: break-word;
-  margin: 0;
-  flex-shrink: 0;
+  margin: 0 0 8px 0; /* 增加下边距 */
+  display: block;
+  min-height: 20px;
 }
 
 .node-basic-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  min-height: 24px;
+  display: block; /* 改为block布局 */
+  margin: 6px 0;
+  min-height: 28px;
+  line-height: 1.5;
 }
 
 .node-status-tag {
   font-weight: 500;
-  flex-shrink: 0;
+  display: inline-block;
+  margin-right: 8px;
+  margin-bottom: 4px;
 }
 
 .node-roles {
@@ -761,27 +763,26 @@ onUnmounted(() => {
   padding: 2px 6px;
   border-radius: 3px;
   white-space: nowrap;
-  flex-shrink: 0;
   height: 20px;
   line-height: 16px;
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
+  margin-right: 8px;
+  margin-bottom: 4px;
 }
 
 .node-ip-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  display: block;
   font-size: 12px;
   color: #52c41a;
   background: #f6ffed;
-  padding: 2px 6px;
+  padding: 4px 8px;
   border-radius: 4px;
   border: 1px solid #b7eb8f;
   white-space: nowrap;
-  flex-shrink: 0;
-  height: 20px;
-  line-height: 16px;
+  height: auto;
+  line-height: 1.4;
+  margin: 6px 0;
+  width: fit-content;
 }
 
 .ip-icon {
@@ -797,34 +798,34 @@ onUnmounted(() => {
 }
 
 .node-attributes {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: block; /* 改为block布局 */
   border-top: 1px solid #f0f0f0;
-  padding-top: 12px;
-  margin-top: 8px;
+  padding-top: 16px;
+  margin-top: 12px;
   width: 100%;
   box-sizing: border-box;
+  min-height: 40px; /* 确保最小高度 */
 }
 
 .attributes-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: block; /* 改为block布局 */
   width: 100%;
   box-sizing: border-box;
+  margin-bottom: 16px; /* 增加节之间的间距 */
 }
 
 .attributes-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  display: block;
+  margin-bottom: 8px;
+  line-height: 1.4;
 }
 
 .section-icon {
   font-size: 12px;
   color: #999;
-  flex-shrink: 0;
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: middle;
 }
 
 .section-label {
@@ -833,39 +834,36 @@ onUnmounted(() => {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .attributes-content {
-  display: flex;
-  flex-wrap: wrap; /* 允许换行但控制行数 */
-  gap: 8px 6px; /* 行间距8px，列间距6px */
-  align-items: flex-start;
-  line-height: 1.4;
+  display: block; /* 改为block布局，避免flex问题 */
   width: 100%;
   box-sizing: border-box;
-  min-height: 24px; /* 确保最小高度 */
+  min-height: 32px; /* 增加最小高度 */
+  line-height: 1.6;
+  padding: 4px 0;
 }
 
 .label-tag {
   font-size: 11px;
-  height: 22px;
-  line-height: 20px;
-  padding: 0 8px;
+  height: 24px;
+  line-height: 22px;
+  padding: 0 10px;
   font-family: 'Monaco', 'Menlo', monospace;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
+  display: inline-block; /* 改为inline-block */
   vertical-align: top;
   white-space: nowrap;
-  flex-shrink: 0; /* 防止被压缩 */
-  max-width: 200px; /* 限制最大宽度 */
+  max-width: 180px; /* 稍微减小最大宽度 */
   overflow: hidden;
   text-overflow: ellipsis;
-  margin: 2px 0; /* 增加上下边距 */
+  margin: 2px 6px 6px 0; /* 增加右边距和下边距 */
 }
 
 .label-tag:hover {
@@ -938,22 +936,20 @@ onUnmounted(() => {
 .more-labels-tag,
 .more-taints-tag {
   font-size: 11px;
-  height: 22px;
-  line-height: 20px;
-  padding: 0 8px;
+  height: 24px;
+  line-height: 22px;
+  padding: 0 10px;
   cursor: pointer;
   font-weight: 600;
   border-radius: 4px;
   transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
+  display: inline-block; /* 改为inline-block */
   vertical-align: top;
   background: #f0f0f0 !important;
   border: 1px solid #d9d9d9 !important;
   color: #666 !important;
-  flex-shrink: 0;
   white-space: nowrap;
-  margin: 2px 0; /* 增加上下边距 */
+  margin: 2px 6px 6px 0; /* 增加右边距和下边距 */
 }
 
 .more-labels-tag:hover,
