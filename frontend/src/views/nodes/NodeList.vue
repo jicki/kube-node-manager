@@ -111,8 +111,9 @@
                 {{ row.name }}
               </el-button>
               <div class="node-labels">
+                <!-- 显示主要角色标签 -->
                 <el-tag
-                  v-for="role in row.roles"
+                  v-for="role in getVisibleRoles(row.roles)"
                   :key="role"
                   :type="role === 'master' ? 'danger' : 'primary'"
                   size="small"
@@ -120,6 +121,65 @@
                 >
                   {{ formatNodeRoles([role]) }}
                 </el-tag>
+                
+                <!-- 标签折叠按钮 -->
+                <el-dropdown 
+                  v-if="hasMoreLabels(row)"
+                  trigger="click" 
+                  placement="bottom-start"
+                  @command="(cmd) => handleLabelCommand(cmd, row)"
+                >
+                  <el-tag
+                    size="small"
+                    class="more-labels-tag"
+                    type="info"
+                  >
+                    <span>+{{ getMoreLabelsCount(row) }}</span>
+                    <el-icon class="more-icon"><ArrowDown /></el-icon>
+                  </el-tag>
+                  <template #dropdown>
+                    <el-dropdown-menu class="labels-dropdown">
+                      <div class="dropdown-header">节点标签</div>
+                      <div class="dropdown-content">
+                        <!-- 所有角色标签 -->
+                        <div v-if="row.roles && row.roles.length > 0" class="label-group">
+                          <div class="group-title">角色</div>
+                          <el-tag
+                            v-for="role in row.roles"
+                            :key="`role-${role}`"
+                            :type="role === 'master' ? 'danger' : 'primary'"
+                            size="small"
+                            class="dropdown-tag"
+                          >
+                            {{ formatNodeRoles([role]) }}
+                          </el-tag>
+                        </div>
+                        
+                        <!-- 其他重要标签 -->
+                        <div v-if="getImportantLabels(row).length > 0" class="label-group">
+                          <div class="group-title">重要标签</div>
+                          <el-tag
+                            v-for="label in getImportantLabels(row)"
+                            :key="`label-${label.key}`"
+                            size="small"
+                            class="dropdown-tag"
+                          >
+                            {{ label.key }}: {{ label.value }}
+                          </el-tag>
+                        </div>
+                      </div>
+                      <div class="dropdown-footer">
+                        <el-button 
+                          type="text" 
+                          size="small"
+                          @click="viewNodeDetail(row)"
+                        >
+                          查看详情
+                        </el-button>
+                      </div>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </div>
             </div>
           </template>
@@ -318,7 +378,8 @@ import {
   WarningFilled,
   Plus,
   Check,
-  Monitor
+  Monitor,
+  ArrowDown
 } from '@element-plus/icons-vue'
 
 const nodeStore = useNodeStore()
@@ -573,6 +634,52 @@ const clearSelection = () => {
   nodeStore.clearSelectedNodes()
 }
 
+// 标签折叠相关方法
+const getVisibleRoles = (roles) => {
+  if (!roles || roles.length === 0) return []
+  // 只显示第一个角色，其余通过折叠显示
+  return roles.slice(0, 1)
+}
+
+const hasMoreLabels = (node) => {
+  const roleCount = (node.roles && node.roles.length > 1) ? node.roles.length - 1 : 0
+  const importantLabelsCount = getImportantLabels(node).length
+  return roleCount + importantLabelsCount > 0
+}
+
+const getMoreLabelsCount = (node) => {
+  const roleCount = (node.roles && node.roles.length > 1) ? node.roles.length - 1 : 0
+  const importantLabelsCount = getImportantLabels(node).length
+  return roleCount + importantLabelsCount
+}
+
+const getImportantLabels = (node) => {
+  if (!node.labels) return []
+  
+  const importantKeys = [
+    'node.kubernetes.io/instance-type',
+    'topology.kubernetes.io/zone',
+    'kubernetes.io/arch',
+    'node.kubernetes.io/node-type',
+    'node-role.kubernetes.io/gpu',
+    'nvidia.com/gpu.present'
+  ]
+  
+  return Object.entries(node.labels)
+    .filter(([key]) => importantKeys.some(importantKey => key.includes(importantKey)))
+    .map(([key, value]) => ({ key, value }))
+    .slice(0, 10) // 限制显示数量
+}
+
+const handleLabelCommand = (command, node) => {
+  // 处理下拉菜单命令
+  switch (command) {
+    case 'view-detail':
+      viewNodeDetail(node)
+      break
+  }
+}
+
 onMounted(() => {
   fetchNodes()
 })
@@ -725,6 +832,104 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   min-width: fit-content;
+}
+
+.more-labels-tag {
+  font-size: 11px;
+  height: 20px;
+  line-height: 18px;
+  font-weight: 500;
+  border-radius: 10px;
+  padding: 0 6px;
+  letter-spacing: 0.2px;
+  margin: 1px 0;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  background: #f0f0f0 !important;
+  border: 1px solid #d9d9d9 !important;
+  color: #666 !important;
+  transition: all 0.2s ease;
+}
+
+.more-labels-tag:hover {
+  background: #e6f7ff !important;
+  border-color: #91d5ff !important;
+  color: #1890ff !important;
+}
+
+.more-icon {
+  font-size: 10px;
+  margin-left: 2px;
+  transition: transform 0.2s ease;
+}
+
+.more-labels-tag:hover .more-icon {
+  transform: translateY(1px);
+}
+
+/* 下拉菜单样式 */
+.labels-dropdown {
+  min-width: 280px;
+  max-width: 400px;
+}
+
+.dropdown-header {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  background: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dropdown-content {
+  padding: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.label-group {
+  margin-bottom: 12px;
+}
+
+.label-group:last-child {
+  margin-bottom: 0;
+}
+
+.group-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #999;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dropdown-tag {
+  margin: 0 4px 4px 0;
+  font-size: 11px;
+  height: 22px;
+  line-height: 20px;
+  padding: 0 8px;
+  border-radius: 11px;
+  font-weight: 500;
+}
+
+.dropdown-footer {
+  padding: 8px 12px;
+  border-top: 1px solid #f0f0f0;
+  background: #fafafa;
+  text-align: center;
+}
+
+.dropdown-footer .el-button {
+  font-size: 12px;
+  padding: 4px 12px;
+  height: 24px;
 }
 
 .resource-usage {
@@ -909,6 +1114,22 @@ onMounted(() => {
     height: 18px;
     line-height: 16px;
     padding: 0 6px;
+  }
+  
+  .more-labels-tag {
+    font-size: 10px;
+    height: 18px;
+    line-height: 16px;
+    padding: 0 4px;
+  }
+  
+  .labels-dropdown {
+    min-width: 240px;
+    max-width: 300px;
+  }
+  
+  .dropdown-content {
+    max-height: 200px;
   }
   
   .action-buttons {
