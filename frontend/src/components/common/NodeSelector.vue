@@ -545,23 +545,41 @@ const truncateText = (text, maxLength) => {
 }
 
 // 智能截断标签键值，保留关键信息
-const smartTruncateLabel = (key, value, maxKeyLength = 15, maxValueLength = 12) => {
+const smartTruncateLabel = (key, value, maxKeyLength = 25, maxValueLength = 15) => {
   let truncatedKey = key
   let truncatedValue = value
   
-  // 对于deeproute相关的键，保留关键部分
-  if (key.includes('deeproute.cn/')) {
-    const parts = key.split('/')
-    if (parts.length > 1) {
-      truncatedKey = parts[parts.length - 1] // 只显示最后一部分
+  // 特殊处理：保留完整的标签key，只在必要时才截断
+  // 对于常见的标签key，我们希望显示完整信息
+  const importantKeys = [
+    'deeproute.cn/instance-type',
+    'deeproute.cn/user-type', 
+    'kubernetes.io/hostname',
+    'node.kubernetes.io/instance-type'
+  ]
+  
+  // 如果是重要的标签key，尽量保持完整
+  if (importantKeys.includes(key)) {
+    // 只在超出限制时才截断，且给更大的空间
+    if (key.length > maxKeyLength) {
+      // 对于deeproute标签，优化显示方式
+      if (key.includes('deeproute.cn/')) {
+        const parts = key.split('/')
+        if (parts.length === 2) {
+          truncatedKey = `${parts[0].substring(0, 12)}.../${parts[1]}`
+        }
+      } else {
+        truncatedKey = key.substring(0, maxKeyLength) + '..'
+      }
+    }
+  } else {
+    // 其他标签保持原有逻辑，但增加最大长度
+    if (key.length > maxKeyLength) {
+      truncatedKey = key.substring(0, maxKeyLength) + '..'
     }
   }
   
-  // 截断键和值
-  if (truncatedKey.length > maxKeyLength) {
-    truncatedKey = truncatedKey.substring(0, maxKeyLength) + '..'
-  }
-  
+  // 截断值
   if (truncatedValue && truncatedValue.length > maxValueLength) {
     truncatedValue = truncatedValue.substring(0, maxValueLength) + '..'
   }
@@ -1007,7 +1025,7 @@ onUnmounted(() => {
   
   .attribute-tag {
     font-size: 9px;
-    max-width: 120px;
+    max-width: 180px;
   }
   
   .arrow-icon {
