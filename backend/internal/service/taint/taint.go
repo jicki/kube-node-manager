@@ -124,7 +124,7 @@ func NewService(db *gorm.DB, logger *logger.Logger, auditSvc *audit.Service, k8s
 // UpdateNodeTaints 更新单个节点污点
 func (s *Service) UpdateNodeTaints(req UpdateTaintsRequest, userID uint) error {
 	// 验证污点信息
-	if err := s.validateTaints(req.Taints); err != nil {
+	if err := s.validateTaints(req.Taints, req.Operation); err != nil {
 		return fmt.Errorf("invalid taints: %w", err)
 	}
 
@@ -273,7 +273,7 @@ func (s *Service) BatchUpdateTaints(req BatchUpdateRequest, userID uint) error {
 // CreateTemplate 创建污点模板
 func (s *Service) CreateTemplate(req TemplateCreateRequest, userID uint) (*TemplateInfo, error) {
 	// 验证污点信息
-	if err := s.validateTaints(req.Taints); err != nil {
+	if err := s.validateTaints(req.Taints, "add"); err != nil {
 		return nil, fmt.Errorf("invalid taints: %w", err)
 	}
 
@@ -357,7 +357,7 @@ func (s *Service) UpdateTemplate(id uint, req TemplateUpdateRequest, userID uint
 	}
 
 	if req.Taints != nil {
-		if err := s.validateTaints(req.Taints); err != nil {
+		if err := s.validateTaints(req.Taints, "add"); err != nil {
 			return nil, fmt.Errorf("invalid taints: %w", err)
 		}
 
@@ -650,7 +650,7 @@ func (s *Service) GetTaintUsage(clusterName string, userID uint) ([]TaintUsage, 
 }
 
 // validateTaints 验证污点信息
-func (s *Service) validateTaints(taints []k8s.TaintInfo) error {
+func (s *Service) validateTaints(taints []k8s.TaintInfo, operation string) error {
 	validEffects := map[string]bool{
 		TaintEffectNoSchedule:       true,
 		TaintEffectPreferNoSchedule: true,
@@ -665,9 +665,12 @@ func (s *Service) validateTaints(taints []k8s.TaintInfo) error {
 			return fmt.Errorf("taint %d: key cannot be empty", i+1)
 		}
 
-		if !validEffects[taint.Effect] {
-			return fmt.Errorf("taint %d: invalid effect %s, must be one of: %s, %s, %s",
-				i+1, taint.Effect, TaintEffectNoSchedule, TaintEffectPreferNoSchedule, TaintEffectNoExecute)
+		// 对于删除操作，不需要验证Effect字段
+		if operation != "remove" {
+			if !validEffects[taint.Effect] {
+				return fmt.Errorf("taint %d: invalid effect %s, must be one of: %s, %s, %s",
+					i+1, taint.Effect, TaintEffectNoSchedule, TaintEffectPreferNoSchedule, TaintEffectNoExecute)
+			}
 		}
 
 		// 检查键名格式

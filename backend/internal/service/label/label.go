@@ -153,9 +153,17 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 		}
 	case "remove":
 		// 删除指定标签
+		s.logger.Info("Starting remove operation for labels: %+v", req.Labels)
 		for k := range req.Labels {
-			delete(updatedLabels, k)
+			s.logger.Info("Removing label key: %s", k)
+			if _, exists := updatedLabels[k]; exists {
+				delete(updatedLabels, k)
+				s.logger.Info("Successfully removed label key: %s", k)
+			} else {
+				s.logger.Warning("Label key %s not found on node %s", k, req.NodeName)
+			}
 		}
+		s.logger.Info("Labels after removal: %+v", updatedLabels)
 	case "replace":
 		// 替换所有自定义标签（保留系统标签）
 		systemLabels := make(map[string]string)
