@@ -43,6 +43,15 @@ const authApi = {
     })
   },
 
+  // 更新个人信息
+  updateProfile(data) {
+    return request({
+      url: '/api/v1/auth/profile',
+      method: 'put',
+      data
+    })
+  },
+
   // 验证Token有效性
   validateToken() {
     return request({

@@ -160,12 +160,22 @@ func (h *Handler) Get(c *gin.Context) {
 // @Tags nodes
 // @Accept json
 // @Produce json
+// @Param node_name path string true "节点名称"
 // @Param request body node.DrainRequest true "驱逐请求"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Failure 500 {object} Response
-// @Router /nodes/drain [post]
+// @Router /nodes/{node_name}/drain [post]
 func (h *Handler) Drain(c *gin.Context) {
+	nodeName := c.Param("node_name")
+	if nodeName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Node name is required",
+		})
+		return
+	}
+
 	var req node.DrainRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("Failed to bind drain request: %v", err)
@@ -175,6 +185,9 @@ func (h *Handler) Drain(c *gin.Context) {
 		})
 		return
 	}
+
+	// 设置从路径参数获取的节点名称
+	req.NodeName = nodeName
 
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -216,12 +229,22 @@ func (h *Handler) Drain(c *gin.Context) {
 // @Tags nodes
 // @Accept json
 // @Produce json
+// @Param node_name path string true "节点名称"
 // @Param request body node.CordonRequest true "封锁请求"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Failure 500 {object} Response
-// @Router /nodes/cordon [post]
+// @Router /nodes/{node_name}/cordon [post]
 func (h *Handler) Cordon(c *gin.Context) {
+	nodeName := c.Param("node_name")
+	if nodeName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Node name is required",
+		})
+		return
+	}
+
 	var req node.CordonRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("Failed to bind cordon request: %v", err)
@@ -231,6 +254,9 @@ func (h *Handler) Cordon(c *gin.Context) {
 		})
 		return
 	}
+
+	// 设置从路径参数获取的节点名称
+	req.NodeName = nodeName
 
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -262,12 +288,22 @@ func (h *Handler) Cordon(c *gin.Context) {
 // @Tags nodes
 // @Accept json
 // @Produce json
+// @Param node_name path string true "节点名称"
 // @Param request body node.CordonRequest true "取消封锁请求"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Failure 500 {object} Response
-// @Router /nodes/uncordon [post]
+// @Router /nodes/{node_name}/uncordon [post]
 func (h *Handler) Uncordon(c *gin.Context) {
+	nodeName := c.Param("node_name")
+	if nodeName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Node name is required",
+		})
+		return
+	}
+
 	var req node.CordonRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("Failed to bind uncordon request: %v", err)
@@ -277,6 +313,9 @@ func (h *Handler) Uncordon(c *gin.Context) {
 		})
 		return
 	}
+
+	// 设置从路径参数获取的节点名称
+	req.NodeName = nodeName
 
 	userID, exists := c.Get("user_id")
 	if !exists {

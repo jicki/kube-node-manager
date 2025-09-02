@@ -85,6 +85,8 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		auth.POST("/logout", handlers.Auth.Logout)
 		auth.POST("/refresh", handlers.Auth.RefreshToken)
 		auth.GET("/user", handlers.Auth.AuthMiddleware(), handlers.Auth.GetUser)
+		auth.PUT("/profile", handlers.Auth.AuthMiddleware(), handlers.Auth.UpdateProfile)
+		auth.POST("/change-password", handlers.Auth.AuthMiddleware(), handlers.Auth.ChangePassword)
 	}
 
 	protected := api.Group("/")
@@ -115,6 +117,10 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		nodes.GET("", handlers.Node.List)
 		nodes.GET("/:cluster_id/:node_name", handlers.Node.Get)
 		nodes.GET("/:cluster_id/stats", handlers.Node.GetSummary)
+		// 单节点操作
+		nodes.POST("/:node_name/cordon", handlers.Node.Cordon)
+		nodes.POST("/:node_name/uncordon", handlers.Node.Uncordon)
+		nodes.POST("/:node_name/drain", handlers.Node.Drain)
 		// 批量标签操作
 		nodes.POST("/labels/batch-add", handlers.Label.BatchAddLabels)
 		nodes.POST("/labels/batch-delete", handlers.Label.BatchDeleteLabels)

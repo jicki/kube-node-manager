@@ -68,17 +68,68 @@ func (h *Handler) GetUser(c *gin.Context) {
 		return
 	}
 
-	username, _ := c.Get("username")
-	userRole, _ := c.Get("user_role")
+	user, err := h.service.GetUserByID(userID.(uint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "Success",
-		"data": gin.H{
-			"id":       userID,
-			"username": username,
-			"role":     userRole,
-		},
+		"data":    user,
+	})
+}
+
+// UpdateProfile 更新个人信息
+func (h *Handler) UpdateProfile(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	var req auth.UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	user, err := h.service.UpdateProfile(userID.(uint), req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Profile updated successfully",
+		"data":    user,
+	})
+}
+
+// ChangePassword 修改密码
+func (h *Handler) ChangePassword(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	var req auth.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.ChangePassword(userID.(uint), req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Password changed successfully",
 	})
 }
 

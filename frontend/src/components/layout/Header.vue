@@ -243,7 +243,8 @@ const toggleSidebar = () => {
 const handleUserCommand = (command) => {
   switch (command) {
     case 'profile':
-      // 打开个人信息页面
+      // 跳转到个人信息页面
+      router.push('/profile')
       break
     case 'changePassword':
       changePasswordVisible.value = true

@@ -57,6 +57,12 @@ const router = createRouter({
           name: 'AuditLog',
           component: () => import('@/views/audit/AuditLog.vue'),
           meta: { title: '审计日志', icon: 'Document', requiresAuth: true }
+        },
+        {
+          path: 'profile',
+          name: 'UserProfile',
+          component: () => import('@/views/profile/UserProfile.vue'),
+          meta: { title: '个人信息', icon: 'User', requiresAuth: true }
         }
       ]
     },

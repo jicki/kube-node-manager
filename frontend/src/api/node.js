@@ -19,27 +19,36 @@ const nodeApi = {
   },
 
   // 封锁节点
-  cordonNode(nodeName) {
+  cordonNode(nodeName, clusterName) {
     return request({
       url: `/api/v1/nodes/${nodeName}/cordon`,
-      method: 'post'
+      method: 'post',
+      data: {
+        cluster_name: clusterName
+      }
     })
   },
 
   // 取消封锁节点
-  uncordonNode(nodeName) {
+  uncordonNode(nodeName, clusterName) {
     return request({
       url: `/api/v1/nodes/${nodeName}/uncordon`,
-      method: 'post'
+      method: 'post',
+      data: {
+        cluster_name: clusterName
+      }
     })
   },
 
   // 驱逐节点
-  drainNode(nodeName, options = {}) {
+  drainNode(nodeName, clusterName, options = {}) {
     return request({
       url: `/api/v1/nodes/${nodeName}/drain`,
       method: 'post',
-      data: options
+      data: {
+        cluster_name: clusterName,
+        ...options
+      }
     })
   },
 

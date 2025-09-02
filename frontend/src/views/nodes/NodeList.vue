@@ -454,6 +454,7 @@
 
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { useNodeStore } from '@/store/modules/node'
 import { useClusterStore } from '@/store/modules/cluster'
 import { formatTime, formatNodeStatus, formatNodeRoles, formatCPU, formatMemory } from '@/utils/format'
@@ -479,6 +480,7 @@ import {
   QuestionFilled
 } from '@element-plus/icons-vue'
 
+const router = useRouter()
 const nodeStore = useNodeStore()
 const clusterStore = useClusterStore()
 
@@ -645,9 +647,23 @@ const handleNodeAction = (command, node) => {
       break
     case 'labels':
       // 跳转到标签管理页面，传递节点信息
+      router.push({
+        path: '/labels',
+        query: {
+          node_name: node.name,
+          cluster_name: clusterStore.currentClusterName
+        }
+      })
       break
     case 'taints':
       // 跳转到污点管理页面，传递节点信息
+      router.push({
+        path: '/taints',
+        query: {
+          node_name: node.name,
+          cluster_name: clusterStore.currentClusterName
+        }
+      })
       break
   }
 }

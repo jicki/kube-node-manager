@@ -166,7 +166,12 @@ export const useNodeStore = defineStore('node', {
 
     async cordonNode(nodeName) {
       try {
-        const response = await nodeApi.cordonNode(nodeName)
+        const clusterStore = useClusterStore()
+        const clusterName = clusterStore.currentClusterName
+        if (!clusterName) {
+          throw new Error('请先选择集群')
+        }
+        const response = await nodeApi.cordonNode(nodeName, clusterName)
         await this.fetchNodes()
         return response
       } catch (error) {
@@ -176,7 +181,12 @@ export const useNodeStore = defineStore('node', {
 
     async uncordonNode(nodeName) {
       try {
-        const response = await nodeApi.uncordonNode(nodeName)
+        const clusterStore = useClusterStore()
+        const clusterName = clusterStore.currentClusterName
+        if (!clusterName) {
+          throw new Error('请先选择集群')
+        }
+        const response = await nodeApi.uncordonNode(nodeName, clusterName)
         await this.fetchNodes()
         return response
       } catch (error) {
@@ -186,7 +196,12 @@ export const useNodeStore = defineStore('node', {
 
     async drainNode(nodeName, options = {}) {
       try {
-        const response = await nodeApi.drainNode(nodeName, options)
+        const clusterStore = useClusterStore()
+        const clusterName = clusterStore.currentClusterName
+        if (!clusterName) {
+          throw new Error('请先选择集群')
+        }
+        const response = await nodeApi.drainNode(nodeName, clusterName, options)
         await this.fetchNodes()
         return response
       } catch (error) {

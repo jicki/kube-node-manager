@@ -46,6 +46,15 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+type UpdateProfileRequest struct {
+	Email string `json:"email" binding:"omitempty,email"`
+}
+
+type ChangePasswordRequest struct {
+	OldPassword string `json:"oldPassword" binding:"required"`
+	NewPassword string `json:"newPassword" binding:"required,min=6"`
+}
+
 func NewService(db *gorm.DB, logger *logger.Logger, jwtCfg config.JWTConfig, ldap *ldap.Service, audit *audit.Service) *Service {
 	return &Service{
 		db:     db,
@@ -235,4 +244,82 @@ func (s *Service) validateToken(tokenString string) (*Claims, error) {
 	}
 
 	return nil, errors.New("invalid token")
+}
+
+// GetUserByID 根据ID获取用户信息
+func (s *Service) GetUserByID(userID uint) (*model.User, error) {
+	var user model.User
+	if err := s.db.First(&user, userID).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// UpdateProfile 更新用户个人信息
+func (s *Service) UpdateProfile(userID uint, req UpdateProfileRequest) (*model.User, error) {
+	var user model.User
+	if err := s.db.First(&user, userID).Error; err != nil {
+		return nil, err
+	}
+
+	if req.Email != "" && req.Email != user.Email {
+		// 检查邮箱是否已存在
+		var existingUser model.User
+		if err := s.db.Where("email = ? AND id != ?", req.Email, userID).First(&existingUser).Error; err == nil {
+			return nil, errors.New("email already exists")
+		}
+		user.Email = req.Email
+	}
+
+	if err := s.db.Save(&user).Error; err != nil {
+		return nil, err
+	}
+
+	s.audit.Log(audit.LogRequest{
+		UserID:       userID,
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceUser,
+		Details:      fmt.Sprintf("Updated profile for user: %s", user.Username),
+		Status:       model.AuditStatusSuccess,
+	})
+
+	return &user, nil
+}
+
+// ChangePassword 修改用户密码
+func (s *Service) ChangePassword(userID uint, req ChangePasswordRequest) error {
+	var user model.User
+	if err := s.db.First(&user, userID).Error; err != nil {
+		return err
+	}
+
+	if !user.CheckPassword(req.OldPassword) {
+		s.audit.Log(audit.LogRequest{
+			UserID:       userID,
+			Action:       model.ActionUpdate,
+			ResourceType: model.ResourceUser,
+			Details:      fmt.Sprintf("Failed password change attempt for user: %s", user.Username),
+			Status:       model.AuditStatusFailed,
+			ErrorMsg:     "Incorrect current password",
+		})
+		return errors.New("current password is incorrect")
+	}
+
+	if err := user.HashPassword(req.NewPassword); err != nil {
+		return err
+	}
+
+	if err := s.db.Save(&user).Error; err != nil {
+		return err
+	}
+
+	s.audit.Log(audit.LogRequest{
+		UserID:       userID,
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceUser,
+		Details:      fmt.Sprintf("Password changed successfully for user: %s", user.Username),
+		Status:       model.AuditStatusSuccess,
+	})
+
+	return nil
 }
