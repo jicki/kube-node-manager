@@ -74,7 +74,7 @@
               </el-form-item>
 
               <el-form-item label="最后登录">
-                <span class="info-text">{{ formatTime(profileForm.last_login) }}</span>
+                <span class="info-text">{{ profileForm.last_login ? formatTime(profileForm.last_login) : '从未登录' }}</span>
               </el-form-item>
             </el-form>
           </el-card>

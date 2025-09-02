@@ -53,7 +53,9 @@ export const useNodeStore = defineStore('node', {
 
   getters: {
     readyNodes: (state) => state.nodes.filter(node => node.status === 'Ready'),
-    notReadyNodes: (state) => state.nodes.filter(node => node.status === 'NotReady'),
+    notReadyNodes: (state) => state.nodes.filter(node => 
+      node.status === 'NotReady' || node.status === 'SchedulingDisabled'
+    ),
     unknownNodes: (state) => state.nodes.filter(node => node.status === 'Unknown'),
     masterNodes: (state) => state.nodes.filter(node => {
       if (!node.roles || !Array.isArray(node.roles)) return false
@@ -254,6 +256,18 @@ export const useNodeStore = defineStore('node', {
       this.nodeStats.schedulable = this.schedulableNodes.length
       this.nodeStats.limited = this.limitedNodes.length
       this.nodeStats.unschedulable = this.unschedulableNodes.length
+      
+      // 调试日志，帮助诊断统计不匹配问题
+      if (this.nodeStats.ready + this.nodeStats.notReady + this.nodeStats.unknown !== this.nodeStats.total) {
+        console.warn('节点统计不匹配:', {
+          total: this.nodeStats.total,
+          ready: this.nodeStats.ready,
+          notReady: this.nodeStats.notReady,
+          unknown: this.nodeStats.unknown,
+          sum: this.nodeStats.ready + this.nodeStats.notReady + this.nodeStats.unknown,
+          nodeStatuses: this.nodes.map(node => ({ name: node.name, status: node.status }))
+        })
+      }
     },
 
     resetFilters() {

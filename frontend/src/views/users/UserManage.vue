@@ -111,17 +111,17 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="lastLogin" label="最后登录" width="180">
+        <el-table-column prop="last_login" label="最后登录" width="180">
           <template #default="{ row }">
             <span class="time-text">
-              {{ row.lastLogin ? formatTime(row.lastLogin) : '从未登录' }}
+              {{ row.last_login ? formatTime(row.last_login) : '从未登录' }}
             </span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="createdAt" label="创建时间" width="180">
+        <el-table-column prop="created_at" label="创建时间" width="180">
           <template #default="{ row }">
-            <span class="time-text">{{ formatTime(row.createdAt) }}</span>
+            <span class="time-text">{{ formatTime(row.created_at) }}</span>
           </template>
         </el-table-column>
 
