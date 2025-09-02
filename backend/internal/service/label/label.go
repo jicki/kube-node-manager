@@ -136,11 +136,18 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 		// 添加或更新标签
 		for k, v := range req.Labels {
 			// 验证并清理标签值
+			s.logger.Info("Processing label: key=%s, original_value=%s", k, v)
 			cleanedValue := s.sanitizeLabelValue(v)
+			s.logger.Info("Cleaned label: key=%s, cleaned_value=%s", k, cleanedValue)
 			if cleanedValue != "" {
 				updatedLabels[k] = cleanedValue
 			} else {
-				s.logger.Warning("Skipping invalid label value for key %s: %s", k, v)
+				s.logger.Warning("Skipping invalid label value for key %s: original=%s, cleaned=%s", k, v, cleanedValue)
+				// 如果清理后的值为空，保留原有标签值（如果存在）
+				if existingValue, exists := currentNode.Labels[k]; exists {
+					s.logger.Info("Preserving existing label value for key %s: %s", k, existingValue)
+					updatedLabels[k] = existingValue
+				}
 			}
 		}
 	case "remove":
@@ -159,11 +166,13 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 		updatedLabels = systemLabels
 		for k, v := range req.Labels {
 			// 验证并清理标签值
+			s.logger.Info("Processing replace label: key=%s, original_value=%s", k, v)
 			cleanedValue := s.sanitizeLabelValue(v)
+			s.logger.Info("Cleaned replace label: key=%s, cleaned_value=%s", k, cleanedValue)
 			if cleanedValue != "" {
 				updatedLabels[k] = cleanedValue
 			} else {
-				s.logger.Warning("Skipping invalid label value for key %s: %s", k, v)
+				s.logger.Warning("Skipping invalid label value for key %s: original=%s, cleaned=%s", k, v, cleanedValue)
 			}
 		}
 	default:
@@ -171,6 +180,7 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 	}
 
 	// 更新节点标签
+	s.logger.Info("Final labels to apply: %+v", updatedLabels)
 	updateReq := k8s.LabelUpdateRequest{
 		NodeName: req.NodeName,
 		Labels:   updatedLabels,
