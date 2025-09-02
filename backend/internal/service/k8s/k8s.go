@@ -104,7 +104,7 @@ func (s *Service) CreateClient(clusterName, kubeconfig string) error {
 
 	config, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeconfig))
 	if err != nil {
-		s.logger.Error("Failed to parse kubeconfig for cluster %s: %v", clusterName, err)
+		s.logger.Errorf("Failed to parse kubeconfig for cluster %s: %v", clusterName, err)
 		return fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
@@ -113,7 +113,7 @@ func (s *Service) CreateClient(clusterName, kubeconfig string) error {
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		s.logger.Error("Failed to create Kubernetes client for cluster %s: %v", clusterName, err)
+		s.logger.Errorf("Failed to create Kubernetes client for cluster %s: %v", clusterName, err)
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
@@ -124,19 +124,19 @@ func (s *Service) CreateClient(clusterName, kubeconfig string) error {
 	// 使用基础的API版本检查来验证连接
 	_, err = clientset.Discovery().ServerVersion()
 	if err != nil {
-		s.logger.Error("Failed to test connection for cluster %s: %v", clusterName, err)
+		s.logger.Errorf("Failed to test connection for cluster %s: %v", clusterName, err)
 		return fmt.Errorf("failed to connect to kubernetes cluster: %w", err)
 	}
 
 	// 尝试检查节点权限（可选）
 	_, err = clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
 	if err != nil {
-		s.logger.Warning("Limited permissions for cluster %s: cannot list nodes: %v", clusterName, err)
+		s.logger.Warningf("Limited permissions for cluster %s: cannot list nodes: %v", clusterName, err)
 		// 不阻止客户端创建，只是记录警告
 	}
 
 	s.clients[clusterName] = clientset
-	s.logger.Info("Successfully created Kubernetes client for cluster: %s", clusterName)
+	s.logger.Infof("Successfully created Kubernetes client for cluster: %s", clusterName)
 	return nil
 }
 
@@ -146,7 +146,7 @@ func (s *Service) RemoveClient(clusterName string) {
 	defer s.mu.Unlock()
 
 	delete(s.clients, clusterName)
-	s.logger.Info("Removed Kubernetes client for cluster: %s", clusterName)
+	s.logger.Infof("Removed Kubernetes client for cluster: %s", clusterName)
 }
 
 // getClient 获取指定集群的客户端
@@ -171,7 +171,7 @@ func (s *Service) GetClusterInfo(clusterName string) (*ClusterInfo, error) {
 	// 获取集群版本
 	version, err := client.Discovery().ServerVersion()
 	if err != nil {
-		s.logger.Error("Failed to get server version for cluster %s: %v", clusterName, err)
+		s.logger.Errorf("Failed to get server version for cluster %s: %v", clusterName, err)
 		return nil, fmt.Errorf("failed to get server version: %w", err)
 	}
 
@@ -201,7 +201,7 @@ func (s *Service) ListNodes(clusterName string) ([]NodeInfo, error) {
 
 	nodeList, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		s.logger.Error("Failed to list nodes for cluster %s: %v", clusterName, err)
+		s.logger.Errorf("Failed to list nodes for cluster %s: %v", clusterName, err)
 		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}
 
@@ -226,7 +226,7 @@ func (s *Service) GetNode(clusterName, nodeName string) (*NodeInfo, error) {
 
 	node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
-		s.logger.Error("Failed to get node %s for cluster %s: %v", nodeName, clusterName, err)
+		s.logger.Errorf("Failed to get node %s for cluster %s: %v", nodeName, clusterName, err)
 		return nil, fmt.Errorf("failed to get node: %w", err)
 	}
 
@@ -247,33 +247,33 @@ func (s *Service) UpdateNodeLabels(clusterName string, req LabelUpdateRequest) e
 	// 获取当前节点
 	node, err := client.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
 	if err != nil {
-		s.logger.Error("Failed to get node %s: %v", req.NodeName, err)
+		s.logger.Errorf("Failed to get node %s: %v", req.NodeName, err)
 		return fmt.Errorf("failed to get node: %w", err)
 	}
 
 	// 更新标签
-	s.logger.Info("Current node labels before update: %+v", node.Labels)
-	s.logger.Info("Received labels to apply: %+v", req.Labels)
-	
+	s.logger.Infof("Current node labels before update: %+v", node.Labels)
+	s.logger.Infof("Received labels to apply: %+v", req.Labels)
+
 	// 完全替换节点标签
 	// 这样可以确保删除操作正确生效
 	node.Labels = make(map[string]string)
-	
+
 	for key, value := range req.Labels {
-		s.logger.Info("Setting label %s = %s", key, value)
+		s.logger.Infof("Setting label %s = %s", key, value)
 		node.Labels[key] = value
 	}
-	
-	s.logger.Info("Node labels after update: %+v", node.Labels)
+
+	s.logger.Infof("Node labels after update: %+v", node.Labels)
 
 	// 更新节点
 	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
 	if err != nil {
-		s.logger.Error("Failed to update node labels for %s: %v", req.NodeName, err)
+		s.logger.Errorf("Failed to update node labels for %s: %v", req.NodeName, err)
 		return fmt.Errorf("failed to update node labels: %w", err)
 	}
 
-	s.logger.Info("Successfully updated labels for node %s in cluster %s", req.NodeName, clusterName)
+	s.logger.Infof("Successfully updated labels for node %s in cluster %s", req.NodeName, clusterName)
 	return nil
 }
 
@@ -290,7 +290,7 @@ func (s *Service) UpdateNodeTaints(clusterName string, req TaintUpdateRequest) e
 	// 获取当前节点
 	node, err := client.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
 	if err != nil {
-		s.logger.Error("Failed to get node %s: %v", req.NodeName, err)
+		s.logger.Errorf("Failed to get node %s: %v", req.NodeName, err)
 		return fmt.Errorf("failed to get node: %w", err)
 	}
 
@@ -314,11 +314,11 @@ func (s *Service) UpdateNodeTaints(clusterName string, req TaintUpdateRequest) e
 	// 更新节点
 	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
 	if err != nil {
-		s.logger.Error("Failed to update node taints for %s: %v", req.NodeName, err)
+		s.logger.Errorf("Failed to update node taints for %s: %v", req.NodeName, err)
 		return fmt.Errorf("failed to update node taints: %w", err)
 	}
 
-	s.logger.Info("Successfully updated taints for node %s in cluster %s", req.NodeName, clusterName)
+	s.logger.Infof("Successfully updated taints for node %s in cluster %s", req.NodeName, clusterName)
 	return nil
 }
 
@@ -376,11 +376,42 @@ func (s *Service) DrainNode(clusterName, nodeName string) error {
 			GracePeriodSeconds: func() *int64 { i := int64(30); return &i }(),
 		})
 		if err != nil {
-			s.logger.Warning("Failed to delete pod %s/%s: %v", pod.Namespace, pod.Name, err)
+			s.logger.Warningf("Failed to delete pod %s/%s: %v", pod.Namespace, pod.Name, err)
 		}
 	}
 
-	s.logger.Info("Successfully drained node %s in cluster %s", nodeName, clusterName)
+	s.logger.Infof("Successfully drained node %s in cluster %s", nodeName, clusterName)
+	return nil
+}
+
+// CordonNode 封锁节点（仅设置不可调度，不删除pod）
+func (s *Service) CordonNode(clusterName, nodeName string) error {
+	client, err := s.getClient(clusterName)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get node: %w", err)
+	}
+
+	// 如果节点已经不可调度，直接返回成功
+	if node.Spec.Unschedulable {
+		s.logger.Infof("Node %s in cluster %s is already cordoned", nodeName, clusterName)
+		return nil
+	}
+
+	node.Spec.Unschedulable = true
+	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to cordon node: %w", err)
+	}
+
+	s.logger.Infof("Successfully cordoned node %s in cluster %s", nodeName, clusterName)
 	return nil
 }
 
@@ -399,13 +430,19 @@ func (s *Service) UncordonNode(clusterName, nodeName string) error {
 		return fmt.Errorf("failed to get node: %w", err)
 	}
 
+	// 如果节点已经可调度，直接返回成功
+	if !node.Spec.Unschedulable {
+		s.logger.Infof("Node %s in cluster %s is already uncordoned", nodeName, clusterName)
+		return nil
+	}
+
 	node.Spec.Unschedulable = false
 	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to uncordon node: %w", err)
 	}
 
-	s.logger.Info("Successfully uncordoned node %s in cluster %s", nodeName, clusterName)
+	s.logger.Infof("Successfully uncordoned node %s in cluster %s", nodeName, clusterName)
 	return nil
 }
 
@@ -569,14 +606,14 @@ func (s *Service) TestConnection(kubeconfig string) error {
 	// 2. 尝试列出节点（需要nodes权限，可选）
 	_, err = clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
 	if err != nil {
-		s.logger.Warning("Cannot list nodes with this kubeconfig (limited permissions): %v", err)
+		s.logger.Warningf("Cannot list nodes with this kubeconfig (limited permissions): %v", err)
 		// 不返回错误，只是记录警告
 		// 对于只有特定权限的service account，这是正常的
 
 		// 3. 尝试列出命名空间（更基础的权限）
 		_, err = clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{Limit: 1})
 		if err != nil {
-			s.logger.Warning("Cannot list namespaces with this kubeconfig: %v", err)
+			s.logger.Warningf("Cannot list namespaces with this kubeconfig: %v", err)
 			// 仍然不返回错误，继续验证其他权限
 		}
 	}

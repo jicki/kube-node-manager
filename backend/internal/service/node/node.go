@@ -90,7 +90,7 @@ func NewService(logger *logger.Logger, k8sSvc *k8s.Service, auditSvc *audit.Serv
 func (s *Service) List(req ListRequest, userID uint) ([]k8s.NodeInfo, error) {
 	nodes, err := s.k8sSvc.ListNodes(req.ClusterName)
 	if err != nil {
-		s.logger.Error("Failed to list nodes for cluster %s: %v", req.ClusterName, err)
+		s.logger.Errorf("Failed to list nodes for cluster %s: %v", req.ClusterName, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			Action:       model.ActionView,
@@ -123,7 +123,7 @@ func (s *Service) List(req ListRequest, userID uint) ([]k8s.NodeInfo, error) {
 func (s *Service) Get(req GetRequest, userID uint) (*k8s.NodeInfo, error) {
 	node, err := s.k8sSvc.GetNode(req.ClusterName, req.NodeName)
 	if err != nil {
-		s.logger.Error("Failed to get node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
+		s.logger.Errorf("Failed to get node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			NodeName:     req.NodeName,
@@ -152,7 +152,7 @@ func (s *Service) Get(req GetRequest, userID uint) (*k8s.NodeInfo, error) {
 func (s *Service) Drain(req DrainRequest, userID uint) error {
 	err := s.k8sSvc.DrainNode(req.ClusterName, req.NodeName)
 	if err != nil {
-		s.logger.Error("Failed to drain node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
+		s.logger.Errorf("Failed to drain node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			NodeName:     req.NodeName,
@@ -165,7 +165,7 @@ func (s *Service) Drain(req DrainRequest, userID uint) error {
 		return fmt.Errorf("failed to drain node: %w", err)
 	}
 
-	s.logger.Info("Successfully drained node %s for cluster %s", req.NodeName, req.ClusterName)
+	s.logger.Infof("Successfully drained node %s for cluster %s", req.NodeName, req.ClusterName)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		NodeName:     req.NodeName,
@@ -180,21 +180,10 @@ func (s *Service) Drain(req DrainRequest, userID uint) error {
 
 // Cordon 封锁节点（标记为不可调度）
 func (s *Service) Cordon(req CordonRequest, userID uint) error {
-	// 获取当前节点信息
-	node, err := s.k8sSvc.GetNode(req.ClusterName, req.NodeName)
+	// 执行封锁操作（仅设置不可调度，不删除pods）
+	err := s.k8sSvc.CordonNode(req.ClusterName, req.NodeName)
 	if err != nil {
-		return fmt.Errorf("failed to get node: %w", err)
-	}
-
-	// 如果节点已经是不可调度状态，直接返回
-	if node.Status == "SchedulingDisabled" {
-		return fmt.Errorf("node %s is already cordoned", req.NodeName)
-	}
-
-	// 执行驱逐操作（不删除pods）
-	err = s.k8sSvc.DrainNode(req.ClusterName, req.NodeName)
-	if err != nil {
-		s.logger.Error("Failed to cordon node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
+		s.logger.Errorf("Failed to cordon node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			NodeName:     req.NodeName,
@@ -207,7 +196,7 @@ func (s *Service) Cordon(req CordonRequest, userID uint) error {
 		return fmt.Errorf("failed to cordon node: %w", err)
 	}
 
-	s.logger.Info("Successfully cordoned node %s for cluster %s", req.NodeName, req.ClusterName)
+	s.logger.Infof("Successfully cordoned node %s for cluster %s", req.NodeName, req.ClusterName)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		NodeName:     req.NodeName,
@@ -224,7 +213,7 @@ func (s *Service) Cordon(req CordonRequest, userID uint) error {
 func (s *Service) Uncordon(req CordonRequest, userID uint) error {
 	err := s.k8sSvc.UncordonNode(req.ClusterName, req.NodeName)
 	if err != nil {
-		s.logger.Error("Failed to uncordon node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
+		s.logger.Errorf("Failed to uncordon node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			NodeName:     req.NodeName,
@@ -237,7 +226,7 @@ func (s *Service) Uncordon(req CordonRequest, userID uint) error {
 		return fmt.Errorf("failed to uncordon node: %w", err)
 	}
 
-	s.logger.Info("Successfully uncordoned node %s for cluster %s", req.NodeName, req.ClusterName)
+	s.logger.Infof("Successfully uncordoned node %s for cluster %s", req.NodeName, req.ClusterName)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		NodeName:     req.NodeName,
@@ -254,7 +243,7 @@ func (s *Service) Uncordon(req CordonRequest, userID uint) error {
 func (s *Service) GetSummary(clusterName string, userID uint) (*NodeSummary, error) {
 	nodes, err := s.k8sSvc.ListNodes(clusterName)
 	if err != nil {
-		s.logger.Error("Failed to get node summary for cluster %s: %v", clusterName, err)
+		s.logger.Errorf("Failed to get node summary for cluster %s: %v", clusterName, err)
 		return nil, fmt.Errorf("failed to get nodes: %w", err)
 	}
 
@@ -353,7 +342,7 @@ func (s *Service) filterNodes(nodes []k8s.NodeInfo, req ListRequest) []k8s.NodeI
 func (s *Service) GetMetrics(clusterName, nodeName string, userID uint) (*NodeMetrics, error) {
 	node, err := s.k8sSvc.GetNode(clusterName, nodeName)
 	if err != nil {
-		s.logger.Error("Failed to get node metrics for %s: %v", nodeName, err)
+		s.logger.Errorf("Failed to get node metrics for %s: %v", nodeName, err)
 		return nil, fmt.Errorf("failed to get node: %w", err)
 	}
 
@@ -454,7 +443,7 @@ func (s *Service) BatchCordon(req BatchNodeRequest, userID uint) (map[string]int
 
 		if err := s.Cordon(cordonReq, userID); err != nil {
 			errors[nodeName] = err.Error()
-			s.logger.Error("Failed to cordon node %s: %v", nodeName, err)
+			s.logger.Errorf("Failed to cordon node %s: %v", nodeName, err)
 		} else {
 			successful = append(successful, nodeName)
 		}
@@ -492,7 +481,7 @@ func (s *Service) BatchUncordon(req BatchNodeRequest, userID uint) (map[string]i
 
 		if err := s.Uncordon(uncordonReq, userID); err != nil {
 			errors[nodeName] = err.Error()
-			s.logger.Error("Failed to uncordon node %s: %v", nodeName, err)
+			s.logger.Errorf("Failed to uncordon node %s: %v", nodeName, err)
 		} else {
 			successful = append(successful, nodeName)
 		}
@@ -544,7 +533,7 @@ func (s *Service) BatchDrain(req BatchDrainRequest, userID uint) (map[string]int
 
 		if err := s.Drain(drainReq, userID); err != nil {
 			errors[nodeName] = err.Error()
-			s.logger.Error("Failed to drain node %s: %v", nodeName, err)
+			s.logger.Errorf("Failed to drain node %s: %v", nodeName, err)
 		} else {
 			successful = append(successful, nodeName)
 		}
