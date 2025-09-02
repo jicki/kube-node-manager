@@ -423,16 +423,20 @@ const passwordRules = {
 
 // 计算属性
 const userStats = computed(() => {
-  const total = users.value.length
-  const admin = users.value.filter(u => u.role === 'admin').length
-  const active = users.value.filter(u => u.status === 'active').length
-  const online = users.value.filter(u => u.isOnline).length
+  // 确保users.value是数组
+  const userList = Array.isArray(users.value) ? users.value : []
+  const total = userList.length
+  const admin = userList.filter(u => u.role === 'admin').length
+  const active = userList.filter(u => u.status === 'active').length
+  const online = userList.filter(u => u.isOnline).length
   
   return { total, admin, active, online }
 })
 
 const filteredUsers = computed(() => {
-  return users.value.slice(
+  // 确保users.value是数组
+  const userList = Array.isArray(users.value) ? users.value : []
+  return userList.slice(
     (pagination.current - 1) * pagination.size,
     pagination.current * pagination.size
   )
@@ -463,10 +467,52 @@ const fetchUsers = async () => {
   try {
     loading.value = true
     const response = await userApi.getUsers()
-    users.value = response.data?.items || response.data || []
-    pagination.total = users.value.length
+    
+    // 处理响应数据
+    let userData = []
+    let totalCount = 0
+    
+    if (response.data) {
+      // 新的统一响应格式: {code: 200, message: "Success", data: {users: [], total: n}}
+      if (response.data.data && response.data.data.users) {
+        userData = Array.isArray(response.data.data.users) ? response.data.data.users : []
+        totalCount = response.data.data.total || userData.length
+      }
+      // 直接的响应格式: {users: [], total: n}
+      else if (response.data.users) {
+        userData = Array.isArray(response.data.users) ? response.data.users : []
+        totalCount = response.data.total || userData.length
+      }
+      // 如果返回的是数组
+      else if (Array.isArray(response.data)) {
+        userData = response.data
+        totalCount = userData.length
+      }
+      // 如果返回的是单个用户对象（向后兼容）
+      else if (response.data.username) {
+        userData = [response.data]
+        totalCount = 1
+      }
+      // 处理包装在data字段中的单个用户对象
+      else if (response.data.data && response.data.data.username) {
+        userData = [response.data.data]
+        totalCount = 1
+      }
+      else {
+        console.warn('未识别的响应格式:', response.data)
+        userData = []
+        totalCount = 0
+      }
+    }
+    
+    users.value = userData
+    pagination.total = totalCount
+    
   } catch (error) {
-    ElMessage.error('获取用户数据失败')
+    console.error('获取用户数据失败:', error)
+    ElMessage.error(`获取用户数据失败: ${error.message || '系统错误'}`)
+    users.value = []
+    pagination.total = 0
   } finally {
     loading.value = false
   }
