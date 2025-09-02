@@ -144,7 +144,7 @@ func (h *Handler) BatchUpdateLabels(c *gin.Context) {
 func (h *Handler) CreateTemplate(c *gin.Context) {
 	var req label.TemplateCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error("Failed to bind create template request: %v", err)
+		h.logger.Errorf("Failed to bind create template request: %v", err)
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: "Invalid request parameters: " + err.Error(),
@@ -163,7 +163,7 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 
 	template, err := h.labelSvc.CreateTemplate(req, userID.(uint))
 	if err != nil {
-		h.logger.Error("Failed to create label template: %v", err)
+		h.logger.Errorf("Failed to create label template: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    http.StatusInternalServerError,
 			Message: "Failed to create label template: " + err.Error(),

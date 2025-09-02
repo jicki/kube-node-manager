@@ -38,16 +38,16 @@ type BatchUpdateRequest struct {
 
 // TemplateCreateRequest 创建标签模板请求
 type TemplateCreateRequest struct {
-	Name        string            `json:"name" binding:"required"`
-	Description string            `json:"description"`
-	Labels      map[string]string `json:"labels" binding:"required"`
+	Name        string                 `json:"name" binding:"required"`
+	Description string                 `json:"description"`
+	Labels      map[string]interface{} `json:"labels" binding:"required"`
 }
 
 // TemplateUpdateRequest 更新标签模板请求
 type TemplateUpdateRequest struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Labels      map[string]string `json:"labels"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Labels      map[string]interface{} `json:"labels"`
 }
 
 // TemplateListRequest 模板列表请求
@@ -79,19 +79,19 @@ type TemplateInfo struct {
 
 // ApplyTemplateRequest 应用模板请求
 type ApplyTemplateRequest struct {
-	ClusterName  string            `json:"cluster_name" binding:"required"`
-	NodeNames    []string          `json:"node_names" binding:"required"`
-	TemplateID   uint              `json:"template_id" binding:"required"`
-	Operation    string            `json:"operation"` // add, replace
-	Labels       map[string]string `json:"labels"`    // 用户选择的具体标签值
+	ClusterName string            `json:"cluster_name" binding:"required"`
+	NodeNames   []string          `json:"node_names" binding:"required"`
+	TemplateID  uint              `json:"template_id" binding:"required"`
+	Operation   string            `json:"operation"` // add, replace
+	Labels      map[string]string `json:"labels"`    // 用户选择的具体标签值
 }
 
 // LabelUsage 标签使用情况
 type LabelUsage struct {
-	Key        string   `json:"key"`
-	Values     []string `json:"values"`
-	NodeCount  int      `json:"node_count"`
-	Nodes      []string `json:"nodes,omitempty"`
+	Key       string   `json:"key"`
+	Values    []string `json:"values"`
+	NodeCount int      `json:"node_count"`
+	Nodes     []string `json:"nodes,omitempty"`
 }
 
 // NewService 创建新的标签管理服务实例
@@ -124,7 +124,7 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 
 	// 准备更新的标签
 	updatedLabels := make(map[string]string)
-	
+
 	// 复制现有标签
 	if currentNode.Labels != nil {
 		for k, v := range currentNode.Labels {
@@ -275,8 +275,42 @@ func (s *Service) CreateTemplate(req TemplateCreateRequest, userID uint) (*Templ
 		return nil, fmt.Errorf("failed to check template name: %w", err)
 	}
 
-	// 序列化标签
-	labelsJSON, err := json.Marshal(req.Labels)
+	// 将labels转换为map[string]string格式（处理多值情况）
+	processedLabels := make(map[string]string)
+	for key, value := range req.Labels {
+		switch v := value.(type) {
+		case string:
+			processedLabels[key] = v
+		case []interface{}:
+			// 将数组转换为逗号分隔的字符串
+			var values []string
+			for _, item := range v {
+				if str, ok := item.(string); ok && str != "" {
+					values = append(values, str)
+				}
+			}
+			if len(values) > 0 {
+				processedLabels[key] = strings.Join(values, ",")
+			}
+		case []string:
+			// 直接处理字符串数组
+			var values []string
+			for _, str := range v {
+				if str != "" {
+					values = append(values, str)
+				}
+			}
+			if len(values) > 0 {
+				processedLabels[key] = strings.Join(values, ",")
+			}
+		default:
+			// 其他类型转为字符串
+			processedLabels[key] = fmt.Sprintf("%v", v)
+		}
+	}
+
+	// 序列化处理后的标签
+	labelsJSON, err := json.Marshal(processedLabels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize labels: %w", err)
 	}
@@ -289,7 +323,7 @@ func (s *Service) CreateTemplate(req TemplateCreateRequest, userID uint) (*Templ
 	}
 
 	if err := s.db.Create(&template).Error; err != nil {
-		s.logger.Error("Failed to create label template %s: %v", req.Name, err)
+		s.logger.Errorf("Failed to create label template %s: %v", req.Name, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			Action:       model.ActionCreate,
@@ -307,7 +341,7 @@ func (s *Service) CreateTemplate(req TemplateCreateRequest, userID uint) (*Templ
 		return nil, err
 	}
 
-	s.logger.Info("Successfully created label template: %s", template.Name)
+	s.logger.Infof("Successfully created label template: %s", template.Name)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		Action:       model.ActionCreate,
@@ -347,7 +381,41 @@ func (s *Service) UpdateTemplate(id uint, req TemplateUpdateRequest, userID uint
 	}
 
 	if req.Labels != nil {
-		labelsJSON, err := json.Marshal(req.Labels)
+		// 将labels转换为map[string]string格式（处理多值情况）
+		processedLabels := make(map[string]string)
+		for key, value := range req.Labels {
+			switch v := value.(type) {
+			case string:
+				processedLabels[key] = v
+			case []interface{}:
+				// 将数组转换为逗号分隔的字符串
+				var values []string
+				for _, item := range v {
+					if str, ok := item.(string); ok && str != "" {
+						values = append(values, str)
+					}
+				}
+				if len(values) > 0 {
+					processedLabels[key] = strings.Join(values, ",")
+				}
+			case []string:
+				// 直接处理字符串数组
+				var values []string
+				for _, str := range v {
+					if str != "" {
+						values = append(values, str)
+					}
+				}
+				if len(values) > 0 {
+					processedLabels[key] = strings.Join(values, ",")
+				}
+			default:
+				// 其他类型转为字符串
+				processedLabels[key] = fmt.Sprintf("%v", v)
+			}
+		}
+
+		labelsJSON, err := json.Marshal(processedLabels)
 		if err != nil {
 			return nil, fmt.Errorf("failed to serialize labels: %w", err)
 		}
@@ -356,7 +424,7 @@ func (s *Service) UpdateTemplate(id uint, req TemplateUpdateRequest, userID uint
 
 	if len(updates) > 0 {
 		if err := s.db.Model(&template).Updates(updates).Error; err != nil {
-			s.logger.Error("Failed to update label template %s: %v", template.Name, err)
+			s.logger.Errorf("Failed to update label template %s: %v", template.Name, err)
 			s.auditSvc.Log(audit.LogRequest{
 				UserID:       userID,
 				Action:       model.ActionUpdate,
@@ -379,7 +447,7 @@ func (s *Service) UpdateTemplate(id uint, req TemplateUpdateRequest, userID uint
 		return nil, err
 	}
 
-	s.logger.Info("Successfully updated label template: %s", template.Name)
+	s.logger.Infof("Successfully updated label template: %s", template.Name)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		Action:       model.ActionUpdate,
@@ -548,7 +616,7 @@ func (s *Service) GetLabelUsage(clusterName string, userID uint) ([]LabelUsage, 
 			if s.isSystemLabel(key) {
 				continue
 			}
-			
+
 			if labelMap[key] == nil {
 				labelMap[key] = make(map[string][]string)
 			}

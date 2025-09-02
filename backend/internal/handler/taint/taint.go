@@ -210,7 +210,7 @@ func (h *Handler) RemoveTaint(c *gin.Context) {
 func (h *Handler) CreateTemplate(c *gin.Context) {
 	var req taint.TemplateCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error("Failed to bind create template request: %v", err)
+		h.logger.Errorf("Failed to bind create template request: %v", err)
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: "Invalid request parameters: " + err.Error(),
@@ -229,7 +229,7 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 
 	template, err := h.taintSvc.CreateTemplate(req, userID.(uint))
 	if err != nil {
-		h.logger.Error("Failed to create taint template: %v", err)
+		h.logger.Errorf("Failed to create taint template: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    http.StatusInternalServerError,
 			Message: "Failed to create taint template: " + err.Error(),
@@ -376,7 +376,7 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 // @Router /taints/templates [get]
 func (h *Handler) ListTemplates(c *gin.Context) {
 	var req taint.TemplateListRequest
-	
+
 	// 解析查询参数
 	if pageStr := c.Query("page"); pageStr != "" {
 		if page, err := strconv.Atoi(pageStr); err == nil {
@@ -453,7 +453,7 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 		Page:     1,
 		PageSize: 100,
 	}
-	
+
 	result, err := h.taintSvc.ListTemplates(listReq, userID.(uint))
 	if err != nil {
 		h.logger.Error("Failed to get taint template: %v", err)
