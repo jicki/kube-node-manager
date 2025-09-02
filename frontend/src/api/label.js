@@ -46,11 +46,12 @@ const labelApi = {
   },
 
   // 批量删除标签
-  batchDeleteLabels(requestData) {
+  batchDeleteLabels(requestData, config = {}) {
     return request({
       url: '/api/v1/nodes/labels/batch-delete',
       method: 'post',
-      data: requestData
+      data: requestData,
+      ...config
     })
   },
 

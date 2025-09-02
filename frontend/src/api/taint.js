@@ -45,11 +45,12 @@ const taintApi = {
   },
 
   // 批量删除污点
-  batchDeleteTaints(requestData) {
+  batchDeleteTaints(requestData, config = {}) {
     return request({
       url: '/api/v1/nodes/taints/batch-delete',
       method: 'post',
-      data: requestData
+      data: requestData,
+      ...config
     })
   },
 

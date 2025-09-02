@@ -960,18 +960,10 @@ const confirmBatchDeleteLabels = async () => {
       cluster_name: clusterStore.currentClusterName
     }
 
-    const response = await fetch('/api/v1/nodes/labels/batch-delete?cluster_name=' + encodeURIComponent(clusterStore.currentClusterName), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestData)
+    // 使用配置好的API方法而不是原生fetch
+    const response = await labelApi.batchDeleteLabels(requestData, {
+      params: { cluster_name: clusterStore.currentClusterName }
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || '删除失败')
-    }
     
     ElMessage.success(`成功删除 ${selectedNodes.value.length} 个节点的标签`)
     batchDeleteLabelsVisible.value = false
@@ -1016,18 +1008,10 @@ const confirmBatchDeleteTaints = async () => {
       cluster_name: clusterStore.currentClusterName
     }
 
-    const response = await fetch('/api/v1/nodes/taints/batch-delete?cluster_name=' + encodeURIComponent(clusterStore.currentClusterName), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestData)
+    // 使用配置好的API方法而不是原生fetch
+    const response = await taintApi.batchDeleteTaints(requestData, {
+      params: { cluster_name: clusterStore.currentClusterName }
     })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || '删除失败')
-    }
     
     ElMessage.success(`成功删除 ${selectedNodes.value.length} 个节点的污点`)
     batchDeleteTaintsVisible.value = false
