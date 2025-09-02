@@ -501,7 +501,7 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 func (h *Handler) ApplyTemplate(c *gin.Context) {
 	var req taint.ApplyTemplateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error("Failed to bind apply template request: %v", err)
+		h.logger.Errorf("Failed to bind apply template request: %v", err)
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: "Invalid request parameters: " + err.Error(),
@@ -519,7 +519,7 @@ func (h *Handler) ApplyTemplate(c *gin.Context) {
 	}
 
 	if err := h.taintSvc.ApplyTemplate(req, userID.(uint)); err != nil {
-		h.logger.Error("Failed to apply taint template: %v", err)
+		h.logger.Errorf("Failed to apply taint template: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    http.StatusInternalServerError,
 			Message: "Failed to apply taint template: " + err.Error(),

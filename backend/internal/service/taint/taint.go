@@ -23,10 +23,10 @@ type Service struct {
 
 // UpdateTaintsRequest 更新节点污点请求
 type UpdateTaintsRequest struct {
-	ClusterName string           `json:"cluster_name" binding:"required"`
-	NodeName    string           `json:"node_name" binding:"required"`
-	Taints      []k8s.TaintInfo  `json:"taints" binding:"required"`
-	Operation   string           `json:"operation"` // add, remove, replace
+	ClusterName string          `json:"cluster_name" binding:"required"`
+	NodeName    string          `json:"node_name" binding:"required"`
+	Taints      []k8s.TaintInfo `json:"taints" binding:"required"`
+	Operation   string          `json:"operation"` // add, remove, replace
 }
 
 // BatchUpdateRequest 批量更新污点请求
@@ -56,8 +56,8 @@ type TemplateListRequest struct {
 	Page     int    `json:"page"`
 	PageSize int    `json:"page_size"`
 	Name     string `json:"name"`
-	Search   string `json:"search"`   // 搜索关键词
-	Effect   string `json:"effect"`   // 按效果筛选
+	Search   string `json:"search"` // 搜索关键词
+	Effect   string `json:"effect"` // 按效果筛选
 }
 
 // TemplateListResponse 模板列表响应
@@ -82,10 +82,11 @@ type TemplateInfo struct {
 
 // ApplyTemplateRequest 应用模板请求
 type ApplyTemplateRequest struct {
-	ClusterName  string   `json:"cluster_name" binding:"required"`
-	NodeNames    []string `json:"node_names" binding:"required"`
-	TemplateID   uint     `json:"template_id" binding:"required"`
-	Operation    string   `json:"operation"` // add, replace
+	ClusterName string          `json:"cluster_name" binding:"required"`
+	NodeNames   []string        `json:"node_names" binding:"required"`
+	TemplateID  uint            `json:"template_id" binding:"required"`
+	Operation   string          `json:"operation"`        // add, replace
+	Taints      []k8s.TaintInfo `json:"taints,omitempty"` // 前端选择的污点值
 }
 
 // TaintUsage 污点使用情况
@@ -501,7 +502,7 @@ func (s *Service) ListTemplates(req TemplateListRequest, userID uint) (*Template
 			// 如果已经通过名称或描述匹配，则直接添加
 			nameMatch := strings.Contains(strings.ToLower(template.Name), searchTerm)
 			descMatch := strings.Contains(strings.ToLower(template.Description), searchTerm)
-			
+
 			if !nameMatch && !descMatch {
 				// 检查是否匹配污点Key
 				keyMatch := false
@@ -539,10 +540,38 @@ func (s *Service) ApplyTemplate(req ApplyTemplateRequest, userID uint) error {
 		return fmt.Errorf("failed to get template: %w", err)
 	}
 
-	// 解析模板污点
+	// 使用用户提供的污点值，如果没有提供则使用模板污点
 	var taints []k8s.TaintInfo
-	if err := json.Unmarshal([]byte(template.Taints), &taints); err != nil {
-		return fmt.Errorf("failed to parse template taints: %w", err)
+	if req.Taints != nil && len(req.Taints) > 0 {
+		// 使用前端发送的用户选择的污点值（已经清理过MULTI_VALUE分隔符）
+		taints = req.Taints
+		s.logger.Infof("Using user-selected taints: %+v", taints)
+	} else {
+		// 回退到模板的原始污点
+		if err := json.Unmarshal([]byte(template.Taints), &taints); err != nil {
+			return fmt.Errorf("failed to parse template taints: %w", err)
+		}
+		s.logger.Infof("Using template taints: %+v", taints)
+
+		// 清理模板污点中的多值分隔符（防止直接应用模板时出错）
+		for i := range taints {
+			if strings.Contains(taints[i].Value, "|MULTI_VALUE|") {
+				// 如果包含多值分隔符，取第一个值
+				values := strings.Split(taints[i].Value, "|MULTI_VALUE|")
+				cleanValues := make([]string, 0)
+				for _, value := range values {
+					if trimmed := strings.TrimSpace(value); trimmed != "" {
+						cleanValues = append(cleanValues, trimmed)
+					}
+				}
+				if len(cleanValues) > 0 {
+					taints[i].Value = cleanValues[0]
+					s.logger.Infof("Cleaned multi-value taint: %s = %s (from %d values)", taints[i].Key, taints[i].Value, len(cleanValues))
+				} else {
+					taints[i].Value = ""
+				}
+			}
+		}
 	}
 
 	// 应用到所有指定节点
@@ -686,7 +715,7 @@ func (s *Service) validateTaints(taints []k8s.TaintInfo, operation string) error
 	for key, values := range keyValueMap {
 		hasEmpty := false
 		hasNonEmpty := false
-		
+
 		for _, value := range values {
 			if value == "" {
 				hasEmpty = true
@@ -694,7 +723,7 @@ func (s *Service) validateTaints(taints []k8s.TaintInfo, operation string) error
 				hasNonEmpty = true
 			}
 		}
-		
+
 		if hasEmpty && hasNonEmpty {
 			return fmt.Errorf("taint key '%s': cannot have both empty and non-empty values simultaneously", key)
 		}
