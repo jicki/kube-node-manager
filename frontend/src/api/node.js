@@ -53,29 +53,39 @@ const nodeApi = {
   },
 
   // 批量封锁节点
-  batchCordon(nodeNames) {
+  batchCordon(nodeNames, clusterName) {
     return request({
       url: '/api/v1/nodes/batch-cordon',
       method: 'post',
-      data: { nodes: nodeNames }
+      data: { 
+        nodes: nodeNames,
+        cluster_name: clusterName
+      }
     })
   },
 
   // 批量取消封锁节点
-  batchUncordon(nodeNames) {
+  batchUncordon(nodeNames, clusterName) {
     return request({
       url: '/api/v1/nodes/batch-uncordon',
       method: 'post',
-      data: { nodes: nodeNames }
+      data: { 
+        nodes: nodeNames,
+        cluster_name: clusterName
+      }
     })
   },
 
   // 批量驱逐节点
-  batchDrain(nodeNames, options = {}) {
+  batchDrain(nodeNames, clusterName, options = {}) {
     return request({
       url: '/api/v1/nodes/batch-drain',
       method: 'post',
-      data: { nodes: nodeNames, options }
+      data: { 
+        nodes: nodeNames, 
+        cluster_name: clusterName,
+        options 
+      }
     })
   },
 

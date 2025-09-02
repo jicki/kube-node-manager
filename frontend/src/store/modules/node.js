@@ -213,7 +213,8 @@ export const useNodeStore = defineStore('node', {
 
     async batchCordon(nodeNames) {
       try {
-        const response = await nodeApi.batchCordon(nodeNames)
+        const clusterStore = useClusterStore()
+        const response = await nodeApi.batchCordon(nodeNames, clusterStore.currentClusterName)
         await this.fetchNodes()
         return response
       } catch (error) {
@@ -223,7 +224,8 @@ export const useNodeStore = defineStore('node', {
 
     async batchUncordon(nodeNames) {
       try {
-        const response = await nodeApi.batchUncordon(nodeNames)
+        const clusterStore = useClusterStore()
+        const response = await nodeApi.batchUncordon(nodeNames, clusterStore.currentClusterName)
         await this.fetchNodes()
         return response
       } catch (error) {
