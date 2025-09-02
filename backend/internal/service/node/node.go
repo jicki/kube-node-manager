@@ -44,6 +44,19 @@ type CordonRequest struct {
 	NodeName    string `json:"node_name"` // 从URL路径参数获取，不需要binding验证
 }
 
+// BatchNodeRequest 批量节点操作请求
+type BatchNodeRequest struct {
+	ClusterName string   `json:"cluster_name"`
+	Nodes       []string `json:"nodes" binding:"required"`
+}
+
+// BatchDrainRequest 批量驱逐请求
+type BatchDrainRequest struct {
+	ClusterName string                 `json:"cluster_name"`
+	Nodes       []string               `json:"nodes" binding:"required"`
+	Options     map[string]interface{} `json:"options,omitempty"`
+}
+
 // NodeMetrics 节点指标
 type NodeMetrics struct {
 	NodeName    string              `json:"node_name"`
@@ -425,4 +438,132 @@ func (s *Service) ValidateNodeOperation(clusterName, nodeName string, operation 
 	}
 
 	return nil
+}
+
+// BatchCordon 批量封锁节点
+func (s *Service) BatchCordon(req BatchNodeRequest, userID uint) (map[string]interface{}, error) {
+	results := make(map[string]interface{})
+	errors := make(map[string]string)
+	successful := make([]string, 0)
+
+	for _, nodeName := range req.Nodes {
+		cordonReq := CordonRequest{
+			ClusterName: req.ClusterName,
+			NodeName:    nodeName,
+		}
+
+		if err := s.Cordon(cordonReq, userID); err != nil {
+			errors[nodeName] = err.Error()
+			s.logger.Error("Failed to cordon node %s: %v", nodeName, err)
+		} else {
+			successful = append(successful, nodeName)
+		}
+	}
+
+	results["successful"] = successful
+	results["errors"] = errors
+	results["total"] = len(req.Nodes)
+	results["success_count"] = len(successful)
+	results["error_count"] = len(errors)
+
+	// 记录审计日志
+	s.auditSvc.Log(audit.LogRequest{
+		UserID:       userID,
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceNode,
+		Details:      fmt.Sprintf("Batch cordon %d nodes in cluster %s: %d successful, %d failed", len(req.Nodes), req.ClusterName, len(successful), len(errors)),
+		Status:       model.AuditStatusSuccess,
+	})
+
+	return results, nil
+}
+
+// BatchUncordon 批量取消封锁节点
+func (s *Service) BatchUncordon(req BatchNodeRequest, userID uint) (map[string]interface{}, error) {
+	results := make(map[string]interface{})
+	errors := make(map[string]string)
+	successful := make([]string, 0)
+
+	for _, nodeName := range req.Nodes {
+		uncordonReq := CordonRequest{
+			ClusterName: req.ClusterName,
+			NodeName:    nodeName,
+		}
+
+		if err := s.Uncordon(uncordonReq, userID); err != nil {
+			errors[nodeName] = err.Error()
+			s.logger.Error("Failed to uncordon node %s: %v", nodeName, err)
+		} else {
+			successful = append(successful, nodeName)
+		}
+	}
+
+	results["successful"] = successful
+	results["errors"] = errors
+	results["total"] = len(req.Nodes)
+	results["success_count"] = len(successful)
+	results["error_count"] = len(errors)
+
+	// 记录审计日志
+	s.auditSvc.Log(audit.LogRequest{
+		UserID:       userID,
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceNode,
+		Details:      fmt.Sprintf("Batch uncordon %d nodes in cluster %s: %d successful, %d failed", len(req.Nodes), req.ClusterName, len(successful), len(errors)),
+		Status:       model.AuditStatusSuccess,
+	})
+
+	return results, nil
+}
+
+// BatchDrain 批量驱逐节点
+func (s *Service) BatchDrain(req BatchDrainRequest, userID uint) (map[string]interface{}, error) {
+	results := make(map[string]interface{})
+	errors := make(map[string]string)
+	successful := make([]string, 0)
+
+	for _, nodeName := range req.Nodes {
+		// 验证节点是否可以驱逐
+		if err := s.ValidateNodeOperation(req.ClusterName, nodeName, "drain"); err != nil {
+			errors[nodeName] = err.Error()
+			continue
+		}
+
+		drainReq := DrainRequest{
+			ClusterName: req.ClusterName,
+			NodeName:    nodeName,
+			Force:       false, // 默认不强制
+		}
+
+		// 检查options中是否有force参数
+		if req.Options != nil {
+			if force, ok := req.Options["force"].(bool); ok {
+				drainReq.Force = force
+			}
+		}
+
+		if err := s.Drain(drainReq, userID); err != nil {
+			errors[nodeName] = err.Error()
+			s.logger.Error("Failed to drain node %s: %v", nodeName, err)
+		} else {
+			successful = append(successful, nodeName)
+		}
+	}
+
+	results["successful"] = successful
+	results["errors"] = errors
+	results["total"] = len(req.Nodes)
+	results["success_count"] = len(successful)
+	results["error_count"] = len(errors)
+
+	// 记录审计日志
+	s.auditSvc.Log(audit.LogRequest{
+		UserID:       userID,
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceNode,
+		Details:      fmt.Sprintf("Batch drain %d nodes in cluster %s: %d successful, %d failed", len(req.Nodes), req.ClusterName, len(successful), len(errors)),
+		Status:       model.AuditStatusSuccess,
+	})
+
+	return results, nil
 }

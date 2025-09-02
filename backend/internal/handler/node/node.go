@@ -444,6 +444,207 @@ func (h *Handler) GetMetrics(c *gin.Context) {
 	})
 }
 
+// BatchCordon 批量封锁节点
+// @Summary 批量封锁节点
+// @Description 批量标记节点为不可调度
+// @Tags nodes
+// @Accept json
+// @Produce json
+// @Param request body node.BatchNodeRequest true "批量封锁请求"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /nodes/batch-cordon [post]
+func (h *Handler) BatchCordon(c *gin.Context) {
+	var req node.BatchNodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind batch cordon request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
+
+	if len(req.Nodes) == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "At least one node is required",
+		})
+		return
+	}
+
+	if req.ClusterName == "" {
+		req.ClusterName = c.Query("cluster_name")
+		if req.ClusterName == "" {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    http.StatusBadRequest,
+				Message: "cluster_name is required",
+			})
+			return
+		}
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	results, err := h.nodeSvc.BatchCordon(req, userID.(uint))
+	if err != nil {
+		h.logger.Error("Failed to batch cordon nodes: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to batch cordon nodes: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Batch cordon completed",
+		Data:    results,
+	})
+}
+
+// BatchUncordon 批量取消封锁节点
+// @Summary 批量取消封锁节点
+// @Description 批量标记节点为可调度
+// @Tags nodes
+// @Accept json
+// @Produce json
+// @Param request body node.BatchNodeRequest true "批量取消封锁请求"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /nodes/batch-uncordon [post]
+func (h *Handler) BatchUncordon(c *gin.Context) {
+	var req node.BatchNodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind batch uncordon request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
+
+	if len(req.Nodes) == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "At least one node is required",
+		})
+		return
+	}
+
+	if req.ClusterName == "" {
+		req.ClusterName = c.Query("cluster_name")
+		if req.ClusterName == "" {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    http.StatusBadRequest,
+				Message: "cluster_name is required",
+			})
+			return
+		}
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	results, err := h.nodeSvc.BatchUncordon(req, userID.(uint))
+	if err != nil {
+		h.logger.Error("Failed to batch uncordon nodes: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to batch uncordon nodes: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Batch uncordon completed",
+		Data:    results,
+	})
+}
+
+// BatchDrain 批量驱逐节点
+// @Summary 批量驱逐节点
+// @Description 批量驱逐节点上的所有Pod，并标记为不可调度
+// @Tags nodes
+// @Accept json
+// @Produce json
+// @Param request body node.BatchDrainRequest true "批量驱逐请求"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /nodes/batch-drain [post]
+func (h *Handler) BatchDrain(c *gin.Context) {
+	var req node.BatchDrainRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind batch drain request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
+
+	if len(req.Nodes) == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "At least one node is required",
+		})
+		return
+	}
+
+	if req.ClusterName == "" {
+		req.ClusterName = c.Query("cluster_name")
+		if req.ClusterName == "" {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    http.StatusBadRequest,
+				Message: "cluster_name is required",
+			})
+			return
+		}
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	results, err := h.nodeSvc.BatchDrain(req, userID.(uint))
+	if err != nil {
+		h.logger.Error("Failed to batch drain nodes: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to batch drain nodes: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Batch drain completed",
+		Data:    results,
+	})
+}
+
 // GetByLabels 根据标签获取节点
 // @Summary 根据标签获取节点
 // @Description 根据标签选择器获取节点列表
