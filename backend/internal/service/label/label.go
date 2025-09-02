@@ -290,7 +290,7 @@ func (s *Service) CreateTemplate(req TemplateCreateRequest, userID uint) (*Templ
 				}
 			}
 			if len(values) > 0 {
-				processedLabels[key] = strings.Join(values, ",")
+				processedLabels[key] = strings.Join(values, "|MULTI_VALUE|")
 			}
 		case []string:
 			// 直接处理字符串数组
@@ -301,7 +301,7 @@ func (s *Service) CreateTemplate(req TemplateCreateRequest, userID uint) (*Templ
 				}
 			}
 			if len(values) > 0 {
-				processedLabels[key] = strings.Join(values, ",")
+				processedLabels[key] = strings.Join(values, "|MULTI_VALUE|")
 			}
 		default:
 			// 其他类型转为字符串
@@ -396,7 +396,7 @@ func (s *Service) UpdateTemplate(id uint, req TemplateUpdateRequest, userID uint
 					}
 				}
 				if len(values) > 0 {
-					processedLabels[key] = strings.Join(values, ",")
+					processedLabels[key] = strings.Join(values, "|MULTI_VALUE|")
 				}
 			case []string:
 				// 直接处理字符串数组
@@ -407,7 +407,7 @@ func (s *Service) UpdateTemplate(id uint, req TemplateUpdateRequest, userID uint
 					}
 				}
 				if len(values) > 0 {
-					processedLabels[key] = strings.Join(values, ",")
+					processedLabels[key] = strings.Join(values, "|MULTI_VALUE|")
 				}
 			default:
 				// 其他类型转为字符串
