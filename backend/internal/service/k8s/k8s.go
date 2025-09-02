@@ -255,20 +255,13 @@ func (s *Service) UpdateNodeLabels(clusterName string, req LabelUpdateRequest) e
 	s.logger.Info("Current node labels before update: %+v", node.Labels)
 	s.logger.Info("Received labels to apply: %+v", req.Labels)
 	
-	if node.Labels == nil {
-		node.Labels = make(map[string]string)
-	}
-
+	// 完全替换节点标签
+	// 这样可以确保删除操作正确生效
+	node.Labels = make(map[string]string)
+	
 	for key, value := range req.Labels {
-		if value == "" {
-			// 删除标签
-			s.logger.Info("Deleting label %s (empty value)", key)
-			delete(node.Labels, key)
-		} else {
-			// 添加或更新标签
-			s.logger.Info("Setting label %s = %s", key, value)
-			node.Labels[key] = value
-		}
+		s.logger.Info("Setting label %s = %s", key, value)
+		node.Labels[key] = value
 	}
 	
 	s.logger.Info("Node labels after update: %+v", node.Labels)
