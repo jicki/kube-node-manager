@@ -135,7 +135,13 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 	case "add", "":
 		// 添加或更新标签
 		for k, v := range req.Labels {
-			updatedLabels[k] = v
+			// 验证并清理标签值
+			cleanedValue := s.sanitizeLabelValue(v)
+			if cleanedValue != "" {
+				updatedLabels[k] = cleanedValue
+			} else {
+				s.logger.Warning("Skipping invalid label value for key %s: %s", k, v)
+			}
 		}
 	case "remove":
 		// 删除指定标签
@@ -152,7 +158,13 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 		}
 		updatedLabels = systemLabels
 		for k, v := range req.Labels {
-			updatedLabels[k] = v
+			// 验证并清理标签值
+			cleanedValue := s.sanitizeLabelValue(v)
+			if cleanedValue != "" {
+				updatedLabels[k] = cleanedValue
+			} else {
+				s.logger.Warning("Skipping invalid label value for key %s: %s", k, v)
+			}
 		}
 	default:
 		return fmt.Errorf("invalid operation: %s", req.Operation)
@@ -571,6 +583,50 @@ func (s *Service) isSystemLabel(key string) bool {
 	}
 
 	return false
+}
+
+// sanitizeLabelValue 清理标签值，确保符合Kubernetes格式要求
+func (s *Service) sanitizeLabelValue(value string) string {
+	// 移除|MULTI_VALUE|分隔符，只取第一个值
+	if strings.Contains(value, "|MULTI_VALUE|") {
+		parts := strings.Split(value, "|MULTI_VALUE|")
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				value = trimmed
+				break
+			}
+		}
+	}
+
+	// Kubernetes标签值的正则表达式验证
+	// 必须是空字符串或包含字母数字字符、'-'、'_' 或 '.'，并且必须以字母数字字符开始和结束
+	// 最大长度63字符
+	if len(value) > 63 {
+		value = value[:63]
+	}
+
+	// 移除不合法字符，只保留字母数字字符、'-'、'_' 和 '.'
+	cleaned := ""
+	for _, r := range value {
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			cleaned += string(r)
+		}
+	}
+
+	// 确保以字母数字字符开始和结束
+	if cleaned != "" {
+		// 移除开头的非字母数字字符
+		for len(cleaned) > 0 && !((cleaned[0] >= 'A' && cleaned[0] <= 'Z') || (cleaned[0] >= 'a' && cleaned[0] <= 'z') || (cleaned[0] >= '0' && cleaned[0] <= '9')) {
+			cleaned = cleaned[1:]
+		}
+		// 移除结尾的非字母数字字符
+		for len(cleaned) > 0 && !((cleaned[len(cleaned)-1] >= 'A' && cleaned[len(cleaned)-1] <= 'Z') || (cleaned[len(cleaned)-1] >= 'a' && cleaned[len(cleaned)-1] <= 'z') || (cleaned[len(cleaned)-1] >= '0' && cleaned[len(cleaned)-1] <= '9')) {
+			cleaned = cleaned[:len(cleaned)-1]
+		}
+	}
+
+	return cleaned
 }
 
 // getTemplateInfo 获取模板信息

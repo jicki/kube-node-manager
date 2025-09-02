@@ -651,9 +651,9 @@ const fetchLabels = async () => {
                 return v
               }).filter(v => v !== '')
               
-              // 重新连接清理后的值
+              // 对于多值，存储为数组；单值直接存储
               cleanedLabels[key] = cleanedValues.length > 1 
-                ? cleanedValues.join('|MULTI_VALUE|')
+                ? cleanedValues
                 : (cleanedValues[0] || '')
             } else {
               // 验证单值
@@ -951,10 +951,9 @@ const handleSaveLabel = async () => {
         return value
       }).filter(v => v !== '') // 移除清理后的空值
       
-      // 如果有多个值，用特殊分隔符连接（用于标识这是多值）
-      // 注意：这只是为了内部存储，应用时会被分离
+      // 对于多值，存储为数组；单值直接存储
       if (validCleanValues.length > 1) {
-        labelsObj[key] = validCleanValues.join('|MULTI_VALUE|')
+        labelsObj[key] = validCleanValues
       } else {
         labelsObj[key] = validCleanValues[0] || ''
       }
@@ -1093,14 +1092,12 @@ const showApplyDialog = (template) => {
       }).filter(v => v !== '') // 移除清理后的空值
       
       if (cleanedValues.length > 0) {
-        // 如果有多个清理后的值，重新用分隔符连接
-        cleanedLabels[key] = cleanedValues.length > 1 
-          ? cleanedValues.join('|MULTI_VALUE|') 
-          : cleanedValues[0]
-        
-        // 为多值标签设置默认选择
+        // 对于多值标签，存储数组以便UI选择，但不再使用MULTI_VALUE分隔符
         if (cleanedValues.length > 1) {
-          templateCopy.selectedValues[key] = cleanedValues[0]
+          cleanedLabels[key] = cleanedValues  // 存储为数组
+          templateCopy.selectedValues[key] = cleanedValues[0] // 默认选择第一个值
+        } else {
+          cleanedLabels[key] = cleanedValues[0] // 单值直接存储
         }
       }
     })
@@ -1148,13 +1145,22 @@ const handleApplyTemplate = async () => {
           finalValue = getSingleValue(value)
         }
         
+        // 强制清理所有可能包含MULTI_VALUE分隔符的值
+        if (typeof finalValue === 'string' && finalValue.includes('|MULTI_VALUE|')) {
+          const cleanValues = finalValue.split('|MULTI_VALUE|').filter(v => v.trim() !== '')
+          finalValue = cleanValues[0] || ''
+        }
+        
         // 验证最终值符合Kubernetes标签格式
         if (finalValue && isValidLabelValue(finalValue)) {
           labelsToApply[key] = finalValue
         } else if (finalValue) {
           // 如果值不符合格式，记录警告并使用清理后的值
           console.warn(`标签值不符合Kubernetes格式，将被清理: ${finalValue}`)
-          labelsToApply[key] = sanitizeLabelValue(finalValue)
+          const sanitizedValue = sanitizeLabelValue(finalValue)
+          if (sanitizedValue && sanitizedValue !== '') {
+            labelsToApply[key] = sanitizedValue
+          }
         }
       })
     }
