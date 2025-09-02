@@ -663,6 +663,17 @@ const batchDeleteLabelsForm = reactive({
   keys: []
 })
 const batchDeleteLabelsFormRef = ref(null)
+const customLabelKey = ref('')
+const availableLabelKeys = computed(() => {
+  // 从已选择的节点中提取所有标签键
+  const keys = new Set()
+  selectedNodes.value.forEach(node => {
+    if (node.labels) {
+      Object.keys(node.labels).forEach(key => keys.add(key))
+    }
+  })
+  return Array.from(keys).sort()
+})
 
 // 批量删除污点对话框相关
 const batchDeleteTaintsVisible = ref(false)
@@ -670,6 +681,17 @@ const batchDeleteTaintsForm = reactive({
   keys: []
 })
 const batchDeleteTaintsFormRef = ref(null)
+const customTaintKey = ref('')
+const availableTaintKeys = computed(() => {
+  // 从已选择的节点中提取所有污点键
+  const keys = new Set()
+  selectedNodes.value.forEach(node => {
+    if (node.taints && Array.isArray(node.taints)) {
+      node.taints.forEach(taint => keys.add(taint.key))
+    }
+  })
+  return Array.from(keys).sort()
+})
 
 // 搜索和筛选处理函数
 
@@ -1015,6 +1037,44 @@ const confirmBatchDeleteTaints = async () => {
     ElMessage.error(`批量删除污点失败: ${error.message || '未知错误'}`)
   } finally {
     batchLoading.deleteTaints = false
+  }
+}
+
+// 标签键管理方法
+const onLabelKeysChange = (keys) => {
+  // 当选择的标签键发生变化时的处理
+  console.log('Selected label keys:', keys)
+}
+
+const addCustomLabelKey = () => {
+  const key = customLabelKey.value.trim()
+  if (key && !batchDeleteLabelsForm.keys.includes(key)) {
+    batchDeleteLabelsForm.keys.push(key)
+    customLabelKey.value = ''
+    ElMessage.success(`已添加标签键: ${key}`)
+  } else if (!key) {
+    ElMessage.warning('请输入标签键')
+  } else {
+    ElMessage.warning('该标签键已存在')
+  }
+}
+
+// 污点键管理方法
+const onTaintKeysChange = (keys) => {
+  // 当选择的污点键发生变化时的处理
+  console.log('Selected taint keys:', keys)
+}
+
+const addCustomTaintKey = () => {
+  const key = customTaintKey.value.trim()
+  if (key && !batchDeleteTaintsForm.keys.includes(key)) {
+    batchDeleteTaintsForm.keys.push(key)
+    customTaintKey.value = ''
+    ElMessage.success(`已添加污点键: ${key}`)
+  } else if (!key) {
+    ElMessage.warning('请输入污点键')
+  } else {
+    ElMessage.warning('该污点键已存在')
   }
 }
 
