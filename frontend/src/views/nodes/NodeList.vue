@@ -93,6 +93,15 @@
           <el-icon><Download /></el-icon>
           批量驱逐
         </el-button>
+        <el-divider direction="vertical" />
+        <el-button type="warning" @click="showBatchDeleteLabelsDialog" :loading="batchLoading.deleteLabels">
+          <el-icon><CollectionTag /></el-icon>
+          批量删除标签
+        </el-button>
+        <el-button type="warning" @click="showBatchDeleteTaintsDialog" :loading="batchLoading.deleteTaints">
+          <el-icon><WarningFilled /></el-icon>
+          批量删除污点
+        </el-button>
       </div>
     </div>
 
@@ -449,17 +458,160 @@
       confirm-text="确认驱逐"
       @confirm="confirmDrain"
     />
+
+    <!-- 批量删除标签对话框 -->
+    <el-dialog
+      v-model="batchDeleteLabelsVisible"
+      title="批量删除标签"
+      width="600px"
+      destroy-on-close
+    >
+      <div class="batch-delete-content">
+        <div class="selected-nodes-info">
+          <p>将从以下 <strong>{{ selectedNodes.length }}</strong> 个节点删除指定标签：</p>
+          <div class="nodes-list">
+            <el-tag v-for="node in selectedNodes.slice(0, 5)" :key="node.name" type="info" size="small">
+              {{ node.name }}
+            </el-tag>
+            <span v-if="selectedNodes.length > 5">... 及其他 {{ selectedNodes.length - 5 }} 个节点</span>
+          </div>
+        </div>
+        
+        <el-form :model="batchDeleteLabelsForm" ref="batchDeleteLabelsFormRef" label-width="120px">
+          <el-form-item label="要删除的标签键" required>
+            <el-select
+              v-model="batchDeleteLabelsForm.keys"
+              multiple
+              placeholder="选择要删除的标签键"
+              style="width: 100%"
+              clearable
+              @change="onLabelKeysChange"
+            >
+              <el-option
+                v-for="key in availableLabelKeys"
+                :key="key"
+                :label="key"
+                :value="key"
+              />
+            </el-select>
+            <div class="form-help-text">
+              可以输入自定义标签键，用回车确认添加
+            </div>
+          </el-form-item>
+          
+          <el-form-item label="自定义标签键">
+            <el-input
+              v-model="customLabelKey"
+              placeholder="输入标签键，按回车添加"
+              @keyup.enter="addCustomLabelKey"
+              clearable
+            >
+              <template #append>
+                <el-button @click="addCustomLabelKey" type="primary">添加</el-button>
+              </template>
+            </el-input>
+          </el-form-item>
+        </el-form>
+      </div>
+      
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="batchDeleteLabelsVisible = false">取消</el-button>
+          <el-button
+            type="danger"
+            @click="confirmBatchDeleteLabels"
+            :loading="batchLoading.deleteLabels"
+            :disabled="batchDeleteLabelsForm.keys.length === 0"
+          >
+            确认删除
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 批量删除污点对话框 -->
+    <el-dialog
+      v-model="batchDeleteTaintsVisible"
+      title="批量删除污点"
+      width="600px"
+      destroy-on-close
+    >
+      <div class="batch-delete-content">
+        <div class="selected-nodes-info">
+          <p>将从以下 <strong>{{ selectedNodes.length }}</strong> 个节点删除指定污点：</p>
+          <div class="nodes-list">
+            <el-tag v-for="node in selectedNodes.slice(0, 5)" :key="node.name" type="info" size="small">
+              {{ node.name }}
+            </el-tag>
+            <span v-if="selectedNodes.length > 5">... 及其他 {{ selectedNodes.length - 5 }} 个节点</span>
+          </div>
+        </div>
+        
+        <el-form :model="batchDeleteTaintsForm" ref="batchDeleteTaintsFormRef" label-width="120px">
+          <el-form-item label="要删除的污点键" required>
+            <el-select
+              v-model="batchDeleteTaintsForm.keys"
+              multiple
+              placeholder="选择要删除的污点键"
+              style="width: 100%"
+              clearable
+              @change="onTaintKeysChange"
+            >
+              <el-option
+                v-for="key in availableTaintKeys"
+                :key="key"
+                :label="key"
+                :value="key"
+              />
+            </el-select>
+            <div class="form-help-text">
+              可以输入自定义污点键，用回车确认添加
+            </div>
+          </el-form-item>
+          
+          <el-form-item label="自定义污点键">
+            <el-input
+              v-model="customTaintKey"
+              placeholder="输入污点键，按回车添加"
+              @keyup.enter="addCustomTaintKey"
+              clearable
+            >
+              <template #append>
+                <el-button @click="addCustomTaintKey" type="primary">添加</el-button>
+              </template>
+            </el-input>
+          </el-form-item>
+        </el-form>
+      </div>
+      
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="batchDeleteTaintsVisible = false">取消</el-button>
+          <el-button
+            type="danger"
+            @click="confirmBatchDeleteTaints"
+            :loading="batchLoading.deleteTaints"
+            :disabled="batchDeleteTaintsForm.keys.length === 0"
+          >
+            确认删除
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNodeStore } from '@/store/modules/node'
 import { useClusterStore } from '@/store/modules/cluster'
 import { formatTime, formatNodeStatus, formatNodeRoles, formatCPU, formatMemory } from '@/utils/format'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import NodeDetailDialog from './components/NodeDetailDialog.vue'
+import labelApi from '@/api/label'
+import taintApi from '@/api/taint'
 import {
   Refresh,
   Lock,
@@ -500,8 +652,24 @@ const drainDetails = ref([])
 const batchLoading = reactive({
   cordon: false,
   uncordon: false,
-  drain: false
+  drain: false,
+  deleteLabels: false,
+  deleteTaints: false
 })
+
+// 批量删除标签对话框相关
+const batchDeleteLabelsVisible = ref(false)
+const batchDeleteLabelsForm = reactive({
+  keys: []
+})
+const batchDeleteLabelsFormRef = ref(null)
+
+// 批量删除污点对话框相关
+const batchDeleteTaintsVisible = ref(false)
+const batchDeleteTaintsForm = reactive({
+  keys: []
+})
+const batchDeleteTaintsFormRef = ref(null)
 
 // 搜索和筛选处理函数
 
@@ -736,6 +904,118 @@ const batchDrain = async () => {
 // 清空选择
 const clearSelection = () => {
   nodeStore.clearSelectedNodes()
+}
+
+// 批量删除标签相关方法
+const showBatchDeleteLabelsDialog = () => {
+  if (selectedNodes.value.length === 0) {
+    ElMessage.warning('请先选择节点')
+    return
+  }
+  
+  // 重置表单
+  batchDeleteLabelsForm.keys = []
+  batchDeleteLabelsVisible.value = true
+}
+
+const confirmBatchDeleteLabels = async () => {
+  if (batchDeleteLabelsForm.keys.length === 0) {
+    ElMessage.warning('请至少输入一个标签键')
+    return
+  }
+
+  if (!clusterStore.currentClusterName) {
+    ElMessage.error('请先选择集群')
+    return
+  }
+
+  try {
+    batchLoading.deleteLabels = true
+    
+    const requestData = {
+      nodes: selectedNodes.value.map(node => node.name),
+      keys: batchDeleteLabelsForm.keys,
+      cluster_name: clusterStore.currentClusterName
+    }
+
+    const response = await fetch('/api/v1/nodes/labels/batch-delete?cluster_name=' + encodeURIComponent(clusterStore.currentClusterName), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestData)
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || '删除失败')
+    }
+    
+    ElMessage.success(`成功删除 ${selectedNodes.value.length} 个节点的标签`)
+    batchDeleteLabelsVisible.value = false
+    clearSelection()
+    refreshData()
+  } catch (error) {
+    ElMessage.error(`批量删除标签失败: ${error.message || '未知错误'}`)
+  } finally {
+    batchLoading.deleteLabels = false
+  }
+}
+
+// 批量删除污点相关方法
+const showBatchDeleteTaintsDialog = () => {
+  if (selectedNodes.value.length === 0) {
+    ElMessage.warning('请先选择节点')
+    return
+  }
+  
+  // 重置表单
+  batchDeleteTaintsForm.keys = []
+  batchDeleteTaintsVisible.value = true
+}
+
+const confirmBatchDeleteTaints = async () => {
+  if (batchDeleteTaintsForm.keys.length === 0) {
+    ElMessage.warning('请至少输入一个污点键')
+    return
+  }
+
+  if (!clusterStore.currentClusterName) {
+    ElMessage.error('请先选择集群')
+    return
+  }
+
+  try {
+    batchLoading.deleteTaints = true
+    
+    const requestData = {
+      nodes: selectedNodes.value.map(node => node.name),
+      keys: batchDeleteTaintsForm.keys,
+      cluster_name: clusterStore.currentClusterName
+    }
+
+    const response = await fetch('/api/v1/nodes/taints/batch-delete?cluster_name=' + encodeURIComponent(clusterStore.currentClusterName), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestData)
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || '删除失败')
+    }
+    
+    ElMessage.success(`成功删除 ${selectedNodes.value.length} 个节点的污点`)
+    batchDeleteTaintsVisible.value = false
+    clearSelection()
+    refreshData()
+  } catch (error) {
+    ElMessage.error(`批量删除污点失败: ${error.message || '未知错误'}`)
+  } finally {
+    batchLoading.deleteTaints = false
+  }
 }
 
 // 标签折叠相关方法
