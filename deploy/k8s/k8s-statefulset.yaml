@@ -144,12 +144,21 @@ kind: ClusterRole
 metadata:
   name: kube-node-mgr
 rules:
+# 节点管理权限
 - apiGroups: [""]
   resources: ["nodes"]
   verbs: ["get", "list", "watch", "patch", "update"]
 - apiGroups: [""]
   resources: ["nodes/status"]
   verbs: ["patch"]
+# Pod管理权限 - 封锁、驱逐节点需要
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch", "delete"]
+- apiGroups: [""]
+  resources: ["pods/eviction"]
+  verbs: ["create"]
+# Metrics API权限
 - apiGroups: ["metrics.k8s.io"]
   resources: ["nodes", "pods"]
   verbs: ["get", "list"]

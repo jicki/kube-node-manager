@@ -105,13 +105,42 @@ kubectl logs <pod-name>
 
 ### 权限问题
 
+如果遇到节点封锁功能失败，提示权限错误：
+```
+pods is forbidden: User "system:serviceaccount:kube-node-mgr:kube-node-mgr" cannot list resource "pods" in API group "" at the cluster scope
+```
+
+**快速修复方法：**
+
+1. **使用自动修复脚本（推荐）：**
+```bash
+# 运行权限修复脚本
+../scripts/fix-rbac-permissions.sh
+
+# 或指定命名空间
+../scripts/fix-rbac-permissions.sh your-namespace
+```
+
+2. **手动修复权限：**
+```bash
+# 应用RBAC权限补丁
+kubectl apply -f rbac-patch.yaml
+
+# 重启应用以应用新权限
+kubectl rollout restart statefulset/kube-node-mgr -n kube-node-mgr
+```
+
+**检查权限配置：**
 ```bash
 # 检查 ServiceAccount
-kubectl get sa kube-node-manager
+kubectl get sa kube-node-mgr -n kube-node-mgr
 
 # 检查 RBAC
-kubectl get clusterrole kube-node-manager
-kubectl get clusterrolebinding kube-node-manager
+kubectl get clusterrole kube-node-mgr
+kubectl get clusterrolebinding kube-node-mgr
+
+# 查看详细权限配置
+kubectl describe clusterrole kube-node-mgr
 ```
 
 ### 网络问题

@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/store/modules/auth'
 
 const router = createRouter({
@@ -82,6 +83,18 @@ router.beforeEach(async (to, from, next) => {
     if (!authStore.token) {
       next('/login')
       return
+    }
+    
+    // 如果有token但用户信息未加载，先获取用户信息
+    if (!authStore.userInfo) {
+      try {
+        await authStore.getUserInfo()
+      } catch (error) {
+        console.error('Failed to get user info in router guard:', error)
+        authStore.logout()
+        next('/login')
+        return
+      }
     }
     
     // 检查权限
