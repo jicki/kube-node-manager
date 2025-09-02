@@ -133,6 +133,27 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 	})
 }
 
+// GetProfileStats 获取用户统计信息
+func (h *Handler) GetProfileStats(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	stats, err := h.service.GetProfileStats(userID.(uint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get profile stats"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Success",
+		"data":    stats,
+	})
+}
+
 func (h *Handler) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")

@@ -65,8 +65,10 @@ export const useAuthStore = defineStore('auth', {
     async getUserInfo() {
       try {
         const response = await authApi.getUserInfo()
-        this.userInfo = response.data
-        this.permissions = response.data.permissions || []
+        // 修复数据结构访问，后端返回格式为 {code, message, data}
+        const userData = response.data.data || response.data
+        this.userInfo = userData
+        this.permissions = userData.permissions || []
         return response
       } catch (error) {
         this.logout()

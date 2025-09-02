@@ -55,6 +55,11 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"newPassword" binding:"required,min=6"`
 }
 
+type ProfileStatsResponse struct {
+	LoginCount     int `json:"loginCount"`
+	OperationCount int `json:"operationCount"`
+}
+
 func NewService(db *gorm.DB, logger *logger.Logger, jwtCfg config.JWTConfig, ldap *ldap.Service, audit *audit.Service) *Service {
 	return &Service{
 		db:     db,
@@ -322,4 +327,33 @@ func (s *Service) ChangePassword(userID uint, req ChangePasswordRequest) error {
 	})
 
 	return nil
+}
+
+// GetProfileStats 获取用户统计信息
+func (s *Service) GetProfileStats(userID uint) (*ProfileStatsResponse, error) {
+	stats := &ProfileStatsResponse{
+		LoginCount:     0,
+		OperationCount: 0,
+	}
+
+	// 统计登录次数 - 从审计日志中统计成功登录记录
+	var loginCount int64
+	if err := s.db.Model(&model.AuditLog{}).
+		Where("user_id = ? AND action = ? AND resource_type = ? AND status = ?",
+			userID, model.ActionLogin, model.ResourceUser, model.AuditStatusSuccess).
+		Count(&loginCount).Error; err != nil {
+		s.logger.Error("Failed to count login records: %v", err)
+	}
+	stats.LoginCount = int(loginCount)
+
+	// 统计操作记录 - 从审计日志中统计所有操作记录
+	var operationCount int64
+	if err := s.db.Model(&model.AuditLog{}).
+		Where("user_id = ? AND status = ?", userID, model.AuditStatusSuccess).
+		Count(&operationCount).Error; err != nil {
+		s.logger.Error("Failed to count operation records: %v", err)
+	}
+	stats.OperationCount = int(operationCount)
+
+	return stats, nil
 }

@@ -356,12 +356,13 @@ const loadProfileData = () => {
 // 加载统计信息
 const loadProfileStats = async () => {
   try {
-    // 这里可以调用后端API获取统计信息
-    // const stats = await authApi.getProfileStats()
-    // profileStats.loginCount = stats.loginCount
-    // profileStats.operationCount = stats.operationCount
+    const response = await authApi.getProfileStats()
+    const stats = response.data.data || response.data
+    profileStats.loginCount = stats.loginCount || 0
+    profileStats.operationCount = stats.operationCount || 0
   } catch (error) {
     console.error('Failed to load profile stats:', error)
+    ElMessage.warning('获取统计信息失败')
   }
 }
 

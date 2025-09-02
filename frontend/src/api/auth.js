@@ -66,6 +66,14 @@ const authApi = {
       url: '/api/v1/version',
       method: 'get'
     })
+  },
+
+  // 获取用户统计信息
+  getProfileStats() {
+    return request({
+      url: '/api/v1/auth/profile/stats',
+      method: 'get'
+    })
   }
 }
 

@@ -87,6 +87,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		auth.GET("/user", handlers.Auth.AuthMiddleware(), handlers.Auth.GetUser)
 		auth.PUT("/profile", handlers.Auth.AuthMiddleware(), handlers.Auth.UpdateProfile)
 		auth.POST("/change-password", handlers.Auth.AuthMiddleware(), handlers.Auth.ChangePassword)
+		auth.GET("/profile/stats", handlers.Auth.AuthMiddleware(), handlers.Auth.GetProfileStats)
 	}
 
 	protected := api.Group("/")

@@ -34,14 +34,14 @@ type GetRequest struct {
 // DrainRequest 驱逐节点请求
 type DrainRequest struct {
 	ClusterName string `json:"cluster_name" binding:"required"`
-	NodeName    string `json:"node_name" binding:"required"`
+	NodeName    string `json:"node_name"` // 从URL路径参数获取，不需要binding验证
 	Force       bool   `json:"force"`
 }
 
 // CordonRequest 封锁节点请求
 type CordonRequest struct {
 	ClusterName string `json:"cluster_name" binding:"required"`
-	NodeName    string `json:"node_name" binding:"required"`
+	NodeName    string `json:"node_name"` // 从URL路径参数获取，不需要binding验证
 }
 
 // NodeMetrics 节点指标
