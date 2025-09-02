@@ -1062,6 +1062,9 @@ const applyTemplateToNodes = (template) => {
 
 // 显示应用对话框
 const showApplyDialog = (template) => {
+  console.log('showApplyDialog 接收到的 template:', template)
+  console.log('template.labels:', template.labels)
+  
   // 深拷贝模板以避免修改原始数据
   const templateCopy = JSON.parse(JSON.stringify(template))
   
@@ -1136,9 +1139,12 @@ const handleApplyTemplate = async () => {
         const valueArray = getValueArray(value)
         let finalValue = ''
         
+        console.log(`处理标签 ${key}:`, { value, valueArray, selectedValue: selectedTemplate.value.selectedValues[key] })
+        
         if (valueArray.length > 1) {
           // 使用选中的值，但要确保它是单一值
           const selectedValue = selectedTemplate.value.selectedValues[key] || valueArray[0]
+          console.log(`多值标签 ${key}: selectedValue=${selectedValue}, valueArray=${JSON.stringify(valueArray)}`)
           finalValue = getSingleValue(selectedValue) // 确保选中的值也经过处理
         } else {
           // 使用默认值
