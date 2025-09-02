@@ -1153,9 +1153,13 @@ const handleApplyTemplate = async () => {
         
         // 强制清理所有可能包含MULTI_VALUE分隔符的值
         if (typeof finalValue === 'string' && finalValue.includes('|MULTI_VALUE|')) {
+          console.warn(`发现包含MULTI_VALUE的值: ${finalValue}，将强制清理`)
           const cleanValues = finalValue.split('|MULTI_VALUE|').filter(v => v.trim() !== '')
           finalValue = cleanValues[0] || ''
+          console.log(`清理后的值: ${finalValue}`)
         }
+        
+        console.log(`最终标签值: ${key} = ${finalValue}`)
         
         // 验证最终值符合Kubernetes标签格式
         if (finalValue && isValidLabelValue(finalValue)) {
@@ -1178,6 +1182,9 @@ const handleApplyTemplate = async () => {
       operation: 'add',
       labels: labelsToApply // 包含选定的标签值
     }
+    
+    console.log('即将发送给后端的数据:', applyData)
+    console.log('标签数据详情:', JSON.stringify(labelsToApply, null, 2))
     
     await labelApi.applyTemplate(applyData)
     ElMessage.success('模板应用成功')

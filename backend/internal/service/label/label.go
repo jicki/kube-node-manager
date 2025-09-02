@@ -79,10 +79,11 @@ type TemplateInfo struct {
 
 // ApplyTemplateRequest 应用模板请求
 type ApplyTemplateRequest struct {
-	ClusterName  string   `json:"cluster_name" binding:"required"`
-	NodeNames    []string `json:"node_names" binding:"required"`
-	TemplateID   uint     `json:"template_id" binding:"required"`
-	Operation    string   `json:"operation"` // add, replace
+	ClusterName  string            `json:"cluster_name" binding:"required"`
+	NodeNames    []string          `json:"node_names" binding:"required"`
+	TemplateID   uint              `json:"template_id" binding:"required"`
+	Operation    string            `json:"operation"` // add, replace
+	Labels       map[string]string `json:"labels"`    // 用户选择的具体标签值
 }
 
 // LabelUsage 标签使用情况
@@ -473,10 +474,18 @@ func (s *Service) ApplyTemplate(req ApplyTemplateRequest, userID uint) error {
 		return fmt.Errorf("failed to get template: %w", err)
 	}
 
-	// 解析模板标签
+	// 使用用户提供的标签值，如果没有提供则使用模板标签
 	var labels map[string]string
-	if err := json.Unmarshal([]byte(template.Labels), &labels); err != nil {
-		return fmt.Errorf("failed to parse template labels: %w", err)
+	if req.Labels != nil && len(req.Labels) > 0 {
+		// 使用前端发送的用户选择的标签值
+		labels = req.Labels
+		s.logger.Info("Using user-selected labels: %+v", labels)
+	} else {
+		// 回退到模板的原始标签
+		if err := json.Unmarshal([]byte(template.Labels), &labels); err != nil {
+			return fmt.Errorf("failed to parse template labels: %w", err)
+		}
+		s.logger.Info("Using template labels: %+v", labels)
 	}
 
 	// 应用到所有指定节点
