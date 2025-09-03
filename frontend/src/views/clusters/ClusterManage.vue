@@ -8,7 +8,7 @@
       </div>
       <div class="header-right">
         <el-button 
-          v-if="isAdmin" 
+          v-if="isAdmin || authStore.role === 'admin'" 
           type="primary" 
           @click="showAddDialog"
         >
@@ -80,7 +80,7 @@
                 <p>请添加集群配置以开始管理节点</p>
               </template>
               <el-button 
-                v-if="isAdmin" 
+                v-if="isAdmin || authStore.role === 'admin'" 
                 type="primary" 
                 @click="showAddDialog"
               >
@@ -157,7 +157,7 @@
               </el-button>
               
               <el-button 
-                v-if="isAdmin" 
+                v-if="isAdmin || authStore.role === 'admin'" 
                 type="text" 
                 size="small" 
                 @click="showEditDialog(row)"
@@ -167,7 +167,7 @@
               </el-button>
               
               <el-button 
-                v-if="isAdmin"
+                v-if="isAdmin || authStore.role === 'admin'"
                 type="text" 
                 size="small" 
                 class="danger-button"
@@ -299,7 +299,20 @@ const formRules = {
 const clusters = computed(() => clusterStore.clusters)
 const clusterStats = computed(() => clusterStore.clusterStats)
 const currentCluster = computed(() => clusterStore.currentCluster)
-const isAdmin = computed(() => authStore.user?.role === 'admin')
+const isAdmin = computed(() => {
+  const user = authStore.user
+  const userRole = user?.role
+  const isAdminUser = userRole === 'admin'
+  
+  console.log('=== 权限检查调试信息 ===')
+  console.log('用户信息:', user)
+  console.log('用户角色:', userRole)
+  console.log('是否为管理员:', isAdminUser)
+  console.log('authStore.role getter:', authStore.role)
+  console.log('========================')
+  
+  return isAdminUser
+})
 
 // 获取集群数据
 const fetchClusters = async () => {

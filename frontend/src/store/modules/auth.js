@@ -13,6 +13,7 @@ export const useAuthStore = defineStore('auth', {
     isLoggedIn: (state) => !!state.token,
     username: (state) => state.userInfo?.username || '',
     role: (state) => state.userInfo?.role || '',
+    user: (state) => state.userInfo,  // 添加user getter
     hasPermission: (state) => {
       return (permission) => {
         if (state.userInfo?.role === 'admin') return true
