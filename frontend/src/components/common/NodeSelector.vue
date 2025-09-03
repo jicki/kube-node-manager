@@ -17,7 +17,7 @@
       
       <div class="filter-section">
         <el-row :gutter="12">
-          <el-col :span="6">
+          <el-col :span="8">
             <el-select
               v-model="statusFilter"
               placeholder="状态筛选"
@@ -29,7 +29,7 @@
               <el-option label="NotReady" value="NotReady" />
             </el-select>
           </el-col>
-          <el-col :span="6">
+          <el-col :span="8">
             <el-select
               v-model="roleFilter"
               placeholder="角色筛选"
@@ -41,7 +41,7 @@
               <el-option label="Worker" value="worker" />
             </el-select>
           </el-col>
-          <el-col :span="6">
+          <el-col :span="8">
             <el-select
               v-model="nodeOwnershipFilter"
               placeholder="节点归属"
@@ -57,14 +57,7 @@
               />
             </el-select>
           </el-col>
-          <el-col :span="6">
-            <el-input
-              v-model="labelFilter"
-              placeholder="标签筛选 (key=value)"
-              clearable
-              @input="handleFilter"
-            />
-          </el-col>
+
         </el-row>
         
         <!-- 高级搜索区域 -->
@@ -77,6 +70,34 @@
         </div>
         
         <div v-show="showAdvancedSearch" class="advanced-search">
+          <el-divider content-position="left">标签搜索</el-divider>
+          <el-row :gutter="12">
+            <el-col :span="12">
+              <el-input
+                v-model="labelKeyFilter"
+                placeholder="输入标签键，如 node-role.kubernetes.io/master"
+                clearable
+                @input="handleFilter"
+              >
+                <template #prefix>
+                  <el-icon><CollectionTag /></el-icon>
+                </template>
+              </el-input>
+            </el-col>
+            <el-col :span="12">
+              <el-input
+                v-model="labelValueFilter"
+                placeholder="输入标签值（可选）"
+                clearable
+                @input="handleFilter"
+              >
+                <template #prefix>
+                  <el-icon><Edit /></el-icon>
+                </template>
+              </el-input>
+            </el-col>
+          </el-row>
+          
           <el-divider content-position="left">污点搜索</el-divider>
           <el-row :gutter="12">
             <el-col :span="8">
@@ -310,7 +331,7 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { Search, Location, Collection, Warning, ArrowDown, Filter, WarningFilled, Edit, ArrowUp } from '@element-plus/icons-vue'
+import { Search, Location, Collection, Warning, ArrowDown, Filter, WarningFilled, Edit, ArrowUp, CollectionTag } from '@element-plus/icons-vue'
 
 const props = defineProps({
   modelValue: {
@@ -341,7 +362,8 @@ const emit = defineEmits(['update:modelValue', 'selection-change'])
 const searchQuery = ref('')
 const statusFilter = ref('')
 const roleFilter = ref('')
-const labelFilter = ref('')
+const labelKeyFilter = ref('')
+const labelValueFilter = ref('')
 const nodeOwnershipFilter = ref('')
 const taintKeyFilter = ref('')
 const taintValueFilter = ref('')
@@ -477,19 +499,24 @@ const filteredNodes = computed(() => {
   }
 
   // 标签筛选
-  if (labelFilter.value?.trim()) {
-    const labelQuery = labelFilter.value.trim()
-    const [key, value] = labelQuery.split('=')
-    if (key) {
-      result = result.filter(node => {
-        if (!node?.labels) return false
-        if (value !== undefined) {
-          return node.labels[key] === value
-        } else {
-          return key in node.labels
-        }
-      })
-    }
+  if (labelKeyFilter.value?.trim()) {
+    result = result.filter(node => {
+      if (!node?.labels) return false
+      const key = labelKeyFilter.value.trim()
+      
+      // 检查标签键是否存在
+      if (!(key in node.labels)) {
+        return false
+      }
+      
+      // 如果指定了标签值，进行精确匹配
+      if (labelValueFilter.value?.trim()) {
+        return node.labels[key] === labelValueFilter.value.trim()
+      }
+      
+      // 否则只检查标签键是否存在
+      return true
+    })
   }
 
   // 污点筛选
@@ -565,7 +592,8 @@ const handleFilter = () => {
   console.log('Filter changed:', { 
     status: statusFilter.value, 
     role: roleFilter.value, 
-    label: labelFilter.value,
+    labelKey: labelKeyFilter.value,
+    labelValue: labelValueFilter.value,
     nodeOwnership: nodeOwnershipFilter.value,
     taintKey: taintKeyFilter.value,
     taintValue: taintValueFilter.value,
