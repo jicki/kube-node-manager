@@ -84,14 +84,28 @@ export const useNodeStore = defineStore('node', {
     nodeOwnershipOptions: (state) => {
       const ownershipSet = new Set()
       let hasNoOwnership = false
+      let noOwnershipNodes = []
       
       state.nodes.forEach(node => {
-        if (node.labels && node.labels['deeproute.cn/user-type']) {
-          ownershipSet.add(node.labels['deeproute.cn/user-type'])
+        const userTypeLabel = node.labels && node.labels['deeproute.cn/user-type']
+        // 检查标签是否存在且不为空字符串
+        if (userTypeLabel && userTypeLabel.trim() !== '') {
+          ownershipSet.add(userTypeLabel)
         } else {
           hasNoOwnership = true
+          noOwnershipNodes.push({
+            name: node.name,
+            hasLabels: !!node.labels,
+            userTypeValue: userTypeLabel
+          })
         }
       })
+      
+      // 调试信息
+      console.log('节点总数:', state.nodes.length)
+      console.log('有deeproute.cn/user-type标签的节点数量:', ownershipSet.size)
+      console.log('无deeproute.cn/user-type标签的节点:', noOwnershipNodes)
+      console.log('hasNoOwnership:', hasNoOwnership)
       
       const options = Array.from(ownershipSet).sort()
       
@@ -100,6 +114,7 @@ export const useNodeStore = defineStore('node', {
         options.unshift('无归属') // 添加到数组开头
       }
       
+      console.log('最终选项数组:', options)
       return options
     },
     filteredNodes: (state) => {
@@ -186,16 +201,18 @@ export const useNodeStore = defineStore('node', {
       // 节点归属筛选 (deeproute.cn/user-type)
       if (state.filters.nodeOwnership) {
         result = result.filter(node => {
-          // 如果选择的是“无归属”，过滤出没有 deeproute.cn/user-type 标签的节点
+          const userTypeLabel = node.labels && node.labels['deeproute.cn/user-type']
+          
+          // 如果选择的是“无归属”，过滤出没有或为空的 deeproute.cn/user-type 标签的节点
           if (state.filters.nodeOwnership === '无归属') {
-            return !node.labels || !node.labels['deeproute.cn/user-type']
+            return !userTypeLabel || userTypeLabel.trim() === ''
           }
           
           // 否则过滤具有匹配标签值的节点
-          if (!node.labels || !node.labels['deeproute.cn/user-type']) {
+          if (!userTypeLabel || userTypeLabel.trim() === '') {
             return false
           }
-          return node.labels['deeproute.cn/user-type'] === state.filters.nodeOwnership
+          return userTypeLabel === state.filters.nodeOwnership
         })
       }
       
