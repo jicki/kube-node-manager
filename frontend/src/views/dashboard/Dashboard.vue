@@ -956,7 +956,7 @@ onMounted(async () => {
   display: flex;
   min-height: 280px;
   padding: 20px;
-  gap: 20px;
+  gap: 32px;
   position: relative;
 }
 
@@ -965,8 +965,8 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 250px;
-  max-width: 280px;
+  min-width: 320px;
+  max-width: 360px;
 }
 
 .ownership-section {
@@ -992,7 +992,8 @@ onMounted(async () => {
 .section-divider {
   height: auto !important;
   min-height: 260px;
-  margin: 0 !important;
+  margin: 0 16px !important;
+  opacity: 0.6;
 }
 
 /* 空状态样式 */
@@ -1110,8 +1111,8 @@ onMounted(async () => {
 /* 响应式设计 - 保持一行显示 */
 @media (max-width: 1200px) {
   .status-section {
-    min-width: 220px;
-    max-width: 250px;
+    min-width: 280px;
+    max-width: 300px;
   }
   
   .ownership-section {
@@ -1119,8 +1120,12 @@ onMounted(async () => {
   }
   
   .node-overview-container {
-    gap: 16px; /* 减小间距 */
-    padding: 16px;
+    gap: 24px; /* 保持适中间距 */
+    padding: 18px;
+  }
+  
+  .section-divider {
+    margin: 0 12px !important;
   }
   
   .ownership-section .section-title {
@@ -1137,16 +1142,20 @@ onMounted(async () => {
   .node-overview-container {
     min-height: 240px;
     padding: 15px;
-    gap: 12px;
+    gap: 20px;
   }
   
   .status-section {
-    min-width: 200px;
-    max-width: 220px;
+    min-width: 240px;
+    max-width: 260px;
   }
   
   .ownership-section {
     min-width: 160px;
+  }
+  
+  .section-divider {
+    margin: 0 8px !important;
   }
   
   .ownership-list {
