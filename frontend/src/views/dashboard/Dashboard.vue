@@ -159,7 +159,7 @@
                   <div class="legend-item" :class="{ 'legend-empty': nodeStats.ready === 0 }">
                     <div class="legend-indicator">
                       <span class="legend-color legend-success"></span>
-                      <span class="legend-text">正常</span>
+                      <span class="legend-text">正常 </span>
                     </div>
                     <div class="legend-stats">
                       <span class="legend-value">{{ nodeStats.ready }}</span>
@@ -169,7 +169,7 @@
                   <div class="legend-item" :class="{ 'legend-empty': nodeStats.notReady === 0 }">
                     <div class="legend-indicator">
                       <span class="legend-color legend-warning"></span>
-                      <span class="legend-text">异常</span>
+                      <span class="legend-text">异常 </span>
                     </div>
                     <div class="legend-stats">
                       <span class="legend-value">{{ nodeStats.notReady }}</span>
@@ -179,7 +179,7 @@
                   <div class="legend-item" :class="{ 'legend-empty': nodeStats.unknown === 0 }">
                     <div class="legend-indicator">
                       <span class="legend-color legend-info"></span>
-                      <span class="legend-text">未知</span>
+                      <span class="legend-text">未知 </span>
                     </div>
                     <div class="legend-stats">
                       <span class="legend-value">{{ nodeStats.unknown }}</span>
@@ -934,10 +934,6 @@ onMounted(async () => {
   color: #333;
   font-weight: 500;
   letter-spacing: 0.3px;
-}
-
-.legend-text::after {
-  content: " ";
 }
 
 .legend-stats {
