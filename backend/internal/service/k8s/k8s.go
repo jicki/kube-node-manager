@@ -156,9 +156,19 @@ func (s *Service) getClient(clusterName string) (*kubernetes.Clientset, error) {
 
 	client, exists := s.clients[clusterName]
 	if !exists {
-		return nil, fmt.Errorf("kubernetes client not found for cluster: %s", clusterName)
+		s.logger.Errorf("Kubernetes client not found for cluster: %s. Available clusters: %v", clusterName, s.getAvailableClusterNames())
+		return nil, fmt.Errorf("kubernetes client not found for cluster: %s. Please check if the cluster is properly configured and connected", clusterName)
 	}
 	return client, nil
+}
+
+// getAvailableClusterNames 获取可用的集群名称列表（用于调试）
+func (s *Service) getAvailableClusterNames() []string {
+	var names []string
+	for name := range s.clients {
+		names = append(names, name)
+	}
+	return names
 }
 
 // GetClusterInfo 获取集群信息
@@ -193,7 +203,8 @@ func (s *Service) GetClusterInfo(clusterName string) (*ClusterInfo, error) {
 func (s *Service) ListNodes(clusterName string) ([]NodeInfo, error) {
 	client, err := s.getClient(clusterName)
 	if err != nil {
-		return nil, err
+		s.logger.Errorf("Failed to get client for cluster %s: %v", clusterName, err)
+		return nil, fmt.Errorf("cluster connection not available for %s: %w", clusterName, err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -202,8 +213,23 @@ func (s *Service) ListNodes(clusterName string) ([]NodeInfo, error) {
 	nodeList, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.logger.Errorf("Failed to list nodes for cluster %s: %v", clusterName, err)
-		return nil, fmt.Errorf("failed to list nodes: %w", err)
+		// 提供更详细的错误信息以帮助诊断
+		if strings.Contains(err.Error(), "connection refused") {
+			return nil, fmt.Errorf("cluster %s is not reachable: connection refused", clusterName)
+		}
+		if strings.Contains(err.Error(), "forbidden") {
+			return nil, fmt.Errorf("insufficient permissions to list nodes in cluster %s: %w", clusterName, err)
+		}
+		if strings.Contains(err.Error(), "unauthorized") {
+			return nil, fmt.Errorf("authentication failed for cluster %s: %w", clusterName, err)
+		}
+		if strings.Contains(err.Error(), "timeout") {
+			return nil, fmt.Errorf("timeout connecting to cluster %s: %w", clusterName, err)
+		}
+		return nil, fmt.Errorf("failed to list nodes in cluster %s: %w", clusterName, err)
 	}
+
+	s.logger.Infof("Successfully retrieved %d nodes from cluster %s", len(nodeList.Items), clusterName)
 
 	var nodes []NodeInfo
 	for _, node := range nodeList.Items {
@@ -618,6 +644,24 @@ func (s *Service) TestConnection(kubeconfig string) error {
 		}
 	}
 
+	return nil
+}
+
+// CheckClusterConnection 检查集群连接状态
+func (s *Service) CheckClusterConnection(clusterName string) error {
+	client, err := s.getClient(clusterName)
+	if err != nil {
+		return err
+	}
+
+	// 尝试简单的API调用来验证连接
+	_, err = client.Discovery().ServerVersion()
+	if err != nil {
+		s.logger.Errorf("Failed to check cluster connection for %s: %v", clusterName, err)
+		return fmt.Errorf("cluster connection check failed for %s: %w", clusterName, err)
+	}
+
+	s.logger.Infof("Cluster connection check successful for %s", clusterName)
 	return nil
 }
 

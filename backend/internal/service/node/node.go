@@ -98,11 +98,12 @@ func (s *Service) List(req ListRequest, userID uint) ([]k8s.NodeInfo, error) {
 			UserID:       userID,
 			Action:       model.ActionView,
 			ResourceType: model.ResourceNode,
-			Details:      fmt.Sprintf("Failed to list nodes for cluster %s", req.ClusterName),
+			Details:      fmt.Sprintf("Failed to list nodes for cluster %s: %s", req.ClusterName, err.Error()),
 			Status:       model.AuditStatusFailed,
 			ErrorMsg:     err.Error(),
 		})
-		return nil, fmt.Errorf("failed to list nodes: %w", err)
+		// 保持原始错误信息以便前端显示
+		return nil, err
 	}
 
 	// 应用过滤器

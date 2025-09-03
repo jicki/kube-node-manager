@@ -504,6 +504,31 @@ func (s *Service) TestConnection(kubeconfig string) error {
 	return s.k8sSvc.TestConnection(kubeconfig)
 }
 
+// CheckClusterStatus 检查集群状态
+func (s *Service) CheckClusterStatus(clusterName string, userID uint) error {
+	err := s.k8sSvc.CheckClusterConnection(clusterName)
+	if err != nil {
+		s.auditSvc.Log(audit.LogRequest{
+			UserID:       userID,
+			Action:       model.ActionView,
+			ResourceType: model.ResourceCluster,
+			Details:      fmt.Sprintf("Cluster status check failed for %s", clusterName),
+			Status:       model.AuditStatusFailed,
+			ErrorMsg:     err.Error(),
+		})
+		return err
+	}
+
+	s.auditSvc.Log(audit.LogRequest{
+		UserID:       userID,
+		Action:       model.ActionView,
+		ResourceType: model.ResourceCluster,
+		Details:      fmt.Sprintf("Cluster status check successful for %s", clusterName),
+		Status:       model.AuditStatusSuccess,
+	})
+	return nil
+}
+
 // syncClusterInfo 同步集群信息
 func (s *Service) syncClusterInfo(cluster *model.Cluster) error {
 	clusterInfo, err := s.k8sSvc.GetClusterInfo(cluster.Name)

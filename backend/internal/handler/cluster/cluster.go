@@ -460,3 +460,51 @@ func (h *Handler) TestConnection(c *gin.Context) {
 		Message: "Connection test successful",
 	})
 }
+
+// CheckStatus 检查集群状态
+// @Summary 检查集群状态
+// @Description 检查指定集群的连接状态
+// @Tags clusters
+// @Produce json
+// @Param cluster_name query string true "集群名称"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /clusters/status [get]
+func (h *Handler) CheckStatus(c *gin.Context) {
+	clusterName := c.Query("cluster_name")
+	if clusterName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "cluster_name is required",
+		})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	if err := h.clusterSvc.CheckClusterStatus(clusterName, userID.(uint)); err != nil {
+		h.logger.Error("Cluster status check failed for %s: %v", clusterName, err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Cluster status check failed: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Cluster is healthy and accessible",
+		Data: map[string]interface{}{
+			"cluster_name": clusterName,
+			"status":       "healthy",
+		},
+	})
+}
