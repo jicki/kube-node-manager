@@ -5,7 +5,7 @@ import { useClusterStore } from './cluster'
 // 获取智能调度状态的辅助函数
 function getSmartSchedulingStatus(node) {
   // 如果节点被cordon（不可调度）
-  if (!node.schedulable) {
+  if (node.schedulable === false) {
     return 'unschedulable'
   }
   
@@ -156,6 +156,12 @@ export const useNodeStore = defineStore('node', {
       if (state.filters.schedulable) {
         result = result.filter(node => {
           const schedulingStatus = getSmartSchedulingStatus(node)
+          console.log(`节点 ${node.name} 调度状态:`, {
+            schedulable: node.schedulable,
+            taints: node.taints,
+            calculatedStatus: schedulingStatus,
+            filterValue: state.filters.schedulable
+          })
           return schedulingStatus === state.filters.schedulable
         })
       }
@@ -203,7 +209,7 @@ export const useNodeStore = defineStore('node', {
         result = result.filter(node => {
           const userTypeLabel = node.labels && node.labels['deeproute.cn/user-type']
           
-          // 如果选择的是“无归属”，过滤出没有或为空的 deeproute.cn/user-type 标签的节点
+          // 如果选择的是"无归属"，过滤出没有或为空的 deeproute.cn/user-type 标签的节点
           if (state.filters.nodeOwnership === '无归属') {
             return !userTypeLabel || userTypeLabel.trim() === ''
           }
@@ -217,6 +223,13 @@ export const useNodeStore = defineStore('node', {
       }
       
       return result
+    },
+    // 添加分页后的节点列表
+    paginatedNodes: (state, getters) => {
+      const filtered = getters.filteredNodes
+      const start = (state.pagination.current - 1) * state.pagination.size
+      const end = start + state.pagination.size
+      return filtered.slice(start, end)
     }
   },
 
@@ -230,8 +243,8 @@ export const useNodeStore = defineStore('node', {
         // 如果没有集群名称，直接返回空结果
         if (!clusterName) {
           this.nodes = []
-          this.pagination.total = 0
           this.updateStats()
+          this.updatePaginationTotal()
           return { data: [] }
         }
         
@@ -246,8 +259,9 @@ export const useNodeStore = defineStore('node', {
         const response = await nodeApi.getNodes(queryParams)
         // 后端返回格式: { code, message, data: [...] } - data直接是节点数组
         this.nodes = response.data.data || []
-        this.pagination.total = this.nodes.length
         this.updateStats()
+        // 重新计算分页总数（基于过滤后的结果）
+        this.updatePaginationTotal()
         
         return response
       } catch (error) {
@@ -335,6 +349,8 @@ export const useNodeStore = defineStore('node', {
     setFilters(filters) {
       this.filters = { ...this.filters, ...filters }
       this.pagination.current = 1
+      // 重新计算分页总数（基于过滤后的结果）
+      this.updatePaginationTotal()
     },
 
     setPagination(pagination) {
@@ -369,6 +385,18 @@ export const useNodeStore = defineStore('node', {
           nodeStatuses: this.nodes.map(node => ({ name: node.name, status: node.status }))
         })
       }
+    },
+
+    updatePaginationTotal() {
+      // 基于过滤后的节点数量来设置分页总数
+      this.pagination.total = this.filteredNodes.length
+      console.log('更新分页总数:', {
+        totalNodes: this.nodes.length,
+        filteredNodes: this.filteredNodes.length,
+        paginationTotal: this.pagination.total,
+        currentPage: this.pagination.current,
+        pageSize: this.pagination.size
+      })
     },
 
     resetFilters() {

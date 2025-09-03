@@ -810,7 +810,7 @@ const pagination = computed(() => nodeStore.pagination)
 const nodeOwnershipOptions = computed(() => nodeStore.nodeOwnershipOptions)
 
 const filteredNodes = computed(() => {
-  return nodeStore.filteredNodes
+  return nodeStore.paginatedNodes
 })
 
 // 处理搜索
@@ -849,12 +849,12 @@ const handleSortChange = ({ prop, order }) => {
 // 分页处理
 const handleSizeChange = (size) => {
   nodeStore.setPagination({ size, current: 1 })
-  fetchNodes()
+  // 前端分页，不需要重新获取数据
 }
 
 const handleCurrentChange = (current) => {
   nodeStore.setPagination({ current })
-  fetchNodes()
+  // 前端分页，不需要重新获取数据
 }
 
 // 获取节点数据
