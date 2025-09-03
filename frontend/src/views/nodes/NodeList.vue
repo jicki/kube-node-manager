@@ -104,7 +104,7 @@
                 @clear="handleFilterChange"
               >
                 <template #prefix>
-                  <el-icon><Price /></el-icon>
+                  <el-icon><Edit /></el-icon>
                 </template>
               </el-input>
             </el-col>
@@ -134,7 +134,7 @@
                 @clear="handleFilterChange"
               >
                 <template #prefix>
-                  <el-icon><Price /></el-icon>
+                  <el-icon><Edit /></el-icon>
                 </template>
               </el-input>
             </el-col>
@@ -712,7 +712,7 @@ import {
   VideoPlay,
   QuestionFilled,
   Filter,
-  Price
+  Edit
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
