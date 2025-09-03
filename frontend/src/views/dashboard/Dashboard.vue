@@ -67,12 +67,12 @@
 
     <!-- 图表和详细信息 -->
     <el-row :gutter="24" class="content-row">
-      <!-- 节点状态图表 -->
-      <el-col :xs="24" :lg="12">
-        <el-card class="chart-card">
+      <!-- 节点概览分布 -->
+      <el-col :xs="24">
+        <el-card class="chart-card node-overview-card">
           <template #header>
             <div class="card-header">
-              <span class="card-title">节点状态分布</span>
+              <span class="card-title">节点概览分布</span>
               <el-button type="text" size="small" @click="refreshNodeStats">
                 <el-icon><Refresh /></el-icon>
                 刷新
@@ -80,176 +80,172 @@
             </div>
           </template>
           
-          <div class="chart-container" style="height: 300px;">
-            <!-- 节点状态环形图 -->
-            <div class="node-status-chart">
-              <div class="pie-chart">
-                <svg width="200" height="200" viewBox="0 0 200 200" class="pie-svg">
-                  <!-- 背景圆 -->
-                  <circle
-                    cx="100"
-                    cy="100"
-                    r="80"
-                    fill="none"
-                    stroke="#f0f0f0"
-                    stroke-width="20"
-                  />
-                  
-                  <!-- 正常节点段 -->
-                  <circle
-                    v-if="nodeStats.ready > 0"
-                    cx="100"
-                    cy="100"
-                    r="80"
-                    fill="none"
-                    stroke="#67c23a"
-                    stroke-width="20"
-                    :stroke-dasharray="readyCircumference"
-                    :stroke-dashoffset="readyOffset"
-                    transform="rotate(-90 100 100)"
-                    class="status-arc ready-arc"
-                  />
-                  
-                  <!-- 异常节点段 -->
-                  <circle
-                    v-if="nodeStats.notReady > 0"
-                    cx="100"
-                    cy="100"
-                    r="80"
-                    fill="none"
-                    stroke="#f56c6c"
-                    stroke-width="20"
-                    :stroke-dasharray="notReadyCircumference"
-                    :stroke-dashoffset="notReadyOffset"
-                    transform="rotate(-90 100 100)"
-                    class="status-arc notready-arc"
-                  />
-                  
-                  <!-- 未知节点段 -->
-                  <circle
-                    v-if="nodeStats.unknown > 0"
-                    cx="100"
-                    cy="100"
-                    r="80"
-                    fill="none"
-                    stroke="#909399"
-                    stroke-width="20"
-                    :stroke-dasharray="unknownCircumference"
-                    :stroke-dashoffset="unknownOffset"
-                    transform="rotate(-90 100 100)"
-                    class="status-arc unknown-arc"
-                  />
-                  
-                  <!-- 中心文字 -->
-                  <text x="100" y="95" text-anchor="middle" class="center-number">
-                    {{ nodeStats.total }}
-                  </text>
-                  <text x="100" y="115" text-anchor="middle" class="center-label">
-                    总节点
-                  </text>
-                </svg>
-              </div>
+          <div class="node-overview-container">
+            <!-- 左侧：节点状态环形图 -->
+            <div class="status-section">
+              <div class="section-title">节点状态</div>
               
-              <!-- 图例 -->
-              <div class="chart-legend">
-                <div class="legend-item" :class="{ 'legend-empty': nodeStats.ready === 0 }">
-                  <div class="legend-indicator">
-                    <span class="legend-color legend-success"></span>
-                    <span class="legend-text">正常</span>
-                  </div>
-                  <span class="legend-value">{{ nodeStats.ready }}</span>
-                  <span class="legend-percentage">({{ readyPercentage }}%)</span>
+              <!-- 节点状态环形图 -->
+              <div class="node-status-chart">
+                <div class="pie-chart">
+                  <svg width="180" height="180" viewBox="0 0 180 180" class="pie-svg">
+                    <!-- 背景圆 -->
+                    <circle
+                      cx="90"
+                      cy="90"
+                      r="65"
+                      fill="none"
+                      stroke="#f0f0f0"
+                      stroke-width="16"
+                    />
+                    
+                    <!-- 正常节点段 -->
+                    <circle
+                      v-if="nodeStats.ready > 0"
+                      cx="90"
+                      cy="90"
+                      r="65"
+                      fill="none"
+                      stroke="#67c23a"
+                      stroke-width="16"
+                      :stroke-dasharray="readyCircumference"
+                      :stroke-dashoffset="readyOffset"
+                      transform="rotate(-90 90 90)"
+                      class="status-arc ready-arc"
+                    />
+                    
+                    <!-- 异常节点段 -->
+                    <circle
+                      v-if="nodeStats.notReady > 0"
+                      cx="90"
+                      cy="90"
+                      r="65"
+                      fill="none"
+                      stroke="#f56c6c"
+                      stroke-width="16"
+                      :stroke-dasharray="notReadyCircumference"
+                      :stroke-dashoffset="notReadyOffset"
+                      transform="rotate(-90 90 90)"
+                      class="status-arc notready-arc"
+                    />
+                    
+                    <!-- 未知节点段 -->
+                    <circle
+                      v-if="nodeStats.unknown > 0"
+                      cx="90"
+                      cy="90"
+                      r="65"
+                      fill="none"
+                      stroke="#909399"
+                      stroke-width="16"
+                      :stroke-dasharray="unknownCircumference"
+                      :stroke-dashoffset="unknownOffset"
+                      transform="rotate(-90 90 90)"
+                      class="status-arc unknown-arc"
+                    />
+                    
+                    <!-- 中心文字 -->
+                    <text x="90" y="85" text-anchor="middle" class="center-number">
+                      {{ nodeStats.total }}
+                    </text>
+                    <text x="90" y="105" text-anchor="middle" class="center-label">
+                      总节点
+                    </text>
+                  </svg>
                 </div>
-                <div class="legend-item" :class="{ 'legend-empty': nodeStats.notReady === 0 }">
-                  <div class="legend-indicator">
-                    <span class="legend-color legend-warning"></span>
-                    <span class="legend-text">异常</span>
+                
+                <!-- 状态图例 -->
+                <div class="chart-legend">
+                  <div class="legend-item" :class="{ 'legend-empty': nodeStats.ready === 0 }">
+                    <div class="legend-indicator">
+                      <span class="legend-color legend-success"></span>
+                      <span class="legend-text">正常</span>
+                    </div>
+                    <span class="legend-value">{{ nodeStats.ready }}</span>
+                    <span class="legend-percentage">({{ readyPercentage }}%)</span>
                   </div>
-                  <span class="legend-value">{{ nodeStats.notReady }}</span>
-                  <span class="legend-percentage">({{ notReadyPercentage }}%)</span>
-                </div>
-                <div class="legend-item" :class="{ 'legend-empty': nodeStats.unknown === 0 }">
-                  <div class="legend-indicator">
-                    <span class="legend-color legend-info"></span>
-                    <span class="legend-text">未知</span>
+                  <div class="legend-item" :class="{ 'legend-empty': nodeStats.notReady === 0 }">
+                    <div class="legend-indicator">
+                      <span class="legend-color legend-warning"></span>
+                      <span class="legend-text">异常</span>
+                    </div>
+                    <span class="legend-value">{{ nodeStats.notReady }}</span>
+                    <span class="legend-percentage">({{ notReadyPercentage }}%)</span>
                   </div>
-                  <span class="legend-value">{{ nodeStats.unknown }}</span>
-                  <span class="legend-percentage">({{ unknownPercentage }}%)</span>
+                  <div class="legend-item" :class="{ 'legend-empty': nodeStats.unknown === 0 }">
+                    <div class="legend-indicator">
+                      <span class="legend-color legend-info"></span>
+                      <span class="legend-text">未知</span>
+                    </div>
+                    <span class="legend-value">{{ nodeStats.unknown }}</span>
+                    <span class="legend-percentage">({{ unknownPercentage }}%)</span>
+                  </div>
                 </div>
               </div>
             </div>
-            
-            <!-- 空状态 -->
-            <div v-if="nodeStats.total === 0" class="empty-chart">
+
+            <!-- 分隔线 -->
+            <el-divider direction="vertical" class="section-divider" />
+
+            <!-- 右侧：节点归属分布 -->
+            <div class="ownership-section">
+              <div class="section-title">节点归属</div>
+              
+              <!-- 节点归属图表 -->
+              <div class="node-ownership-chart">
+                <div v-if="ownershipChartData.length > 0" class="ownership-list">
+                  <div 
+                    v-for="(item, index) in ownershipChartData" 
+                    :key="item.name"
+                    class="ownership-item"
+                    :style="{ animationDelay: `${index * 0.1}s` }"
+                  >
+                    <div class="ownership-header">
+                      <div class="ownership-indicator">
+                        <span 
+                          class="ownership-color" 
+                          :style="{ backgroundColor: item.color }"
+                        ></span>
+                        <span class="ownership-name">{{ item.name }}</span>
+                      </div>
+                      <div class="ownership-stats">
+                        <span class="ownership-count">{{ item.count }}</span>
+                        <span class="ownership-percentage">{{ item.percentage }}%</span>
+                      </div>
+                    </div>
+                    
+                    <div class="ownership-progress">
+                      <div 
+                        class="ownership-bar"
+                        :style="{ 
+                          width: `${item.percentage}%`,
+                          backgroundColor: item.color 
+                        }"
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 空状态 -->
+                <div v-else class="empty-ownership">
+                  <el-empty description="暂无节点归属数据" :image-size="60">
+                    <template #description>
+                      <p>节点未配置归属标签</p>
+                      <p style="font-size: 12px; color: #999;">标签：deeproute.cn/user-type</p>
+                    </template>
+                  </el-empty>
+                </div>
+              </div>
+            </div>
+
+            <!-- 空状态 (整体无数据) -->
+            <div v-if="nodeStats.total === 0" class="empty-overview">
               <el-empty description="暂无节点数据" :image-size="100">
                 <template #description>
                   <p>当前集群中没有节点信息</p>
                   <p>请检查集群配置或添加节点</p>
                 </template>
               </el-empty>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-
-      <!-- 节点归属分布 -->
-      <el-col :xs="24" :lg="12">
-        <el-card class="chart-card">
-          <template #header>
-            <div class="card-header">
-              <span class="card-title">节点归属分布</span>
-              <el-button type="text" size="small" @click="refreshNodeStats">
-                <el-icon><Refresh /></el-icon>
-                刷新
-              </el-button>
-            </div>
-          </template>
-          
-          <div class="chart-container" style="height: 300px;">
-            <!-- 节点归属图表 -->
-            <div class="node-ownership-chart">
-              <div v-if="ownershipChartData.length > 0" class="ownership-list">
-                <div 
-                  v-for="(item, index) in ownershipChartData" 
-                  :key="item.name"
-                  class="ownership-item"
-                  :style="{ animationDelay: `${index * 0.1}s` }"
-                >
-                  <div class="ownership-header">
-                    <div class="ownership-indicator">
-                      <span 
-                        class="ownership-color" 
-                        :style="{ backgroundColor: item.color }"
-                      ></span>
-                      <span class="ownership-name">{{ item.name }}</span>
-                    </div>
-                    <div class="ownership-stats">
-                      <span class="ownership-count">{{ item.count }}</span>
-                      <span class="ownership-percentage">{{ item.percentage }}%</span>
-                    </div>
-                  </div>
-                  
-                  <div class="ownership-progress">
-                    <div 
-                      class="ownership-bar"
-                      :style="{ 
-                        width: `${item.percentage}%`,
-                        backgroundColor: item.color 
-                      }"
-                    ></div>
-                  </div>
-                </div>
-              </div>
-              
-              <!-- 空状态 -->
-              <div v-else class="empty-ownership">
-                <el-empty description="暂无节点归属数据" :image-size="80">
-                  <template #description>
-                    <p>当前集群节点未配置归属标签</p>
-                    <p>标签：deeproute.cn/user-type</p>
-                  </template>
-                </el-empty>
-              </div>
             </div>
           </div>
         </el-card>
@@ -476,7 +472,7 @@ const unknownPercentage = computed(() => {
 })
 
 // 环形图计算
-const radius = 80
+const radius = 65
 const circumference = 2 * Math.PI * radius
 
 // 正常节点段
@@ -954,22 +950,84 @@ onMounted(async () => {
   justify-content: center;
 }
 
+/* 节点概览容器样式 */
+.node-overview-card {
+  margin-bottom: 24px;
+}
+
+.node-overview-container {
+  display: flex;
+  min-height: 300px;
+  padding: 20px;
+  gap: 24px;
+  position: relative;
+}
+
+.status-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 300px;
+}
+
+.ownership-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 300px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.ownership-section .section-title {
+  text-align: left;
+  margin-left: 20px;
+}
+
+.section-divider {
+  height: auto !important;
+  min-height: 260px;
+  margin: 0 !important;
+}
+
+/* 空状态样式 */
+.empty-overview {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.9);
+  z-index: 10;
+}
+
 /* 节点归属图表样式 */
 .node-ownership-chart {
   height: 100%;
-  padding: 20px;
+  flex: 1;
 }
 
 .ownership-list {
-  height: 100%;
+  height: 220px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   overflow-y: auto;
+  padding: 0 20px;
 }
 
 .ownership-item {
-  padding: 16px;
+  padding: 12px 16px;
   border-radius: 8px;
   background: #fafafa;
   border: 1px solid #e8e8e8;
@@ -980,15 +1038,15 @@ onMounted(async () => {
 .ownership-item:hover {
   background: #f0f0f0;
   border-color: #d9d9d9;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .ownership-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .ownership-indicator {
@@ -998,14 +1056,14 @@ onMounted(async () => {
 }
 
 .ownership-color {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
 .ownership-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: #333;
 }
@@ -1013,41 +1071,74 @@ onMounted(async () => {
 .ownership-stats {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .ownership-count {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #333;
 }
 
 .ownership-percentage {
-  font-size: 12px;
+  font-size: 11px;
   color: #666;
   background: #e8e8e8;
-  padding: 2px 6px;
-  border-radius: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
 }
 
 .ownership-progress {
-  height: 8px;
+  height: 6px;
   background: #e8e8e8;
-  border-radius: 4px;
+  border-radius: 3px;
   overflow: hidden;
 }
 
 .ownership-bar {
   height: 100%;
   transition: width 0.8s ease-out;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .empty-ownership {
-  height: 100%;
+  height: 220px;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0 20px;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .node-overview-container {
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .section-divider {
+    display: none;
+  }
+  
+  .status-section,
+  .ownership-section {
+    min-width: auto;
+  }
+  
+  .ownership-section .section-title {
+    text-align: center;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .node-overview-container {
+    padding: 15px;
+  }
+  
+  .ownership-list {
+    padding: 0 10px;
+  }
 }
 
 /* 动画 */

@@ -1086,9 +1086,6 @@ const applyTemplateToNodes = (template) => {
 
 // 显示应用对话框
 const showApplyDialog = async (template) => {
-  console.log('showApplyDialog 接收到的 template:', template)
-  console.log('template.labels:', template.labels)
-  
   // 懒加载节点数据
   await fetchNodes()
   
