@@ -27,11 +27,12 @@
               style="width: 180px"
             >
               <el-option label="全部" value="" />
-              <el-option label="CREATE" value="CREATE" />
-              <el-option label="UPDATE" value="UPDATE" />
-              <el-option label="DELETE" value="DELETE" />
-              <el-option label="LIST" value="LIST" />
-              <el-option label="LOGIN" value="LOGIN" />
+              <el-option label="创建" value="create" />
+              <el-option label="更新" value="update" />
+              <el-option label="删除" value="delete" />
+              <el-option label="查看" value="view" />
+              <el-option label="登录" value="login" />
+              <el-option label="退出" value="logout" />
             </el-select>
           </el-form-item>
           <el-form-item label="资源类型">
@@ -42,11 +43,13 @@
               style="width: 180px"
             >
               <el-option label="全部" value="" />
-              <el-option label="Node" value="Node" />
-              <el-option label="Label" value="Label" />
-              <el-option label="Taint" value="Taint" />
-              <el-option label="User" value="User" />
-              <el-option label="Cluster" value="Cluster" />
+              <el-option label="节点" value="node" />
+              <el-option label="标签" value="label" />
+              <el-option label="污点" value="taint" />
+              <el-option label="用户" value="user" />
+              <el-option label="集群" value="cluster" />
+              <el-option label="标签模板" value="label_template" />
+              <el-option label="污点模板" value="taint_template" />
             </el-select>
           </el-form-item>
           <el-form-item label="状态">
@@ -58,7 +61,7 @@
             >
               <el-option label="全部" value="" />
               <el-option label="成功" value="success" />
-              <el-option label="失败" value="failure" />
+              <el-option label="失败" value="failed" />
             </el-select>
           </el-form-item>
           <el-form-item>
@@ -219,6 +222,9 @@ const fetchAuditLogs = async () => {
         delete params[key]
       }
     })
+    
+    // 添加调试日志
+    console.log('审计日志搜索参数:', params)
     
     const response = await auditApi.getAuditLogs(params)
     if (response.data && response.data.data) {

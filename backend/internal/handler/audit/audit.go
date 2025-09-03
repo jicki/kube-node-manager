@@ -81,6 +81,10 @@ func (h *Handler) List(c *gin.Context) {
 	req.StartDate = c.Query("start_date")
 	req.EndDate = c.Query("end_date")
 
+	// 添加调试日志
+	h.logger.Infof("审计日志查询参数: action=%s, resource_type=%s, status=%s, username=%s",
+		req.Action, req.ResourceType, req.Status, req.Username)
+
 	// 检查用户权限 - 普通用户只能查看自己的日志
 	currentUserID, exists := c.Get("user_id")
 	if !exists {

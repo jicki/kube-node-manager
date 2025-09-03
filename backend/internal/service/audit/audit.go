@@ -89,12 +89,15 @@ func (s *Service) List(req ListRequest) (*ListResponse, error) {
 		query = query.Where("cluster_id = ?", req.ClusterID)
 	}
 	if req.Action != "" {
+		s.logger.Infof("添加action过滤条件: %s", req.Action)
 		query = query.Where("action = ?", req.Action)
 	}
 	if req.ResourceType != "" {
+		s.logger.Infof("添加resource_type过滤条件: %s", req.ResourceType)
 		query = query.Where("resource_type = ?", req.ResourceType)
 	}
 	if req.Status != "" {
+		s.logger.Infof("添加status过滤条件: %s", req.Status)
 		query = query.Where("status = ?", req.Status)
 	}
 	if req.StartDate != "" {
