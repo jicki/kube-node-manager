@@ -51,7 +51,8 @@ export const useNodeStore = defineStore('node', {
       labelValue: '',
       taintKey: '',
       taintValue: '',
-      taintEffect: ''
+      taintEffect: '',
+      nodeOwnership: '' // deeproute.cn/user-type 标签过滤
     },
     loading: false
   }),
@@ -79,6 +80,16 @@ export const useNodeStore = defineStore('node', {
     schedulableNodes: (state) => state.nodes.filter(node => getSmartSchedulingStatus(node) === 'schedulable'),
     limitedNodes: (state) => state.nodes.filter(node => getSmartSchedulingStatus(node) === 'limited'),
     unschedulableNodes: (state) => state.nodes.filter(node => getSmartSchedulingStatus(node) === 'unschedulable'),
+    // 节点归属选项 (从所有节点的 deeproute.cn/user-type 标签中提取)
+    nodeOwnershipOptions: (state) => {
+      const ownershipSet = new Set()
+      state.nodes.forEach(node => {
+        if (node.labels && node.labels['deeproute.cn/user-type']) {
+          ownershipSet.add(node.labels['deeproute.cn/user-type'])
+        }
+      })
+      return Array.from(ownershipSet).sort()
+    },
     filteredNodes: (state) => {
       let result = state.nodes
       
@@ -157,6 +168,16 @@ export const useNodeStore = defineStore('node', {
             }
             return true
           })
+        })
+      }
+      
+      // 节点归属筛选 (deeproute.cn/user-type)
+      if (state.filters.nodeOwnership) {
+        result = result.filter(node => {
+          if (!node.labels || !node.labels['deeproute.cn/user-type']) {
+            return false
+          }
+          return node.labels['deeproute.cn/user-type'] === state.filters.nodeOwnership
         })
       }
       
@@ -325,7 +346,8 @@ export const useNodeStore = defineStore('node', {
         labelValue: '',
         taintKey: '',
         taintValue: '',
-        taintEffect: ''
+        taintEffect: '',
+        nodeOwnership: ''
       }
       this.pagination.current = 1
     }

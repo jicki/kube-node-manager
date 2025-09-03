@@ -32,7 +32,7 @@
       
       <div class="filter-section">
         <el-row :gutter="12">
-          <el-col :span="6">
+          <el-col :span="4">
             <el-select
               v-model="statusFilter"
               placeholder="状态筛选"
@@ -45,7 +45,7 @@
               <el-option label="Unknown" value="Unknown" />
             </el-select>
           </el-col>
-          <el-col :span="6">
+          <el-col :span="4">
             <el-select
               v-model="roleFilter"
               placeholder="角色筛选"
@@ -57,7 +57,7 @@
               <el-option label="Worker" value="worker" />
             </el-select>
           </el-col>
-          <el-col :span="6">
+          <el-col :span="5">
             <el-select
               v-model="schedulableFilter"
               placeholder="调度状态"
@@ -68,6 +68,22 @@
               <el-option label="可调度" value="schedulable" />
               <el-option label="有限调度" value="limited" />
               <el-option label="不可调度" value="unschedulable" />
+            </el-select>
+          </el-col>
+          <el-col :span="5">
+            <el-select
+              v-model="nodeOwnershipFilter"
+              placeholder="节点归属"
+              clearable
+              @change="handleFilterChange"
+            >
+              <el-option label="全部归属" value="" />
+              <el-option 
+                v-for="ownership in nodeOwnershipOptions" 
+                :key="ownership" 
+                :label="ownership" 
+                :value="ownership" 
+              />
             </el-select>
           </el-col>
           <el-col :span="6">
@@ -734,6 +750,7 @@ const labelValueFilter = ref('')
 const taintKeyFilter = ref('')
 const taintValueFilter = ref('')
 const taintEffectFilter = ref('')
+const nodeOwnershipFilter = ref('')
 const detailDialogVisible = ref(false)
 const drainConfirmVisible = ref(false)
 const drainConfirmMessage = ref('')
@@ -790,6 +807,7 @@ const availableTaintKeys = computed(() => {
 const nodes = computed(() => nodeStore.nodes)
 const selectedNodes = computed(() => nodeStore.selectedNodes)
 const pagination = computed(() => nodeStore.pagination)
+const nodeOwnershipOptions = computed(() => nodeStore.nodeOwnershipOptions)
 
 const filteredNodes = computed(() => {
   return nodeStore.filteredNodes
@@ -806,7 +824,8 @@ const handleSearch = () => {
     labelValue: labelValueFilter.value,
     taintKey: taintKeyFilter.value,
     taintValue: taintValueFilter.value,
-    taintEffect: taintEffectFilter.value
+    taintEffect: taintEffectFilter.value,
+    nodeOwnership: nodeOwnershipFilter.value
   })
 }
 
