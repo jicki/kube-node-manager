@@ -699,7 +699,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNodeStore } from '@/store/modules/node'
@@ -810,23 +810,52 @@ const pagination = computed(() => nodeStore.pagination)
 const nodeOwnershipOptions = computed(() => nodeStore.nodeOwnershipOptions)
 
 const filteredNodes = computed(() => {
-  return nodeStore.paginatedNodes
+  const paginatedNodes = nodeStore.paginatedNodes
+  const allFilteredNodes = nodeStore.filteredNodes
+  
+  // 如果分页节点为空但有过滤结果，可能是分页问题
+  if (paginatedNodes.length === 0 && allFilteredNodes.length > 0) {
+    if (nodeStore.pagination.current > 1) {
+      console.warn('分页问题：当前页无数据但过滤结果不为空，重置到第一页')
+      // 异步重置分页，避免计算属性中的状态变更
+      nextTick(() => {
+        nodeStore.setPagination({ current: 1 })
+      })
+    }
+    
+    // 紧急情况下，显示第一页的数据
+    if (allFilteredNodes.length > 0) {
+      const pageSize = nodeStore.pagination.size
+      return allFilteredNodes.slice(0, pageSize)
+    }
+  }
+  
+  return paginatedNodes
 })
 
-// 处理搜索
+// 防抖搜索处理
+let searchDebounceTimer = null
 const handleSearch = () => {
-  nodeStore.setFilters({
-    name: searchKeyword.value,
-    status: statusFilter.value,
-    role: roleFilter.value,
-    schedulable: schedulableFilter.value,
-    labelKey: labelKeyFilter.value,
-    labelValue: labelValueFilter.value,
-    taintKey: taintKeyFilter.value,
-    taintValue: taintValueFilter.value,
-    taintEffect: taintEffectFilter.value,
-    nodeOwnership: nodeOwnershipFilter.value
-  })
+  // 清除之前的定时器
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+  
+  // 设置防抖延迟
+  searchDebounceTimer = setTimeout(() => {
+    nodeStore.setFilters({
+      name: searchKeyword.value,
+      status: statusFilter.value,
+      role: roleFilter.value,
+      schedulable: schedulableFilter.value,
+      labelKey: labelKeyFilter.value,
+      labelValue: labelValueFilter.value,
+      taintKey: taintKeyFilter.value,
+      taintValue: taintValueFilter.value,
+      taintEffect: taintEffectFilter.value,
+      nodeOwnership: nodeOwnershipFilter.value
+    })
+  }, 300) // 300ms 防抖延迟
 }
 
 // 处理筛选变化

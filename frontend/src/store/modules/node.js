@@ -119,6 +119,20 @@ export const useNodeStore = defineStore('node', {
     },
     filteredNodes: (state) => {
       let result = state.nodes
+      const originalCount = result.length
+      
+      // 检查是否有任何过滤条件
+      const hasFilters = !!(state.filters.name || state.filters.status || state.filters.role || 
+                           state.filters.schedulable || state.filters.labelKey || state.filters.taintKey || 
+                           state.filters.nodeOwnership)
+      
+      // 只在有过滤条件且结果数量异常时输出调试信息
+      if (hasFilters && originalCount > 0) {
+        console.log('开始过滤节点:', {
+          原始节点数: originalCount,
+          过滤条件: state.filters
+        })
+      }
       
       if (state.filters.name) {
         result = result.filter(node => 
@@ -156,12 +170,6 @@ export const useNodeStore = defineStore('node', {
       if (state.filters.schedulable) {
         result = result.filter(node => {
           const schedulingStatus = getSmartSchedulingStatus(node)
-          console.log(`节点 ${node.name} 调度状态:`, {
-            schedulable: node.schedulable,
-            taints: node.taints,
-            calculatedStatus: schedulingStatus,
-            filterValue: state.filters.schedulable
-          })
           return schedulingStatus === state.filters.schedulable
         })
       }
@@ -222,6 +230,11 @@ export const useNodeStore = defineStore('node', {
         })
       }
       
+      // 只在有过滤条件或结果为空时输出最终结果
+      if (hasFilters || result.length === 0) {
+        console.log(`过滤结果: ${originalCount} → ${result.length}`)
+      }
+      
       return result
     },
     // 添加分页后的节点列表
@@ -229,7 +242,21 @@ export const useNodeStore = defineStore('node', {
       const filtered = getters.filteredNodes
       const start = (state.pagination.current - 1) * state.pagination.size
       const end = start + state.pagination.size
-      return filtered.slice(start, end)
+      const result = filtered.slice(start, end)
+      
+      // 只在结果为空但应该有数据时输出调试信息
+      if (result.length === 0 && filtered.length > 0) {
+        console.warn('分页异常:', {
+          filteredCount: filtered.length,
+          currentPage: state.pagination.current,
+          pageSize: state.pagination.size,
+          start,
+          end,
+          paginatedCount: result.length
+        })
+      }
+      
+      return result
     }
   },
 
@@ -389,14 +416,27 @@ export const useNodeStore = defineStore('node', {
 
     updatePaginationTotal() {
       // 基于过滤后的节点数量来设置分页总数
-      this.pagination.total = this.filteredNodes.length
-      console.log('更新分页总数:', {
-        totalNodes: this.nodes.length,
-        filteredNodes: this.filteredNodes.length,
-        paginationTotal: this.pagination.total,
-        currentPage: this.pagination.current,
-        pageSize: this.pagination.size
-      })
+      const filteredCount = this.filteredNodes.length
+      const oldTotal = this.pagination.total
+      
+      this.pagination.total = filteredCount
+      
+      // 只在数量变化时输出日志，减少控制台噪音
+      if (oldTotal !== filteredCount) {
+        console.log('更新分页总数:', {
+          totalNodes: this.nodes.length,
+          filteredNodes: filteredCount,
+          paginationTotal: this.pagination.total,
+          currentPage: this.pagination.current,
+          pageSize: this.pagination.size
+        })
+      }
+      
+      // 如果当前页超出范围，重置到第一页
+      const maxPage = Math.ceil(filteredCount / this.pagination.size) || 1
+      if (this.pagination.current > maxPage) {
+        this.pagination.current = 1
+      }
     },
 
     resetFilters() {
