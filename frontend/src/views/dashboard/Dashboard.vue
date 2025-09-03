@@ -81,22 +81,112 @@
           </template>
           
           <div class="chart-container" style="height: 300px;">
-            <!-- 这里可以集成图表库如ECharts -->
-            <div class="pie-chart-placeholder">
+            <!-- 节点状态环形图 -->
+            <div class="node-status-chart">
+              <div class="pie-chart">
+                <svg width="200" height="200" viewBox="0 0 200 200" class="pie-svg">
+                  <!-- 背景圆 -->
+                  <circle
+                    cx="100"
+                    cy="100"
+                    r="80"
+                    fill="none"
+                    stroke="#f0f0f0"
+                    stroke-width="20"
+                  />
+                  
+                  <!-- 正常节点段 -->
+                  <circle
+                    v-if="nodeStats.ready > 0"
+                    cx="100"
+                    cy="100"
+                    r="80"
+                    fill="none"
+                    stroke="#67c23a"
+                    stroke-width="20"
+                    :stroke-dasharray="readyCircumference"
+                    :stroke-dashoffset="readyOffset"
+                    transform="rotate(-90 100 100)"
+                    class="status-arc ready-arc"
+                  />
+                  
+                  <!-- 异常节点段 -->
+                  <circle
+                    v-if="nodeStats.notReady > 0"
+                    cx="100"
+                    cy="100"
+                    r="80"
+                    fill="none"
+                    stroke="#f56c6c"
+                    stroke-width="20"
+                    :stroke-dasharray="notReadyCircumference"
+                    :stroke-dashoffset="notReadyOffset"
+                    transform="rotate(-90 100 100)"
+                    class="status-arc notready-arc"
+                  />
+                  
+                  <!-- 未知节点段 -->
+                  <circle
+                    v-if="nodeStats.unknown > 0"
+                    cx="100"
+                    cy="100"
+                    r="80"
+                    fill="none"
+                    stroke="#909399"
+                    stroke-width="20"
+                    :stroke-dasharray="unknownCircumference"
+                    :stroke-dashoffset="unknownOffset"
+                    transform="rotate(-90 100 100)"
+                    class="status-arc unknown-arc"
+                  />
+                  
+                  <!-- 中心文字 -->
+                  <text x="100" y="95" text-anchor="middle" class="center-number">
+                    {{ nodeStats.total }}
+                  </text>
+                  <text x="100" y="115" text-anchor="middle" class="center-label">
+                    总节点
+                  </text>
+                </svg>
+              </div>
+              
+              <!-- 图例 -->
               <div class="chart-legend">
-                <div class="legend-item">
-                  <span class="legend-color legend-success"></span>
-                  <span class="legend-text">正常 ({{ nodeStats.ready }})</span>
+                <div class="legend-item" :class="{ 'legend-empty': nodeStats.ready === 0 }">
+                  <div class="legend-indicator">
+                    <span class="legend-color legend-success"></span>
+                    <span class="legend-text">正常</span>
+                  </div>
+                  <span class="legend-value">{{ nodeStats.ready }}</span>
+                  <span class="legend-percentage">({{ readyPercentage }}%)</span>
                 </div>
-                <div class="legend-item">
-                  <span class="legend-color legend-warning"></span>
-                  <span class="legend-text">异常 ({{ nodeStats.notReady }})</span>
+                <div class="legend-item" :class="{ 'legend-empty': nodeStats.notReady === 0 }">
+                  <div class="legend-indicator">
+                    <span class="legend-color legend-warning"></span>
+                    <span class="legend-text">异常</span>
+                  </div>
+                  <span class="legend-value">{{ nodeStats.notReady }}</span>
+                  <span class="legend-percentage">({{ notReadyPercentage }}%)</span>
                 </div>
-                <div class="legend-item">
-                  <span class="legend-color legend-info"></span>
-                  <span class="legend-text">未知 ({{ nodeStats.unknown }})</span>
+                <div class="legend-item" :class="{ 'legend-empty': nodeStats.unknown === 0 }">
+                  <div class="legend-indicator">
+                    <span class="legend-color legend-info"></span>
+                    <span class="legend-text">未知</span>
+                  </div>
+                  <span class="legend-value">{{ nodeStats.unknown }}</span>
+                  <span class="legend-percentage">({{ unknownPercentage }}%)</span>
                 </div>
               </div>
+            </div>
+            
+            <!-- 空状态 -->
+            <div v-if="nodeStats.total === 0" class="empty-chart">
+              <el-empty description="暂无节点数据" :image-size="100">
+                <template #description>
+                  <p>当前集群中没有节点信息</p>
+                  <p>请检查集群配置或添加节点</p>
+                </template>
+              </el-empty>
             </div>
           </div>
         </el-card>
@@ -302,6 +392,65 @@ const clusterStats = computed(() => clusterStore.clusterStats)
 const clusters = computed(() => clusterStore.clusters)
 const currentCluster = computed(() => clusterStore.currentCluster)
 const isAdmin = computed(() => authStore.user?.role === 'admin')
+
+// 节点状态百分比计算
+const readyPercentage = computed(() => {
+  if (nodeStats.value.total === 0) return 0
+  return Math.round((nodeStats.value.ready / nodeStats.value.total) * 100)
+})
+
+const notReadyPercentage = computed(() => {
+  if (nodeStats.value.total === 0) return 0
+  return Math.round((nodeStats.value.notReady / nodeStats.value.total) * 100)
+})
+
+const unknownPercentage = computed(() => {
+  if (nodeStats.value.total === 0) return 0
+  return Math.round((nodeStats.value.unknown / nodeStats.value.total) * 100)
+})
+
+// 环形图计算
+const radius = 80
+const circumference = 2 * Math.PI * radius
+
+// 正常节点段
+const readyCircumference = computed(() => {
+  if (nodeStats.value.total === 0) return '0 ' + circumference
+  const ratio = nodeStats.value.ready / nodeStats.value.total
+  const arcLength = ratio * circumference
+  return `${arcLength} ${circumference}`
+})
+
+const readyOffset = computed(() => 0)
+
+// 异常节点段
+const notReadyCircumference = computed(() => {
+  if (nodeStats.value.total === 0) return '0 ' + circumference
+  const ratio = nodeStats.value.notReady / nodeStats.value.total
+  const arcLength = ratio * circumference
+  return `${arcLength} ${circumference}`
+})
+
+const notReadyOffset = computed(() => {
+  if (nodeStats.value.total === 0) return 0
+  const readyRatio = nodeStats.value.ready / nodeStats.value.total
+  return -(readyRatio * circumference)
+})
+
+// 未知节点段
+const unknownCircumference = computed(() => {
+  if (nodeStats.value.total === 0) return '0 ' + circumference
+  const ratio = nodeStats.value.unknown / nodeStats.value.total
+  const arcLength = ratio * circumference
+  return `${arcLength} ${circumference}`
+})
+
+const unknownOffset = computed(() => {
+  if (nodeStats.value.total === 0) return 0
+  const readyRatio = nodeStats.value.ready / nodeStats.value.total
+  const notReadyRatio = nodeStats.value.notReady / nodeStats.value.total
+  return -((readyRatio + notReadyRatio) * circumference)
+})
 
 // 最近操作数据
 const recentActions = ref([])
@@ -571,17 +720,90 @@ onMounted(async () => {
   justify-content: center;
 }
 
-.pie-chart-placeholder {
-  text-align: center;
+/* 节点状态环形图样式 */
+.chart-card {
+  height: 380px;
+}
+
+.node-status-chart {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  padding: 20px;
+}
+
+.pie-chart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pie-svg {
+  max-width: 200px;
+  max-height: 200px;
+}
+
+.status-arc {
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.status-arc:hover {
+  stroke-width: 24;
+}
+
+.ready-arc {
+  stroke: #67c23a;
+}
+
+.notready-arc {
+  stroke: #f56c6c;
+}
+
+.unknown-arc {
+  stroke: #909399;
+}
+
+.center-number {
+  font-size: 24px;
+  font-weight: 600;
+  fill: #333;
+}
+
+.center-label {
+  font-size: 12px;
+  fill: #666;
 }
 
 .chart-legend {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  min-width: 120px;
 }
 
 .legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fafafa;
+  transition: all 0.3s ease;
+}
+
+.legend-item:hover {
+  background: #f0f0f0;
+  transform: translateX(2px);
+}
+
+.legend-item.legend-empty {
+  opacity: 0.5;
+}
+
+.legend-indicator {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -591,18 +813,46 @@ onMounted(async () => {
   width: 12px;
   height: 12px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .legend-success {
-  background: #52c41a;
+  background-color: #67c23a;
 }
 
 .legend-warning {
-  background: #faad14;
+  background-color: #f56c6c;
 }
 
 .legend-info {
-  background: #1890ff;
+  background-color: #909399;
+}
+
+.legend-text {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.legend-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+.legend-percentage {
+  font-size: 12px;
+  color: #666;
+  font-weight: normal;
+}
+
+.empty-chart {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .cluster-list {
@@ -767,6 +1017,31 @@ onMounted(async () => {
   
   .content-row .el-col {
     margin-bottom: 16px;
+  }
+  
+  /* 环形图响应式 */
+  .node-status-chart {
+    flex-direction: column;
+    gap: 20px;
+    padding: 10px;
+  }
+  
+  .pie-svg {
+    max-width: 160px;
+    max-height: 160px;
+  }
+  
+  .center-number {
+    font-size: 20px;
+  }
+  
+  .center-label {
+    font-size: 11px;
+  }
+  
+  .chart-legend {
+    min-width: auto;
+    width: 100%;
   }
 }
 </style>
