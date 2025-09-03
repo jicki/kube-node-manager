@@ -1184,23 +1184,26 @@ onUnmounted(() => {
 /* 圆形图表图例 */
 .ownership-legend {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px 12px;
+  align-content: start;
   overflow-y: auto;
+  padding: 4px;
 }
 
 .ownership-legend-item {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  border-radius: 6px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 8px;
+  border-radius: 8px;
   background: #fafafa;
   border: 1px solid #e8e8e8;
   transition: all 0.3s ease;
   animation: fadeInUp 0.5s ease-out;
+  min-height: 60px;
+  justify-content: space-between;
 }
 
 .ownership-legend-item:hover {
@@ -1213,7 +1216,8 @@ onUnmounted(() => {
 .ownership-legend-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
 }
 
 .ownership-legend-color {
@@ -1232,7 +1236,8 @@ onUnmounted(() => {
 .ownership-legend-stats {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
 }
 
 .ownership-legend-count {
@@ -1361,6 +1366,11 @@ onUnmounted(() => {
   .ownership-section .section-title {
     margin-left: 10px; /* 调整边距 */
   }
+  
+  .ownership-legend {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 6px 8px;
+  }
 }
 
 @media (max-width: 992px) {
@@ -1401,6 +1411,16 @@ onUnmounted(() => {
   .cluster-list {
     max-height: 280px;
   }
+  
+  .ownership-legend {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 6px;
+  }
+  
+  .ownership-legend-item {
+    min-height: 50px;
+    padding: 8px 6px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -1432,6 +1452,27 @@ onUnmounted(() => {
   
   .cluster-list {
     max-height: 240px;
+  }
+  
+  .ownership-legend {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  .ownership-legend-item {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+  
+  .ownership-legend-indicator {
+    justify-content: flex-start;
+  }
+  
+  .ownership-legend-stats {
+    justify-content: flex-end;
   }
 }
 
