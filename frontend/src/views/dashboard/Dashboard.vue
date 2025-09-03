@@ -929,11 +929,21 @@ onMounted(async () => {
   background-color: #909399;
 }
 
+.legend-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
 .legend-text {
   font-size: 14px;
   color: #333;
   font-weight: 500;
   letter-spacing: 0.3px;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+  white-space: nowrap;
 }
 
 .legend-stats {
