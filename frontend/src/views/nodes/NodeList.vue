@@ -32,7 +32,7 @@
       
       <div class="filter-section">
         <el-row :gutter="12">
-          <el-col :span="8">
+          <el-col :span="6">
             <el-select
               v-model="statusFilter"
               placeholder="状态筛选"
@@ -45,7 +45,7 @@
               <el-option label="Unknown" value="Unknown" />
             </el-select>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="6">
             <el-select
               v-model="roleFilter"
               placeholder="角色筛选"
@@ -57,7 +57,7 @@
               <el-option label="Worker" value="worker" />
             </el-select>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="6">
             <el-select
               v-model="schedulableFilter"
               placeholder="调度状态"
@@ -70,7 +70,88 @@
               <el-option label="不可调度" value="unschedulable" />
             </el-select>
           </el-col>
+          <el-col :span="6">
+            <el-button type="primary" plain @click="showAdvancedSearch = !showAdvancedSearch">
+              <el-icon><Filter /></el-icon>
+              高级搜索
+            </el-button>
+          </el-col>
         </el-row>
+        
+        <!-- 高级搜索区域 -->
+        <div v-show="showAdvancedSearch" class="advanced-search">
+          <el-divider content-position="left">标签搜索</el-divider>
+          <el-row :gutter="12">
+            <el-col :span="12">
+              <el-input
+                v-model="labelKeyFilter"
+                placeholder="输入标签键，如 node-role.kubernetes.io/master"
+                clearable
+                @input="handleFilterChange"
+                @clear="handleFilterChange"
+              >
+                <template #prefix>
+                  <el-icon><CollectionTag /></el-icon>
+                </template>
+              </el-input>
+            </el-col>
+            <el-col :span="12">
+              <el-input
+                v-model="labelValueFilter"
+                placeholder="输入标签值（可选）"
+                clearable
+                @input="handleFilterChange"
+                @clear="handleFilterChange"
+              >
+                <template #prefix>
+                  <el-icon><Price /></el-icon>
+                </template>
+              </el-input>
+            </el-col>
+          </el-row>
+          
+          <el-divider content-position="left">污点搜索</el-divider>
+          <el-row :gutter="12">
+            <el-col :span="8">
+              <el-input
+                v-model="taintKeyFilter"
+                placeholder="输入污点键，如 node.kubernetes.io/unschedulable"
+                clearable
+                @input="handleFilterChange"
+                @clear="handleFilterChange"
+              >
+                <template #prefix>
+                  <el-icon><WarningFilled /></el-icon>
+                </template>
+              </el-input>
+            </el-col>
+            <el-col :span="8">
+              <el-input
+                v-model="taintValueFilter"
+                placeholder="输入污点值（可选）"
+                clearable
+                @input="handleFilterChange"
+                @clear="handleFilterChange"
+              >
+                <template #prefix>
+                  <el-icon><Price /></el-icon>
+                </template>
+              </el-input>
+            </el-col>
+            <el-col :span="8">
+              <el-select
+                v-model="taintEffectFilter"
+                placeholder="污点效果（可选）"
+                clearable
+                @change="handleFilterChange"
+              >
+                <el-option label="NoSchedule" value="NoSchedule" />
+                <el-option label="PreferNoSchedule" value="PreferNoSchedule" />
+                <el-option label="NoExecute" value="NoExecute" />
+              </el-select>
+            </el-col>
+          </el-row>
+        </div>
       </div>
     </el-card>
 
@@ -361,13 +442,13 @@
         </el-table-column>
 
         <el-table-column
-          prop="createdAt"
+          prop="created_at"
           label="创建时间"
           sortable="custom"
           width="180"
         >
           <template #default="{ row }">
-            <span class="time-text">{{ formatTime(row.createdAt) }}</span>
+            <span class="time-text">{{ formatTime(row.created_at) }}</span>
           </template>
         </el-table-column>
 
@@ -629,7 +710,9 @@ import {
   Search,
   Grid,
   VideoPlay,
-  QuestionFilled
+  QuestionFilled,
+  Filter,
+  Price
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -643,6 +726,14 @@ const statusFilter = ref('')
 const roleFilter = ref('')
 const schedulableFilter = ref('')
 const selectedNode = ref(null)
+const showAdvancedSearch = ref(false)
+
+// 标签和污点过滤器
+const labelKeyFilter = ref('')
+const labelValueFilter = ref('')
+const taintKeyFilter = ref('')
+const taintValueFilter = ref('')
+const taintEffectFilter = ref('')
 const detailDialogVisible = ref(false)
 const drainConfirmVisible = ref(false)
 const drainConfirmMessage = ref('')
@@ -710,7 +801,12 @@ const handleSearch = () => {
     name: searchKeyword.value,
     status: statusFilter.value,
     role: roleFilter.value,
-    schedulable: schedulableFilter.value
+    schedulable: schedulableFilter.value,
+    labelKey: labelKeyFilter.value,
+    labelValue: labelValueFilter.value,
+    taintKey: taintKeyFilter.value,
+    taintValue: taintValueFilter.value,
+    taintEffect: taintEffectFilter.value
   })
 }
 
@@ -1384,6 +1480,30 @@ onMounted(async () => {
 
 .filter-section {
   margin-bottom: 12px;
+}
+
+.advanced-search {
+  margin-top: 16px;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #e8e8e8;
+}
+
+.advanced-search .el-divider {
+  margin: 16px 0 12px 0;
+}
+
+.advanced-search .el-divider:first-child {
+  margin-top: 0;
+}
+
+.advanced-search .el-row {
+  margin-bottom: 12px;
+}
+
+.advanced-search .el-row:last-child {
+  margin-bottom: 0;
 }
 
 .batch-actions {

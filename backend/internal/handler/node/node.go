@@ -40,6 +40,9 @@ func NewHandler(nodeSvc *node.Service, logger *logger.Logger) *Handler {
 // @Param role query string false "节点角色筛选"
 // @Param label_key query string false "标签键筛选"
 // @Param label_value query string false "标签值筛选"
+// @Param taint_key query string false "污点键筛选"
+// @Param taint_value query string false "污点值筛选"
+// @Param taint_effect query string false "污点效果筛选"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Failure 500 {object} Response
@@ -51,6 +54,9 @@ func (h *Handler) List(c *gin.Context) {
 		Role:        c.Query("role"),
 		LabelKey:    c.Query("label_key"),
 		LabelValue:  c.Query("label_value"),
+		TaintKey:    c.Query("taint_key"),
+		TaintValue:  c.Query("taint_value"),
+		TaintEffect: c.Query("taint_effect"),
 	}
 
 	if req.ClusterName == "" {

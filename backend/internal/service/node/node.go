@@ -23,6 +23,9 @@ type ListRequest struct {
 	Role        string `json:"role"`
 	LabelKey    string `json:"label_key"`
 	LabelValue  string `json:"label_value"`
+	TaintKey    string `json:"taint_key"`
+	TaintValue  string `json:"taint_value"`
+	TaintEffect string `json:"taint_effect"`
 }
 
 // GetRequest 获取节点详情请求
@@ -106,7 +109,7 @@ func (s *Service) List(req ListRequest, userID uint) ([]k8s.NodeInfo, error) {
 	filteredNodes := s.filterNodes(nodes, req)
 
 	// 只在有特定过滤条件时记录审计日志，避免频繁记录普通列表查看
-	if req.Status != "" || req.Role != "" || req.LabelKey != "" {
+	if req.Status != "" || req.Role != "" || req.LabelKey != "" || req.TaintKey != "" {
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			Action:       model.ActionView,
@@ -329,6 +332,29 @@ func (s *Service) filterNodes(nodes []k8s.NodeInfo, req ListRequest) []k8s.NodeI
 				if _, exists := node.Labels[req.LabelKey]; !exists {
 					continue
 				}
+			}
+		}
+
+		// 污点过滤
+		if req.TaintKey != "" {
+			found := false
+			for _, taint := range node.Taints {
+				// 检查污点键匹配
+				if taint.Key == req.TaintKey {
+					// 如果指定了污点值，进行值匹配
+					if req.TaintValue != "" && taint.Value != req.TaintValue {
+						continue
+					}
+					// 如果指定了污点效果，进行效果匹配
+					if req.TaintEffect != "" && taint.Effect != req.TaintEffect {
+						continue
+					}
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
 			}
 		}
 

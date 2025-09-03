@@ -46,7 +46,12 @@ export const useNodeStore = defineStore('node', {
       name: '',
       status: '',
       role: '',
-      cluster_name: ''
+      cluster_name: '',
+      labelKey: '',
+      labelValue: '',
+      taintKey: '',
+      taintValue: '',
+      taintEffect: ''
     },
     loading: false
   }),
@@ -114,6 +119,44 @@ export const useNodeStore = defineStore('node', {
         result = result.filter(node => {
           const schedulingStatus = getSmartSchedulingStatus(node)
           return schedulingStatus === state.filters.schedulable
+        })
+      }
+      
+      // 标签筛选
+      if (state.filters.labelKey) {
+        result = result.filter(node => {
+          if (!node.labels || !node.labels[state.filters.labelKey]) {
+            return false
+          }
+          // 如果指定了标签值，进行精确匹配
+          if (state.filters.labelValue) {
+            return node.labels[state.filters.labelKey] === state.filters.labelValue
+          }
+          // 否则只检查标签键是否存在
+          return true
+        })
+      }
+      
+      // 污点筛选
+      if (state.filters.taintKey) {
+        result = result.filter(node => {
+          if (!node.taints || node.taints.length === 0) {
+            return false
+          }
+          return node.taints.some(taint => {
+            if (taint.key !== state.filters.taintKey) {
+              return false
+            }
+            // 如果指定了污点值，进行值匹配
+            if (state.filters.taintValue && taint.value !== state.filters.taintValue) {
+              return false
+            }
+            // 如果指定了污点效果，进行效果匹配
+            if (state.filters.taintEffect && taint.effect !== state.filters.taintEffect) {
+              return false
+            }
+            return true
+          })
         })
       }
       
@@ -277,7 +320,12 @@ export const useNodeStore = defineStore('node', {
         name: '',
         status: '',
         role: '',
-        cluster_name: ''
+        cluster_name: '',
+        labelKey: '',
+        labelValue: '',
+        taintKey: '',
+        taintValue: '',
+        taintEffect: ''
       }
       this.pagination.current = 1
     }
