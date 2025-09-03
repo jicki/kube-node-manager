@@ -36,7 +36,7 @@
           </el-form-item>
           <el-form-item label="资源类型">
             <el-select 
-              v-model="searchForm.resourceType"
+              v-model="searchForm.resource_type"
               placeholder="请选择资源类型"
               clearable
               style="width: 180px"
@@ -192,7 +192,7 @@ const auditLogs = ref([])
 const searchForm = reactive({
   username: '',
   action: '',
-  resourceType: '',
+  resource_type: '',
   status: ''
 })
 

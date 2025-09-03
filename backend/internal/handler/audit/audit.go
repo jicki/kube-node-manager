@@ -40,6 +40,7 @@ func NewHandler(auditSvc *audit.Service, logger *logger.Logger) *Handler {
 // @Param page query int false "页码" default(1)
 // @Param page_size query int false "每页数量" default(10)
 // @Param user_id query int false "用户ID筛选"
+// @Param username query string false "用户名筛选"
 // @Param cluster_id query int false "集群ID筛选"
 // @Param action query string false "操作类型筛选"
 // @Param resource_type query string false "资源类型筛选"
@@ -73,6 +74,7 @@ func (h *Handler) List(c *gin.Context) {
 		}
 	}
 
+	req.Username = c.Query("username")
 	req.Action = model.AuditAction(c.Query("action"))
 	req.ResourceType = model.ResourceType(c.Query("resource_type"))
 	req.Status = model.AuditStatus(c.Query("status"))

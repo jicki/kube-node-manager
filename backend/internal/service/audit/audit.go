@@ -29,6 +29,7 @@ type ListRequest struct {
 	Page         int                `json:"page"`
 	PageSize     int                `json:"page_size"`
 	UserID       uint               `json:"user_id"`
+	Username     string             `json:"username"`
 	ClusterID    uint               `json:"cluster_id"`
 	Action       model.AuditAction  `json:"action"`
 	ResourceType model.ResourceType `json:"resource_type"`
@@ -80,6 +81,9 @@ func (s *Service) List(req ListRequest) (*ListResponse, error) {
 
 	if req.UserID > 0 {
 		query = query.Where("user_id = ?", req.UserID)
+	}
+	if req.Username != "" {
+		query = query.Joins("LEFT JOIN users ON audit_logs.user_id = users.id").Where("users.username LIKE ?", "%"+req.Username+"%")
 	}
 	if req.ClusterID > 0 {
 		query = query.Where("cluster_id = ?", req.ClusterID)
