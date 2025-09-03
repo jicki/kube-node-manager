@@ -882,7 +882,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-width: 140px;
+  min-width: 180px;
 }
 
 .legend-item {
@@ -939,8 +939,9 @@ onMounted(async () => {
 .legend-stats {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: clamp(16px, 4vw, 24px);
   margin-left: auto;
+  min-width: clamp(90px, 20%, 120px);
 }
 
 .legend-value {
@@ -948,6 +949,9 @@ onMounted(async () => {
   font-weight: 700;
   color: #333;
   letter-spacing: -0.3px;
+  min-width: 30px;
+  text-align: right;
+  flex-shrink: 0;
 }
 
 .legend-percentage {
@@ -1431,11 +1435,13 @@ onMounted(async () => {
   }
   
   .legend-stats {
-    gap: 10px;
+    gap: 14px;
+    min-width: 80px;
   }
   
   .legend-value {
     font-size: 16px;
+    min-width: 28px;
   }
   
   .legend-percentage {
