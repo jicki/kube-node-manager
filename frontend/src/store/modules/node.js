@@ -83,12 +83,24 @@ export const useNodeStore = defineStore('node', {
     // 节点归属选项 (从所有节点的 deeproute.cn/user-type 标签中提取)
     nodeOwnershipOptions: (state) => {
       const ownershipSet = new Set()
+      let hasNoOwnership = false
+      
       state.nodes.forEach(node => {
         if (node.labels && node.labels['deeproute.cn/user-type']) {
           ownershipSet.add(node.labels['deeproute.cn/user-type'])
+        } else {
+          hasNoOwnership = true
         }
       })
-      return Array.from(ownershipSet).sort()
+      
+      const options = Array.from(ownershipSet).sort()
+      
+      // 如果有节点没有 deeproute.cn/user-type 标签，添加“无归属”选项
+      if (hasNoOwnership) {
+        options.unshift('无归属') // 添加到数组开头
+      }
+      
+      return options
     },
     filteredNodes: (state) => {
       let result = state.nodes
@@ -174,6 +186,12 @@ export const useNodeStore = defineStore('node', {
       // 节点归属筛选 (deeproute.cn/user-type)
       if (state.filters.nodeOwnership) {
         result = result.filter(node => {
+          // 如果选择的是“无归属”，过滤出没有 deeproute.cn/user-type 标签的节点
+          if (state.filters.nodeOwnership === '无归属') {
+            return !node.labels || !node.labels['deeproute.cn/user-type']
+          }
+          
+          // 否则过滤具有匹配标签值的节点
           if (!node.labels || !node.labels['deeproute.cn/user-type']) {
             return false
           }
