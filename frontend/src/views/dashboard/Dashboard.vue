@@ -163,7 +163,7 @@
                     </div>
                     <div class="legend-stats">
                       <span class="legend-value">{{ nodeStats.ready }}</span>
-                      <span class="legend-percentage">({{ readyPercentage }}%)</span>
+                      <span class="legend-percentage"> ({{ readyPercentage }}%)</span>
                     </div>
                   </div>
                   <div class="legend-item" :class="{ 'legend-empty': nodeStats.notReady === 0 }">
@@ -173,7 +173,7 @@
                     </div>
                     <div class="legend-stats">
                       <span class="legend-value">{{ nodeStats.notReady }}</span>
-                      <span class="legend-percentage">({{ notReadyPercentage }}%)</span>
+                      <span class="legend-percentage"> ({{ notReadyPercentage }}%)</span>
                     </div>
                   </div>
                   <div class="legend-item" :class="{ 'legend-empty': nodeStats.unknown === 0 }">
@@ -183,7 +183,7 @@
                     </div>
                     <div class="legend-stats">
                       <span class="legend-value">{{ nodeStats.unknown }}</span>
-                      <span class="legend-percentage">({{ unknownPercentage }}%)</span>
+                      <span class="legend-percentage"> ({{ unknownPercentage }}%)</span>
                     </div>
                   </div>
                 </div>
@@ -934,6 +934,10 @@ onMounted(async () => {
   color: #333;
   font-weight: 500;
   letter-spacing: 0.3px;
+}
+
+.legend-text::after {
+  content: " ";
 }
 
 .legend-stats {
