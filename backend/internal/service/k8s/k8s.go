@@ -255,14 +255,14 @@ func (s *Service) UpdateNodeLabels(clusterName string, req LabelUpdateRequest) e
 	s.logger.Infof("Current node labels before update: %+v", node.Labels)
 	s.logger.Infof("Received labels to apply: %+v", req.Labels)
 
-	// 完全替换节点标签
-	// 这样可以确保删除操作正确生效
-	node.Labels = make(map[string]string)
-
-	for key, value := range req.Labels {
-		s.logger.Infof("Setting label %s = %s", key, value)
-		node.Labels[key] = value
+	// 不要完全清空标签，因为这会删除系统必需的标签
+	// 相反，我们直接应用传递过来的标签映射，它们已经在上层服务中被正确处理了
+	if node.Labels == nil {
+		node.Labels = make(map[string]string)
 	}
+
+	// 直接应用传递的标签（标签服务已经处理了保留系统标签的逻辑）
+	node.Labels = req.Labels
 
 	s.logger.Infof("Node labels after update: %+v", node.Labels)
 

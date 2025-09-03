@@ -132,17 +132,17 @@ func (s *Service) UpdateNodeTaints(req UpdateTaintsRequest, userID uint) error {
 	// 获取当前节点信息
 	currentNode, err := s.k8sSvc.GetNode(req.ClusterName, req.NodeName)
 	if err != nil {
-		s.logger.Errorf("Failed to get node %s: %v", req.NodeName, err)
+		s.logger.Errorf("Failed to get node %s in cluster %s: %v", req.NodeName, req.ClusterName, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			NodeName:     req.NodeName,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceTaint,
-			Details:      fmt.Sprintf("Failed to update taints for node %s: node not found", req.NodeName),
+			Details:      fmt.Sprintf("Failed to update taints for node %s in cluster %s: node not found or inaccessible", req.NodeName, req.ClusterName),
 			Status:       model.AuditStatusFailed,
 			ErrorMsg:     err.Error(),
 		})
-		return fmt.Errorf("failed to get node: %w", err)
+		return fmt.Errorf("failed to get node %s in cluster %s: %w", req.NodeName, req.ClusterName, err)
 	}
 
 	// 准备更新的污点
@@ -763,7 +763,7 @@ func (s *Service) RemoveTaint(clusterName, nodeName, taintKey string, userID uin
 	// 获取当前节点信息
 	node, err := s.k8sSvc.GetNode(clusterName, nodeName)
 	if err != nil {
-		return fmt.Errorf("failed to get node: %w", err)
+		return fmt.Errorf("failed to get node %s in cluster %s: %w", nodeName, clusterName, err)
 	}
 
 	// 过滤掉指定的污点
