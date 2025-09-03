@@ -238,8 +238,96 @@ export const useNodeStore = defineStore('node', {
       return result
     },
     // 添加分页后的节点列表
-    paginatedNodes: (state, getters) => {
-      const filtered = getters.filteredNodes
+    paginatedNodes: (state) => {
+      // 重新实现过滤逻辑，避免 getter 循环依赖
+      let filtered = state.nodes
+      
+      // 应用所有过滤条件
+      if (state.filters.name) {
+        filtered = filtered.filter(node => 
+          node.name.toLowerCase().includes(state.filters.name.toLowerCase())
+        )
+      }
+      
+      if (state.filters.status) {
+        filtered = filtered.filter(node => node.status === state.filters.status)
+      }
+      
+      if (state.filters.role) {
+        filtered = filtered.filter(node => {
+          if (!node.roles || !Array.isArray(node.roles)) {
+            return state.filters.role === 'worker'
+          }
+          
+          if (state.filters.role === 'master') {
+            return node.roles.some(role => 
+              role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')
+            )
+          } else if (state.filters.role === 'worker') {
+            return !node.roles.some(role => 
+              role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')
+            )
+          }
+          
+          return false
+        })
+      }
+      
+      if (state.filters.schedulable) {
+        filtered = filtered.filter(node => {
+          const schedulingStatus = getSmartSchedulingStatus(node)
+          return schedulingStatus === state.filters.schedulable
+        })
+      }
+      
+      if (state.filters.labelKey) {
+        filtered = filtered.filter(node => {
+          if (!node.labels || !node.labels[state.filters.labelKey]) {
+            return false
+          }
+          if (state.filters.labelValue) {
+            return node.labels[state.filters.labelKey] === state.filters.labelValue
+          }
+          return true
+        })
+      }
+      
+      if (state.filters.taintKey) {
+        filtered = filtered.filter(node => {
+          if (!node.taints || node.taints.length === 0) {
+            return false
+          }
+          return node.taints.some(taint => {
+            if (taint.key !== state.filters.taintKey) {
+              return false
+            }
+            if (state.filters.taintValue && taint.value !== state.filters.taintValue) {
+              return false
+            }
+            if (state.filters.taintEffect && taint.effect !== state.filters.taintEffect) {
+              return false
+            }
+            return true
+          })
+        })
+      }
+      
+      if (state.filters.nodeOwnership) {
+        filtered = filtered.filter(node => {
+          const userTypeLabel = node.labels && node.labels['deeproute.cn/user-type']
+          
+          if (state.filters.nodeOwnership === '无归属') {
+            return !userTypeLabel || userTypeLabel.trim() === ''
+          }
+          
+          if (!userTypeLabel || userTypeLabel.trim() === '') {
+            return false
+          }
+          return userTypeLabel === state.filters.nodeOwnership
+        })
+      }
+      
+      // 分页计算
       const start = (state.pagination.current - 1) * state.pagination.size
       const end = start + state.pagination.size
       const result = filtered.slice(start, end)
@@ -415,10 +503,104 @@ export const useNodeStore = defineStore('node', {
     },
 
     updatePaginationTotal() {
-      // 基于过滤后的节点数量来设置分页总数
-      const filteredCount = this.filteredNodes.length
-      const oldTotal = this.pagination.total
+      // 计算过滤后的节点数量（避免使用 getter）
+      let filteredCount = this.nodes.length
       
+      // 如果有过滤条件，重新计算过滤后的数量
+      if (this.filters.name || this.filters.status || this.filters.role || 
+          this.filters.schedulable || this.filters.labelKey || this.filters.taintKey || 
+          this.filters.nodeOwnership) {
+        
+        let filtered = this.nodes
+        
+        if (this.filters.name) {
+          filtered = filtered.filter(node => 
+            node.name.toLowerCase().includes(this.filters.name.toLowerCase())
+          )
+        }
+        
+        if (this.filters.status) {
+          filtered = filtered.filter(node => node.status === this.filters.status)
+        }
+        
+        if (this.filters.role) {
+          filtered = filtered.filter(node => {
+            if (!node.roles || !Array.isArray(node.roles)) {
+              return this.filters.role === 'worker'
+            }
+            
+            if (this.filters.role === 'master') {
+              return node.roles.some(role => 
+                role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')
+              )
+            } else if (this.filters.role === 'worker') {
+              return !node.roles.some(role => 
+                role === 'master' || role === 'control-plane' || role.includes('control-plane') || role.includes('master')
+              )
+            }
+            
+            return false
+          })
+        }
+        
+        if (this.filters.schedulable) {
+          filtered = filtered.filter(node => {
+            const schedulingStatus = getSmartSchedulingStatus(node)
+            return schedulingStatus === this.filters.schedulable
+          })
+        }
+        
+        if (this.filters.labelKey) {
+          filtered = filtered.filter(node => {
+            if (!node.labels || !node.labels[this.filters.labelKey]) {
+              return false
+            }
+            if (this.filters.labelValue) {
+              return node.labels[this.filters.labelKey] === this.filters.labelValue
+            }
+            return true
+          })
+        }
+        
+        if (this.filters.taintKey) {
+          filtered = filtered.filter(node => {
+            if (!node.taints || node.taints.length === 0) {
+              return false
+            }
+            return node.taints.some(taint => {
+              if (taint.key !== this.filters.taintKey) {
+                return false
+              }
+              if (this.filters.taintValue && taint.value !== this.filters.taintValue) {
+                return false
+              }
+              if (this.filters.taintEffect && taint.effect !== this.filters.taintEffect) {
+                return false
+              }
+              return true
+            })
+          })
+        }
+        
+        if (this.filters.nodeOwnership) {
+          filtered = filtered.filter(node => {
+            const userTypeLabel = node.labels && node.labels['deeproute.cn/user-type']
+            
+            if (this.filters.nodeOwnership === '无归属') {
+              return !userTypeLabel || userTypeLabel.trim() === ''
+            }
+            
+            if (!userTypeLabel || userTypeLabel.trim() === '') {
+              return false
+            }
+            return userTypeLabel === this.filters.nodeOwnership
+          })
+        }
+        
+        filteredCount = filtered.length
+      }
+      
+      const oldTotal = this.pagination.total
       this.pagination.total = filteredCount
       
       // 只在数量变化时输出日志，减少控制台噪音

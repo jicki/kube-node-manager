@@ -810,27 +810,7 @@ const pagination = computed(() => nodeStore.pagination)
 const nodeOwnershipOptions = computed(() => nodeStore.nodeOwnershipOptions)
 
 const filteredNodes = computed(() => {
-  const paginatedNodes = nodeStore.paginatedNodes
-  const allFilteredNodes = nodeStore.filteredNodes
-  
-  // 如果分页节点为空但有过滤结果，可能是分页问题
-  if (paginatedNodes.length === 0 && allFilteredNodes.length > 0) {
-    if (nodeStore.pagination.current > 1) {
-      console.warn('分页问题：当前页无数据但过滤结果不为空，重置到第一页')
-      // 异步重置分页，避免计算属性中的状态变更
-      nextTick(() => {
-        nodeStore.setPagination({ current: 1 })
-      })
-    }
-    
-    // 紧急情况下，显示第一页的数据
-    if (allFilteredNodes.length > 0) {
-      const pageSize = nodeStore.pagination.size
-      return allFilteredNodes.slice(0, pageSize)
-    }
-  }
-  
-  return paginatedNodes
+  return nodeStore.paginatedNodes || []
 })
 
 // 防抖搜索处理
