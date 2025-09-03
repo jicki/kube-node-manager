@@ -28,6 +28,7 @@ export const useNodeStore = defineStore('node', {
   state: () => ({
     nodes: [],
     selectedNodes: [],
+    currentClusterName: '', // 当前集群名称，用于缓存识别
     nodeStats: {
       total: 0,
       ready: 0,
@@ -375,6 +376,7 @@ export const useNodeStore = defineStore('node', {
         const response = await nodeApi.getNodes(queryParams)
         // 后端返回格式: { code, message, data: [...] } - data直接是节点数组
         this.nodes = response.data.data || []
+        this.currentClusterName = clusterName
         this.updateStats()
         // 重新计算分页总数（基于过滤后的结果）
         this.updatePaginationTotal()
@@ -481,27 +483,6 @@ export const useNodeStore = defineStore('node', {
       this.selectedNodes = []
     },
 
-    updateStats() {
-      this.nodeStats.total = this.nodes.length
-      this.nodeStats.ready = this.readyNodes.length
-      this.nodeStats.notReady = this.notReadyNodes.length
-      this.nodeStats.unknown = this.unknownNodes.length
-      this.nodeStats.schedulable = this.schedulableNodes.length
-      this.nodeStats.limited = this.limitedNodes.length
-      this.nodeStats.unschedulable = this.unschedulableNodes.length
-      
-      // 调试日志，帮助诊断统计不匹配问题
-      if (this.nodeStats.ready + this.nodeStats.notReady + this.nodeStats.unknown !== this.nodeStats.total) {
-        console.warn('节点统计不匹配:', {
-          total: this.nodeStats.total,
-          ready: this.nodeStats.ready,
-          notReady: this.nodeStats.notReady,
-          unknown: this.nodeStats.unknown,
-          sum: this.nodeStats.ready + this.nodeStats.notReady + this.nodeStats.unknown,
-          nodeStatuses: this.nodes.map(node => ({ name: node.name, status: node.status }))
-        })
-      }
-    },
 
     updateStats() {
       // 统计节点状态
@@ -692,6 +673,16 @@ export const useNodeStore = defineStore('node', {
         nodeOwnership: ''
       }
       this.pagination.current = 1
+    },
+
+    // 直接设置节点数据（用于其他组件缓存节点数据）
+    setNodes(nodes, clusterName = '') {
+      this.nodes = nodes || []
+      if (clusterName) {
+        this.currentClusterName = clusterName
+      }
+      this.updateStats()
+      this.updatePaginationTotal()
     }
   }
 })

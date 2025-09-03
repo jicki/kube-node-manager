@@ -752,8 +752,7 @@ const fetchNodes = async (forceRefresh = false) => {
     
     // 更新nodeStore缓存
     if (nodes.length > 0) {
-      nodeStore.setNodes(nodes)
-      nodeStore.currentClusterName = clusterName
+      nodeStore.setNodes(nodes, clusterName)
       console.log('[污点管理] 已更新nodeStore缓存')
     } else {
       console.warn('[污点管理] 获取到的节点数据为空')
