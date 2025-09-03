@@ -17,7 +17,7 @@
       
       <div class="filter-section">
         <el-row :gutter="12">
-          <el-col :span="8">
+          <el-col :span="6">
             <el-select
               v-model="statusFilter"
               placeholder="状态筛选"
@@ -29,7 +29,7 @@
               <el-option label="NotReady" value="NotReady" />
             </el-select>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="6">
             <el-select
               v-model="roleFilter"
               placeholder="角色筛选"
@@ -41,7 +41,23 @@
               <el-option label="Worker" value="worker" />
             </el-select>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="6">
+            <el-select
+              v-model="nodeOwnershipFilter"
+              placeholder="节点归属"
+              clearable
+              @change="handleFilter"
+            >
+              <el-option label="全部归属" value="" />
+              <el-option 
+                v-for="ownership in nodeOwnershipOptions" 
+                :key="ownership" 
+                :label="ownership" 
+                :value="ownership" 
+              />
+            </el-select>
+          </el-col>
+          <el-col :span="6">
             <el-input
               v-model="labelFilter"
               placeholder="标签筛选 (key=value)"
@@ -50,6 +66,57 @@
             />
           </el-col>
         </el-row>
+        
+        <!-- 高级搜索区域 -->
+        <div class="advanced-search-toggle">
+          <el-button type="text" @click="showAdvancedSearch = !showAdvancedSearch">
+            <el-icon><Filter /></el-icon>
+            高级搜索
+            <el-icon><component :is="showAdvancedSearch ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
+          </el-button>
+        </div>
+        
+        <div v-show="showAdvancedSearch" class="advanced-search">
+          <el-divider content-position="left">污点搜索</el-divider>
+          <el-row :gutter="12">
+            <el-col :span="8">
+              <el-input
+                v-model="taintKeyFilter"
+                placeholder="输入污点键..."
+                clearable
+                @input="handleFilter"
+              >
+                <template #prefix>
+                  <el-icon><WarningFilled /></el-icon>
+                </template>
+              </el-input>
+            </el-col>
+            <el-col :span="8">
+              <el-input
+                v-model="taintValueFilter"
+                placeholder="输入污点值（可选）..."
+                clearable
+                @input="handleFilter"
+              >
+                <template #prefix>
+                  <el-icon><Edit /></el-icon>
+                </template>
+              </el-input>
+            </el-col>
+            <el-col :span="8">
+              <el-select
+                v-model="taintEffectFilter"
+                placeholder="污点效果（可选）"
+                clearable
+                @change="handleFilter"
+              >
+                <el-option label="NoSchedule" value="NoSchedule" />
+                <el-option label="PreferNoSchedule" value="PreferNoSchedule" />
+                <el-option label="NoExecute" value="NoExecute" />
+              </el-select>
+            </el-col>
+          </el-row>
+        </div>
       </div>
 
       <div class="action-section">
@@ -243,7 +310,7 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { Search, Location, Collection, Warning, ArrowDown } from '@element-plus/icons-vue'
+import { Search, Location, Collection, Warning, ArrowDown, Filter, WarningFilled, Edit, ArrowUp } from '@element-plus/icons-vue'
 
 const props = defineProps({
   modelValue: {
@@ -275,6 +342,11 @@ const searchQuery = ref('')
 const statusFilter = ref('')
 const roleFilter = ref('')
 const labelFilter = ref('')
+const nodeOwnershipFilter = ref('')
+const taintKeyFilter = ref('')
+const taintValueFilter = ref('')
+const taintEffectFilter = ref('')
+const showAdvancedSearch = ref(false)
 const selectedNodes = ref([...props.modelValue])
 
 // 监听props变化，避免深度监听造成性能问题
@@ -311,6 +383,35 @@ const validateNodeData = (node) => {
   
   return isValid
 }
+
+// 节点归属选项计算
+const nodeOwnershipOptions = computed(() => {
+  if (!props.nodes || props.nodes.length === 0) {
+    return []
+  }
+  
+  const ownershipSet = new Set()
+  let hasNoOwnership = false
+  
+  props.nodes.forEach(node => {
+    const userTypeLabel = node.labels && node.labels['deeproute.cn/user-type']
+    // 检查标签是否存在且不为空字符串
+    if (userTypeLabel && userTypeLabel.trim() !== '') {
+      ownershipSet.add(userTypeLabel)
+    } else {
+      hasNoOwnership = true
+    }
+  })
+  
+  const options = Array.from(ownershipSet).sort()
+  
+  // 如果有节点没有 deeproute.cn/user-type 标签，添加"无归属"选项
+  if (hasNoOwnership) {
+    options.unshift('无归属')
+  }
+  
+  return options
+})
 
 // 计算属性 - 优化过滤逻辑，减少不必要的计算  
 const filteredNodes = computed(() => {
@@ -357,6 +458,24 @@ const filteredNodes = computed(() => {
     })
   }
 
+  // 节点归属筛选
+  if (nodeOwnershipFilter.value) {
+    result = result.filter(node => {
+      const userTypeLabel = node.labels && node.labels['deeproute.cn/user-type']
+      
+      // 如果选择的是"无归属"，过滤出没有或为空的 deeproute.cn/user-type 标签的节点
+      if (nodeOwnershipFilter.value === '无归属') {
+        return !userTypeLabel || userTypeLabel.trim() === ''
+      }
+      
+      // 否则过滤具有匹配标签值的节点
+      if (!userTypeLabel || userTypeLabel.trim() === '') {
+        return false
+      }
+      return userTypeLabel === nodeOwnershipFilter.value
+    })
+  }
+
   // 标签筛选
   if (labelFilter.value?.trim()) {
     const labelQuery = labelFilter.value.trim()
@@ -371,6 +490,29 @@ const filteredNodes = computed(() => {
         }
       })
     }
+  }
+
+  // 污点筛选
+  if (taintKeyFilter.value) {
+    result = result.filter(node => {
+      if (!node.taints || node.taints.length === 0) {
+        return false
+      }
+      return node.taints.some(taint => {
+        if (taint.key !== taintKeyFilter.value) {
+          return false
+        }
+        // 如果指定了污点值，进行值匹配
+        if (taintValueFilter.value && taint.value !== taintValueFilter.value) {
+          return false
+        }
+        // 如果指定了污点效果，进行效果匹配
+        if (taintEffectFilter.value && taint.effect !== taintEffectFilter.value) {
+          return false
+        }
+        return true
+      })
+    })
   }
 
   return result
@@ -420,6 +562,15 @@ const handleSearch = () => {
 
 const handleFilter = () => {
   // 筛选是响应式的，不需要额外处理
+  console.log('Filter changed:', { 
+    status: statusFilter.value, 
+    role: roleFilter.value, 
+    label: labelFilter.value,
+    nodeOwnership: nodeOwnershipFilter.value,
+    taintKey: taintKeyFilter.value,
+    taintValue: taintValueFilter.value,
+    taintEffect: taintEffectFilter.value
+  })
 }
 
 const handleSelectAll = (checked) => {
@@ -1128,5 +1279,33 @@ onUnmounted(() => {
   .node-selector {
     font-size: 12px;
   }
+}
+.advanced-search-toggle {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.advanced-search {
+  margin-top: 16px;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #e8e8e8;
+}
+
+.advanced-search .el-divider {
+  margin: 16px 0 12px 0;
+}
+
+.advanced-search .el-divider:first-child {
+  margin-top: 0;
+}
+
+.advanced-search .el-row {
+  margin-bottom: 12px;
+}
+
+.advanced-search .el-row:last-child {
+  margin-bottom: 0;
 }
 </style>
