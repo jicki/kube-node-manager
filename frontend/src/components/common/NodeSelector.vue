@@ -693,16 +693,27 @@ const getCompactDisplayLabels = (labels) => {
   if (!labels || typeof labels !== 'object') return {}
   try {
     const entries = Object.entries(labels)
+    console.log('[NodeSelector] 原始标签数据:', labels)
+    console.log('[NodeSelector] 标签键列表:', Object.keys(labels))
+    
     // 按优先级显示关键标签，确保deeproute.cn/user-type优先显示
     const priorityKeys = ['deeproute.cn/user-type', 'cluster', 'deeproute.cn/instance-type']
-    const priorityEntries = entries.filter(([key]) => priorityKeys.includes(key)).slice(0, 2)
+    const priorityEntries = entries.filter(([key]) => priorityKeys.includes(key))
+    
+    console.log('[NodeSelector] 优先级标签:', priorityEntries)
+    console.log('[NodeSelector] 是否包含 deeproute.cn/user-type:', labels.hasOwnProperty('deeproute.cn/user-type'))
+    console.log('[NodeSelector] deeproute.cn/user-type 值:', labels['deeproute.cn/user-type'])
+    
+    const selectedEntries = priorityEntries.slice(0, 2)
     
     // 如果没有优先级标签，显示前2个标签
-    if (priorityEntries.length === 0) {
+    if (selectedEntries.length === 0) {
+      console.log('[NodeSelector] 没有优先级标签，显示前2个标签')
       return Object.fromEntries(entries.slice(0, 2))
     }
     
-    return Object.fromEntries(priorityEntries)
+    console.log('[NodeSelector] 最终显示的标签:', selectedEntries)
+    return Object.fromEntries(selectedEntries)
   } catch (error) {
     console.warn('Error filtering labels:', error)
     return {}
@@ -732,9 +743,16 @@ const getOtherLabels = (labels) => {
   if (!labels || typeof labels !== 'object') return {}
   try {
     const entries = Object.entries(labels)
+    console.log('[NodeSelector] getOtherLabels - 原始标签数据:', labels)
+    
     // 返回除了优先显示标签外的所有其他标签
     const priorityKeys = ['deeproute.cn/user-type', 'cluster', 'deeproute.cn/instance-type']
     const otherEntries = entries.filter(([key]) => !priorityKeys.includes(key))
+    
+    console.log('[NodeSelector] getOtherLabels - 优先级标签键:', priorityKeys)
+    console.log('[NodeSelector] getOtherLabels - 其他标签:', otherEntries)
+    console.log('[NodeSelector] getOtherLabels - deeproute.cn/user-type 是否在优先级中被排除:', 
+      priorityKeys.includes('deeproute.cn/user-type') && labels.hasOwnProperty('deeproute.cn/user-type'))
     
     // 按重要性排序：deeproute相关标签优先，然后是系统标签，最后是自定义标签
     const deeprouteLabels = otherEntries.filter(([key]) => 
@@ -752,6 +770,8 @@ const getOtherLabels = (labels) => {
       !key.startsWith('deeproute.cn/')
     )
     const sortedEntries = [...deeprouteLabels, ...systemLabels, ...customLabels]
+    
+    console.log('[NodeSelector] getOtherLabels - 最终排序后的其他标签:', sortedEntries)
     return Object.fromEntries(sortedEntries)
   } catch (error) {
     console.warn('Error filtering other labels:', error)
@@ -889,7 +909,20 @@ const shouldShowAttributes = (node) => {
 
 // 判断是否应该显示标签
 const shouldShowLabels = (node) => {
-  return node.labels && props.showLabels && Object.keys(node.labels).length > 0
+  const hasLabels = node.labels && Object.keys(node.labels).length > 0
+  const showLabelsEnabled = props.showLabels
+  const result = hasLabels && showLabelsEnabled
+  
+  console.log('[NodeSelector] shouldShowLabels 检查:', {
+    nodeName: node.name,
+    hasLabels,
+    showLabelsEnabled,
+    labelsCount: node.labels ? Object.keys(node.labels).length : 0,
+    labelKeys: node.labels ? Object.keys(node.labels) : [],
+    result
+  })
+  
+  return result
 }
 
 // 清理定时器
