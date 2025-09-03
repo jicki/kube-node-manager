@@ -693,9 +693,15 @@ const getCompactDisplayLabels = (labels) => {
   if (!labels || typeof labels !== 'object') return {}
   try {
     const entries = Object.entries(labels)
-    // 按优先级显示关键标签
-    const priorityKeys = ['cluster', 'deeproute.cn/user-type', 'deeproute.cn/instance-type']
+    // 按优先级显示关键标签，确保deeproute.cn/user-type优先显示
+    const priorityKeys = ['deeproute.cn/user-type', 'cluster', 'deeproute.cn/instance-type']
     const priorityEntries = entries.filter(([key]) => priorityKeys.includes(key)).slice(0, 2)
+    
+    // 如果没有优先级标签，显示前2个标签
+    if (priorityEntries.length === 0) {
+      return Object.fromEntries(entries.slice(0, 2))
+    }
+    
     return Object.fromEntries(priorityEntries)
   } catch (error) {
     console.warn('Error filtering labels:', error)
@@ -716,7 +722,7 @@ const getCompactDisplayTaints = (taints) => {
 const getTotalLabelsCount = (labels) => {
   if (!labels || typeof labels !== 'object') return 0
   // 返回除了优先显示标签外的总数
-  const priorityKeys = ['cluster', 'deeproute.cn/user-type', 'deeproute.cn/instance-type']
+  const priorityKeys = ['deeproute.cn/user-type', 'cluster', 'deeproute.cn/instance-type']
   const allKeys = Object.keys(labels)
   const otherLabelsCount = allKeys.filter(key => !priorityKeys.includes(key)).length
   return otherLabelsCount
@@ -727,9 +733,13 @@ const getOtherLabels = (labels) => {
   try {
     const entries = Object.entries(labels)
     // 返回除了优先显示标签外的所有其他标签
-    const priorityKeys = ['cluster', 'deeproute.cn/user-type', 'deeproute.cn/instance-type']
+    const priorityKeys = ['deeproute.cn/user-type', 'cluster', 'deeproute.cn/instance-type']
     const otherEntries = entries.filter(([key]) => !priorityKeys.includes(key))
-    // 按重要性排序：系统标签优先，自定义标签在后
+    
+    // 按重要性排序：deeproute相关标签优先，然后是系统标签，最后是自定义标签
+    const deeprouteLabels = otherEntries.filter(([key]) => 
+      key.startsWith('deeproute.cn/') && !priorityKeys.includes(key)
+    )
     const systemLabels = otherEntries.filter(([key]) => 
       key.startsWith('kubernetes.io/') || 
       key.startsWith('node.kubernetes.io/') ||
@@ -738,9 +748,10 @@ const getOtherLabels = (labels) => {
     const customLabels = otherEntries.filter(([key]) => 
       !key.startsWith('kubernetes.io/') && 
       !key.startsWith('node.kubernetes.io/') &&
-      !key.startsWith('topology.kubernetes.io/')
+      !key.startsWith('topology.kubernetes.io/') &&
+      !key.startsWith('deeproute.cn/')
     )
-    const sortedEntries = [...systemLabels, ...customLabels]
+    const sortedEntries = [...deeprouteLabels, ...systemLabels, ...customLabels]
     return Object.fromEntries(sortedEntries)
   } catch (error) {
     console.warn('Error filtering other labels:', error)
@@ -878,7 +889,7 @@ const shouldShowAttributes = (node) => {
 
 // 判断是否应该显示标签
 const shouldShowLabels = (node) => {
-  return node.labels && props.showLabels && Object.keys(getDisplayLabels(node.labels)).length > 0
+  return node.labels && props.showLabels && Object.keys(node.labels).length > 0
 }
 
 // 清理定时器
