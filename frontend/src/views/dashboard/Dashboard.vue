@@ -199,35 +199,67 @@
               
               <!-- 节点归属图表 -->
               <div class="node-ownership-chart">
-                <div v-if="ownershipChartData.length > 0" class="ownership-list">
-                  <div 
-                    v-for="(item, index) in ownershipChartData" 
-                    :key="item.name"
-                    class="ownership-item"
-                    :style="{ animationDelay: `${index * 0.1}s` }"
-                  >
-                    <div class="ownership-header">
-                      <div class="ownership-indicator">
+                <div v-if="ownershipChartData.length > 0" class="ownership-pie-container">
+                  <!-- SVG 圆形图表 -->
+                  <div class="ownership-pie-chart">
+                    <svg width="140" height="140" viewBox="0 0 140 140" class="ownership-svg">
+                      <!-- 背景圆 -->
+                      <circle
+                        cx="70"
+                        cy="70"
+                        r="55"
+                        fill="none"
+                        stroke="#f0f0f0"
+                        stroke-width="10"
+                      />
+                      
+                      <!-- 动态渲染饼图扇形 -->
+                      <template v-for="(item, index) in ownershipChartData" :key="item.name">
+                        <circle
+                          v-if="item.percentage > 0"
+                          cx="70"
+                          cy="70"
+                          r="55"
+                          fill="none"
+                          :stroke="item.color"
+                          stroke-width="10"
+                          :stroke-dasharray="item.strokeDasharray"
+                          :stroke-dashoffset="item.strokeDashoffset"
+                          transform="rotate(-90 70 70)"
+                          class="ownership-arc"
+                          :style="{ animationDelay: `${index * 0.2}s` }"
+                        />
+                      </template>
+                      
+                      <!-- 中心文字 -->
+                      <text x="70" y="65" text-anchor="middle" class="ownership-center-number">
+                        {{ nodeStats.total }}
+                      </text>
+                      <text x="70" y="80" text-anchor="middle" class="ownership-center-label">
+                        总节点
+                      </text>
+                    </svg>
+                  </div>
+                  
+                  <!-- 图例 -->
+                  <div class="ownership-legend">
+                    <div 
+                      v-for="(item, index) in ownershipChartData" 
+                      :key="item.name"
+                      class="ownership-legend-item"
+                      :style="{ animationDelay: `${index * 0.1}s` }"
+                    >
+                      <div class="ownership-legend-indicator">
                         <span 
-                          class="ownership-color" 
+                          class="ownership-legend-color" 
                           :style="{ backgroundColor: item.color }"
                         ></span>
-                        <span class="ownership-name">{{ item.name }}</span>
+                        <span class="ownership-legend-name">{{ item.name }}</span>
                       </div>
-                      <div class="ownership-stats">
-                        <span class="ownership-count">{{ item.count }}</span>
-                        <span class="ownership-percentage">{{ item.percentage }}%</span>
+                      <div class="ownership-legend-stats">
+                        <span class="ownership-legend-count">{{ item.count }}</span>
+                        <span class="ownership-legend-percentage">({{ item.percentage }}%)</span>
                       </div>
-                    </div>
-                    
-                    <div class="ownership-progress">
-                      <div 
-                        class="ownership-bar"
-                        :style="{ 
-                          width: `${item.percentage}%`,
-                          backgroundColor: item.color 
-                        }"
-                      ></div>
                     </div>
                   </div>
                 </div>
@@ -547,7 +579,27 @@ const ownershipChartData = computed(() => {
   }))
   
   // 按数量排序
-  return data.sort((a, b) => b.count - a.count)
+  const sortedData = data.sort((a, b) => b.count - a.count)
+  
+  // 计算SVG圆形图表的stroke-dasharray和stroke-dashoffset
+  const radius = 55
+  const circumference = 2 * Math.PI * radius
+  let accumulatedOffset = 0
+  
+  return sortedData.map((item, index) => {
+    const ratio = item.count / total
+    const arcLength = ratio * circumference
+    const strokeDasharray = `${arcLength} ${circumference}`
+    const strokeDashoffset = -accumulatedOffset
+    
+    accumulatedOffset += arcLength
+    
+    return {
+      ...item,
+      strokeDasharray,
+      strokeDashoffset
+    }
+  })
 })
 
 // 最近操作数据
@@ -653,6 +705,29 @@ const refreshClusters = async () => {
   }
 }
 
+// 处理集群切换事件
+const handleClusterChanged = async (event) => {
+  try {
+    loading.value = true
+    console.log('Dashboard: Cluster changed, refreshing data...')
+    
+    // 重新获取节点数据
+    if (clusterStore.currentCluster) {
+      await nodeStore.fetchNodes()
+    }
+    
+    // 重新获取最近操作数据
+    await fetchRecentActions()
+    
+    ElMessage.success('数据已刷新')
+  } catch (error) {
+    console.error('Dashboard data refresh error:', error)
+    ElMessage.error('数据刷新失败')
+  } finally {
+    loading.value = false
+  }
+}
+
 // 初始化数据
 onMounted(async () => {
   try {
@@ -676,11 +751,19 @@ onMounted(async () => {
     
     // 获取最近操作数据
     await fetchRecentActions()
+    
+    // 监听集群切换事件
+    window.addEventListener('cluster-changed', handleClusterChanged)
   } catch (error) {
     console.error('Dashboard data loading error:', error)
   } finally {
     loading.value = false
   }
+})
+
+// 清理事件监听器
+onUnmounted(() => {
+  window.removeEventListener('cluster-changed', handleClusterChanged)
 })
 </script>
 
@@ -948,21 +1031,23 @@ onMounted(async () => {
 
 .legend-stats {
   display: flex;
-  align-items: center;
-  gap: clamp(20px, 5vw, 32px);
+  align-items: baseline;
+  gap: clamp(18px, 4vw, 28px);
   margin-left: auto;
-  min-width: clamp(120px, 25%, 160px);
+  min-width: clamp(130px, 28%, 180px);
+  justify-content: flex-end;
 }
 
 .legend-value {
   font-size: 18px;
   font-weight: 700;
   color: #333;
-  letter-spacing: -0.3px;
-  min-width: clamp(40px, 8vw, 60px);
+  letter-spacing: -0.5px;
+  min-width: 50px;
   text-align: right;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
+  font-family: "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
 }
 
 .legend-percentage {
@@ -970,6 +1055,9 @@ onMounted(async () => {
   color: #666;
   font-weight: 500;
   letter-spacing: 0.2px;
+  min-width: 50px;
+  text-align: left;
+  flex-shrink: 0;
 }
 
 .empty-chart {
@@ -1046,6 +1134,116 @@ onMounted(async () => {
 .node-ownership-chart {
   height: 100%;
   flex: 1;
+}
+
+/* 圆形图表容器 */
+.ownership-pie-container {
+  height: 220px;
+  display: flex;
+  gap: 20px;
+  padding: 0 20px;
+}
+
+.ownership-pie-chart {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ownership-svg {
+  max-width: 140px;
+  max-height: 140px;
+}
+
+.ownership-arc {
+  transition: stroke-dasharray 0.8s ease-out, stroke-dashoffset 0.8s ease-out;
+  opacity: 0;
+  animation: fadeInArc 0.8s ease-out forwards;
+}
+
+@keyframes fadeInArc {
+  to {
+    opacity: 1;
+  }
+}
+
+.ownership-center-number {
+  font-size: 20px;
+  font-weight: 700;
+  fill: #333;
+  letter-spacing: -0.5px;
+}
+
+.ownership-center-label {
+  font-size: 11px;
+  fill: #666;
+  font-weight: 500;
+}
+
+/* 圆形图表图例 */
+.ownership-legend {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.ownership-legend-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  transition: all 0.3s ease;
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.ownership-legend-item:hover {
+  background: #f0f0f0;
+  border-color: #d9d9d9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ownership-legend-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ownership-legend-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ownership-legend-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+}
+
+.ownership-legend-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ownership-legend-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.ownership-legend-percentage {
+  font-size: 11px;
+  color: #666;
 }
 
 .ownership-list {
@@ -1446,17 +1644,19 @@ onMounted(async () => {
   }
   
   .legend-stats {
-    gap: 18px;
-    min-width: 100px;
+    gap: 16px;
+    min-width: 110px;
+    justify-content: flex-end;
   }
   
   .legend-value {
     font-size: 16px;
-    min-width: 35px;
+    min-width: 40px;
   }
   
   .legend-percentage {
     font-size: 12px;
+    min-width: 45px;
   }
 }
 </style>
