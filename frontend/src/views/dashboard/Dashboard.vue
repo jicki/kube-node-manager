@@ -957,25 +957,26 @@ onMounted(async () => {
 
 .node-overview-container {
   display: flex;
-  min-height: 300px;
+  min-height: 280px;
   padding: 20px;
-  gap: 24px;
+  gap: 20px;
   position: relative;
 }
 
 .status-section {
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 300px;
+  min-width: 280px;
+  max-width: 320px;
 }
 
 .ownership-section {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-width: 300px;
+  min-width: 280px;
 }
 
 .section-title {
@@ -1109,11 +1110,49 @@ onMounted(async () => {
   padding: 0 20px;
 }
 
-/* 响应式设计 */
+/* 响应式设计 - 保持一行显示 */
 @media (max-width: 1200px) {
+  .status-section,
+  .ownership-section {
+    min-width: 250px; /* 减小最小宽度以适应更小屏幕 */
+  }
+  
   .node-overview-container {
-    flex-direction: column;
-    gap: 20px;
+    gap: 16px; /* 减小间距 */
+  }
+  
+  .ownership-section .section-title {
+    margin-left: 10px; /* 调整边距 */
+  }
+}
+
+@media (max-width: 980px) {
+  .node-overview-container {
+    padding: 15px;
+    gap: 12px;
+  }
+  
+  .status-section,
+  .ownership-section {
+    min-width: 200px;
+  }
+  
+  .ownership-list {
+    padding: 0 10px;
+    height: 180px; /* 减小高度以适应紧凑布局 */
+  }
+  
+  .section-title {
+    font-size: 14px;
+    margin-bottom: 15px;
+  }
+}
+
+@media (max-width: 768px) {
+  .node-overview-container {
+    flex-direction: column; /* 只在非常小的屏幕才堆叠 */
+    gap: 15px;
+    padding: 12px;
   }
   
   .section-divider {
@@ -1129,15 +1168,9 @@ onMounted(async () => {
     text-align: center;
     margin-left: 0;
   }
-}
-
-@media (max-width: 768px) {
-  .node-overview-container {
-    padding: 15px;
-  }
   
   .ownership-list {
-    padding: 0 10px;
+    height: 160px;
   }
 }
 
