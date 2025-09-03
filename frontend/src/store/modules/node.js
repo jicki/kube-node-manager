@@ -35,7 +35,8 @@ export const useNodeStore = defineStore('node', {
       unknown: 0,
       schedulable: 0,
       limited: 0,
-      unschedulable: 0
+      unschedulable: 0,
+      ownership: {} // 节点归属统计 { "归属名称": 数量, "无归属": 数量 }
     },
     pagination: {
       current: 1,
@@ -500,6 +501,62 @@ export const useNodeStore = defineStore('node', {
           nodeStatuses: this.nodes.map(node => ({ name: node.name, status: node.status }))
         })
       }
+    },
+
+    updateStats() {
+      // 统计节点状态
+      const stats = {
+        total: this.nodes.length,
+        ready: 0,
+        notReady: 0,
+        unknown: 0,
+        schedulable: 0,
+        limited: 0,
+        unschedulable: 0,
+        ownership: {}
+      }
+
+      // 统计各种状态的节点
+      this.nodes.forEach(node => {
+        // 状态统计
+        switch (node.status) {
+          case 'Ready':
+            stats.ready++
+            break
+          case 'NotReady':
+          case 'SchedulingDisabled':
+            stats.notReady++
+            break
+          case 'Unknown':
+            stats.unknown++
+            break
+        }
+
+        // 调度状态统计
+        const schedulingStatus = getSmartSchedulingStatus(node)
+        switch (schedulingStatus) {
+          case 'schedulable':
+            stats.schedulable++
+            break
+          case 'limited':
+            stats.limited++
+            break
+          case 'unschedulable':
+            stats.unschedulable++
+            break
+        }
+
+        // 节点归属统计
+        const userTypeLabel = node.labels && node.labels['deeproute.cn/user-type']
+        if (userTypeLabel && userTypeLabel.trim() !== '') {
+          stats.ownership[userTypeLabel] = (stats.ownership[userTypeLabel] || 0) + 1
+        } else {
+          stats.ownership['无归属'] = (stats.ownership['无归属'] || 0) + 1
+        }
+      })
+
+      // 更新状态
+      this.nodeStats = stats
     },
 
     updatePaginationTotal() {

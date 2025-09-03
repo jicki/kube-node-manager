@@ -192,6 +192,72 @@
         </el-card>
       </el-col>
 
+      <!-- 节点归属分布 -->
+      <el-col :xs="24" :lg="12">
+        <el-card class="chart-card">
+          <template #header>
+            <div class="card-header">
+              <span class="card-title">节点归属分布</span>
+              <el-button type="text" size="small" @click="refreshNodeStats">
+                <el-icon><Refresh /></el-icon>
+                刷新
+              </el-button>
+            </div>
+          </template>
+          
+          <div class="chart-container" style="height: 300px;">
+            <!-- 节点归属图表 -->
+            <div class="node-ownership-chart">
+              <div v-if="ownershipChartData.length > 0" class="ownership-list">
+                <div 
+                  v-for="(item, index) in ownershipChartData" 
+                  :key="item.name"
+                  class="ownership-item"
+                  :style="{ animationDelay: `${index * 0.1}s` }"
+                >
+                  <div class="ownership-header">
+                    <div class="ownership-indicator">
+                      <span 
+                        class="ownership-color" 
+                        :style="{ backgroundColor: item.color }"
+                      ></span>
+                      <span class="ownership-name">{{ item.name }}</span>
+                    </div>
+                    <div class="ownership-stats">
+                      <span class="ownership-count">{{ item.count }}</span>
+                      <span class="ownership-percentage">{{ item.percentage }}%</span>
+                    </div>
+                  </div>
+                  
+                  <div class="ownership-progress">
+                    <div 
+                      class="ownership-bar"
+                      :style="{ 
+                        width: `${item.percentage}%`,
+                        backgroundColor: item.color 
+                      }"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 空状态 -->
+              <div v-else class="empty-ownership">
+                <el-empty description="暂无节点归属数据" :image-size="80">
+                  <template #description>
+                    <p>当前集群节点未配置归属标签</p>
+                    <p>标签：deeproute.cn/user-type</p>
+                  </template>
+                </el-empty>
+              </div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 图表和详细信息 -->
+    <el-row :gutter="24" class="content-row">
       <!-- 集群列表 -->
       <el-col :xs="24" :lg="12">
         <el-card class="cluster-card">
@@ -450,6 +516,39 @@ const unknownOffset = computed(() => {
   const readyRatio = nodeStats.value.ready / nodeStats.value.total
   const notReadyRatio = nodeStats.value.notReady / nodeStats.value.total
   return -((readyRatio + notReadyRatio) * circumference)
+})
+
+// 节点归属图表数据计算
+const ownershipChartData = computed(() => {
+  const ownership = nodeStats.value.ownership || {}
+  const total = nodeStats.value.total
+  
+  if (total === 0) return []
+  
+  // 定义颜色数组
+  const colors = [
+    '#409EFF', // 蓝色
+    '#67C23A', // 绿色
+    '#E6A23C', // 橙色
+    '#F56C6C', // 红色
+    '#909399', // 灰色
+    '#722ED1', // 紫色
+    '#13CE66', // 青绿色
+    '#FF6B6B', // 粉红色
+    '#4DABF7', // 浅蓝色
+    '#69DB7C'  // 浅绿色
+  ]
+  
+  // 转换为图表数据
+  const data = Object.entries(ownership).map(([name, count], index) => ({
+    name,
+    count,
+    percentage: Math.round((count / total) * 100),
+    color: colors[index % colors.length]
+  }))
+  
+  // 按数量排序
+  return data.sort((a, b) => b.count - a.count)
 })
 
 // 最近操作数据
@@ -853,6 +952,114 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* 节点归属图表样式 */
+.node-ownership-chart {
+  height: 100%;
+  padding: 20px;
+}
+
+.ownership-list {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.ownership-item {
+  padding: 16px;
+  border-radius: 8px;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  transition: all 0.3s ease;
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.ownership-item:hover {
+  background: #f0f0f0;
+  border-color: #d9d9d9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.ownership-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.ownership-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ownership-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ownership-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.ownership-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ownership-count {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.ownership-percentage {
+  font-size: 12px;
+  color: #666;
+  background: #e8e8e8;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.ownership-progress {
+  height: 8px;
+  background: #e8e8e8;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.ownership-bar {
+  height: 100%;
+  transition: width 0.8s ease-out;
+  border-radius: 4px;
+}
+
+.empty-ownership {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 动画 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .cluster-list {

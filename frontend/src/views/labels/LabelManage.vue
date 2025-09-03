@@ -442,6 +442,7 @@ import { ref, computed, onMounted, reactive, nextTick } from 'vue'
 import labelApi from '@/api/label'
 import nodeApi from '@/api/node'
 import { useClusterStore } from '@/store/modules/cluster'
+import { useNodeStore } from '@/store/modules/node'
 import SearchBox from '@/components/common/SearchBox.vue'
 import NodeSelector from '@/components/common/NodeSelector.vue'
 import {
@@ -693,9 +694,10 @@ const fetchLabels = async () => {
   }
 }
 
-const fetchNodes = async () => {
+const fetchNodes = async (forceRefresh = false) => {
   try {
     const clusterStore = useClusterStore()
+    const nodeStore = useNodeStore()
     const clusterName = clusterStore.currentClusterName
     
     // 如果没有集群，直接设置为空数组
@@ -704,20 +706,42 @@ const fetchNodes = async () => {
       return
     }
     
+    // 优化：如果nodeStore中已有当前集群的节点数据且不强制刷新，直接使用
+    if (!forceRefresh && nodeStore.nodes.length > 0 && nodeStore.currentClusterName === clusterName) {
+      console.log('使用缓存的节点数据，避免重复请求')
+      availableNodes.value = nodeStore.nodes
+      return
+    }
+    
+    // 显示加载状态
+    loading.value = true
+    
     const response = await nodeApi.getNodes({
       cluster_name: clusterName
     })
     // 后端返回格式: { code, message, data: [...] } - data直接是节点数组
-    availableNodes.value = response.data.data || []
+    const nodes = response.data.data || []
+    availableNodes.value = nodes
+    
+    // 更新nodeStore缓存
+    if (nodes.length > 0) {
+      nodeStore.setNodes(nodes)
+      nodeStore.currentClusterName = clusterName
+    }
+    
   } catch (error) {
     console.error('获取节点数据失败:', error)
     availableNodes.value = []
+  } finally {
+    loading.value = false
   }
 }
 
-const refreshData = () => {
+const refreshData = (includeNodes = false) => {
   fetchLabels()
-  fetchNodes()
+  if (includeNodes) {
+    fetchNodes(true) // 强制刷新节点数据
+  }
 }
 
 const handleSearch = (params) => {
@@ -1061,9 +1085,12 @@ const applyTemplateToNodes = (template) => {
 }
 
 // 显示应用对话框
-const showApplyDialog = (template) => {
+const showApplyDialog = async (template) => {
   console.log('showApplyDialog 接收到的 template:', template)
   console.log('template.labels:', template.labels)
+  
+  // 懒加载节点数据
+  await fetchNodes()
   
   // 深拷贝模板以避免修改原始数据
   const templateCopy = JSON.parse(JSON.stringify(template))
@@ -1111,7 +1138,6 @@ const showApplyDialog = (template) => {
   
   selectedTemplate.value = templateCopy
   applyDialogVisible.value = true
-  fetchNodes() // 获取节点列表
 }
 
 // 应用模板
