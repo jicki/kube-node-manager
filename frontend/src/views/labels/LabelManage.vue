@@ -700,8 +700,15 @@ const fetchNodes = async (forceRefresh = false) => {
     const nodeStore = useNodeStore()
     const clusterName = clusterStore.currentClusterName
     
+    console.log('fetchNodes 开始执行')
+    console.log('当前集群名称:', clusterName)
+    console.log('forceRefresh:', forceRefresh)
+    console.log('nodeStore.nodes 长度:', nodeStore.nodes.length)
+    console.log('nodeStore.currentClusterName:', nodeStore.currentClusterName)
+    
     // 如果没有集群，直接设置为空数组
     if (!clusterName) {
+      console.log('没有集群名称，设置空数组')
       availableNodes.value = []
       return
     }
@@ -710,30 +717,42 @@ const fetchNodes = async (forceRefresh = false) => {
     if (!forceRefresh && nodeStore.nodes.length > 0 && nodeStore.currentClusterName === clusterName) {
       console.log('使用缓存的节点数据，避免重复请求')
       availableNodes.value = nodeStore.nodes
+      console.log('缓存数据设置完成，availableNodes.value 长度:', availableNodes.value.length)
       return
     }
     
+    console.log('发起API请求获取节点数据')
     // 显示加载状态
     loading.value = true
     
     const response = await nodeApi.getNodes({
       cluster_name: clusterName
     })
+    console.log('API响应:', response)
+    
     // 后端返回格式: { code, message, data: [...] } - data直接是节点数组
     const nodes = response.data.data || []
+    console.log('解析的节点数据:', nodes)
+    console.log('节点数量:', nodes.length)
+    
     availableNodes.value = nodes
     
     // 更新nodeStore缓存
     if (nodes.length > 0) {
       nodeStore.setNodes(nodes)
       nodeStore.currentClusterName = clusterName
+      console.log('已更新nodeStore缓存')
+    } else {
+      console.warn('获取到的节点数据为空')
     }
     
   } catch (error) {
     console.error('获取节点数据失败:', error)
+    console.error('错误详情:', error.response?.data || error.message)
     availableNodes.value = []
   } finally {
     loading.value = false
+    console.log('fetchNodes 执行完成，最终 availableNodes.value 长度:', availableNodes.value.length)
   }
 }
 
@@ -1086,8 +1105,16 @@ const applyTemplateToNodes = (template) => {
 
 // 显示应用对话框
 const showApplyDialog = async (template) => {
+  console.log('showApplyDialog 接收到的 template:', template)
+  console.log('template.labels:', template.labels)
+  
   // 懒加载节点数据
   await fetchNodes()
+  
+  // 调试节点数据
+  console.log('fetchNodes 完成后的 availableNodes:', availableNodes.value)
+  console.log('availableNodes 长度:', availableNodes.value.length)
+  console.log('前3个节点数据:', availableNodes.value.slice(0, 3))
   
   // 深拷贝模板以避免修改原始数据
   const templateCopy = JSON.parse(JSON.stringify(template))

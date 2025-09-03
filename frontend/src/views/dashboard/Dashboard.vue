@@ -1052,7 +1052,7 @@ onMounted(async () => {
 .ownership-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .ownership-color {
