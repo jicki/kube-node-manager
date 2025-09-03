@@ -65,10 +65,10 @@
       </el-col>
     </el-row>
 
-    <!-- 图表和详细信息 -->
+    <!-- 节点概览分布与集群状态 -->
     <el-row :gutter="24" class="content-row">
       <!-- 节点概览分布 -->
-      <el-col :xs="24">
+      <el-col :xs="24" :lg="16">
         <el-card class="chart-card node-overview-card">
           <template #header>
             <div class="card-header">
@@ -250,12 +250,9 @@
           </div>
         </el-card>
       </el-col>
-    </el-row>
 
-    <!-- 图表和详细信息 -->
-    <el-row :gutter="24" class="content-row">
-      <!-- 集群列表 -->
-      <el-col :xs="24" :lg="12">
+      <!-- 集群状态 -->
+      <el-col :xs="24" :lg="8">
         <el-card class="cluster-card">
           <template #header>
             <div class="card-header">
@@ -952,7 +949,7 @@ onMounted(async () => {
 
 /* 节点概览容器样式 */
 .node-overview-card {
-  margin-bottom: 24px;
+  height: 380px;
 }
 
 .node-overview-container {
@@ -968,15 +965,15 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 280px;
-  max-width: 320px;
+  min-width: 250px;
+  max-width: 280px;
 }
 
 .ownership-section {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-width: 280px;
+  min-width: 200px;
 }
 
 .section-title {
@@ -1112,13 +1109,18 @@ onMounted(async () => {
 
 /* 响应式设计 - 保持一行显示 */
 @media (max-width: 1200px) {
-  .status-section,
+  .status-section {
+    min-width: 220px;
+    max-width: 250px;
+  }
+  
   .ownership-section {
-    min-width: 250px; /* 减小最小宽度以适应更小屏幕 */
+    min-width: 180px;
   }
   
   .node-overview-container {
     gap: 16px; /* 减小间距 */
+    padding: 16px;
   }
   
   .ownership-section .section-title {
@@ -1126,15 +1128,25 @@ onMounted(async () => {
   }
 }
 
-@media (max-width: 980px) {
+@media (max-width: 992px) {
+  .node-overview-card,
+  .cluster-card {
+    height: auto; /* 在中等屏幕取消固定高度 */
+  }
+  
   .node-overview-container {
+    min-height: 240px;
     padding: 15px;
     gap: 12px;
   }
   
-  .status-section,
-  .ownership-section {
+  .status-section {
     min-width: 200px;
+    max-width: 220px;
+  }
+  
+  .ownership-section {
+    min-width: 160px;
   }
   
   .ownership-list {
@@ -1146,13 +1158,18 @@ onMounted(async () => {
     font-size: 14px;
     margin-bottom: 15px;
   }
+  
+  .cluster-list {
+    max-height: 280px;
+  }
 }
 
 @media (max-width: 768px) {
   .node-overview-container {
-    flex-direction: column; /* 只在非常小的屏幕才堆叠 */
+    flex-direction: column; /* 小屏幕堆叠显示 */
     gap: 15px;
     padding: 12px;
+    min-height: auto;
   }
   
   .section-divider {
@@ -1162,6 +1179,7 @@ onMounted(async () => {
   .status-section,
   .ownership-section {
     min-width: auto;
+    max-width: none;
   }
   
   .ownership-section .section-title {
@@ -1171,6 +1189,10 @@ onMounted(async () => {
   
   .ownership-list {
     height: 160px;
+  }
+  
+  .cluster-list {
+    max-height: 240px;
   }
 }
 
@@ -1184,6 +1206,10 @@ onMounted(async () => {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.cluster-card {
+  height: 380px;
 }
 
 .cluster-list {
