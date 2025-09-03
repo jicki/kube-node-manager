@@ -161,24 +161,30 @@
                       <span class="legend-color legend-success"></span>
                       <span class="legend-text">正常</span>
                     </div>
-                    <span class="legend-value">{{ nodeStats.ready }}</span>
-                    <span class="legend-percentage">({{ readyPercentage }}%)</span>
+                    <div class="legend-stats">
+                      <span class="legend-value">{{ nodeStats.ready }}</span>
+                      <span class="legend-percentage">({{ readyPercentage }}%)</span>
+                    </div>
                   </div>
                   <div class="legend-item" :class="{ 'legend-empty': nodeStats.notReady === 0 }">
                     <div class="legend-indicator">
                       <span class="legend-color legend-warning"></span>
                       <span class="legend-text">异常</span>
                     </div>
-                    <span class="legend-value">{{ nodeStats.notReady }}</span>
-                    <span class="legend-percentage">({{ notReadyPercentage }}%)</span>
+                    <div class="legend-stats">
+                      <span class="legend-value">{{ nodeStats.notReady }}</span>
+                      <span class="legend-percentage">({{ notReadyPercentage }}%)</span>
+                    </div>
                   </div>
                   <div class="legend-item" :class="{ 'legend-empty': nodeStats.unknown === 0 }">
                     <div class="legend-indicator">
                       <span class="legend-color legend-info"></span>
                       <span class="legend-text">未知</span>
                     </div>
-                    <span class="legend-value">{{ nodeStats.unknown }}</span>
-                    <span class="legend-percentage">({{ unknownPercentage }}%)</span>
+                    <div class="legend-stats">
+                      <span class="legend-value">{{ nodeStats.unknown }}</span>
+                      <span class="legend-percentage">({{ unknownPercentage }}%)</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -930,12 +936,17 @@ onMounted(async () => {
   letter-spacing: 0.3px;
 }
 
+.legend-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
 .legend-value {
   font-size: 18px;
   font-weight: 700;
   color: #333;
-  margin-left: auto;
-  margin-right: 8px;
   letter-spacing: -0.3px;
 }
 
@@ -1419,9 +1430,12 @@ onMounted(async () => {
     gap: 10px;
   }
   
+  .legend-stats {
+    gap: 10px;
+  }
+  
   .legend-value {
     font-size: 16px;
-    margin-right: 6px;
   }
   
   .legend-percentage {
