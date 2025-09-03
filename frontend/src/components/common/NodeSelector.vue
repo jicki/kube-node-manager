@@ -7,7 +7,7 @@
           v-model="searchQuery"
           placeholder="搜索节点名称..."
           clearable
-          @input="handleSearch"
+          @input="handleSearchDebounced"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
@@ -146,31 +146,53 @@
           :indeterminate="indeterminate"
           @change="handleSelectAll"
         >
-          全选 ({{ selectedNodes.length }}/{{ filteredNodes.length }})
+          全选 ({{ selectedNodes.length }}/{{ totalFilteredCount }})
         </el-checkbox>
-        <el-button type="text" size="small" @click="clearSelection">
-          清空选择
-        </el-button>
+        <div class="action-controls">
+          <el-button type="text" size="small" @click="clearSelection">
+            清空选择
+          </el-button>
+          <div class="pagination-info">
+            <span class="total-info">
+              共 {{ totalFilteredCount }} 个节点
+              <template v-if="totalFilteredCount > pageSize">
+                ，显示前 {{ Math.min(pageSize, totalFilteredCount) }} 个
+              </template>
+            </span>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- 节点列表 -->
     <div class="node-list">
-      <el-scrollbar height="300px">
-        
-        <el-checkbox-group v-model="selectedNodes" @change="handleSelectionChange">
-          <div class="node-container">
-            <div
-              v-for="node in filteredNodes"
-              :key="node?.name || node?.id || Math.random()"
-              class="node-item"
-              :class="{ 'selected': getNodeName(node) && selectedNodes.includes(getNodeName(node)) }"
-            >
-              <el-checkbox 
-                :value="getNodeName(node) || `node-${Math.random()}`"
-                :disabled="!getNodeName(node)"
-                class="node-checkbox"
-              />
+      <!-- 加载状态 -->
+      <div v-if="isFiltering" class="loading-container">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>正在过滤节点...</span>
+      </div>
+      
+      <!-- 无数据状态 -->
+      <div v-else-if="paginatedNodes.length === 0" class="empty-container">
+        <el-empty description="没有找到匹配的节点" :image-size="100" />
+      </div>
+      
+      <!-- 节点列表内容 -->
+      <div v-else>
+        <el-scrollbar height="300px">
+          <el-checkbox-group v-model="selectedNodes" @change="handleSelectionChange">
+            <div class="node-container">
+              <div
+                v-for="node in paginatedNodes"
+                :key="node?.name || node?.id || Math.random()"
+                class="node-item"
+                :class="{ 'selected': getNodeName(node) && selectedNodes.includes(getNodeName(node)) }"
+              >
+                <el-checkbox 
+                  :value="getNodeName(node) || `node-${Math.random()}`"
+                  :disabled="!getNodeName(node)"
+                  class="node-checkbox"
+                />
             
             <div class="node-content">
               <div class="node-header">
@@ -320,18 +342,34 @@
           />
         </div>
         
-        <!-- 加载状态 -->
-        <div v-if="loading" class="loading-nodes">
-          <el-skeleton :rows="3" animated />
+        </el-scrollbar>
+        
+        <!-- 分页控制（当节点数量超过pageSize时显示） -->
+        <div v-if="totalFilteredCount > pageSize" class="pagination-container">
+          <el-pagination
+            v-model:current-page="currentPage"
+            :page-size="pageSize"
+            :total="totalFilteredCount"
+            layout="prev, pager, next, jumper"
+            :small="true"
+            :hide-on-single-page="true"
+            @current-change="handlePageChange"
+          />
+          <div class="pagination-extra">
+            <el-button type="text" size="small" @click="loadMoreNodes">
+              <el-icon><More /></el-icon>
+              显示更多
+            </el-button>
+          </div>
         </div>
-      </el-scrollbar>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { Search, Location, Collection, Warning, ArrowDown, Filter, WarningFilled, Edit, ArrowUp, CollectionTag } from '@element-plus/icons-vue'
+import { Search, Location, Collection, Warning, ArrowDown, Filter, WarningFilled, Edit, ArrowUp, CollectionTag, Loading, More } from '@element-plus/icons-vue'
 
 const props = defineProps({
   modelValue: {
@@ -360,6 +398,7 @@ const emit = defineEmits(['update:modelValue', 'selection-change'])
 
 // 响应式数据
 const searchQuery = ref('')
+const debouncedSearchQuery = ref('')
 const statusFilter = ref('')
 const roleFilter = ref('')
 const labelKeyFilter = ref('')
@@ -370,6 +409,12 @@ const taintValueFilter = ref('')
 const taintEffectFilter = ref('')
 const showAdvancedSearch = ref(false)
 const selectedNodes = ref([...props.modelValue])
+
+// 分页和性能优化相关
+const currentPage = ref(1)
+const pageSize = ref(50) // 每页显示50个节点
+const isFiltering = ref(false)
+let searchDebounceTimer = null
 
 // 监听props变化，避免深度监听造成性能问题
 watch(() => props.modelValue, (newValue) => {
@@ -436,7 +481,8 @@ const nodeOwnershipOptions = computed(() => {
 })
 
 // 计算属性 - 优化过滤逻辑，减少不必要的计算  
-const filteredNodes = computed(() => {
+// 优化的过滤逻辑 - 支持分页和性能优化
+const filteredNodesCache = computed(() => {
   if (!props.nodes || props.nodes.length === 0) {
     return []
   }
@@ -444,9 +490,9 @@ const filteredNodes = computed(() => {
   // 首先过滤掉无效的节点数据
   let result = props.nodes.filter(validateNodeData)
 
-  // 文本搜索
-  if (searchQuery.value?.trim()) {
-    const query = searchQuery.value.toLowerCase().trim()
+  // 文本搜索 - 使用防抖后的搜索词
+  if (debouncedSearchQuery.value?.trim()) {
+    const query = debouncedSearchQuery.value.toLowerCase().trim()
     result = result.filter(node => 
       getNodeName(node)?.toLowerCase().includes(query)
     )
@@ -545,25 +591,38 @@ const filteredNodes = computed(() => {
   return result
 })
 
+// 总过滤节点数量
+const totalFilteredCount = computed(() => filteredNodesCache.value.length)
+
+// 分页后的节点
+const paginatedNodes = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredNodesCache.value.slice(start, end)
+})
+
+// 为了向后兼容，保留 filteredNodes 计算属性
+const filteredNodes = computed(() => paginatedNodes.value)
+
 const selectAll = computed({
   get() {
-    if (!filteredNodes.value?.length) return false
+    if (!paginatedNodes.value?.length) return false
     
     // 优化检查，避免每次都遍历整个数组
-    const filteredNodeNames = filteredNodes.value.map(node => getNodeName(node)).filter(Boolean)
+    const filteredNodeNames = paginatedNodes.value.map(node => getNodeName(node)).filter(Boolean)
     return filteredNodeNames.length > 0 && 
            filteredNodeNames.every(name => selectedNodes.value.includes(name))
   },
   set(value) {
     if (value) {
-      // 全选：将筛选后的节点添加到选中列表
-      const allNodeNames = filteredNodes.value
+      // 全选：将当前页的节点添加到选中列表
+      const allNodeNames = paginatedNodes.value
         .map(node => getNodeName(node))
         .filter(Boolean)
       selectedNodes.value = [...new Set([...selectedNodes.value, ...allNodeNames])]
     } else {
-      // 取消选择筛选后的节点
-      const filteredNodeNames = filteredNodes.value
+      // 取消选择当前页的节点
+      const filteredNodeNames = paginatedNodes.value
         .map(node => getNodeName(node))
         .filter(Boolean)
       selectedNodes.value = selectedNodes.value.filter(name => 
@@ -583,12 +642,26 @@ const indeterminate = computed(() => {
 })
 
 // 方法
-const handleSearch = () => {
-  // 搜索是响应式的，不需要额外处理
+const handleSearchDebounced = () => {
+  isFiltering.value = true
+  
+  // 清除之前的定时器
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+  
+  // 设置防抖延迟
+  searchDebounceTimer = setTimeout(() => {
+    debouncedSearchQuery.value = searchQuery.value
+    currentPage.value = 1 // 重置到第一页
+    isFiltering.value = false
+  }, 300)
 }
 
 const handleFilter = () => {
-  // 筛选是响应式的，不需要额外处理
+  // 筛选变化时重置分页
+  currentPage.value = 1
+  
   console.log('Filter changed:', { 
     status: statusFilter.value, 
     role: roleFilter.value, 
@@ -597,8 +670,18 @@ const handleFilter = () => {
     nodeOwnership: nodeOwnershipFilter.value,
     taintKey: taintKeyFilter.value,
     taintValue: taintValueFilter.value,
-    taintEffect: taintEffectFilter.value
+    taintEffect: taintEffectFilter.value,
+    totalFiltered: totalFilteredCount.value
   })
+}
+
+// 分页相关方法
+const handlePageChange = (page) => {
+  currentPage.value = page
+}
+
+const loadMoreNodes = () => {
+  pageSize.value += 50 // 每次增加50个节点
 }
 
 const handleSelectAll = (checked) => {
@@ -847,6 +930,10 @@ onUnmounted(() => {
   if (emitTimer) {
     clearTimeout(emitTimer)
     emitTimer = null
+  }
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
   }
 })
 </script>
@@ -1141,6 +1228,64 @@ onUnmounted(() => {
 
 .empty-nodes, .loading-nodes {
   padding: 20px;
+  text-align: center;
+}
+
+/* 新增样式 - 性能优化相关 */
+.loading-container {
+  padding: 40px 20px;
+  text-align: center;
+  color: #666;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.loading-container .el-icon {
+  font-size: 24px;
+  color: #409eff;
+}
+
+.empty-container {
+  padding: 20px;
+  text-align: center;
+}
+
+.action-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.total-info {
+  font-size: 12px;
+  color: #666;
+}
+
+.pagination-container {
+  border-top: 1px solid #e8e8e8;
+  padding: 16px;
+  background: #fafafa;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pagination-extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-container .el-pagination {
+  flex: 1;
   text-align: center;
 }
 
