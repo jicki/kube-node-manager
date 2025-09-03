@@ -54,6 +54,10 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
+	// 添加调试日志
+	h.logger.Infof("接收到集群创建请求: Name=%s, Description=%s, KubeConfig长度=%d",
+		req.Name, req.Description, len(req.KubeConfig))
+
 	// 获取用户ID
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -266,7 +270,7 @@ func (h *Handler) Delete(c *gin.Context) {
 // @Router /clusters [get]
 func (h *Handler) List(c *gin.Context) {
 	var req cluster.ListRequest
-	
+
 	// 解析查询参数
 	if pageStr := c.Query("page"); pageStr != "" {
 		if page, err := strconv.Atoi(pageStr); err == nil {

@@ -127,9 +127,9 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="createdAt" label="创建时间" width="180">
+        <el-table-column prop="created_at" label="创建时间" width="180">
           <template #default="{ row }">
-            <span class="time-text">{{ formatTime(row.createdAt) }}</span>
+            <span class="time-text">{{ formatTime(row.created_at) }}</span>
           </template>
         </el-table-column>
 
@@ -359,6 +359,9 @@ const handleSubmit = async () => {
     await formRef.value.validate()
     
     submitting.value = true
+    
+    // 添加调试日志
+    console.log('提交集群数据:', form)
     
     if (isEdit.value) {
       await clusterStore.updateCluster(form.id, form)

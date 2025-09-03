@@ -75,7 +75,7 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 	// 检查用户权限 - 只有管理员可以创建集群
 	var currentUser model.User
 	if err := s.db.First(&currentUser, userID).Error; err != nil {
-		s.logger.Error("Failed to get current user %d: %v", userID, err)
+		s.logger.Errorf("Failed to get current user %d: %v", userID, err)
 		return nil, fmt.Errorf("failed to get current user: %w", err)
 	}
 
@@ -93,7 +93,7 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 
 	// 验证kubeconfig
 	if err := s.k8sSvc.TestConnection(req.KubeConfig); err != nil {
-		s.logger.Error("Invalid kubeconfig for cluster %s: %v", req.Name, err)
+		s.logger.Errorf("Invalid kubeconfig for cluster %s: %v", req.Name, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			Action:       model.ActionCreate,
@@ -118,7 +118,7 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 		})
 		return nil, fmt.Errorf("cluster name already exists: %s", req.Name)
 	} else if err != gorm.ErrRecordNotFound {
-		s.logger.Error("Failed to check cluster name existence: %v", err)
+		s.logger.Errorf("Failed to check cluster name existence: %v", err)
 		return nil, fmt.Errorf("failed to check cluster name: %w", err)
 	}
 
@@ -132,7 +132,7 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 	}
 
 	if err := s.db.Create(&cluster).Error; err != nil {
-		s.logger.Error("Failed to create cluster %s: %v", req.Name, err)
+		s.logger.Errorf("Failed to create cluster %s: %v", req.Name, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			Action:       model.ActionCreate,
@@ -146,14 +146,14 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 
 	// 创建Kubernetes客户端
 	if err := s.k8sSvc.CreateClient(cluster.Name, cluster.KubeConfig); err != nil {
-		s.logger.Error("Failed to create k8s client for cluster %s: %v", cluster.Name, err)
+		s.logger.Errorf("Failed to create k8s client for cluster %s: %v", cluster.Name, err)
 		// 不返回错误，但记录日志
 	}
 
 	// 同步集群信息
 	s.syncClusterInfo(&cluster)
 
-	s.logger.Info("Successfully created cluster: %s", cluster.Name)
+	s.logger.Infof("Successfully created cluster: %s", cluster.Name)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		ClusterID:    &cluster.ID,
@@ -412,7 +412,7 @@ func (s *Service) List(req ListRequest, userID uint) (*ListResponse, error) {
 	// 获取总数
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		s.logger.Error("Failed to count clusters: %v", err)
+		s.logger.Errorf("Failed to count clusters: %v", err)
 		return nil, fmt.Errorf("failed to count clusters: %w", err)
 	}
 
@@ -429,7 +429,7 @@ func (s *Service) List(req ListRequest, userID uint) (*ListResponse, error) {
 	// 获取集群列表
 	var clusters []model.Cluster
 	if err := query.Order("created_at DESC").Offset(offset).Limit(req.PageSize).Find(&clusters).Error; err != nil {
-		s.logger.Error("Failed to list clusters: %v", err)
+		s.logger.Errorf("Failed to list clusters: %v", err)
 		return nil, fmt.Errorf("failed to list clusters: %w", err)
 	}
 
