@@ -145,10 +145,10 @@
                     />
                     
                     <!-- 中心文字 -->
-                    <text x="90" y="85" text-anchor="middle" class="center-number">
+                    <text x="90" y="82" text-anchor="middle" class="center-number">
                       {{ nodeStats.total }}
                     </text>
-                    <text x="90" y="105" text-anchor="middle" class="center-label">
+                    <text x="90" y="108" text-anchor="middle" class="center-label">
                       总节点
                     </text>
                   </svg>
@@ -859,29 +859,32 @@ onMounted(async () => {
 }
 
 .center-number {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 700;
   fill: #333;
+  letter-spacing: -0.5px;
 }
 
 .center-label {
-  font-size: 12px;
+  font-size: 13px;
   fill: #666;
+  font-weight: 500;
+  letter-spacing: 0.5px;
 }
 
 .chart-legend {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  min-width: 120px;
+  gap: 12px;
+  min-width: 140px;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: 10px 14px;
+  border-radius: 8px;
   background: #fafafa;
   transition: all 0.3s ease;
 }
@@ -898,12 +901,12 @@ onMounted(async () => {
 .legend-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .legend-color {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -924,20 +927,23 @@ onMounted(async () => {
   font-size: 14px;
   color: #333;
   font-weight: 500;
+  letter-spacing: 0.3px;
 }
 
 .legend-value {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: #333;
   margin-left: auto;
-  margin-right: 4px;
+  margin-right: 8px;
+  letter-spacing: -0.3px;
 }
 
 .legend-percentage {
-  font-size: 12px;
+  font-size: 13px;
   color: #666;
-  font-weight: normal;
+  font-weight: 500;
+  letter-spacing: 0.2px;
 }
 
 .empty-chart {
@@ -1398,16 +1404,28 @@ onMounted(async () => {
   }
   
   .center-number {
-    font-size: 20px;
+    font-size: 22px;
+    letter-spacing: -0.3px;
   }
   
   .center-label {
-    font-size: 11px;
+    font-size: 12px;
+    letter-spacing: 0.3px;
   }
   
   .chart-legend {
     min-width: auto;
     width: 100%;
+    gap: 10px;
+  }
+  
+  .legend-value {
+    font-size: 16px;
+    margin-right: 6px;
+  }
+  
+  .legend-percentage {
+    font-size: 12px;
   }
 }
 </style>
