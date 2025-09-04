@@ -100,7 +100,7 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 			user = model.User{
 				Username: ldapUser.Username,
 				Email:    ldapUser.Email,
-				Role:     model.RoleUser,
+				Role:     model.RoleViewer, // LDAP 用户默认分配为只读用户角色
 				Status:   model.StatusActive,
 			}
 			user.HashPassword("") // LDAP users don't have local passwords
@@ -108,7 +108,7 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 				s.logger.Errorf("Failed to create local user record for LDAP user %s: %v", req.Username, err)
 				return nil, err
 			}
-			s.logger.Infof("Local user record created for LDAP user %s (ID: %d)", req.Username, user.ID)
+			s.logger.Infof("Local user record created for LDAP user %s (ID: %d) with Viewer role", req.Username, user.ID)
 			isLDAPAuth = true
 		} else {
 			return nil, err
