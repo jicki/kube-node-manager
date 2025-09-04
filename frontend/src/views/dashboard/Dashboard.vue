@@ -254,13 +254,7 @@
                           class="ownership-legend-color" 
                           :style="{ backgroundColor: item.color }"
                         ></span>
-                        <el-tooltip
-                          :content="item.name"
-                          placement="top"
-                          :disabled="item.name.length <= 15"
-                        >
-                          <span class="ownership-legend-name">{{ item.name }}</span>
-                        </el-tooltip>
+                        <span class="ownership-legend-name">{{ item.name }}</span>
                       </div>
                       <div class="ownership-legend-stats">
                         <span class="ownership-legend-count">{{ item.count }}</span>
@@ -1075,12 +1069,12 @@ onUnmounted(() => {
 
 /* 节点概览容器样式 */
 .node-overview-card {
-  height: 380px;
+  height: 480px;
 }
 
 .node-overview-container {
   display: flex;
-  min-height: 280px;
+  min-height: 380px;
   padding: 20px;
   gap: 32px;
   position: relative;
@@ -1117,7 +1111,7 @@ onUnmounted(() => {
 
 .section-divider {
   height: auto !important;
-  min-height: 260px;
+  min-height: 360px;
   margin: 0 16px !important;
   opacity: 0.6;
 }
@@ -1144,7 +1138,7 @@ onUnmounted(() => {
 
 /* 圆形图表容器 */
 .ownership-pie-container {
-  height: 220px;
+  height: 320px;
   display: flex;
   gap: 20px;
   padding: 0 20px;
@@ -1191,8 +1185,8 @@ onUnmounted(() => {
 .ownership-legend {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px 10px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px 12px;
   align-content: start;
   overflow-y: auto;
   padding: 4px;
@@ -1239,11 +1233,8 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 500;
   color: #333;
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: help;
+  word-break: break-word;
+  line-height: 1.4;
   transition: all 0.2s ease;
 }
 
@@ -1354,7 +1345,7 @@ onUnmounted(() => {
 }
 
 .empty-ownership {
-  height: 220px;
+  height: 320px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1386,12 +1377,8 @@ onUnmounted(() => {
   }
   
   .ownership-legend {
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 6px 8px;
-  }
-  
-  .ownership-legend-name {
-    max-width: 80px;
   }
 }
 
@@ -1402,7 +1389,7 @@ onUnmounted(() => {
   }
   
   .node-overview-container {
-    min-height: 240px;
+    min-height: 320px;
     padding: 15px;
     gap: 20px;
   }
@@ -1435,12 +1422,8 @@ onUnmounted(() => {
   }
   
   .ownership-legend {
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 6px;
-  }
-  
-  .ownership-legend-name {
-    max-width: 70px;
   }
   
   .ownership-legend-item {
@@ -1485,10 +1468,6 @@ onUnmounted(() => {
     gap: 8px;
   }
   
-  .ownership-legend-name {
-    max-width: 150px;
-  }
-  
   .ownership-legend-item {
     flex-direction: row;
     justify-content: space-between;
@@ -1519,11 +1498,11 @@ onUnmounted(() => {
 }
 
 .cluster-card {
-  height: 380px;
+  height: 480px;
 }
 
 .cluster-list {
-  max-height: 300px;
+  max-height: 400px;
   overflow-y: auto;
 }
 
