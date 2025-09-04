@@ -3,6 +3,7 @@ package node
 import (
 	"net/http"
 
+	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/node"
 	"kube-node-manager/pkg/logger"
 
@@ -204,6 +205,16 @@ func (h *Handler) Drain(c *gin.Context) {
 		return
 	}
 
+	// 检查用户权限：只有 admin 和 user 角色可以驱逐节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can drain nodes",
+		})
+		return
+	}
+
 	// 验证节点操作权限
 	if err := h.nodeSvc.ValidateNodeOperation(req.ClusterName, req.NodeName, "drain"); err != nil {
 		h.logger.Warning("Node operation validation failed: %v", err)
@@ -273,6 +284,16 @@ func (h *Handler) Cordon(c *gin.Context) {
 		return
 	}
 
+	// 检查用户权限：只有 admin 和 user 角色可以禁止调度节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can cordon nodes",
+		})
+		return
+	}
+
 	if err := h.nodeSvc.Cordon(req, userID.(uint)); err != nil {
 		h.logger.Error("Failed to cordon node: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
@@ -328,6 +349,16 @@ func (h *Handler) Uncordon(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, Response{
 			Code:    http.StatusUnauthorized,
 			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以解除调度节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can uncordon nodes",
 		})
 		return
 	}
@@ -500,6 +531,16 @@ func (h *Handler) BatchCordon(c *gin.Context) {
 		return
 	}
 
+	// 检查用户权限：只有 admin 和 user 角色可以批量禁止调度节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can batch cordon nodes",
+		})
+		return
+	}
+
 	results, err := h.nodeSvc.BatchCordon(req, userID.(uint))
 	if err != nil {
 		h.logger.Error("Failed to batch cordon nodes: %v", err)
@@ -567,6 +608,16 @@ func (h *Handler) BatchUncordon(c *gin.Context) {
 		return
 	}
 
+	// 检查用户权限：只有 admin 和 user 角色可以批量解除调度节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can batch uncordon nodes",
+		})
+		return
+	}
+
 	results, err := h.nodeSvc.BatchUncordon(req, userID.(uint))
 	if err != nil {
 		h.logger.Error("Failed to batch uncordon nodes: %v", err)
@@ -630,6 +681,16 @@ func (h *Handler) BatchDrain(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, Response{
 			Code:    http.StatusUnauthorized,
 			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以批量驱逐节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can batch drain nodes",
 		})
 		return
 	}

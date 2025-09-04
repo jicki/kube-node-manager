@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/taint"
 	"kube-node-manager/pkg/logger"
 
@@ -62,6 +63,16 @@ func (h *Handler) UpdateNodeTaints(c *gin.Context) {
 		return
 	}
 
+	// 检查用户权限：只有 admin 和 user 角色可以更新节点污点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can update node taints",
+		})
+		return
+	}
+
 	if err := h.taintSvc.UpdateNodeTaints(req, userID.(uint)); err != nil {
 		h.logger.Error("Failed to update node taints: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
@@ -104,6 +115,16 @@ func (h *Handler) BatchUpdateTaints(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, Response{
 			Code:    http.StatusUnauthorized,
 			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以批量更新节点污点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can batch update node taints",
 		})
 		return
 	}
@@ -177,6 +198,16 @@ func (h *Handler) RemoveTaint(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, Response{
 			Code:    http.StatusUnauthorized,
 			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以移除节点污点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can remove node taints",
 		})
 		return
 	}

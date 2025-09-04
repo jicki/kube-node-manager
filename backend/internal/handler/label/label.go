@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/label"
 	"kube-node-manager/pkg/logger"
 
@@ -69,6 +70,16 @@ func (h *Handler) UpdateNodeLabels(c *gin.Context) {
 		return
 	}
 
+	// 检查用户权限：只有 admin 和 user 角色可以更新节点标签
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can update node labels",
+		})
+		return
+	}
+
 	if err := h.labelSvc.UpdateNodeLabels(req, userID.(uint)); err != nil {
 		h.logger.Error("Failed to update node labels: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
@@ -115,6 +126,16 @@ func (h *Handler) BatchUpdateLabels(c *gin.Context) {
 		return
 	}
 
+	// 检查用户权限：只有 admin 和 user 角色可以批量更新节点标签
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can batch update node labels",
+		})
+		return
+	}
+
 	if err := h.labelSvc.BatchUpdateLabels(req, userID.(uint)); err != nil {
 		h.logger.Error("Failed to batch update node labels: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
@@ -157,6 +178,16 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, Response{
 			Code:    http.StatusUnauthorized,
 			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以创建标签模板
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can create label templates",
 		})
 		return
 	}
@@ -220,6 +251,16 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 		return
 	}
 
+	// 检查用户权限：只有 admin 和 user 角色可以更新标签模板
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can update label templates",
+		})
+		return
+	}
+
 	template, err := h.labelSvc.UpdateTemplate(uint(id), req, userID.(uint))
 	if err != nil {
 		h.logger.Error("Failed to update label template: %v", err)
@@ -270,6 +311,16 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, Response{
 			Code:    http.StatusUnauthorized,
 			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以删除标签模板
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can delete label templates",
 		})
 		return
 	}
