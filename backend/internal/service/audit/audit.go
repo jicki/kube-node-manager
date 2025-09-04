@@ -19,6 +19,7 @@ type LogRequest struct {
 	Action       model.AuditAction  `json:"action"`
 	ResourceType model.ResourceType `json:"resource_type"`
 	Details      string             `json:"details"`
+	Reason       string             `json:"reason,omitempty"` // 操作原因，特别用于记录禁止调度的原因
 	Status       model.AuditStatus  `json:"status"`
 	ErrorMsg     string             `json:"error_msg,omitempty"`
 	IPAddress    string             `json:"ip_address,omitempty"`
@@ -65,6 +66,7 @@ func (s *Service) Log(req LogRequest) {
 		Action:       req.Action,
 		ResourceType: req.ResourceType,
 		Details:      req.Details,
+		Reason:       req.Reason,
 		Status:       req.Status,
 		ErrorMsg:     req.ErrorMsg,
 		IPAddress:    req.IPAddress,
@@ -140,4 +142,71 @@ func (s *Service) GetByID(id uint) (*model.AuditLog, error) {
 		return nil, err
 	}
 	return &log, nil
+}
+
+// GetLatestCordonRecord 获取节点最新的禁止调度记录
+func (s *Service) GetLatestCordonRecord(nodeName string, clusterID uint) (*model.AuditLog, error) {
+	var log model.AuditLog
+	query := s.db.Model(&model.AuditLog{}).
+		Preload("User").
+		Where("node_name = ?", nodeName).
+		Where("resource_type = ?", model.ResourceNode).
+		Where("action = ?", model.ActionUpdate).
+		Where("status = ?", model.AuditStatusSuccess)
+
+	// 如果指定了集群ID，添加集群过滤条件
+	if clusterID > 0 {
+		query = query.Where("cluster_id = ?", clusterID)
+	}
+
+	// 只查询包含"Cordoned"或"Uncordoned"关键词的记录，按时间倒序获取最新一条
+	err := query.Where("details LIKE ? OR details LIKE ?", "%Cordoned%", "%Uncordoned%").
+		Order("created_at DESC").
+		First(&log).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &log, nil
+}
+
+// GetLatestCordonRecords 批量获取多个节点的最新禁止调度记录
+func (s *Service) GetLatestCordonRecords(nodeNames []string, clusterID uint) (map[string]*model.AuditLog, error) {
+	if len(nodeNames) == 0 {
+		return make(map[string]*model.AuditLog), nil
+	}
+
+	var logs []model.AuditLog
+	query := s.db.Model(&model.AuditLog{}).
+		Preload("User").
+		Where("node_name IN ?", nodeNames).
+		Where("resource_type = ?", model.ResourceNode).
+		Where("action = ?", model.ActionUpdate).
+		Where("status = ?", model.AuditStatusSuccess)
+
+	// 如果指定了集群ID，添加集群过滤条件
+	if clusterID > 0 {
+		query = query.Where("cluster_id = ?", clusterID)
+	}
+
+	// 查询包含禁止调度或解除调度关键词的记录
+	err := query.Where("details LIKE ? OR details LIKE ?", "%Cordoned%", "%Uncordoned%").
+		Order("node_name, created_at DESC").
+		Find(&logs).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 为每个节点保留最新的一条记录
+	result := make(map[string]*model.AuditLog)
+	for _, log := range logs {
+		if _, exists := result[log.NodeName]; !exists {
+			logCopy := log
+			result[log.NodeName] = &logCopy
+		}
+	}
+
+	return result, nil
 }

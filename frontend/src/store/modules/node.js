@@ -397,14 +397,14 @@ export const useNodeStore = defineStore('node', {
       }
     },
 
-    async cordonNode(nodeName) {
+    async cordonNode(nodeName, reason = '') {
       try {
         const clusterStore = useClusterStore()
         const clusterName = clusterStore.currentClusterName
         if (!clusterName) {
           throw new Error('请先选择集群')
         }
-        const response = await nodeApi.cordonNode(nodeName, clusterName)
+        const response = await nodeApi.cordonNode(nodeName, clusterName, reason)
         await this.fetchNodes()
         return response
       } catch (error) {
@@ -412,14 +412,14 @@ export const useNodeStore = defineStore('node', {
       }
     },
 
-    async uncordonNode(nodeName) {
+    async uncordonNode(nodeName, reason = '') {
       try {
         const clusterStore = useClusterStore()
         const clusterName = clusterStore.currentClusterName
         if (!clusterName) {
           throw new Error('请先选择集群')
         }
-        const response = await nodeApi.uncordonNode(nodeName, clusterName)
+        const response = await nodeApi.uncordonNode(nodeName, clusterName, reason)
         await this.fetchNodes()
         return response
       } catch (error) {
@@ -442,10 +442,10 @@ export const useNodeStore = defineStore('node', {
       }
     },
 
-    async batchCordon(nodeNames) {
+    async batchCordon(nodeNames, reason = '') {
       try {
         const clusterStore = useClusterStore()
-        const response = await nodeApi.batchCordon(nodeNames, clusterStore.currentClusterName)
+        const response = await nodeApi.batchCordon(nodeNames, clusterStore.currentClusterName, reason)
         await this.fetchNodes()
         return response
       } catch (error) {
@@ -453,10 +453,10 @@ export const useNodeStore = defineStore('node', {
       }
     },
 
-    async batchUncordon(nodeNames) {
+    async batchUncordon(nodeNames, reason = '') {
       try {
         const clusterStore = useClusterStore()
-        const response = await nodeApi.batchUncordon(nodeNames, clusterStore.currentClusterName)
+        const response = await nodeApi.batchUncordon(nodeNames, clusterStore.currentClusterName, reason)
         await this.fetchNodes()
         return response
       } catch (error) {

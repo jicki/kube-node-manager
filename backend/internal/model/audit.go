@@ -12,6 +12,7 @@ type AuditLog struct {
 	Action       AuditAction  `json:"action" gorm:"not null"`
 	ResourceType ResourceType `json:"resource_type" gorm:"not null"`
 	Details      string       `json:"details" gorm:"type:text"`
+	Reason       string       `json:"reason" gorm:"type:text"` // 操作原因，特别用于记录禁止调度的原因
 	Status       AuditStatus  `json:"status" gorm:"default:success"`
 	ErrorMsg     string       `json:"error_msg"`
 	IPAddress    string       `json:"ip_address"`

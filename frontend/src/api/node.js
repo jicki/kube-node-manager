@@ -19,23 +19,25 @@ const nodeApi = {
   },
 
   // 禁止调度节点
-  cordonNode(nodeName, clusterName) {
+  cordonNode(nodeName, clusterName, reason = '') {
     return request({
       url: `/api/v1/nodes/${nodeName}/cordon`,
       method: 'post',
       data: {
-        cluster_name: clusterName
+        cluster_name: clusterName,
+        reason: reason
       }
     })
   },
 
   // 解除调度节点
-  uncordonNode(nodeName, clusterName) {
+  uncordonNode(nodeName, clusterName, reason = '') {
     return request({
       url: `/api/v1/nodes/${nodeName}/uncordon`,
       method: 'post',
       data: {
-        cluster_name: clusterName
+        cluster_name: clusterName,
+        reason: reason
       }
     })
   },
@@ -53,25 +55,27 @@ const nodeApi = {
   },
 
   // 批量禁止调度节点
-  batchCordon(nodeNames, clusterName) {
+  batchCordon(nodeNames, clusterName, reason = '') {
     return request({
       url: '/api/v1/nodes/batch-cordon',
       method: 'post',
       data: { 
         nodes: nodeNames,
-        cluster_name: clusterName
+        cluster_name: clusterName,
+        reason: reason
       }
     })
   },
 
   // 批量解除调度节点
-  batchUncordon(nodeNames, clusterName) {
+  batchUncordon(nodeNames, clusterName, reason = '') {
     return request({
       url: '/api/v1/nodes/batch-uncordon',
       method: 'post',
       data: { 
         nodes: nodeNames,
-        cluster_name: clusterName
+        cluster_name: clusterName,
+        reason: reason
       }
     })
   },
@@ -120,6 +124,24 @@ const nodeApi = {
     return request({
       url: '/api/v1/nodes/stats',
       method: 'get'
+    })
+  },
+
+  // 获取节点禁止调度历史
+  getCordonHistory(nodeName, params) {
+    return request({
+      url: `/api/v1/nodes/${nodeName}/cordon-history`,
+      method: 'get',
+      params
+    })
+  },
+
+  // 批量获取节点禁止调度历史
+  getBatchCordonHistory(data) {
+    return request({
+      url: '/api/v1/nodes/batch-cordon-history',
+      method: 'post',
+      data
     })
   }
 }

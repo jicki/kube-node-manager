@@ -458,6 +458,28 @@
         </el-table-column>
 
         <el-table-column
+          label="禁止调度信息"
+          min-width="200"
+        >
+          <template #default="{ row }">
+            <div class="cordon-info" v-if="getCordonInfo(row)">
+              <div class="cordon-reason">
+                <el-icon class="reason-icon"><Edit /></el-icon>
+                <span class="reason-text">{{ getCordonInfo(row).reason || '无说明' }}</span>
+              </div>
+              <div class="cordon-operator">
+                <el-icon class="operator-icon"><User /></el-icon>
+                <span class="operator-text">{{ getCordonInfo(row).operatorName }}</span>
+                <span class="timestamp">{{ formatTimeShort(getCordonInfo(row).timestamp) }}</span>
+              </div>
+            </div>
+            <div v-else class="no-cordon-info">
+              <span class="no-info-text">-</span>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column
           prop="created_at"
           label="创建时间"
           sortable="custom"
@@ -564,6 +586,73 @@
       confirm-text="确认驱逐"
       @confirm="confirmDrain"
     />
+
+    <!-- 禁止调度确认对话框 -->
+    <el-dialog
+      v-model="cordonConfirmVisible"
+      :title="cordonReasonForm.isBatch ? '批量禁止调度' : '禁止调度'"
+      width="600px"
+      destroy-on-close
+    >
+      <div class="cordon-confirm-content">
+        <div class="confirm-message">
+          <el-icon class="confirm-icon"><WarningFilled /></el-icon>
+          <span>{{ cordonConfirmMessage }}</span>
+        </div>
+        
+        <div class="reason-section">
+          <div class="section-title">
+            <el-icon><Edit /></el-icon>
+            <span>禁止调度原因（可选）</span>
+          </div>
+          <el-input
+            v-model="cordonReasonForm.reason"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入禁止调度的原因，如：维护、升级、故障排查等（可选）"
+            maxlength="200"
+            show-word-limit
+            clearable
+          />
+          <div class="help-text">
+            <el-icon><QuestionFilled /></el-icon>
+            <span>添加原因说明有助于团队协作和后续管理</span>
+          </div>
+        </div>
+        
+        <div v-if="cordonReasonForm.isBatch" class="selected-nodes-info">
+          <div class="section-title">
+            <el-icon><Grid /></el-icon>
+            <span>将要禁止调度的节点：</span>
+          </div>
+          <div class="nodes-list">
+            <el-tag 
+              v-for="node in cordonReasonForm.nodes.slice(0, 5)" 
+              :key="node.name" 
+              type="warning" 
+              size="small"
+            >
+              {{ node.name }}
+            </el-tag>
+            <span v-if="cordonReasonForm.nodes.length > 5">... 及其他 {{ cordonReasonForm.nodes.length - 5 }} 个节点</span>
+          </div>
+        </div>
+      </div>
+      
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="cordonConfirmVisible = false">取消</el-button>
+          <el-button
+            type="warning"
+            @click="cordonReasonForm.isBatch ? confirmBatchCordon() : confirmCordon()"
+            :loading="batchLoading.cordon"
+          >
+            <el-icon><Lock /></el-icon>
+            {{ cordonReasonForm.isBatch ? '批量禁止调度' : '禁止调度' }}
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
 
     <!-- 批量删除标签对话框 -->
     <el-dialog
@@ -718,6 +807,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import NodeDetailDialog from './components/NodeDetailDialog.vue'
 import labelApi from '@/api/label'
 import taintApi from '@/api/taint'
+import nodeApi from '@/api/node'
 import {
   Refresh,
   Lock,
@@ -737,7 +827,8 @@ import {
   VideoPlay,
   QuestionFilled,
   Filter,
-  Edit
+  Edit,
+  User
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -764,6 +855,16 @@ const detailDialogVisible = ref(false)
 const drainConfirmVisible = ref(false)
 const drainConfirmMessage = ref('')
 const drainDetails = ref([])
+
+// 禁止调度确认对话框相关
+const cordonConfirmVisible = ref(false)
+const cordonConfirmMessage = ref('')
+const cordonReasonForm = ref({
+  reason: '',
+  node: null,
+  isBatch: false,
+  nodes: []
+})
 
 // 批量操作加载状态
 const batchLoading = reactive({
@@ -809,6 +910,9 @@ const availableTaintKeys = computed(() => {
   })
   return Array.from(keys).sort()
 })
+
+// 禁止调度历史信息
+const cordonHistories = ref(new Map())
 
 // 搜索和筛选处理函数
 
@@ -880,10 +984,63 @@ const fetchNodes = async (params = {}) => {
   try {
     loading.value = true
     await nodeStore.fetchNodes(params)
+    // 获取节点数据后，批量获取禁止调度历史
+    await fetchCordonHistories()
   } catch (error) {
     ElMessage.error('获取节点数据失败')
   } finally {
     loading.value = false
+  }
+}
+
+// 获取禁止调度历史
+const fetchCordonHistories = async () => {
+  try {
+    if (!nodes.value || nodes.value.length === 0) return
+    
+    const nodeNames = nodes.value.map(node => node.name)
+    const clusterName = clusterStore.currentClusterName
+    
+    if (!clusterName) return
+    
+    const response = await nodeApi.getBatchCordonHistory({
+      node_names: nodeNames,
+      cluster_name: clusterName
+    })
+    
+    if (response.data && response.data.data) {
+      cordonHistories.value = new Map(Object.entries(response.data.data))
+    }
+  } catch (error) {
+    console.warn('获取禁止调度历史失败:', error)
+    // 不影响主要功能，只是历史信息无法显示
+  }
+}
+
+// 获取节点的禁止调度信息
+const getCordonInfo = (node) => {
+  // 只有当节点处于不可调度状态时才显示历史信息
+  if (node.schedulable === false && cordonHistories.value.has(node.name)) {
+    return cordonHistories.value.get(node.name)
+  }
+  return null
+}
+
+// 格式化时间（短格式）
+const formatTimeShort = (timestamp) => {
+  if (!timestamp) return ''
+  
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diff = now - date
+  const diffDays = Math.floor(diff / (1000 * 60 * 60 * 24))
+  
+  if (diffDays === 0) {
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  } else if (diffDays < 7) {
+    return `${diffDays}天前`
+  } else {
+    return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
   }
 }
 
@@ -906,7 +1063,7 @@ const refreshData = async () => {
   }
   
   // 然后刷新节点数据
-  fetchNodes()
+  await fetchNodes()
 }
 
 // 查看节点详情
@@ -916,11 +1073,25 @@ const viewNodeDetail = (node) => {
 }
 
 // 禁止调度节点
-const cordonNode = async (node) => {
+const cordonNode = (node) => {
+  cordonConfirmMessage.value = `确认要禁止调度节点 "${node.name}" 吗？`
+  cordonReasonForm.value = {
+    reason: '',
+    node: node,
+    isBatch: false,
+    nodes: []
+  }
+  cordonConfirmVisible.value = true
+}
+
+// 确认禁止调度
+const confirmCordon = async () => {
   try {
-    await nodeStore.cordonNode(node.name)
+    const { reason, node } = cordonReasonForm.value
+    await nodeStore.cordonNode(node.name, reason)
     ElMessage.success(`节点 ${node.name} 已禁止调度`)
-    refreshData()
+    cordonConfirmVisible.value = false
+    await refreshData()
   } catch (error) {
     ElMessage.error(`禁止调度节点失败: ${error.message}`)
   }
@@ -992,16 +1163,30 @@ const handleNodeAction = (command, node) => {
 }
 
 // 批量操作
-const batchCordon = async () => {
+const batchCordon = () => {
   if (selectedNodes.value.length === 0) return
   
+  cordonConfirmMessage.value = `确认要禁止调度选中的 ${selectedNodes.value.length} 个节点吗？`
+  cordonReasonForm.value = {
+    reason: '',
+    node: null,
+    isBatch: true,
+    nodes: selectedNodes.value
+  }
+  cordonConfirmVisible.value = true
+}
+
+// 确认批量禁止调度
+const confirmBatchCordon = async () => {
   try {
     batchLoading.cordon = true
-    const nodeNames = selectedNodes.value.map(node => node.name)
-    await nodeStore.batchCordon(nodeNames)
+    const { reason, nodes } = cordonReasonForm.value
+    const nodeNames = nodes.map(node => node.name)
+    await nodeStore.batchCordon(nodeNames, reason)
     ElMessage.success(`成功禁止调度 ${nodeNames.length} 个节点`)
     clearSelection()
-    refreshData()
+    cordonConfirmVisible.value = false
+    await refreshData()
   } catch (error) {
     ElMessage.error(`批量禁止调度失败: ${error.message}`)
   } finally {
@@ -2080,6 +2265,165 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   border-top: 1px solid #f0f0f0;
+}
+
+/* 禁止调度信息列样式 */
+.cordon-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: #fff7e6;
+  border-radius: 6px;
+  border-left: 3px solid #faad14;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.cordon-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.reason-icon {
+  color: #faad14;
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.reason-text {
+  color: #d46b08;
+  font-weight: 600;
+  word-break: break-word;
+  flex: 1;
+  max-width: 160px;
+}
+
+.cordon-operator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #666;
+  font-size: 11px;
+}
+
+.operator-icon {
+  color: #1890ff;
+  font-size: 12px;
+}
+
+.operator-text {
+  font-weight: 500;
+  color: #333;
+}
+
+.timestamp {
+  margin-left: auto;
+  color: #999;
+  font-style: italic;
+}
+
+.no-cordon-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  color: #999;
+  font-size: 14px;
+}
+
+.no-info-text {
+  opacity: 0.6;
+}
+
+/* 禁止调度确认对话框样式 */
+.cordon-confirm-content {
+  padding: 8px 0;
+}
+
+.confirm-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #fff7e6;
+  border-radius: 8px;
+  border-left: 4px solid #faad14;
+  margin-bottom: 20px;
+  font-size: 14px;
+  color: #666;
+}
+
+.confirm-icon {
+  color: #faad14;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.reason-section {
+  margin-bottom: 20px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.section-title .el-icon {
+  color: #1890ff;
+  font-size: 16px;
+}
+
+.help-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #999;
+}
+
+.help-text .el-icon {
+  font-size: 14px;
+  color: #faad14;
+}
+
+.selected-nodes-info .nodes-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #e8e8e8;
+  align-items: center;
+}
+
+.selected-nodes-info .nodes-list .el-tag {
+  font-size: 12px;
+  height: 24px;
+  line-height: 22px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: #fff7e6 !important;
+  border: 1px solid #ffd591 !important;
+  color: #d46b08 !important;
+}
+
+.selected-nodes-info .nodes-list span {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
 }
 
 /* 响应式设计 */

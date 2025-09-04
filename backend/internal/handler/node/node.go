@@ -651,6 +651,144 @@ func (h *Handler) BatchDrain(c *gin.Context) {
 	})
 }
 
+// GetCordonHistory 获取节点禁止调度历史
+// @Summary 获取节点禁止调度历史
+// @Description 获取指定节点的禁止调度历史记录
+// @Tags nodes
+// @Produce json
+// @Param cluster_name query string true "集群名称"
+// @Param node_name path string true "节点名称"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
+// @Router /nodes/{node_name}/cordon-history [get]
+func (h *Handler) GetCordonHistory(c *gin.Context) {
+	clusterName := c.Query("cluster_name")
+	nodeName := c.Param("node_name")
+
+	if clusterName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "cluster_name is required",
+		})
+		return
+	}
+
+	if nodeName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "node_name is required",
+		})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	history, err := h.nodeSvc.GetCordonHistory(nodeName, clusterName, userID.(uint))
+	if err != nil {
+		h.logger.Error("Failed to get cordon history: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to get cordon history: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Success",
+		Data:    history,
+	})
+}
+
+// GetBatchCordonHistory 批量获取节点禁止调度历史
+// @Summary 批量获取节点禁止调度历史
+// @Description 批量获取指定节点列表的禁止调度历史记录
+// @Tags nodes
+// @Accept json
+// @Produce json
+// @Param request body map[string]interface{} true "批量查询请求"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /nodes/batch-cordon-history [post]
+func (h *Handler) GetBatchCordonHistory(c *gin.Context) {
+	var req map[string]interface{}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind batch cordon history request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
+
+	clusterName, ok := req["cluster_name"].(string)
+	if !ok || clusterName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "cluster_name is required",
+		})
+		return
+	}
+
+	nodeNamesInterface, ok := req["node_names"].([]interface{})
+	if !ok {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "node_names is required and must be an array",
+		})
+		return
+	}
+
+	var nodeNames []string
+	for _, name := range nodeNamesInterface {
+		if str, ok := name.(string); ok {
+			nodeNames = append(nodeNames, str)
+		}
+	}
+
+	if len(nodeNames) == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "At least one node name is required",
+		})
+		return
+	}
+
+	_, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	histories, err := h.nodeSvc.GetBatchCordonHistory(nodeNames, clusterName)
+	if err != nil {
+		h.logger.Error("Failed to get batch cordon history: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to get batch cordon history: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Success",
+		Data:    histories,
+	})
+}
+
 // GetByLabels 根据标签获取节点
 // @Summary 根据标签获取节点
 // @Description 根据标签选择器获取节点列表

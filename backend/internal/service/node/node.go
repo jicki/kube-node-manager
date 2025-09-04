@@ -7,6 +7,7 @@ import (
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/pkg/logger"
 	"strings"
+	"time"
 )
 
 // Service 节点管理服务
@@ -45,12 +46,14 @@ type DrainRequest struct {
 type CordonRequest struct {
 	ClusterName string `json:"cluster_name" binding:"required"`
 	NodeName    string `json:"node_name"` // 从URL路径参数获取，不需要binding验证
+	Reason      string `json:"reason"`    // 禁止调度的原因说明
 }
 
 // BatchNodeRequest 批量节点操作请求
 type BatchNodeRequest struct {
 	ClusterName string   `json:"cluster_name"`
 	Nodes       []string `json:"nodes" binding:"required"`
+	Reason      string   `json:"reason"` // 批量操作的原因说明
 }
 
 // BatchDrainRequest 批量驱逐请求
@@ -78,6 +81,15 @@ type NodeSummary struct {
 	Schedulable int `json:"schedulable"`
 	Masters     int `json:"masters"`
 	Workers     int `json:"workers"`
+}
+
+// CordonHistoryResponse 禁止调度历史响应
+type CordonHistoryResponse struct {
+	NodeName     string    `json:"node_name"`
+	Reason       string    `json:"reason"`
+	OperatorName string    `json:"operator_name"`
+	OperatorID   uint      `json:"operator_id"`
+	Timestamp    time.Time `json:"timestamp"`
 }
 
 // NewService 创建新的节点管理服务实例
@@ -188,12 +200,17 @@ func (s *Service) Cordon(req CordonRequest, userID uint) error {
 	err := s.k8sSvc.CordonNode(req.ClusterName, req.NodeName)
 	if err != nil {
 		s.logger.Errorf("Failed to cordon node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
+		reasonMsg := ""
+		if req.Reason != "" {
+			reasonMsg = fmt.Sprintf(" (原因: %s)", req.Reason)
+		}
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			NodeName:     req.NodeName,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceNode,
-			Details:      fmt.Sprintf("Failed to cordon node %s for cluster %s", req.NodeName, req.ClusterName),
+			Details:      fmt.Sprintf("Failed to cordon node %s for cluster %s%s", req.NodeName, req.ClusterName, reasonMsg),
+			Reason:       req.Reason,
 			Status:       model.AuditStatusFailed,
 			ErrorMsg:     err.Error(),
 		})
@@ -201,12 +218,17 @@ func (s *Service) Cordon(req CordonRequest, userID uint) error {
 	}
 
 	s.logger.Infof("Successfully cordoned node %s for cluster %s", req.NodeName, req.ClusterName)
+	reasonMsg := ""
+	if req.Reason != "" {
+		reasonMsg = fmt.Sprintf(" (原因: %s)", req.Reason)
+	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		NodeName:     req.NodeName,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceNode,
-		Details:      fmt.Sprintf("Cordoned node %s for cluster %s", req.NodeName, req.ClusterName),
+		Details:      fmt.Sprintf("Cordoned node %s for cluster %s%s", req.NodeName, req.ClusterName, reasonMsg),
+		Reason:       req.Reason,
 		Status:       model.AuditStatusSuccess,
 	})
 
@@ -466,6 +488,7 @@ func (s *Service) BatchCordon(req BatchNodeRequest, userID uint) (map[string]int
 		cordonReq := CordonRequest{
 			ClusterName: req.ClusterName,
 			NodeName:    nodeName,
+			Reason:      req.Reason,
 		}
 
 		if err := s.Cordon(cordonReq, userID); err != nil {
@@ -504,6 +527,7 @@ func (s *Service) BatchUncordon(req BatchNodeRequest, userID uint) (map[string]i
 		uncordonReq := CordonRequest{
 			ClusterName: req.ClusterName,
 			NodeName:    nodeName,
+			Reason:      req.Reason,
 		}
 
 		if err := s.Uncordon(uncordonReq, userID); err != nil {
@@ -582,4 +606,67 @@ func (s *Service) BatchDrain(req BatchDrainRequest, userID uint) (map[string]int
 	})
 
 	return results, nil
+}
+
+// GetCordonHistory 获取节点的禁止调度历史
+func (s *Service) GetCordonHistory(nodeName, clusterName string, userID uint) (*CordonHistoryResponse, error) {
+	// 尝试获取集群信息以获取集群ID（这里简化处理，实际可能需要从cluster service获取）
+	// 暂时使用0作为集群ID，表示不按集群ID过滤
+	clusterID := uint(0)
+
+	log, err := s.auditSvc.GetLatestCordonRecord(nodeName, clusterID)
+	if err != nil {
+		// 如果没有找到记录，返回空的历史
+		if err.Error() == "record not found" || strings.Contains(err.Error(), "not found") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get cordon history: %w", err)
+	}
+
+	// 检查是否是禁止调度操作（包含"Cordoned"关键词且不包含"Uncordoned"）
+	if !strings.Contains(log.Details, "Cordoned") || strings.Contains(log.Details, "Uncordoned") {
+		// 如果最新记录是解除调度，返回空历史
+		return nil, nil
+	}
+
+	response := &CordonHistoryResponse{
+		NodeName:     log.NodeName,
+		Reason:       log.Reason,
+		OperatorName: log.User.Username,
+		OperatorID:   log.UserID,
+		Timestamp:    log.CreatedAt,
+	}
+
+	return response, nil
+}
+
+// GetBatchCordonHistory 批量获取节点的禁止调度历史
+func (s *Service) GetBatchCordonHistory(nodeNames []string, clusterName string) (map[string]*CordonHistoryResponse, error) {
+	if len(nodeNames) == 0 {
+		return make(map[string]*CordonHistoryResponse), nil
+	}
+
+	// 暂时使用0作为集群ID
+	clusterID := uint(0)
+
+	logs, err := s.auditSvc.GetLatestCordonRecords(nodeNames, clusterID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get batch cordon history: %w", err)
+	}
+
+	result := make(map[string]*CordonHistoryResponse)
+	for nodeName, log := range logs {
+		// 检查是否是禁止调度操作且不是解除调度操作
+		if log != nil && strings.Contains(log.Details, "Cordoned") && !strings.Contains(log.Details, "Uncordoned") {
+			result[nodeName] = &CordonHistoryResponse{
+				NodeName:     log.NodeName,
+				Reason:       log.Reason,
+				OperatorName: log.User.Username,
+				OperatorID:   log.UserID,
+				Timestamp:    log.CreatedAt,
+			}
+		}
+	}
+
+	return result, nil
 }
