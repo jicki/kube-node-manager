@@ -1,23 +1,6 @@
 <template>
   <div class="login-container">
     <div class="login-content">
-      <!-- 左侧信息 -->
-      <div class="login-info">
-        <div class="info-content">
-          <!-- 系统图标 -->
-          <div class="system-icon">
-            <svg viewBox="0 0 1024 1024" class="logo-icon">
-              <path d="M512 42.666667C252.8 42.666667 42.666667 252.8 42.666667 512s210.133333 469.333333 469.333333 469.333333 469.333333-210.133333 469.333333-469.333333S771.2 42.666667 512 42.666667z m213.333333 469.333333c0 23.466667-19.2 42.666667-42.666666 42.666667h-128v128c0 23.466667-19.2 42.666667-42.666667 42.666666s-42.666667-19.2-42.666667-42.666666v-128H341.333333c-23.466667 0-42.666667-19.2-42.666666-42.666667s19.2-42.666667 42.666666-42.666666h128V341.333333c0-23.466667 19.2-42.666667 42.666667-42.666666s42.666667 19.2 42.666667 42.666666v128h128c23.466667 0 42.666667 19.2 42.666666 42.666667z" />
-            </svg>
-          </div>
-          
-          <!-- 系统标题 -->
-          <h1 class="system-title">Kubernetes节点管理器</h1>
-          <p class="system-subtitle">实时监控・安全可靠・快速部署</p>
-        </div>
-      </div>
-      
-      <!-- 右侧登录表单 -->
       <div class="login-form-container">
         <div class="login-form-wrapper">
           <div class="login-header">
@@ -258,66 +241,24 @@ onMounted(() => {
 
 .login-content {
   display: flex;
-  width: 100%;
-  height: 100%;
-}
-
-.login-info {
-  flex: 1;
-  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 60px;
-  color: white;
-  background: #1a1a1a;
-}
-
-.info-content {
-  text-align: center;
-}
-
-.system-icon {
-  margin-bottom: 32px;
-  display: flex;
-  justify-content: center;
-}
-
-.logo-icon {
-  width: 80px;
-  height: 80px;
-  fill: #ffffff;
-  opacity: 0.9;
-}
-
-.system-title {
-  font-size: 32px;
-  font-weight: 600;
-  margin-bottom: 16px;
-  line-height: 1.2;
-  color: #ffffff;
-}
-
-.system-subtitle {
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.7);
-  margin: 0;
-  line-height: 1.5;
+  width: 100%;
+  height: 100%;
+  padding: 20px;
 }
 
 .login-form-container {
-  width: 420px;
+  width: 100%;
+  max-width: 400px;
   background: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 24px 0 0 24px;
-  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  padding: 40px;
 }
 
 .login-form-wrapper {
   width: 100%;
-  max-width: 320px;
-  padding: 40px 0;
 }
 
 .login-header {
@@ -447,30 +388,14 @@ onMounted(() => {
 }
 
 /* 响应式设计 */
-@media (max-width: 1024px) {
-  .login-info {
-    display: none;
-  }
-  
-  .login-form-container {
-    width: 100%;
-    border-radius: 0;
-  }
-}
-
 @media (max-width: 768px) {
-  .login-container {
-    background: #ffffff;
+  .login-content {
+    padding: 10px;
   }
   
   .login-form-container {
-    background: #ffffff;
-    box-shadow: none;
-  }
-  
-  .login-form-wrapper {
-    padding: 20px;
-    max-width: none;
+    padding: 24px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   }
   
   .login-title {
@@ -479,6 +404,17 @@ onMounted(() => {
   
   .login-subtitle {
     font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-form-container {
+    padding: 20px;
+    border-radius: 12px;
+  }
+  
+  .login-title {
+    font-size: 18px;
   }
 }
 </style>
