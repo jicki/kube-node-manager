@@ -469,7 +469,7 @@
               </div>
               <div class="cordon-operator">
                 <el-icon class="operator-icon"><User /></el-icon>
-                <span class="operator-text">{{ getCordonInfo(row).operatorName }}</span>
+                <span class="operator-text">{{ getCordonInfo(row).operator_name || getCordonInfo(row).operatorName || '未知用户' }}</span>
                 <span class="timestamp">{{ formatTimeShort(getCordonInfo(row).timestamp) }}</span>
               </div>
             </div>
@@ -1010,6 +1010,8 @@ const fetchCordonHistories = async () => {
     
     if (response.data && response.data.data) {
       cordonHistories.value = new Map(Object.entries(response.data.data))
+      // 调试：检查禁止调度历史数据
+      console.log('禁止调度历史数据:', response.data.data)
     }
   } catch (error) {
     console.warn('获取禁止调度历史失败:', error)
@@ -1021,26 +1023,46 @@ const fetchCordonHistories = async () => {
 const getCordonInfo = (node) => {
   // 只有当节点处于不可调度状态时才显示历史信息
   if (node.schedulable === false && cordonHistories.value.has(node.name)) {
-    return cordonHistories.value.get(node.name)
+    const info = cordonHistories.value.get(node.name)
+    return info
   }
   return null
 }
 
-// 格式化时间（短格式）
+// 格式化时间（完整格式）
 const formatTimeShort = (timestamp) => {
   if (!timestamp) return ''
   
   const date = new Date(timestamp)
   const now = new Date()
   const diff = now - date
+  const diffHours = Math.floor(diff / (1000 * 60 * 60))
   const diffDays = Math.floor(diff / (1000 * 60 * 60 * 24))
   
+  // 如果是今天，显示时间 + "今天"
   if (diffDays === 0) {
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  } else if (diffDays < 7) {
-    return `${diffDays}天前`
-  } else {
-    return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+    const timeStr = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    return `今天 ${timeStr}`
+  } 
+  // 如果是昨天
+  else if (diffDays === 1) {
+    const timeStr = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    return `昨天 ${timeStr}`
+  }
+  // 如果是最近7天内
+  else if (diffDays < 7) {
+    const timeStr = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    return `${diffDays}天前 ${timeStr}`
+  }
+  // 超过7天，显示完整日期时间
+  else {
+    return date.toLocaleString('zh-CN', { 
+      year: 'numeric',
+      month: '2-digit', 
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
   }
 }
 
