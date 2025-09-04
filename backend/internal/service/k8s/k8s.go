@@ -407,8 +407,8 @@ func (s *Service) CordonNodeWithReason(clusterName, nodeName, reason string) err
 		node.Annotations["deeproute.cn/kube-node-mgr"] = reason
 	}
 
-	// 添加禁止调度的时间戳
-	node.Annotations["deeproute.cn/kube-node-mgr-timestamp"] = fmt.Sprintf("%d", time.Now().Unix())
+	// 添加禁止调度的时间戳（ISO 8601格式）
+	node.Annotations["deeproute.cn/kube-node-mgr-timestamp"] = time.Now().UTC().Format(time.RFC3339)
 
 	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
 	if err != nil {

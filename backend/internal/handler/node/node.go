@@ -624,7 +624,7 @@ func (h *Handler) GetCordonHistory(c *gin.Context) {
 
 // GetNodeCordonInfo 获取节点禁止调度信息
 // @Summary 获取节点禁止调度信息
-// @Description 获取节点的禁止调度信息，包括原因和时间戳
+// @Description 获取节点的禁止调度信息，包括原因和ISO 8601格式的时间戳 (如: 2025-03-12T07:02:10Z)
 // @Tags nodes
 // @Accept json
 // @Produce json

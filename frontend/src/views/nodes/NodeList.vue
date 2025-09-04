@@ -1011,7 +1011,15 @@ const getCordonInfo = (node) => {
 const formatTimeShort = (timestamp) => {
   if (!timestamp) return ''
   
+  // 处理 ISO 8601 格式 (如: 2025-03-12T07:02:10Z) 或 Unix 时间戳
   const date = new Date(timestamp)
+  
+  // 检查日期是否有效
+  if (isNaN(date.getTime())) {
+    console.warn('Invalid timestamp:', timestamp)
+    return '无效时间'
+  }
+  
   const now = new Date()
   const diff = now - date
   const diffHours = Math.floor(diff / (1000 * 60 * 60))
