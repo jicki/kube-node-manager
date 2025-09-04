@@ -128,11 +128,14 @@ const nodeApi = {
   },
 
   // 获取节点禁止调度历史
-  getCordonHistory(nodeName, params) {
+  getCordonHistory(nodeName, clusterName) {
     return request({
-      url: `/api/v1/nodes/${nodeName}/cordon-history`,
-      method: 'get',
-      params
+      url: '/api/v1/nodes/cordon-history',
+      method: 'post',
+      data: {
+        node_name: nodeName,
+        cluster_name: clusterName
+      }
     })
   },
 

@@ -655,18 +655,26 @@ func (h *Handler) BatchDrain(c *gin.Context) {
 // @Summary 获取节点禁止调度历史
 // @Description 获取指定节点的禁止调度历史记录
 // @Tags nodes
+// @Accept json
 // @Produce json
-// @Param cluster_name query string true "集群名称"
-// @Param node_name path string true "节点名称"
+// @Param request body map[string]interface{} true "单节点查询请求"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Failure 404 {object} Response
-// @Router /nodes/{node_name}/cordon-history [get]
+// @Router /nodes/cordon-history [post]
 func (h *Handler) GetCordonHistory(c *gin.Context) {
-	clusterName := c.Query("cluster_name")
-	nodeName := c.Param("node_name")
+	var req map[string]interface{}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind cordon history request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
 
-	if clusterName == "" {
+	clusterName, ok := req["cluster_name"].(string)
+	if !ok || clusterName == "" {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: "cluster_name is required",
@@ -674,7 +682,8 @@ func (h *Handler) GetCordonHistory(c *gin.Context) {
 		return
 	}
 
-	if nodeName == "" {
+	nodeName, ok := req["node_name"].(string)
+	if !ok || nodeName == "" {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: "node_name is required",
