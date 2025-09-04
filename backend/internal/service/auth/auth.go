@@ -72,11 +72,12 @@ func NewService(db *gorm.DB, logger *logger.Logger, jwtCfg config.JWTConfig, lda
 
 func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginResponse, error) {
 	var user model.User
-	err := s.db.Where("username = ?", req.Username).First(&user).Error
+	// 首先查询包含软删除的用户记录
+	err := s.db.Unscoped().Where("username = ?", req.Username).First(&user).Error
 
 	var isLDAPAuth bool
 	if err != nil {
-		// 用户不存在，尝试 LDAP 认证
+		// 用户完全不存在，尝试 LDAP 认证
 		if err == gorm.ErrRecordNotFound && s.ldap.IsEnabled() {
 			s.logger.Infof("User %s not found locally, attempting LDAP authentication", req.Username)
 			ldapUser, ldapErr := s.ldap.Authenticate(ldap.AuthRequest{
@@ -116,31 +117,91 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 			return nil, err
 		}
 	} else {
-		// 用户已存在，检查是否为 LDAP 用户
-		if user.IsLDAPUser && s.ldap.IsEnabled() {
-			s.logger.Infof("Existing LDAP user %s found, performing LDAP authentication", req.Username)
-			_, ldapErr := s.ldap.Authenticate(ldap.AuthRequest{
-				Username: req.Username,
-				Password: req.Password,
-			})
-			if ldapErr != nil {
-				s.logger.Warningf("LDAP authentication failed for existing user %s: %v", req.Username, ldapErr)
-				s.audit.Log(audit.LogRequest{
-					UserID:       user.ID,
-					Action:       model.ActionLogin,
-					ResourceType: model.ResourceUser,
-					Details:      fmt.Sprintf("Failed LDAP login attempt for existing user: %s - %s", req.Username, ldapErr.Error()),
-					Status:       model.AuditStatusFailed,
-					ErrorMsg:     "LDAP authentication failed",
-					IPAddress:    ipAddress,
-					UserAgent:    userAgent,
+		// 用户存在（可能被软删除）
+		if user.DeletedAt.Valid {
+			// 用户被软删除，检查是否为 LDAP 用户并尝试恢复
+			if user.IsLDAPUser && s.ldap.IsEnabled() {
+				s.logger.Infof("Found soft-deleted LDAP user %s, attempting LDAP authentication for recovery", req.Username)
+				ldapUser, ldapErr := s.ldap.Authenticate(ldap.AuthRequest{
+					Username: req.Username,
+					Password: req.Password,
 				})
-				return nil, errors.New("invalid credentials")
+				if ldapErr != nil {
+					s.logger.Warningf("LDAP authentication failed for soft-deleted user %s: %v", req.Username, ldapErr)
+					s.audit.Log(audit.LogRequest{
+						UserID:       user.ID,
+						Action:       model.ActionLogin,
+						ResourceType: model.ResourceUser,
+						Details:      fmt.Sprintf("Failed LDAP login attempt for soft-deleted user: %s - %s", req.Username, ldapErr.Error()),
+						Status:       model.AuditStatusFailed,
+						ErrorMsg:     "LDAP authentication failed",
+						IPAddress:    ipAddress,
+						UserAgent:    userAgent,
+					})
+					return nil, errors.New("invalid credentials")
+				}
+
+				// LDAP 认证成功，恢复用户并更新信息
+				s.logger.Infof("LDAP authentication successful, restoring soft-deleted user %s", req.Username)
+				user.DeletedAt = gorm.DeletedAt{}
+				user.Email = ldapUser.Email
+				user.Status = model.StatusActive
+				user.IsLDAPUser = true
+				if err := s.db.Unscoped().Save(&user).Error; err != nil {
+					s.logger.Errorf("Failed to restore soft-deleted LDAP user %s: %v", req.Username, err)
+					return nil, err
+				}
+				s.logger.Infof("Successfully restored LDAP user %s (ID: %d)", req.Username, user.ID)
+				isLDAPAuth = true
+			} else {
+				// 非 LDAP 用户被软删除，拒绝登录
+				s.logger.Warningf("Attempt to login with soft-deleted non-LDAP user %s", req.Username)
+				return nil, errors.New("account not found")
 			}
-			s.logger.Infof("LDAP authentication successful for existing user %s", req.Username)
-			isLDAPAuth = true
+		} else {
+			// 用户正常存在，检查是否为 LDAP 用户
+			if user.IsLDAPUser && s.ldap.IsEnabled() {
+				s.logger.Infof("Existing LDAP user %s found, performing LDAP authentication", req.Username)
+				ldapUser, ldapErr := s.ldap.Authenticate(ldap.AuthRequest{
+					Username: req.Username,
+					Password: req.Password,
+				})
+				if ldapErr != nil {
+					s.logger.Warningf("LDAP authentication failed for existing user %s: %v", req.Username, ldapErr)
+					s.audit.Log(audit.LogRequest{
+						UserID:       user.ID,
+						Action:       model.ActionLogin,
+						ResourceType: model.ResourceUser,
+						Details:      fmt.Sprintf("Failed LDAP login attempt for existing user: %s - %s", req.Username, ldapErr.Error()),
+						Status:       model.AuditStatusFailed,
+						ErrorMsg:     "LDAP authentication failed",
+						IPAddress:    ipAddress,
+						UserAgent:    userAgent,
+					})
+					return nil, errors.New("invalid credentials")
+				}
+
+				// LDAP 认证成功，同步用户信息
+				s.logger.Infof("LDAP authentication successful for existing user %s, syncing user info", req.Username)
+				needUpdate := false
+				if user.Email != ldapUser.Email {
+					s.logger.Infof("Syncing email for LDAP user %s: %s -> %s", req.Username, user.Email, ldapUser.Email)
+					user.Email = ldapUser.Email
+					needUpdate = true
+				}
+
+				if needUpdate {
+					if err := s.db.Save(&user).Error; err != nil {
+						s.logger.Errorf("Failed to sync LDAP user info for %s: %v", req.Username, err)
+					} else {
+						s.logger.Infof("Successfully synced LDAP user info for %s", req.Username)
+					}
+				}
+
+				isLDAPAuth = true
+			}
+			// 如果不是 LDAP 用户，将在后面进行本地密码验证
 		}
-		// 如果不是 LDAP 用户，将在后面进行本地密码验证
 	}
 
 	if user.Status != model.StatusActive {

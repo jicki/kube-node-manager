@@ -62,3 +62,23 @@ func (u *User) CanManageNodes() bool {
 func (u *User) CanViewNodes() bool {
 	return u.Role == RoleAdmin || u.Role == RoleUser || u.Role == RoleViewer
 }
+
+// CanModifyProfile 检查用户是否可以修改个人资料
+func (u *User) CanModifyProfile() bool {
+	// LDAP 用户不能修改用户名和邮箱
+	return !u.IsLDAPUser
+}
+
+// CanBeDeleted 检查用户是否可以被删除
+func (u *User) CanBeDeleted() bool {
+	// LDAP 用户不能被删除
+	return !u.IsLDAPUser
+}
+
+// GetUserType 获取用户类型描述
+func (u *User) GetUserType() string {
+	if u.IsLDAPUser {
+		return "LDAP User"
+	}
+	return "Local User"
+}

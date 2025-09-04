@@ -170,38 +170,63 @@ func (s *Service) Update(id uint, req UpdateRequest, operatorID uint) (*model.Us
 		return nil, err
 	}
 
-	if req.Username != "" && req.Username != user.Username {
-		var existingUser model.User
-		if err := s.db.Where("username = ? AND id != ?", req.Username, id).First(&existingUser).Error; err == nil {
-			return nil, errors.New("username already exists")
+	// 检查是否为 LDAP 用户
+	if user.IsLDAPUser {
+		// LDAP 用户只允许修改角色和状态
+		if req.Username != "" && req.Username != user.Username {
+			return nil, errors.New("cannot modify username for LDAP users. Username is managed by LDAP directory")
 		}
-		user.Username = req.Username
-	}
-
-	if req.Email != "" && req.Email != user.Email {
-		var existingUser model.User
-		if err := s.db.Where("email = ? AND id != ?", req.Email, id).First(&existingUser).Error; err == nil {
-			return nil, errors.New("email already exists")
+		if req.Email != "" && req.Email != user.Email {
+			return nil, errors.New("cannot modify email for LDAP users. Email is managed by LDAP directory")
 		}
-		user.Email = req.Email
-	}
 
-	if req.Role != "" {
-		user.Role = req.Role
-	}
-	if req.Status != "" {
-		user.Status = req.Status
+		// 只允许修改角色和状态
+		if req.Role != "" {
+			user.Role = req.Role
+		}
+		if req.Status != "" {
+			user.Status = req.Status
+		}
+	} else {
+		// 非 LDAP 用户允许修改所有字段
+		if req.Username != "" && req.Username != user.Username {
+			var existingUser model.User
+			if err := s.db.Where("username = ? AND id != ?", req.Username, id).First(&existingUser).Error; err == nil {
+				return nil, errors.New("username already exists")
+			}
+			user.Username = req.Username
+		}
+
+		if req.Email != "" && req.Email != user.Email {
+			var existingUser model.User
+			if err := s.db.Where("email = ? AND id != ?", req.Email, id).First(&existingUser).Error; err == nil {
+				return nil, errors.New("email already exists")
+			}
+			user.Email = req.Email
+		}
+
+		if req.Role != "" {
+			user.Role = req.Role
+		}
+		if req.Status != "" {
+			user.Status = req.Status
+		}
 	}
 
 	if err := s.db.Save(&user).Error; err != nil {
 		return nil, err
 	}
 
+	updateDetails := fmt.Sprintf("Updated user: %s", user.Username)
+	if user.IsLDAPUser {
+		updateDetails = fmt.Sprintf("Updated LDAP user (role/status only): %s", user.Username)
+	}
+
 	s.audit.Log(audit.LogRequest{
 		UserID:       operatorID,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceUser,
-		Details:      fmt.Sprintf("Updated user: %s", user.Username),
+		Details:      updateDetails,
 		Status:       model.AuditStatusSuccess,
 	})
 
@@ -216,6 +241,11 @@ func (s *Service) Delete(id uint, operatorID uint) error {
 
 	if user.ID == operatorID {
 		return errors.New("cannot delete yourself")
+	}
+
+	// 检查是否为 LDAP 用户
+	if user.IsLDAPUser {
+		return errors.New("cannot delete LDAP users. LDAP users are managed through the LDAP directory")
 	}
 
 	if err := s.db.Delete(&user).Error; err != nil {
@@ -302,4 +332,18 @@ func (s *Service) ResetPassword(id uint, req ResetPasswordRequest, operatorID ui
 func (s *Service) UpdateLastLogin(id uint) error {
 	now := time.Now()
 	return s.db.Model(&model.User{}).Where("id = ?", id).Update("last_login", now).Error
+}
+
+// GetLDAPUserCount 获取 LDAP 用户数量统计
+func (s *Service) GetLDAPUserCount() (int64, error) {
+	var count int64
+	err := s.db.Model(&model.User{}).Where("is_ldap_user = ?", true).Count(&count).Error
+	return count, err
+}
+
+// GetLocalUserCount 获取本地用户数量统计
+func (s *Service) GetLocalUserCount() (int64, error) {
+	var count int64
+	err := s.db.Model(&model.User{}).Where("is_ldap_user = ?", false).Count(&count).Error
+	return count, err
 }
