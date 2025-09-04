@@ -410,7 +410,7 @@ func (s *Service) DrainNode(clusterName, nodeName string) error {
 	return nil
 }
 
-// CordonNode 封锁节点（仅设置不可调度，不删除pod）
+// CordonNode 禁止调度节点（仅设置不可调度，不删除pod）
 func (s *Service) CordonNode(clusterName, nodeName string) error {
 	client, err := s.getClient(clusterName)
 	if err != nil {

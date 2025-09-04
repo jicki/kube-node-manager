@@ -180,11 +180,11 @@
       <div class="batch-buttons">
         <el-button @click="batchCordon" :loading="batchLoading.cordon">
           <el-icon><Lock /></el-icon>
-          批量封锁
+          禁止调度
         </el-button>
         <el-button @click="batchUncordon" :loading="batchLoading.uncordon">
           <el-icon><Unlock /></el-icon>
-          批量解封
+          解除调度
         </el-button>
         <el-button type="danger" @click="batchDrain" :loading="batchLoading.drain">
           <el-icon><Download /></el-icon>
@@ -481,10 +481,10 @@
                 type="text"
                 size="small"
                 @click="cordonNode(row)"
-                :title="getSchedulingStatus(row).value === 'limited' ? '节点有污点但仍可调度，封锁后完全不可调度' : '封锁节点使其不可调度'"
+                :title="getSchedulingStatus(row).value === 'limited' ? '节点有污点但仍可调度，禁止调度后完全不可调度' : '禁止调度节点使其不可调度'"
               >
                 <el-icon><Lock /></el-icon>
-                封锁
+                禁止调度
               </el-button>
               
               <el-button
@@ -492,10 +492,10 @@
                 type="text"
                 size="small"
                 @click="uncordonNode(row)"
-                title="解封节点使其恢复调度能力"
+                title="解除调度限制使节点恢复调度能力"
               >
                 <el-icon><Unlock /></el-icon>
-                解封
+                解除调度
               </el-button>
               
               <el-dropdown @command="(cmd) => handleNodeAction(cmd, row)">
@@ -906,25 +906,25 @@ const viewNodeDetail = (node) => {
   detailDialogVisible.value = true
 }
 
-// 封锁节点
+// 禁止调度节点
 const cordonNode = async (node) => {
   try {
     await nodeStore.cordonNode(node.name)
-    ElMessage.success(`节点 ${node.name} 已封锁`)
+    ElMessage.success(`节点 ${node.name} 已禁止调度`)
     refreshData()
   } catch (error) {
-    ElMessage.error(`封锁节点失败: ${error.message}`)
+    ElMessage.error(`禁止调度节点失败: ${error.message}`)
   }
 }
 
-// 解封节点
+// 解除调度节点
 const uncordonNode = async (node) => {
   try {
     await nodeStore.uncordonNode(node.name)
-    ElMessage.success(`节点 ${node.name} 已解封`)
+    ElMessage.success(`节点 ${node.name} 已解除调度限制`)
     refreshData()
   } catch (error) {
-    ElMessage.error(`解封节点失败: ${error.message}`)
+    ElMessage.error(`解除调度节点失败: ${error.message}`)
   }
 }
 
@@ -990,11 +990,11 @@ const batchCordon = async () => {
     batchLoading.cordon = true
     const nodeNames = selectedNodes.value.map(node => node.name)
     await nodeStore.batchCordon(nodeNames)
-    ElMessage.success(`成功封锁 ${nodeNames.length} 个节点`)
+    ElMessage.success(`成功禁止调度 ${nodeNames.length} 个节点`)
     clearSelection()
     refreshData()
   } catch (error) {
-    ElMessage.error(`批量封锁失败: ${error.message}`)
+    ElMessage.error(`批量禁止调度失败: ${error.message}`)
   } finally {
     batchLoading.cordon = false
   }
@@ -1007,11 +1007,11 @@ const batchUncordon = async () => {
     batchLoading.uncordon = true
     const nodeNames = selectedNodes.value.map(node => node.name)
     await nodeStore.batchUncordon(nodeNames)
-    ElMessage.success(`成功解封 ${nodeNames.length} 个节点`)
+    ElMessage.success(`成功解除调度限制 ${nodeNames.length} 个节点`)
     clearSelection()
     refreshData()
   } catch (error) {
-    ElMessage.error(`批量解封失败: ${error.message}`)
+    ElMessage.error(`批量解除调度失败: ${error.message}`)
   } finally {
     batchLoading.uncordon = false
   }

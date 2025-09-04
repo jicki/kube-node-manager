@@ -41,7 +41,7 @@ type DrainRequest struct {
 	Force       bool   `json:"force"`
 }
 
-// CordonRequest 封锁节点请求
+// CordonRequest 禁止调度节点请求
 type CordonRequest struct {
 	ClusterName string `json:"cluster_name" binding:"required"`
 	NodeName    string `json:"node_name"` // 从URL路径参数获取，不需要binding验证
@@ -182,9 +182,9 @@ func (s *Service) Drain(req DrainRequest, userID uint) error {
 	return nil
 }
 
-// Cordon 封锁节点（标记为不可调度）
+// Cordon 禁止调度节点（标记为不可调度）
 func (s *Service) Cordon(req CordonRequest, userID uint) error {
-	// 执行封锁操作（仅设置不可调度，不删除pods）
+	// 执行禁止调度操作（仅设置不可调度，不删除pods）
 	err := s.k8sSvc.CordonNode(req.ClusterName, req.NodeName)
 	if err != nil {
 		s.logger.Errorf("Failed to cordon node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
@@ -213,7 +213,7 @@ func (s *Service) Cordon(req CordonRequest, userID uint) error {
 	return nil
 }
 
-// Uncordon 取消封锁节点（标记为可调度）
+// Uncordon 解除调度节点（标记为可调度）
 func (s *Service) Uncordon(req CordonRequest, userID uint) error {
 	err := s.k8sSvc.UncordonNode(req.ClusterName, req.NodeName)
 	if err != nil {
@@ -456,7 +456,7 @@ func (s *Service) ValidateNodeOperation(clusterName, nodeName string, operation 
 	return nil
 }
 
-// BatchCordon 批量封锁节点
+// BatchCordon 批量禁止调度节点
 func (s *Service) BatchCordon(req BatchNodeRequest, userID uint) (map[string]interface{}, error) {
 	results := make(map[string]interface{})
 	errors := make(map[string]string)
@@ -494,7 +494,7 @@ func (s *Service) BatchCordon(req BatchNodeRequest, userID uint) (map[string]int
 	return results, nil
 }
 
-// BatchUncordon 批量取消封锁节点
+// BatchUncordon 批量解除调度节点
 func (s *Service) BatchUncordon(req BatchNodeRequest, userID uint) (map[string]interface{}, error) {
 	results := make(map[string]interface{})
 	errors := make(map[string]string)

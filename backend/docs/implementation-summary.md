@@ -47,7 +47,7 @@
 #### 1.4 节点管理服务 (`internal/service/node/node.go`)
 - **功能**：
   - 节点状态查询和筛选
-  - 节点操作（驱逐、封锁）
+  - 节点操作（驱逐、禁止调度）
   - 节点统计和指标获取
   - 节点权限验证
 - **主要方法**：
@@ -98,8 +98,8 @@
   - `GET /nodes` - 获取节点列表
   - `GET /nodes/{node_name}` - 获取节点详情
   - `POST /nodes/drain` - 驱逐节点
-  - `POST /nodes/cordon` - 封锁节点
-  - `POST /nodes/uncordon` - 取消封锁节点
+  - `POST /nodes/cordon` - 禁止调度节点
+  - `POST /nodes/uncordon` - 解除调度节点
   - `GET /nodes/summary` - 获取节点摘要
   - `GET /nodes/{node_name}/metrics` - 获取节点指标
   - `POST /nodes/by-labels` - 根据标签获取节点

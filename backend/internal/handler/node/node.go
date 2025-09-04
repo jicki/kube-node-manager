@@ -229,14 +229,14 @@ func (h *Handler) Drain(c *gin.Context) {
 	})
 }
 
-// Cordon 封锁节点
-// @Summary 封锁节点
+// Cordon 禁止调度节点
+// @Summary 禁止调度节点
 // @Description 标记节点为不可调度（不驱逐现有Pod）
 // @Tags nodes
 // @Accept json
 // @Produce json
 // @Param node_name path string true "节点名称"
-// @Param request body node.CordonRequest true "封锁请求"
+// @Param request body node.CordonRequest true "禁止调度请求"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Failure 500 {object} Response
@@ -288,14 +288,14 @@ func (h *Handler) Cordon(c *gin.Context) {
 	})
 }
 
-// Uncordon 取消封锁节点
-// @Summary 取消封锁节点
+// Uncordon 解除调度节点
+// @Summary 解除调度节点
 // @Description 标记节点为可调度
 // @Tags nodes
 // @Accept json
 // @Produce json
 // @Param node_name path string true "节点名称"
-// @Param request body node.CordonRequest true "取消封锁请求"
+// @Param request body node.CordonRequest true "解除调度请求"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Failure 500 {object} Response
@@ -450,13 +450,13 @@ func (h *Handler) GetMetrics(c *gin.Context) {
 	})
 }
 
-// BatchCordon 批量封锁节点
-// @Summary 批量封锁节点
+// BatchCordon 批量禁止调度节点
+// @Summary 批量禁止调度节点
 // @Description 批量标记节点为不可调度
 // @Tags nodes
 // @Accept json
 // @Produce json
-// @Param request body node.BatchNodeRequest true "批量封锁请求"
+// @Param request body node.BatchNodeRequest true "批量禁止调度请求"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Failure 500 {object} Response
@@ -517,13 +517,13 @@ func (h *Handler) BatchCordon(c *gin.Context) {
 	})
 }
 
-// BatchUncordon 批量取消封锁节点
-// @Summary 批量取消封锁节点
+// BatchUncordon 批量解除调度节点
+// @Summary 批量解除调度节点
 // @Description 批量标记节点为可调度
 // @Tags nodes
 // @Accept json
 // @Produce json
-// @Param request body node.BatchNodeRequest true "批量取消封锁请求"
+// @Param request body node.BatchNodeRequest true "批量解除调度请求"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Failure 500 {object} Response

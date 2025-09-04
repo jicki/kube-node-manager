@@ -18,7 +18,7 @@ const nodeApi = {
     })
   },
 
-  // 封锁节点
+  // 禁止调度节点
   cordonNode(nodeName, clusterName) {
     return request({
       url: `/api/v1/nodes/${nodeName}/cordon`,
@@ -29,7 +29,7 @@ const nodeApi = {
     })
   },
 
-  // 取消封锁节点
+  // 解除调度节点
   uncordonNode(nodeName, clusterName) {
     return request({
       url: `/api/v1/nodes/${nodeName}/uncordon`,
@@ -52,7 +52,7 @@ const nodeApi = {
     })
   },
 
-  // 批量封锁节点
+  // 批量禁止调度节点
   batchCordon(nodeNames, clusterName) {
     return request({
       url: '/api/v1/nodes/batch-cordon',
@@ -64,7 +64,7 @@ const nodeApi = {
     })
   },
 
-  // 批量取消封锁节点
+  // 批量解除调度节点
   batchUncordon(nodeNames, clusterName) {
     return request({
       url: '/api/v1/nodes/batch-uncordon',
