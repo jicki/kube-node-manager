@@ -10,10 +10,32 @@ jwt:
   expire_time: 86400  # 24 hours
 
 ldap:
-  enabled: false
-  host: "ldap.example.com"
-  port: 389
-  base_dn: "dc=example,dc=com"
-  user_filter: "(uid=%s)"
-  admin_dn: "cn=admin,dc=example,dc=com"
-  admin_pass: "admin_password"
+  # LDAP 认证配置
+  enabled: false  # 是否启用 LDAP 认证
+  
+  # LDAP 服务器配置
+  host: "ldap.example.com"    # LDAP 服务器地址
+  port: 389                   # LDAP 服务器端口 (389 for LDAP, 636 for LDAPS)
+  
+  # LDAP 目录结构配置
+  base_dn: "dc=example,dc=com"                    # 搜索基础 DN
+  user_filter: "(uid=%s)"                         # 用户搜索过滤器，%s 会被替换为用户名
+  
+  # LDAP 管理员账号配置 (用于搜索用户)
+  admin_dn: "cn=admin,dc=example,dc=com"          # 管理员 DN
+  admin_pass: "admin_password"                    # 管理员密码
+  
+  # 常见的 LDAP 配置示例:
+  # Active Directory:
+  #   base_dn: "dc=company,dc=com"
+  #   user_filter: "(sAMAccountName=%s)"
+  #   admin_dn: "cn=ldap-service,ou=Service Accounts,dc=company,dc=com"
+  #
+  # OpenLDAP:
+  #   base_dn: "ou=users,dc=company,dc=com"
+  #   user_filter: "(uid=%s)"
+  #   admin_dn: "cn=admin,dc=company,dc=com"
+  #
+  # 对于不同的用户属性，可以使用不同的过滤器:
+  #   user_filter: "(mail=%s)"          # 使用邮箱登录
+  #   user_filter: "(cn=%s)"            # 使用公共名称登录

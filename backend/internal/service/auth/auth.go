@@ -77,23 +77,26 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 	var isLDAPAuth bool
 	if err != nil {
 		if err == gorm.ErrRecordNotFound && s.ldap.IsEnabled() {
+			s.logger.Infof("User %s not found locally, attempting LDAP authentication", req.Username)
 			ldapUser, ldapErr := s.ldap.Authenticate(ldap.AuthRequest{
 				Username: req.Username,
 				Password: req.Password,
 			})
 			if ldapErr != nil {
+				s.logger.Warningf("LDAP authentication failed for user %s: %v", req.Username, ldapErr)
 				s.audit.Log(audit.LogRequest{
 					Action:       model.ActionLogin,
 					ResourceType: model.ResourceUser,
-					Details:      fmt.Sprintf("Failed login attempt for username: %s", req.Username),
+					Details:      fmt.Sprintf("Failed LDAP login attempt for username: %s - %s", req.Username, ldapErr.Error()),
 					Status:       model.AuditStatusFailed,
-					ErrorMsg:     "Invalid credentials",
+					ErrorMsg:     "LDAP authentication failed",
 					IPAddress:    ipAddress,
 					UserAgent:    userAgent,
 				})
 				return nil, errors.New("invalid credentials")
 			}
 
+			s.logger.Infof("LDAP authentication successful for user %s, creating local user record", req.Username)
 			user = model.User{
 				Username: ldapUser.Username,
 				Email:    ldapUser.Email,
@@ -102,8 +105,10 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 			}
 			user.HashPassword("") // LDAP users don't have local passwords
 			if err := s.db.Create(&user).Error; err != nil {
+				s.logger.Errorf("Failed to create local user record for LDAP user %s: %v", req.Username, err)
 				return nil, err
 			}
+			s.logger.Infof("Local user record created for LDAP user %s (ID: %d)", req.Username, user.ID)
 			isLDAPAuth = true
 		} else {
 			return nil, err
@@ -155,11 +160,20 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 	now := time.Now()
 	s.db.Model(&user).Update("last_login", now)
 
+	// 记录成功登录的审计日志
+	loginDetails := fmt.Sprintf("Successful login for user: %s", user.Username)
+	if isLDAPAuth {
+		loginDetails = fmt.Sprintf("Successful LDAP login for user: %s", user.Username)
+		s.logger.Infof("User %s successfully logged in via LDAP", user.Username)
+	} else {
+		s.logger.Infof("User %s successfully logged in via local authentication", user.Username)
+	}
+
 	s.audit.Log(audit.LogRequest{
 		UserID:       user.ID,
 		Action:       model.ActionLogin,
 		ResourceType: model.ResourceUser,
-		Details:      fmt.Sprintf("Successful login for user: %s", user.Username),
+		Details:      loginDetails,
 		Status:       model.AuditStatusSuccess,
 		IPAddress:    ipAddress,
 		UserAgent:    userAgent,
@@ -327,6 +341,40 @@ func (s *Service) ChangePassword(userID uint, req ChangePasswordRequest) error {
 	})
 
 	return nil
+}
+
+// TestLDAPConnection 测试LDAP连接配置
+func (s *Service) TestLDAPConnection() (*TestLDAPResponse, error) {
+	response := &TestLDAPResponse{
+		Enabled: s.ldap.IsEnabled(),
+	}
+
+	if !s.ldap.IsEnabled() {
+		response.Status = "LDAP is disabled"
+		response.Success = false
+		s.logger.Info("LDAP connection test skipped - LDAP is disabled")
+		return response, nil
+	}
+
+	if err := s.ldap.TestConnection(); err != nil {
+		response.Status = fmt.Sprintf("Connection failed: %v", err)
+		response.Success = false
+		s.logger.Warningf("LDAP connection test failed: %v", err)
+		return response, nil
+	}
+
+	response.Status = "Connection successful"
+	response.Success = true
+	s.logger.Info("LDAP connection test successful")
+
+	return response, nil
+}
+
+// TestLDAPResponse LDAP连接测试响应
+type TestLDAPResponse struct {
+	Enabled bool   `json:"enabled"`
+	Success bool   `json:"success"`
+	Status  string `json:"status"`
 }
 
 // GetProfileStats 获取用户统计信息

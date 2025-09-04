@@ -189,3 +189,27 @@ func (h *Handler) AuthMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// TestLDAPConnection 测试LDAP连接
+func (h *Handler) TestLDAPConnection(c *gin.Context) {
+	// 检查用户权限 (只有管理员能测试LDAP连接)
+	userRole, exists := c.Get("user_role")
+	if !exists || userRole.(string) != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can test LDAP connection"})
+		return
+	}
+
+	result, err := h.service.TestLDAPConnection()
+	if err != nil {
+		h.logger.Errorf("LDAP connection test error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 根据测试结果返回不同的状态码
+	if result.Success {
+		c.JSON(http.StatusOK, gin.H{"data": result})
+	} else {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"data": result})
+	}
+}

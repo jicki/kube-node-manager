@@ -31,10 +31,36 @@ type AuthRequest struct {
 
 // NewService creates a new LDAP service instance
 func NewService(logger *logger.Logger, cfg config.LDAPConfig) *Service {
-	return &Service{
+	service := &Service{
 		logger: logger,
 		config: cfg,
 	}
+
+	// 记录LDAP服务初始化状态
+	if cfg.Enabled {
+		logger.Infof("LDAP authentication is ENABLED - Server: %s:%d, Base DN: %s", cfg.Host, cfg.Port, cfg.BaseDN)
+
+		// 验证配置
+		if err := service.validateConfig(); err != nil {
+			logger.Errorf("LDAP configuration validation failed: %v", err)
+			logger.Warning("LDAP authentication may not work properly due to configuration errors")
+		} else {
+			logger.Info("LDAP configuration validation passed")
+		}
+
+		// 测试连接（不阻塞启动）
+		go func() {
+			if err := service.TestConnection(); err != nil {
+				logger.Warningf("LDAP connection test failed: %v", err)
+			} else {
+				logger.Info("LDAP connection test successful")
+			}
+		}()
+	} else {
+		logger.Info("LDAP authentication is DISABLED - using local authentication only")
+	}
+
+	return service
 }
 
 // IsEnabled 检查LDAP是否启用
@@ -42,44 +68,90 @@ func (s *Service) IsEnabled() bool {
 	return s.config.Enabled
 }
 
+// validateConfig 校验LDAP配置的完整性
+func (s *Service) validateConfig() error {
+	if s.config.Host == "" {
+		return fmt.Errorf("LDAP host is required")
+	}
+
+	if s.config.Port <= 0 {
+		return fmt.Errorf("LDAP port must be greater than 0")
+	}
+
+	if s.config.BaseDN == "" {
+		return fmt.Errorf("LDAP base DN is required")
+	}
+
+	if s.config.AdminDN == "" {
+		return fmt.Errorf("LDAP admin DN is required")
+	}
+
+	if s.config.AdminPass == "" {
+		return fmt.Errorf("LDAP admin password is required")
+	}
+
+	// 设置默认的用户过滤器
+	if s.config.UserFilter == "" {
+		s.logger.Info("Using default LDAP user filter: (uid=%s)")
+	}
+
+	return nil
+}
+
 // Authenticate 验证LDAP用户身份
 func (s *Service) Authenticate(req AuthRequest) (*UserInfo, error) {
+	// 记录LDAP认证尝试
+	s.logger.Infof("LDAP authentication attempt for user: %s", req.Username)
+
 	if !s.config.Enabled {
+		s.logger.Warningf("LDAP authentication attempted but LDAP is disabled for user: %s", req.Username)
 		return nil, fmt.Errorf("LDAP authentication is not enabled")
 	}
 
+	// 校验LDAP配置完整性
+	if err := s.validateConfig(); err != nil {
+		s.logger.Errorf("LDAP configuration validation failed: %v", err)
+		return nil, fmt.Errorf("LDAP configuration error: %w", err)
+	}
+
 	// 连接到LDAP服务器
+	s.logger.Infof("Connecting to LDAP server: %s:%d", s.config.Host, s.config.Port)
 	conn, err := s.connect()
 	if err != nil {
-		s.logger.Error("Failed to connect to LDAP server", err)
+		s.logger.Errorf("Failed to connect to LDAP server %s:%d for user %s: %v", s.config.Host, s.config.Port, req.Username, err)
 		return nil, fmt.Errorf("failed to connect to LDAP server: %w", err)
 	}
 	defer conn.Close()
 
 	// 使用管理员账号绑定
+	s.logger.Infof("Binding with admin DN: %s", s.config.AdminDN)
 	if err := s.bindAdmin(conn); err != nil {
-		s.logger.Error("Failed to bind admin user", err)
+		s.logger.Errorf("Failed to bind admin user for authentication of %s: %v", req.Username, err)
 		return nil, fmt.Errorf("failed to bind admin user: %w", err)
 	}
 
 	// 搜索用户
+	s.logger.Infof("Searching for user %s in base DN: %s", req.Username, s.config.BaseDN)
 	userDN, userInfo, err := s.searchUser(conn, req.Username)
 	if err != nil {
-		s.logger.Error("Failed to search user", err)
+		s.logger.Errorf("Failed to search user %s: %v", req.Username, err)
 		return nil, fmt.Errorf("failed to search user: %w", err)
 	}
 
 	if userDN == "" {
+		s.logger.Warningf("User not found in LDAP directory: %s", req.Username)
 		return nil, fmt.Errorf("user not found: %s", req.Username)
 	}
 
+	s.logger.Infof("Found user %s with DN: %s", req.Username, userDN)
+
 	// 验证用户密码
 	if err := s.authenticateUser(conn, userDN, req.Password); err != nil {
-		s.logger.Error("Failed to authenticate user", err)
+		s.logger.Errorf("Failed to authenticate user %s with DN %s: %v", req.Username, userDN, err)
 		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
 
-	s.logger.Info("LDAP authentication successful for user: %s", req.Username)
+	s.logger.Infof("LDAP authentication successful for user: %s (DN: %s, Email: %s)", req.Username, userDN, userInfo.Email)
 	return userInfo, nil
 }
 

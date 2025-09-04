@@ -27,10 +27,10 @@ type ListRequest struct {
 }
 
 type ListResponse struct {
-	Users []model.User `json:"users"`
-	Total int64        `json:"total"`
-	Page  int          `json:"page"`
-	PageSize int       `json:"page_size"`
+	Users    []model.User `json:"users"`
+	Total    int64        `json:"total"`
+	Page     int          `json:"page"`
+	PageSize int          `json:"page_size"`
 }
 
 type CreateRequest struct {
@@ -53,6 +53,11 @@ type UpdatePasswordRequest struct {
 	NewPassword     string `json:"new_password" binding:"required,min=6"`
 }
 
+// ResetPasswordRequest 管理员重置用户密码请求
+type ResetPasswordRequest struct {
+	Password string `json:"password" binding:"required,min=6"`
+}
+
 func NewService(db *gorm.DB, logger *logger.Logger, audit *audit.Service) *Service {
 	return &Service{
 		db:     db,
@@ -63,7 +68,7 @@ func NewService(db *gorm.DB, logger *logger.Logger, audit *audit.Service) *Servi
 
 func (s *Service) List(req ListRequest) (*ListResponse, error) {
 	query := s.db.Model(&model.User{})
-	
+
 	if req.Username != "" {
 		query = query.Where("username LIKE ?", "%"+req.Username+"%")
 	}
@@ -76,26 +81,26 @@ func (s *Service) List(req ListRequest) (*ListResponse, error) {
 	if req.Status != "" {
 		query = query.Where("status = ?", req.Status)
 	}
-	
+
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err
 	}
-	
+
 	if req.Page <= 0 {
 		req.Page = 1
 	}
 	if req.PageSize <= 0 || req.PageSize > 100 {
 		req.PageSize = 10
 	}
-	
+
 	offset := (req.Page - 1) * req.PageSize
-	
+
 	var users []model.User
 	if err := query.Offset(offset).Limit(req.PageSize).Find(&users).Error; err != nil {
 		return nil, err
 	}
-	
+
 	return &ListResponse{
 		Users:    users,
 		Total:    total,
@@ -125,29 +130,29 @@ func (s *Service) Create(req CreateRequest, operatorID uint) (*model.User, error
 	if err := s.db.Where("username = ? OR email = ?", req.Username, req.Email).First(&existingUser).Error; err == nil {
 		return nil, errors.New("username or email already exists")
 	}
-	
+
 	user := model.User{
 		Username: req.Username,
 		Email:    req.Email,
 		Role:     req.Role,
 		Status:   req.Status,
 	}
-	
+
 	if user.Role == "" {
 		user.Role = model.RoleUser
 	}
 	if user.Status == "" {
 		user.Status = model.StatusActive
 	}
-	
+
 	if err := user.HashPassword(req.Password); err != nil {
 		return nil, err
 	}
-	
+
 	if err := s.db.Create(&user).Error; err != nil {
 		return nil, err
 	}
-	
+
 	s.audit.Log(audit.LogRequest{
 		UserID:       operatorID,
 		Action:       model.ActionCreate,
@@ -155,7 +160,7 @@ func (s *Service) Create(req CreateRequest, operatorID uint) (*model.User, error
 		Details:      fmt.Sprintf("Created user: %s", user.Username),
 		Status:       model.AuditStatusSuccess,
 	})
-	
+
 	return &user, nil
 }
 
@@ -164,7 +169,7 @@ func (s *Service) Update(id uint, req UpdateRequest, operatorID uint) (*model.Us
 	if err := s.db.First(&user, id).Error; err != nil {
 		return nil, err
 	}
-	
+
 	if req.Username != "" && req.Username != user.Username {
 		var existingUser model.User
 		if err := s.db.Where("username = ? AND id != ?", req.Username, id).First(&existingUser).Error; err == nil {
@@ -172,7 +177,7 @@ func (s *Service) Update(id uint, req UpdateRequest, operatorID uint) (*model.Us
 		}
 		user.Username = req.Username
 	}
-	
+
 	if req.Email != "" && req.Email != user.Email {
 		var existingUser model.User
 		if err := s.db.Where("email = ? AND id != ?", req.Email, id).First(&existingUser).Error; err == nil {
@@ -180,18 +185,18 @@ func (s *Service) Update(id uint, req UpdateRequest, operatorID uint) (*model.Us
 		}
 		user.Email = req.Email
 	}
-	
+
 	if req.Role != "" {
 		user.Role = req.Role
 	}
 	if req.Status != "" {
 		user.Status = req.Status
 	}
-	
+
 	if err := s.db.Save(&user).Error; err != nil {
 		return nil, err
 	}
-	
+
 	s.audit.Log(audit.LogRequest{
 		UserID:       operatorID,
 		Action:       model.ActionUpdate,
@@ -199,7 +204,7 @@ func (s *Service) Update(id uint, req UpdateRequest, operatorID uint) (*model.Us
 		Details:      fmt.Sprintf("Updated user: %s", user.Username),
 		Status:       model.AuditStatusSuccess,
 	})
-	
+
 	return &user, nil
 }
 
@@ -208,15 +213,15 @@ func (s *Service) Delete(id uint, operatorID uint) error {
 	if err := s.db.First(&user, id).Error; err != nil {
 		return err
 	}
-	
+
 	if user.ID == operatorID {
 		return errors.New("cannot delete yourself")
 	}
-	
+
 	if err := s.db.Delete(&user).Error; err != nil {
 		return err
 	}
-	
+
 	s.audit.Log(audit.LogRequest{
 		UserID:       operatorID,
 		Action:       model.ActionDelete,
@@ -224,7 +229,7 @@ func (s *Service) Delete(id uint, operatorID uint) error {
 		Details:      fmt.Sprintf("Deleted user: %s", user.Username),
 		Status:       model.AuditStatusSuccess,
 	})
-	
+
 	return nil
 }
 
@@ -233,19 +238,19 @@ func (s *Service) UpdatePassword(id uint, req UpdatePasswordRequest, operatorID 
 	if err := s.db.First(&user, id).Error; err != nil {
 		return err
 	}
-	
+
 	if !user.CheckPassword(req.CurrentPassword) {
 		return errors.New("current password is incorrect")
 	}
-	
+
 	if err := user.HashPassword(req.NewPassword); err != nil {
 		return err
 	}
-	
+
 	if err := s.db.Save(&user).Error; err != nil {
 		return err
 	}
-	
+
 	s.audit.Log(audit.LogRequest{
 		UserID:       operatorID,
 		Action:       model.ActionUpdate,
@@ -253,7 +258,34 @@ func (s *Service) UpdatePassword(id uint, req UpdatePasswordRequest, operatorID 
 		Details:      fmt.Sprintf("Updated password for user: %s", user.Username),
 		Status:       model.AuditStatusSuccess,
 	})
-	
+
+	return nil
+}
+
+// ResetPassword 管理员重置用户密码（不需要当前密码验证）
+func (s *Service) ResetPassword(id uint, req ResetPasswordRequest, operatorID uint) error {
+	var user model.User
+	if err := s.db.First(&user, id).Error; err != nil {
+		return err
+	}
+
+	// 直接设置新密码，不需要验证当前密码
+	if err := user.HashPassword(req.Password); err != nil {
+		return err
+	}
+
+	if err := s.db.Save(&user).Error; err != nil {
+		return err
+	}
+
+	s.audit.Log(audit.LogRequest{
+		UserID:       operatorID,
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceUser,
+		Details:      fmt.Sprintf("Reset password for user: %s", user.Username),
+		Status:       model.AuditStatusSuccess,
+	})
+
 	return nil
 }
 

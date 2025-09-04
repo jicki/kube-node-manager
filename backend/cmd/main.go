@@ -88,6 +88,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		auth.PUT("/profile", handlers.Auth.AuthMiddleware(), handlers.Auth.UpdateProfile)
 		auth.POST("/change-password", handlers.Auth.AuthMiddleware(), handlers.Auth.ChangePassword)
 		auth.GET("/profile/stats", handlers.Auth.AuthMiddleware(), handlers.Auth.GetProfileStats)
+		auth.POST("/test-ldap", handlers.Auth.AuthMiddleware(), handlers.Auth.TestLDAPConnection)
 	}
 
 	protected := api.Group("/")
@@ -101,6 +102,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		users.PUT("/:id", handlers.User.Update)
 		users.DELETE("/:id", handlers.User.Delete)
 		users.PUT("/:id/password", handlers.User.UpdatePassword)
+		users.POST("/:id/reset-password", handlers.User.ResetPassword)
 	}
 
 	clusters := protected.Group("/clusters")
