@@ -8,23 +8,24 @@ import (
 )
 
 type User struct {
-	ID        uint      `json:"id" gorm:"primaryKey"`
-	Username  string    `json:"username" gorm:"uniqueIndex;not null"`
-	Email     string    `json:"email" gorm:"uniqueIndex;not null"`
-	Password  string    `json:"-" gorm:"not null"`
-	Role      UserRole  `json:"role" gorm:"default:user"`
-	Status    UserStatus `json:"status" gorm:"default:active"`
-	LastLogin *time.Time `json:"last_login"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	ID         uint           `json:"id" gorm:"primaryKey"`
+	Username   string         `json:"username" gorm:"uniqueIndex;not null"`
+	Email      string         `json:"email" gorm:"uniqueIndex;not null"`
+	Password   string         `json:"-" gorm:"not null"`
+	Role       UserRole       `json:"role" gorm:"default:user"`
+	Status     UserStatus     `json:"status" gorm:"default:active"`
+	IsLDAPUser bool           `json:"is_ldap_user" gorm:"default:false"` // 标识是否为 LDAP 用户
+	LastLogin  *time.Time     `json:"last_login"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+	DeletedAt  gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 type UserRole string
 
 const (
-	RoleAdmin UserRole = "admin"
-	RoleUser  UserRole = "user"
+	RoleAdmin  UserRole = "admin"
+	RoleUser   UserRole = "user"
 	RoleViewer UserRole = "viewer"
 )
 

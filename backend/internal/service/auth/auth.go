@@ -76,6 +76,7 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 
 	var isLDAPAuth bool
 	if err != nil {
+		// 用户不存在，尝试 LDAP 认证
 		if err == gorm.ErrRecordNotFound && s.ldap.IsEnabled() {
 			s.logger.Infof("User %s not found locally, attempting LDAP authentication", req.Username)
 			ldapUser, ldapErr := s.ldap.Authenticate(ldap.AuthRequest{
@@ -98,10 +99,11 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 
 			s.logger.Infof("LDAP authentication successful for user %s, creating local user record", req.Username)
 			user = model.User{
-				Username: ldapUser.Username,
-				Email:    ldapUser.Email,
-				Role:     model.RoleViewer, // LDAP 用户默认分配为只读用户角色
-				Status:   model.StatusActive,
+				Username:   ldapUser.Username,
+				Email:      ldapUser.Email,
+				Role:       model.RoleViewer, // LDAP 用户默认分配为只读用户角色
+				Status:     model.StatusActive,
+				IsLDAPUser: true, // 标记为 LDAP 用户
 			}
 			user.HashPassword("") // LDAP users don't have local passwords
 			if err := s.db.Create(&user).Error; err != nil {
@@ -113,6 +115,32 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 		} else {
 			return nil, err
 		}
+	} else {
+		// 用户已存在，检查是否为 LDAP 用户
+		if user.IsLDAPUser && s.ldap.IsEnabled() {
+			s.logger.Infof("Existing LDAP user %s found, performing LDAP authentication", req.Username)
+			_, ldapErr := s.ldap.Authenticate(ldap.AuthRequest{
+				Username: req.Username,
+				Password: req.Password,
+			})
+			if ldapErr != nil {
+				s.logger.Warningf("LDAP authentication failed for existing user %s: %v", req.Username, ldapErr)
+				s.audit.Log(audit.LogRequest{
+					UserID:       user.ID,
+					Action:       model.ActionLogin,
+					ResourceType: model.ResourceUser,
+					Details:      fmt.Sprintf("Failed LDAP login attempt for existing user: %s - %s", req.Username, ldapErr.Error()),
+					Status:       model.AuditStatusFailed,
+					ErrorMsg:     "LDAP authentication failed",
+					IPAddress:    ipAddress,
+					UserAgent:    userAgent,
+				})
+				return nil, errors.New("invalid credentials")
+			}
+			s.logger.Infof("LDAP authentication successful for existing user %s", req.Username)
+			isLDAPAuth = true
+		}
+		// 如果不是 LDAP 用户，将在后面进行本地密码验证
 	}
 
 	if user.Status != model.StatusActive {

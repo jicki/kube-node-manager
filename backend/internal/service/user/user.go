@@ -239,6 +239,11 @@ func (s *Service) UpdatePassword(id uint, req UpdatePasswordRequest, operatorID 
 		return err
 	}
 
+	// 检查是否为 LDAP 用户
+	if user.IsLDAPUser {
+		return errors.New("LDAP users cannot change password locally. Please contact your LDAP administrator")
+	}
+
 	if !user.CheckPassword(req.CurrentPassword) {
 		return errors.New("current password is incorrect")
 	}
@@ -267,6 +272,11 @@ func (s *Service) ResetPassword(id uint, req ResetPasswordRequest, operatorID ui
 	var user model.User
 	if err := s.db.First(&user, id).Error; err != nil {
 		return err
+	}
+
+	// 检查是否为 LDAP 用户
+	if user.IsLDAPUser {
+		return errors.New("Cannot reset password for LDAP users. LDAP users are authenticated through LDAP directory")
 	}
 
 	// 直接设置新密码，不需要验证当前密码
