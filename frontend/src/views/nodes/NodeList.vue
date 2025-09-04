@@ -468,7 +468,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button type="text" size="small" @click="viewNodeDetail(row)">
@@ -498,10 +498,17 @@
                 解除调度
               </el-button>
               
-              <el-dropdown @command="(cmd) => handleNodeAction(cmd, row)">
-                <el-button type="text" size="small">
-                  <el-icon><MoreFilled /></el-icon>
-                </el-button>
+              <el-dropdown 
+                trigger="click"
+                placement="bottom-end"
+                @command="(cmd) => handleNodeAction(cmd, row)"
+              >
+                <el-tooltip content="更多操作" placement="top">
+                  <el-button type="text" size="small" class="more-actions-btn">
+                    <el-icon><MoreFilled /></el-icon>
+                    <span class="btn-text">更多</span>
+                  </el-button>
+                </el-tooltip>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="drain">
@@ -1998,6 +2005,64 @@ onMounted(async () => {
   border-color: #91d5ff;
 }
 
+.more-actions-btn {
+  min-width: 50px !important;
+  position: relative;
+  padding: 6px 8px !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.more-actions-btn .btn-text {
+  font-size: 12px;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+.more-actions-btn:hover {
+  background: #f0f0f0 !important;
+  border-color: #d9d9d9 !important;
+  color: #1890ff !important;
+}
+
+.more-actions-btn:hover .btn-text {
+  color: #1890ff;
+}
+
+/* 下拉菜单项样式优化 */
+.action-buttons .el-dropdown-menu {
+  min-width: 130px;
+  padding: 6px 0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e8e8e8;
+}
+
+.action-buttons .el-dropdown-menu .el-dropdown-menu__item {
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  margin: 0 4px;
+  border-radius: 4px;
+}
+
+.action-buttons .el-dropdown-menu .el-dropdown-menu__item:hover {
+  background: #f0f9ff;
+  color: #1890ff;
+  transform: translateX(2px);
+}
+
+.action-buttons .el-dropdown-menu .el-dropdown-menu__item .el-icon {
+  font-size: 14px;
+  color: inherit;
+}
+
 .pagination-container {
   padding: 16px;
   display: flex;
@@ -2075,6 +2140,15 @@ onMounted(async () => {
   .action-buttons {
     flex-direction: column;
     gap: 2px;
+  }
+  
+  .more-actions-btn {
+    min-width: 45px !important;
+    padding: 4px 6px !important;
+  }
+  
+  .more-actions-btn .btn-text {
+    font-size: 11px;
   }
 }
 </style>
