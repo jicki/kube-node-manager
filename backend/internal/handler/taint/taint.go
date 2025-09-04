@@ -258,6 +258,16 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 		return
 	}
 
+	// 检查用户权限：只有 admin 和 user 角色可以创建污点模板
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can create taint templates",
+		})
+		return
+	}
+
 	template, err := h.taintSvc.CreateTemplate(req, userID.(uint))
 	if err != nil {
 		h.logger.Errorf("Failed to create taint template: %v", err)
@@ -317,6 +327,16 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 		return
 	}
 
+	// 检查用户权限：只有 admin 和 user 角色可以更新污点模板
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can update taint templates",
+		})
+		return
+	}
+
 	template, err := h.taintSvc.UpdateTemplate(uint(id), req, userID.(uint))
 	if err != nil {
 		h.logger.Error("Failed to update taint template: %v", err)
@@ -367,6 +387,16 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, Response{
 			Code:    http.StatusUnauthorized,
 			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以删除污点模板
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can delete taint templates",
 		})
 		return
 	}
@@ -545,6 +575,16 @@ func (h *Handler) ApplyTemplate(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, Response{
 			Code:    http.StatusUnauthorized,
 			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以应用污点模板到节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can apply taint templates to nodes",
 		})
 		return
 	}

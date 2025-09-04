@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/internal/service/taint"
 
@@ -35,6 +36,16 @@ func (h *Handler) BatchAddTaints(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, Response{
 			Code:    http.StatusUnauthorized,
 			Message: "用户未认证",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以批量添加污点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "权限不足。只有管理员和用户角色可以批量添加污点",
 		})
 		return
 	}
@@ -113,6 +124,16 @@ func (h *Handler) BatchDeleteTaints(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, Response{
 			Code:    http.StatusUnauthorized,
 			Message: "用户未认证",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以批量删除污点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "权限不足。只有管理员和用户角色可以批量删除污点",
 		})
 		return
 	}

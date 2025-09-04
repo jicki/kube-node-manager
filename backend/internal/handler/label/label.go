@@ -430,6 +430,16 @@ func (h *Handler) ApplyTemplate(c *gin.Context) {
 		return
 	}
 
+	// 检查用户权限：只有 admin 和 user 角色可以应用标签模板到节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can apply label templates to nodes",
+		})
+		return
+	}
+
 	if err := h.labelSvc.ApplyTemplate(req, userID.(uint)); err != nil {
 		h.logger.Error("Failed to apply label template: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
