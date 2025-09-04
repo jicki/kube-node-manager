@@ -499,16 +499,18 @@
               </el-button>
               
               <el-dropdown 
-                trigger="click"
-                placement="bottom-end"
                 @command="(cmd) => handleNodeAction(cmd, row)"
               >
-                <el-tooltip content="更多操作" placement="top">
-                  <el-button type="text" size="small" class="more-actions-btn">
-                    <el-icon><MoreFilled /></el-icon>
-                    <span class="btn-text">更多</span>
-                  </el-button>
-                </el-tooltip>
+                <el-button 
+                  type="text" 
+                  size="small" 
+                  class="more-actions-btn"
+                  title="更多操作"
+                >
+                  <el-icon><MoreFilled /></el-icon>
+                  <span class="btn-text">更多</span>
+                  <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="drain">
@@ -2006,19 +2008,24 @@ onMounted(async () => {
 }
 
 .more-actions-btn {
-  min-width: 50px !important;
+  min-width: 60px !important;
   position: relative;
   padding: 6px 8px !important;
   display: flex !important;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .more-actions-btn .btn-text {
   font-size: 12px;
   line-height: 1;
+}
+
+.more-actions-btn .el-icon--right {
   margin-left: 2px;
+  font-size: 10px;
+  opacity: 0.7;
 }
 
 .more-actions-btn:hover {
@@ -2031,8 +2038,10 @@ onMounted(async () => {
   color: #1890ff;
 }
 
+
 /* 下拉菜单项样式优化 */
-.action-buttons .el-dropdown-menu {
+.action-buttons .el-dropdown-menu,
+.node-action-dropdown {
   min-width: 130px;
   padding: 6px 0;
   border-radius: 8px;
@@ -2040,7 +2049,8 @@ onMounted(async () => {
   border: 1px solid #e8e8e8;
 }
 
-.action-buttons .el-dropdown-menu .el-dropdown-menu__item {
+.action-buttons .el-dropdown-menu .el-dropdown-menu__item,
+.node-action-dropdown .el-dropdown-menu__item {
   padding: 10px 14px;
   font-size: 13px;
   line-height: 1.4;
@@ -2052,13 +2062,15 @@ onMounted(async () => {
   border-radius: 4px;
 }
 
-.action-buttons .el-dropdown-menu .el-dropdown-menu__item:hover {
+.action-buttons .el-dropdown-menu .el-dropdown-menu__item:hover,
+.node-action-dropdown .el-dropdown-menu__item:hover {
   background: #f0f9ff;
   color: #1890ff;
   transform: translateX(2px);
 }
 
-.action-buttons .el-dropdown-menu .el-dropdown-menu__item .el-icon {
+.action-buttons .el-dropdown-menu .el-dropdown-menu__item .el-icon,
+.node-action-dropdown .el-dropdown-menu__item .el-icon {
   font-size: 14px;
   color: inherit;
 }
@@ -2143,12 +2155,16 @@ onMounted(async () => {
   }
   
   .more-actions-btn {
-    min-width: 45px !important;
+    min-width: 50px !important;
     padding: 4px 6px !important;
   }
   
   .more-actions-btn .btn-text {
     font-size: 11px;
+  }
+  
+  .more-actions-btn .el-icon--right {
+    font-size: 9px;
   }
 }
 </style>
