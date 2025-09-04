@@ -166,8 +166,8 @@
         <!-- 分页 -->
         <div class="pagination-wrapper">
           <el-pagination
-            v-model:current-page="pagination.current"
-            v-model:page-size="pagination.size"
+            :current-page="pagination.current"
+            :page-size="pagination.size"
             :page-sizes="[20, 50, 100, 200]"
             :total="pagination.total"
             layout="total, sizes, prev, pager, next, jumper"
@@ -227,9 +227,18 @@ const fetchAuditLogs = async () => {
     console.log('审计日志搜索参数:', params)
     
     const response = await auditApi.getAuditLogs(params)
+    console.log('审计日志API响应:', response.data)
+    
     if (response.data && response.data.data) {
       auditLogs.value = response.data.data.logs || []
       pagination.total = response.data.data.total || 0
+      
+      console.log(`获取到 ${auditLogs.value.length} 条审计日志，总数: ${pagination.total}`)
+      console.log('当前分页信息:', {
+        current: pagination.current,
+        size: pagination.size,
+        total: pagination.total
+      })
     }
   } catch (error) {
     console.error('获取审计日志失败:', error)
@@ -258,12 +267,14 @@ const handleReset = () => {
 
 // 分页处理
 const handleSizeChange = (size) => {
+  console.log('分页大小改变:', size)
   pagination.size = size
   pagination.current = 1
   fetchAuditLogs()
 }
 
 const handleCurrentChange = (current) => {
+  console.log('当前页改变:', current)
   pagination.current = current
   fetchAuditLogs()
 }

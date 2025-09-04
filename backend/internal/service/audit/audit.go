@@ -117,8 +117,12 @@ func (s *Service) List(req ListRequest) (*ListResponse, error) {
 	if req.Page <= 0 {
 		req.Page = 1
 	}
-	if req.PageSize <= 0 || req.PageSize > 100 {
-		req.PageSize = 10
+	if req.PageSize <= 0 {
+		req.PageSize = 20
+	}
+	// 限制最大页大小为500，避免数据库查询过大
+	if req.PageSize > 500 {
+		req.PageSize = 500
 	}
 
 	offset := (req.Page - 1) * req.PageSize
