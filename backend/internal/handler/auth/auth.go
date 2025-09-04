@@ -213,3 +213,23 @@ func (h *Handler) TestLDAPConnection(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"data": result})
 	}
 }
+
+// DiagnoseLDAP 诊断 LDAP 目录结构
+func (h *Handler) DiagnoseLDAP(c *gin.Context) {
+	// 检查用户权限 (只有管理员能诊断LDAP)
+	userRole, exists := c.Get("user_role")
+	if !exists || userRole.(string) != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can diagnose LDAP directory"})
+		return
+	}
+
+	if err := h.service.DiagnoseLDAP(); err != nil {
+		h.logger.Errorf("LDAP diagnosis error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "LDAP directory diagnosis completed. Check server logs for detailed information.",
+	})
+}

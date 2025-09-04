@@ -370,6 +370,16 @@ func (s *Service) TestLDAPConnection() (*TestLDAPResponse, error) {
 	return response, nil
 }
 
+// DiagnoseLDAP 诊断 LDAP 目录结构
+func (s *Service) DiagnoseLDAP() error {
+	if !s.ldap.IsEnabled() {
+		return fmt.Errorf("LDAP is not enabled")
+	}
+
+	s.logger.Info("Starting LDAP directory diagnosis...")
+	return s.ldap.DiagnoseDirectory()
+}
+
 // TestLDAPResponse LDAP连接测试响应
 type TestLDAPResponse struct {
 	Enabled bool   `json:"enabled"`

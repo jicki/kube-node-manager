@@ -208,24 +208,33 @@ func (s *Service) searchUser(conn *ldap.Conn, username string) (string, *UserInf
 		filter = fmt.Sprintf("(uid=%s)", username)
 	}
 
+	s.logger.Infof("LDAP search filter: %s", filter)
+	s.logger.Infof("LDAP search base DN: %s", s.config.BaseDN)
+
 	searchRequest := ldap.NewSearchRequest(
 		s.config.BaseDN,
 		ldap.ScopeWholeSubtree,
 		ldap.NeverDerefAliases,
-		1, // 只需要一个结果
+		10, // 增加返回结果数量用于调试
 		0,
 		false,
 		filter,
-		[]string{"dn", "uid", "cn", "mail", "displayName", "memberOf"},
+		[]string{"dn", "uid", "cn", "mail", "displayName", "memberOf", "sAMAccountName", "userPrincipalName"},
 		nil,
 	)
 
 	sr, err := conn.Search(searchRequest)
 	if err != nil {
+		s.logger.Errorf("LDAP search error: %v", err)
 		return "", nil, fmt.Errorf("search failed: %w", err)
 	}
 
+	s.logger.Infof("LDAP search returned %d entries", len(sr.Entries))
+
+	// 如果没有找到用户，尝试不同的过滤器进行诊断
 	if len(sr.Entries) == 0 {
+		s.logger.Infof("No entries found with filter %s, trying alternative filters for diagnosis...", filter)
+		s.tryAlternativeFilters(conn, username)
 		return "", nil, nil
 	}
 
@@ -368,4 +377,140 @@ func (s *Service) SearchUsers(filter string, limit int) ([]*UserInfo, error) {
 	}
 
 	return users, nil
+}
+
+// tryAlternativeFilters 尝试不同的过滤器进行诊断
+func (s *Service) tryAlternativeFilters(conn *ldap.Conn, username string) {
+	// 常见的用户过滤器
+	alternativeFilters := []string{
+		"(sAMAccountName=%s)",    // Active Directory
+		"(userPrincipalName=%s)", // Active Directory UPN
+		"(cn=%s)",                // Common Name
+		"(mail=%s)",              // Email address
+		"(displayName=%s)",       // Display Name
+		"(name=%s)",              // Name attribute
+	}
+
+	for _, filterTemplate := range alternativeFilters {
+		filter := fmt.Sprintf(filterTemplate, username)
+		s.logger.Infof("Trying alternative filter: %s", filter)
+
+		searchRequest := ldap.NewSearchRequest(
+			s.config.BaseDN,
+			ldap.ScopeWholeSubtree,
+			ldap.NeverDerefAliases,
+			5,
+			0,
+			false,
+			filter,
+			[]string{"dn", "uid", "cn", "sAMAccountName", "userPrincipalName", "mail", "displayName"},
+			nil,
+		)
+
+		sr, err := conn.Search(searchRequest)
+		if err != nil {
+			s.logger.Warningf("Alternative filter %s failed: %v", filter, err)
+			continue
+		}
+
+		if len(sr.Entries) > 0 {
+			s.logger.Infof("SUCCESS: Found %d entries with filter %s", len(sr.Entries), filter)
+			for i, entry := range sr.Entries {
+				s.logger.Infof("Entry %d: DN=%s", i+1, entry.DN)
+				s.logger.Infof("  uid: %s", entry.GetAttributeValue("uid"))
+				s.logger.Infof("  cn: %s", entry.GetAttributeValue("cn"))
+				s.logger.Infof("  sAMAccountName: %s", entry.GetAttributeValue("sAMAccountName"))
+				s.logger.Infof("  userPrincipalName: %s", entry.GetAttributeValue("userPrincipalName"))
+				s.logger.Infof("  mail: %s", entry.GetAttributeValue("mail"))
+				s.logger.Infof("  displayName: %s", entry.GetAttributeValue("displayName"))
+			}
+			s.logger.Infof("SUGGESTION: Consider updating your user_filter to: %s", filterTemplate)
+			return
+		}
+	}
+
+	s.logger.Warningf("No entries found with any alternative filters for user: %s", username)
+	s.logger.Info("This could indicate:")
+	s.logger.Info("1. The user does not exist in the LDAP directory")
+	s.logger.Info("2. The Base DN is incorrect or too restrictive")
+	s.logger.Info("3. The user is in a different OU not covered by the Base DN")
+	s.logger.Info("4. Insufficient permissions for the admin account to search")
+}
+
+// DiagnoseDirectory 诊断 LDAP 目录结构，帮助确定正确的配置
+func (s *Service) DiagnoseDirectory() error {
+	if !s.config.Enabled {
+		return fmt.Errorf("LDAP is not enabled")
+	}
+
+	conn, err := s.connect()
+	if err != nil {
+		return fmt.Errorf("failed to connect: %w", err)
+	}
+	defer conn.Close()
+
+	if err := s.bindAdmin(conn); err != nil {
+		return fmt.Errorf("failed to bind admin: %w", err)
+	}
+
+	s.logger.Info("=== LDAP Directory Diagnosis ===")
+	s.logger.Infof("Base DN: %s", s.config.BaseDN)
+
+	// 搜索组织单位
+	s.logger.Info("--- Organizational Units ---")
+	ouSearchRequest := ldap.NewSearchRequest(
+		s.config.BaseDN,
+		ldap.ScopeWholeSubtree,
+		ldap.NeverDerefAliases,
+		20,
+		0,
+		false,
+		"(objectClass=organizationalUnit)",
+		[]string{"dn", "ou", "description"},
+		nil,
+	)
+
+	ouResult, err := conn.Search(ouSearchRequest)
+	if err != nil {
+		s.logger.Warningf("Failed to search OUs: %v", err)
+	} else {
+		for i, entry := range ouResult.Entries {
+			s.logger.Infof("OU %d: %s", i+1, entry.DN)
+			if desc := entry.GetAttributeValue("description"); desc != "" {
+				s.logger.Infof("  Description: %s", desc)
+			}
+		}
+	}
+
+	// 搜索前几个用户样本
+	s.logger.Info("--- Sample Users (first 5) ---")
+	userSearchRequest := ldap.NewSearchRequest(
+		s.config.BaseDN,
+		ldap.ScopeWholeSubtree,
+		ldap.NeverDerefAliases,
+		5,
+		0,
+		false,
+		"(objectClass=person)",
+		[]string{"dn", "uid", "cn", "sAMAccountName", "userPrincipalName", "mail", "displayName"},
+		nil,
+	)
+
+	userResult, err := conn.Search(userSearchRequest)
+	if err != nil {
+		s.logger.Warningf("Failed to search users: %v", err)
+	} else {
+		for i, entry := range userResult.Entries {
+			s.logger.Infof("User %d: %s", i+1, entry.DN)
+			s.logger.Infof("  uid: %s", entry.GetAttributeValue("uid"))
+			s.logger.Infof("  cn: %s", entry.GetAttributeValue("cn"))
+			s.logger.Infof("  sAMAccountName: %s", entry.GetAttributeValue("sAMAccountName"))
+			s.logger.Infof("  userPrincipalName: %s", entry.GetAttributeValue("userPrincipalName"))
+			s.logger.Infof("  mail: %s", entry.GetAttributeValue("mail"))
+			s.logger.Infof("  displayName: %s", entry.GetAttributeValue("displayName"))
+		}
+	}
+
+	s.logger.Info("=== End of Diagnosis ===")
+	return nil
 }

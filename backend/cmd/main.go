@@ -89,6 +89,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		auth.POST("/change-password", handlers.Auth.AuthMiddleware(), handlers.Auth.ChangePassword)
 		auth.GET("/profile/stats", handlers.Auth.AuthMiddleware(), handlers.Auth.GetProfileStats)
 		auth.POST("/test-ldap", handlers.Auth.AuthMiddleware(), handlers.Auth.TestLDAPConnection)
+		auth.POST("/diagnose-ldap", handlers.Auth.AuthMiddleware(), handlers.Auth.DiagnoseLDAP)
 	}
 
 	protected := api.Group("/")
