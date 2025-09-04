@@ -254,7 +254,13 @@
                           class="ownership-legend-color" 
                           :style="{ backgroundColor: item.color }"
                         ></span>
-                        <span class="ownership-legend-name">{{ item.name }}</span>
+                        <el-tooltip
+                          :content="item.name"
+                          placement="top"
+                          :disabled="item.name.length <= 15"
+                        >
+                          <span class="ownership-legend-name">{{ item.name }}</span>
+                        </el-tooltip>
                       </div>
                       <div class="ownership-legend-stats">
                         <span class="ownership-legend-count">{{ item.count }}</span>
@@ -1185,8 +1191,8 @@ onUnmounted(() => {
 .ownership-legend {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 10px;
   align-content: start;
   overflow-y: auto;
   padding: 4px;
@@ -1216,8 +1222,10 @@ onUnmounted(() => {
 .ownership-legend-indicator {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
+  flex: 1;
+  min-width: 0;
 }
 
 .ownership-legend-color {
@@ -1231,6 +1239,16 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 500;
   color: #333;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+  transition: all 0.2s ease;
+}
+
+.ownership-legend-name:hover {
+  color: #1890ff;
 }
 
 .ownership-legend-stats {
@@ -1368,8 +1386,12 @@ onUnmounted(() => {
   }
   
   .ownership-legend {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
     gap: 6px 8px;
+  }
+  
+  .ownership-legend-name {
+    max-width: 80px;
   }
 }
 
@@ -1413,8 +1435,12 @@ onUnmounted(() => {
   }
   
   .ownership-legend {
-    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
     gap: 6px;
+  }
+  
+  .ownership-legend-name {
+    max-width: 70px;
   }
   
   .ownership-legend-item {
@@ -1457,6 +1483,10 @@ onUnmounted(() => {
   .ownership-legend {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+  
+  .ownership-legend-name {
+    max-width: 150px;
   }
   
   .ownership-legend-item {
