@@ -422,7 +422,7 @@
               <div class="resource-item">
                 <div class="resource-header">
                   <el-icon class="resource-icon pods-icon"><Grid /></el-icon>
-                  <span class="resource-label">Pods</span>
+                  <span class="resource-label">Pod</span>
                 </div>
                 <div class="resource-content">
                   <span class="resource-total">{{ row.capacity?.pods || '0' }}</span>
