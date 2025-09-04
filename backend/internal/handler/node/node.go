@@ -161,85 +161,6 @@ func (h *Handler) Get(c *gin.Context) {
 	})
 }
 
-// Drain 驱逐节点
-// @Summary 驱逐节点
-// @Description 驱逐节点上的所有Pod，并标记为不可调度
-// @Tags nodes
-// @Accept json
-// @Produce json
-// @Param node_name path string true "节点名称"
-// @Param request body node.DrainRequest true "驱逐请求"
-// @Success 200 {object} Response
-// @Failure 400 {object} Response
-// @Failure 500 {object} Response
-// @Router /nodes/{node_name}/drain [post]
-func (h *Handler) Drain(c *gin.Context) {
-	nodeName := c.Param("node_name")
-	if nodeName == "" {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    http.StatusBadRequest,
-			Message: "Node name is required",
-		})
-		return
-	}
-
-	var req node.DrainRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error("Failed to bind drain request: %v", err)
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    http.StatusBadRequest,
-			Message: "Invalid request parameters: " + err.Error(),
-		})
-		return
-	}
-
-	// 设置从路径参数获取的节点名称
-	req.NodeName = nodeName
-
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    http.StatusUnauthorized,
-			Message: "User not authenticated",
-		})
-		return
-	}
-
-	// 检查用户权限：只有 admin 和 user 角色可以驱逐节点
-	userRole, _ := c.Get("user_role")
-	if userRole != model.RoleAdmin && userRole != model.RoleUser {
-		c.JSON(http.StatusForbidden, Response{
-			Code:    http.StatusForbidden,
-			Message: "Insufficient permissions. Only admin and user roles can drain nodes",
-		})
-		return
-	}
-
-	// 验证节点操作权限
-	if err := h.nodeSvc.ValidateNodeOperation(req.ClusterName, req.NodeName, "drain"); err != nil {
-		h.logger.Warning("Node operation validation failed: %v", err)
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    http.StatusBadRequest,
-			Message: err.Error(),
-		})
-		return
-	}
-
-	if err := h.nodeSvc.Drain(req, userID.(uint)); err != nil {
-		h.logger.Error("Failed to drain node: %v", err)
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    http.StatusInternalServerError,
-			Message: "Failed to drain node: " + err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, Response{
-		Code:    http.StatusOK,
-		Message: "Node drained successfully",
-	})
-}
-
 // Cordon 禁止调度节点
 // @Summary 禁止调度节点
 // @Description 标记节点为不可调度（不驱逐现有Pod）
@@ -635,83 +556,6 @@ func (h *Handler) BatchUncordon(c *gin.Context) {
 	})
 }
 
-// BatchDrain 批量驱逐节点
-// @Summary 批量驱逐节点
-// @Description 批量驱逐节点上的所有Pod，并标记为不可调度
-// @Tags nodes
-// @Accept json
-// @Produce json
-// @Param request body node.BatchDrainRequest true "批量驱逐请求"
-// @Success 200 {object} Response
-// @Failure 400 {object} Response
-// @Failure 500 {object} Response
-// @Router /nodes/batch-drain [post]
-func (h *Handler) BatchDrain(c *gin.Context) {
-	var req node.BatchDrainRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error("Failed to bind batch drain request: %v", err)
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    http.StatusBadRequest,
-			Message: "Invalid request parameters: " + err.Error(),
-		})
-		return
-	}
-
-	if len(req.Nodes) == 0 {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    http.StatusBadRequest,
-			Message: "At least one node is required",
-		})
-		return
-	}
-
-	if req.ClusterName == "" {
-		req.ClusterName = c.Query("cluster_name")
-		if req.ClusterName == "" {
-			c.JSON(http.StatusBadRequest, Response{
-				Code:    http.StatusBadRequest,
-				Message: "cluster_name is required",
-			})
-			return
-		}
-	}
-
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, Response{
-			Code:    http.StatusUnauthorized,
-			Message: "User not authenticated",
-		})
-		return
-	}
-
-	// 检查用户权限：只有 admin 和 user 角色可以批量驱逐节点
-	userRole, _ := c.Get("user_role")
-	if userRole != model.RoleAdmin && userRole != model.RoleUser {
-		c.JSON(http.StatusForbidden, Response{
-			Code:    http.StatusForbidden,
-			Message: "Insufficient permissions. Only admin and user roles can batch drain nodes",
-		})
-		return
-	}
-
-	results, err := h.nodeSvc.BatchDrain(req, userID.(uint))
-	if err != nil {
-		h.logger.Error("Failed to batch drain nodes: %v", err)
-		c.JSON(http.StatusInternalServerError, Response{
-			Code:    http.StatusInternalServerError,
-			Message: "Failed to batch drain nodes: " + err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, Response{
-		Code:    http.StatusOK,
-		Message: "Batch drain completed",
-		Data:    results,
-	})
-}
-
 // GetCordonHistory 获取节点禁止调度历史
 // @Summary 获取节点禁止调度历史
 // @Description 获取指定节点的禁止调度历史记录
@@ -775,6 +619,65 @@ func (h *Handler) GetCordonHistory(c *gin.Context) {
 		Code:    http.StatusOK,
 		Message: "Success",
 		Data:    history,
+	})
+}
+
+// GetNodeCordonInfo 获取节点禁止调度信息
+// @Summary 获取节点禁止调度信息
+// @Description 获取节点的禁止调度信息，包括原因和时间戳
+// @Tags nodes
+// @Produce json
+// @Param cluster_name query string true "集群名称"
+// @Param node_name path string true "节点名称"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /nodes/{node_name}/cordon-info [get]
+func (h *Handler) GetNodeCordonInfo(c *gin.Context) {
+	nodeName := c.Param("node_name")
+	clusterName := c.Query("cluster_name")
+
+	if nodeName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Node name is required",
+		})
+		return
+	}
+
+	if clusterName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "cluster_name is required",
+		})
+		return
+	}
+
+	_, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// Note: 审计日志由service层处理
+
+	info, err := h.nodeSvc.GetNodeCordonInfo(clusterName, nodeName)
+	if err != nil {
+		h.logger.Error("Failed to get node cordon info: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to get node cordon info: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Success",
+		Data:    info,
 	})
 }
 

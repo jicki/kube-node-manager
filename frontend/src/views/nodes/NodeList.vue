@@ -186,10 +186,6 @@
           <el-icon><Unlock /></el-icon>
           解除调度
         </el-button>
-        <el-button type="danger" @click="batchDrain" :loading="batchLoading.drain">
-          <el-icon><Download /></el-icon>
-          批量驱逐
-        </el-button>
         <el-divider direction="vertical" />
         <el-button type="warning" @click="showBatchDeleteLabelsDialog" :loading="batchLoading.deleteLabels">
           <el-icon><CollectionTag /></el-icon>
@@ -535,10 +531,6 @@
                 </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="drain">
-                      <el-icon><Download /></el-icon>
-                      驱逐Pod
-                    </el-dropdown-item>
                     <el-dropdown-item command="labels">
                       <el-icon><CollectionTag /></el-icon>
                       管理标签
@@ -576,16 +568,6 @@
       @refresh="refreshData"
     />
 
-    <!-- 驱逐确认对话框 -->
-    <ConfirmDialog
-      v-model="drainConfirmVisible"
-      title="确认驱逐操作"
-      :message="drainConfirmMessage"
-      :details="drainDetails"
-      dangerous
-      confirm-text="确认驱逐"
-      @confirm="confirmDrain"
-    />
 
     <!-- 禁止调度确认对话框 -->
     <el-dialog
@@ -852,9 +834,6 @@ const taintValueFilter = ref('')
 const taintEffectFilter = ref('')
 const nodeOwnershipFilter = ref('')
 const detailDialogVisible = ref(false)
-const drainConfirmVisible = ref(false)
-const drainConfirmMessage = ref('')
-const drainDetails = ref([])
 
 // 禁止调度确认对话框相关
 const cordonConfirmVisible = ref(false)
@@ -870,7 +849,6 @@ const cordonReasonForm = ref({
 const batchLoading = reactive({
   cordon: false,
   uncordon: false,
-  drain: false,
   deleteLabels: false,
   deleteTaints: false
 })
@@ -1131,36 +1109,11 @@ const uncordonNode = async (node) => {
 }
 
 // 驱逐节点
-const drainNode = (node) => {
-  drainConfirmMessage.value = `确认要驱逐节点 "${node.name}" 上的所有Pod吗？`
-  drainDetails.value = [
-    '此操作将会:',
-    '1. 将节点标记为不可调度',
-    '2. 驱逐节点上的所有Pod',
-    '3. 等待Pod优雅终止',
-    '请确保已经做好相应的准备工作'
-  ]
-  selectedNode.value = node
-  drainConfirmVisible.value = true
-}
 
-// 确认驱逐
-const confirmDrain = async () => {
-  try {
-    await nodeStore.drainNode(selectedNode.value.name)
-    ElMessage.success(`节点 ${selectedNode.value.name} 驱逐操作已开始`)
-    refreshData()
-  } catch (error) {
-    ElMessage.error(`驱逐节点失败: ${error.message}`)
-  }
-}
 
 // 处理节点操作
 const handleNodeAction = (command, node) => {
   switch (command) {
-    case 'drain':
-      drainNode(node)
-      break
     case 'labels':
       // 跳转到标签管理页面，传递节点信息
       router.push({
@@ -1233,35 +1186,6 @@ const batchUncordon = async () => {
   }
 }
 
-const batchDrain = async () => {
-  if (selectedNodes.value.length === 0) return
-  
-  ElMessageBox.confirm(
-    `确认要驱逐选中的 ${selectedNodes.value.length} 个节点上的所有Pod吗？`,
-    '批量驱逐确认',
-    {
-      confirmButtonText: '确认驱逐',
-      cancelButtonText: '取消',
-      type: 'warning',
-      confirmButtonClass: 'el-button--danger'
-    }
-  ).then(async () => {
-    try {
-      batchLoading.drain = true
-      const nodeNames = selectedNodes.value.map(node => node.name)
-      await nodeStore.batchDrain(nodeNames)
-      ElMessage.success(`成功开始驱逐 ${nodeNames.length} 个节点`)
-      clearSelection()
-      refreshData()
-    } catch (error) {
-      ElMessage.error(`批量驱逐失败: ${error.message}`)
-    } finally {
-      batchLoading.drain = false
-    }
-  }).catch(() => {
-    // 用户取消
-  })
-}
 
 // 清空选择
 const clearSelection = () => {

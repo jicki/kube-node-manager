@@ -42,17 +42,6 @@ const nodeApi = {
     })
   },
 
-  // 驱逐节点
-  drainNode(nodeName, clusterName, options = {}) {
-    return request({
-      url: `/api/v1/nodes/${nodeName}/drain`,
-      method: 'post',
-      data: {
-        cluster_name: clusterName,
-        ...options
-      }
-    })
-  },
 
   // 批量禁止调度节点
   batchCordon(nodeNames, clusterName, reason = '') {
@@ -80,18 +69,6 @@ const nodeApi = {
     })
   },
 
-  // 批量驱逐节点
-  batchDrain(nodeNames, clusterName, options = {}) {
-    return request({
-      url: '/api/v1/nodes/batch-drain',
-      method: 'post',
-      data: { 
-        nodes: nodeNames, 
-        cluster_name: clusterName,
-        options 
-      }
-    })
-  },
 
   // 获取节点资源使用情况
   getNodeResources(nodeName) {

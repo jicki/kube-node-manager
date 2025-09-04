@@ -35,13 +35,6 @@ type GetRequest struct {
 	NodeName    string `json:"node_name" binding:"required"`
 }
 
-// DrainRequest 驱逐节点请求
-type DrainRequest struct {
-	ClusterName string `json:"cluster_name" binding:"required"`
-	NodeName    string `json:"node_name"` // 从URL路径参数获取，不需要binding验证
-	Force       bool   `json:"force"`
-}
-
 // CordonRequest 禁止调度节点请求
 type CordonRequest struct {
 	ClusterName string `json:"cluster_name" binding:"required"`
@@ -54,13 +47,6 @@ type BatchNodeRequest struct {
 	ClusterName string   `json:"cluster_name"`
 	Nodes       []string `json:"nodes" binding:"required"`
 	Reason      string   `json:"reason"` // 批量操作的原因说明
-}
-
-// BatchDrainRequest 批量驱逐请求
-type BatchDrainRequest struct {
-	ClusterName string                 `json:"cluster_name"`
-	Nodes       []string               `json:"nodes" binding:"required"`
-	Options     map[string]interface{} `json:"options,omitempty"`
 }
 
 // NodeMetrics 节点指标
@@ -164,40 +150,10 @@ func (s *Service) Get(req GetRequest, userID uint) (*k8s.NodeInfo, error) {
 	return node, nil
 }
 
-// Drain 驱逐节点
-func (s *Service) Drain(req DrainRequest, userID uint) error {
-	err := s.k8sSvc.DrainNode(req.ClusterName, req.NodeName)
-	if err != nil {
-		s.logger.Errorf("Failed to drain node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
-		s.auditSvc.Log(audit.LogRequest{
-			UserID:       userID,
-			NodeName:     req.NodeName,
-			Action:       model.ActionUpdate,
-			ResourceType: model.ResourceNode,
-			Details:      fmt.Sprintf("Failed to drain node %s for cluster %s", req.NodeName, req.ClusterName),
-			Status:       model.AuditStatusFailed,
-			ErrorMsg:     err.Error(),
-		})
-		return fmt.Errorf("failed to drain node: %w", err)
-	}
-
-	s.logger.Infof("Successfully drained node %s for cluster %s", req.NodeName, req.ClusterName)
-	s.auditSvc.Log(audit.LogRequest{
-		UserID:       userID,
-		NodeName:     req.NodeName,
-		Action:       model.ActionUpdate,
-		ResourceType: model.ResourceNode,
-		Details:      fmt.Sprintf("Drained node %s for cluster %s", req.NodeName, req.ClusterName),
-		Status:       model.AuditStatusSuccess,
-	})
-
-	return nil
-}
-
 // Cordon 禁止调度节点（标记为不可调度）
 func (s *Service) Cordon(req CordonRequest, userID uint) error {
-	// 执行禁止调度操作（仅设置不可调度，不删除pods）
-	err := s.k8sSvc.CordonNode(req.ClusterName, req.NodeName)
+	// 执行禁止调度操作（仅设置不可调度，不删除pods），并添加原因注释
+	err := s.k8sSvc.CordonNodeWithReason(req.ClusterName, req.NodeName, req.Reason)
 	if err != nil {
 		s.logger.Errorf("Failed to cordon node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
 		reasonMsg := ""
@@ -457,19 +413,12 @@ func (s *Service) GetNodesByLabels(clusterName string, labels map[string]string,
 // ValidateNodeOperation 验证节点操作权限
 func (s *Service) ValidateNodeOperation(clusterName, nodeName string, operation string) error {
 	// 获取节点信息进行验证
-	node, err := s.k8sSvc.GetNode(clusterName, nodeName)
+	_, err := s.k8sSvc.GetNode(clusterName, nodeName)
 	if err != nil {
 		return fmt.Errorf("failed to get node for validation: %w", err)
 	}
 
 	switch operation {
-	case "drain":
-		// 检查是否是master节点
-		for _, role := range node.Roles {
-			if strings.ToLower(role) == "master" || strings.ToLower(role) == "control-plane" {
-				return fmt.Errorf("cannot drain master/control-plane node: %s", nodeName)
-			}
-		}
 	case "delete":
 		// 通常不允许通过此API删除节点
 		return fmt.Errorf("node deletion is not allowed through this API")
@@ -556,56 +505,9 @@ func (s *Service) BatchUncordon(req BatchNodeRequest, userID uint) (map[string]i
 	return results, nil
 }
 
-// BatchDrain 批量驱逐节点
-func (s *Service) BatchDrain(req BatchDrainRequest, userID uint) (map[string]interface{}, error) {
-	results := make(map[string]interface{})
-	errors := make(map[string]string)
-	successful := make([]string, 0)
-
-	for _, nodeName := range req.Nodes {
-		// 验证节点是否可以驱逐
-		if err := s.ValidateNodeOperation(req.ClusterName, nodeName, "drain"); err != nil {
-			errors[nodeName] = err.Error()
-			continue
-		}
-
-		drainReq := DrainRequest{
-			ClusterName: req.ClusterName,
-			NodeName:    nodeName,
-			Force:       false, // 默认不强制
-		}
-
-		// 检查options中是否有force参数
-		if req.Options != nil {
-			if force, ok := req.Options["force"].(bool); ok {
-				drainReq.Force = force
-			}
-		}
-
-		if err := s.Drain(drainReq, userID); err != nil {
-			errors[nodeName] = err.Error()
-			s.logger.Errorf("Failed to drain node %s: %v", nodeName, err)
-		} else {
-			successful = append(successful, nodeName)
-		}
-	}
-
-	results["successful"] = successful
-	results["errors"] = errors
-	results["total"] = len(req.Nodes)
-	results["success_count"] = len(successful)
-	results["error_count"] = len(errors)
-
-	// 记录审计日志
-	s.auditSvc.Log(audit.LogRequest{
-		UserID:       userID,
-		Action:       model.ActionUpdate,
-		ResourceType: model.ResourceNode,
-		Details:      fmt.Sprintf("Batch drain %d nodes in cluster %s: %d successful, %d failed", len(req.Nodes), req.ClusterName, len(successful), len(errors)),
-		Status:       model.AuditStatusSuccess,
-	})
-
-	return results, nil
+// GetNodeCordonInfo 获取节点的禁止调度信息（从annotations）
+func (s *Service) GetNodeCordonInfo(clusterName, nodeName string) (map[string]interface{}, error) {
+	return s.k8sSvc.GetNodeCordonInfo(clusterName, nodeName)
 }
 
 // GetCordonHistory 获取节点的禁止调度历史

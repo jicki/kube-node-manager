@@ -427,20 +427,6 @@ export const useNodeStore = defineStore('node', {
       }
     },
 
-    async drainNode(nodeName, options = {}) {
-      try {
-        const clusterStore = useClusterStore()
-        const clusterName = clusterStore.currentClusterName
-        if (!clusterName) {
-          throw new Error('请先选择集群')
-        }
-        const response = await nodeApi.drainNode(nodeName, clusterName, options)
-        await this.fetchNodes()
-        return response
-      } catch (error) {
-        throw error
-      }
-    },
 
     async batchCordon(nodeNames, reason = '') {
       try {

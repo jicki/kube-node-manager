@@ -348,68 +348,6 @@ func (s *Service) UpdateNodeTaints(clusterName string, req TaintUpdateRequest) e
 	return nil
 }
 
-// DrainNode 驱逐节点
-func (s *Service) DrainNode(clusterName, nodeName string) error {
-	client, err := s.getClient(clusterName)
-	if err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	// 首先标记节点为不可调度
-	node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to get node: %w", err)
-	}
-
-	node.Spec.Unschedulable = true
-	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to cordon node: %w", err)
-	}
-
-	// 获取节点上的pods
-	pods, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
-		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list pods on node: %w", err)
-	}
-
-	// 驱逐pods
-	for _, pod := range pods.Items {
-		// 跳过DaemonSet管理的pods和已经在删除的pods
-		if pod.DeletionTimestamp != nil {
-			continue
-		}
-
-		// 检查是否是DaemonSet
-		isDaemonSet := false
-		for _, owner := range pod.OwnerReferences {
-			if owner.Kind == "DaemonSet" {
-				isDaemonSet = true
-				break
-			}
-		}
-		if isDaemonSet {
-			continue
-		}
-
-		// 删除pod
-		err = client.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{
-			GracePeriodSeconds: func() *int64 { i := int64(30); return &i }(),
-		})
-		if err != nil {
-			s.logger.Warningf("Failed to delete pod %s/%s: %v", pod.Namespace, pod.Name, err)
-		}
-	}
-
-	s.logger.Infof("Successfully drained node %s in cluster %s", nodeName, clusterName)
-	return nil
-}
-
 // CordonNode 禁止调度节点（仅设置不可调度，不删除pod）
 func (s *Service) CordonNode(clusterName, nodeName string) error {
 	client, err := s.getClient(clusterName)
@@ -441,6 +379,46 @@ func (s *Service) CordonNode(clusterName, nodeName string) error {
 	return nil
 }
 
+// CordonNodeWithReason 禁止调度节点并添加原因注释
+func (s *Service) CordonNodeWithReason(clusterName, nodeName, reason string) error {
+	client, err := s.getClient(clusterName)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get node: %w", err)
+	}
+
+	// 设置不可调度
+	node.Spec.Unschedulable = true
+
+	// 添加或更新annotation
+	if node.Annotations == nil {
+		node.Annotations = make(map[string]string)
+	}
+
+	// 添加禁止调度的原因注释
+	if reason != "" {
+		node.Annotations["deeproute.cn/kube-node-mgr"] = reason
+	}
+
+	// 添加禁止调度的时间戳
+	node.Annotations["deeproute.cn/kube-node-mgr-timestamp"] = fmt.Sprintf("%d", time.Now().Unix())
+
+	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to cordon node with reason: %w", err)
+	}
+
+	s.logger.Infof("Successfully cordoned node %s in cluster %s with reason: %s", nodeName, clusterName, reason)
+	return nil
+}
+
 // UncordonNode 取消节点驱逐
 func (s *Service) UncordonNode(clusterName, nodeName string) error {
 	client, err := s.getClient(clusterName)
@@ -463,6 +441,13 @@ func (s *Service) UncordonNode(clusterName, nodeName string) error {
 	}
 
 	node.Spec.Unschedulable = false
+
+	// 删除相关的annotations
+	if node.Annotations != nil {
+		delete(node.Annotations, "deeproute.cn/kube-node-mgr")
+		delete(node.Annotations, "deeproute.cn/kube-node-mgr-timestamp")
+	}
+
 	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to uncordon node: %w", err)
@@ -470,6 +455,36 @@ func (s *Service) UncordonNode(clusterName, nodeName string) error {
 
 	s.logger.Infof("Successfully uncordoned node %s in cluster %s", nodeName, clusterName)
 	return nil
+}
+
+// GetNodeCordonInfo 获取节点的禁止调度信息
+func (s *Service) GetNodeCordonInfo(clusterName, nodeName string) (map[string]interface{}, error) {
+	client, err := s.getClient(clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get node: %w", err)
+	}
+
+	info := make(map[string]interface{})
+	info["cordoned"] = node.Spec.Unschedulable
+
+	if node.Spec.Unschedulable && node.Annotations != nil {
+		if reason, exists := node.Annotations["deeproute.cn/kube-node-mgr"]; exists {
+			info["reason"] = reason
+		}
+		if timestamp, exists := node.Annotations["deeproute.cn/kube-node-mgr-timestamp"]; exists {
+			info["timestamp"] = timestamp
+		}
+	}
+
+	return info, nil
 }
 
 // nodeToNodeInfo 转换节点信息
