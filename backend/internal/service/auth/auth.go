@@ -119,20 +119,28 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 	} else {
 		// 用户存在（可能被软删除）
 		if user.DeletedAt.Valid {
-			// 用户被软删除，检查是否为 LDAP 用户并尝试恢复
-			if user.IsLDAPUser && s.ldap.IsEnabled() {
-				s.logger.Infof("Found soft-deleted LDAP user %s, attempting LDAP authentication for recovery", req.Username)
+			// 用户被软删除，首先尝试 LDAP 认证
+			if s.ldap.IsEnabled() {
+				s.logger.Infof("Found soft-deleted user %s, attempting LDAP authentication for recovery/conversion", req.Username)
 				ldapUser, ldapErr := s.ldap.Authenticate(ldap.AuthRequest{
 					Username: req.Username,
 					Password: req.Password,
 				})
 				if ldapErr != nil {
 					s.logger.Warningf("LDAP authentication failed for soft-deleted user %s: %v", req.Username, ldapErr)
+
+					// 如果 LDAP 认证失败且用户原本就不是 LDAP 用户，则拒绝登录
+					if !user.IsLDAPUser {
+						s.logger.Warningf("Soft-deleted local user %s failed LDAP authentication, access denied", req.Username)
+						return nil, errors.New("account not found")
+					}
+
+					// 如果是原 LDAP 用户但认证失败，记录审计日志
 					s.audit.Log(audit.LogRequest{
 						UserID:       user.ID,
 						Action:       model.ActionLogin,
 						ResourceType: model.ResourceUser,
-						Details:      fmt.Sprintf("Failed LDAP login attempt for soft-deleted user: %s - %s", req.Username, ldapErr.Error()),
+						Details:      fmt.Sprintf("Failed LDAP login attempt for soft-deleted LDAP user: %s - %s", req.Username, ldapErr.Error()),
 						Status:       model.AuditStatusFailed,
 						ErrorMsg:     "LDAP authentication failed",
 						IPAddress:    ipAddress,
@@ -141,21 +149,28 @@ func (s *Service) Login(req LoginRequest, ipAddress, userAgent string) (*LoginRe
 					return nil, errors.New("invalid credentials")
 				}
 
-				// LDAP 认证成功，恢复用户并更新信息
-				s.logger.Infof("LDAP authentication successful, restoring soft-deleted user %s", req.Username)
+				// LDAP 认证成功，恢复/转换用户
+				if user.IsLDAPUser {
+					s.logger.Infof("LDAP authentication successful, restoring soft-deleted LDAP user %s", req.Username)
+				} else {
+					s.logger.Infof("LDAP authentication successful, converting soft-deleted local user %s to LDAP user", req.Username)
+				}
+
 				user.DeletedAt = gorm.DeletedAt{}
 				user.Email = ldapUser.Email
 				user.Status = model.StatusActive
 				user.IsLDAPUser = true
+				user.Role = model.RoleViewer // 确保转换后的用户使用默认 LDAP 角色
+
 				if err := s.db.Unscoped().Save(&user).Error; err != nil {
-					s.logger.Errorf("Failed to restore soft-deleted LDAP user %s: %v", req.Username, err)
+					s.logger.Errorf("Failed to restore/convert soft-deleted user %s: %v", req.Username, err)
 					return nil, err
 				}
-				s.logger.Infof("Successfully restored LDAP user %s (ID: %d)", req.Username, user.ID)
+				s.logger.Infof("Successfully restored/converted user %s to LDAP user (ID: %d)", req.Username, user.ID)
 				isLDAPAuth = true
 			} else {
-				// 非 LDAP 用户被软删除，拒绝登录
-				s.logger.Warningf("Attempt to login with soft-deleted non-LDAP user %s", req.Username)
+				// LDAP 未启用，拒绝软删除用户登录
+				s.logger.Warningf("Attempt to login with soft-deleted user %s, but LDAP is disabled", req.Username)
 				return nil, errors.New("account not found")
 			}
 		} else {
