@@ -49,6 +49,12 @@ type BatchNodeRequest struct {
 	Reason      string   `json:"reason"` // 批量操作的原因说明
 }
 
+// CordonInfoRequest 获取禁止调度信息请求
+type CordonInfoRequest struct {
+	ClusterName string `json:"cluster_name" binding:"required"`
+	NodeName    string `json:"node_name" binding:"required"`
+}
+
 // NodeMetrics 节点指标
 type NodeMetrics struct {
 	NodeName    string              `json:"node_name"`

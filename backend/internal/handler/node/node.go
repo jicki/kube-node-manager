@@ -626,18 +626,25 @@ func (h *Handler) GetCordonHistory(c *gin.Context) {
 // @Summary 获取节点禁止调度信息
 // @Description 获取节点的禁止调度信息，包括原因和时间戳
 // @Tags nodes
+// @Accept json
 // @Produce json
-// @Param cluster_name query string true "集群名称"
-// @Param node_name path string true "节点名称"
+// @Param request body node.CordonInfoRequest true "获取禁止调度信息请求"
 // @Success 200 {object} Response
 // @Failure 400 {object} Response
 // @Failure 500 {object} Response
-// @Router /nodes/{node_name}/cordon-info [get]
+// @Router /nodes/cordon-info [post]
 func (h *Handler) GetNodeCordonInfo(c *gin.Context) {
-	nodeName := c.Param("node_name")
-	clusterName := c.Query("cluster_name")
+	var req node.CordonInfoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind cordon info request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
 
-	if nodeName == "" {
+	if req.NodeName == "" {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: "Node name is required",
@@ -645,7 +652,7 @@ func (h *Handler) GetNodeCordonInfo(c *gin.Context) {
 		return
 	}
 
-	if clusterName == "" {
+	if req.ClusterName == "" {
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: "cluster_name is required",
@@ -664,7 +671,7 @@ func (h *Handler) GetNodeCordonInfo(c *gin.Context) {
 
 	// Note: 审计日志由service层处理
 
-	info, err := h.nodeSvc.GetNodeCordonInfo(clusterName, nodeName)
+	info, err := h.nodeSvc.GetNodeCordonInfo(req.ClusterName, req.NodeName)
 	if err != nil {
 		h.logger.Error("Failed to get node cordon info: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
