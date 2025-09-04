@@ -251,7 +251,7 @@
           prop="name"
           label="节点名称"
           sortable="custom"
-          min-width="150"
+          min-width="200"
         >
           <template #default="{ row }">
             <div class="node-name-cell">
