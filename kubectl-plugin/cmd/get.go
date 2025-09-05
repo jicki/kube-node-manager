@@ -31,16 +31,16 @@ var getCmd = &cobra.Command{
 如果不指定节点名称，将显示所有节点的调度状态信息。
 可以使用标签选择器来过滤节点。`,
 	Example: `  # 查看所有节点的调度状态
-  kubectl node-mgr get
+  kubectl node_mgr get
 
   # 查看特定节点的调度状态
-  kubectl node-mgr get node1
+  kubectl node_mgr get node1
 
   # 使用标签选择器过滤节点
-  kubectl node-mgr get -l "kubernetes.io/arch=amd64"
+  kubectl node_mgr get -l "kubernetes.io/arch=amd64"
 
   # 以 JSON 格式输出
-  kubectl node-mgr get -o json`,
+  kubectl node_mgr get -o json`,
 	Run: func(cmd *cobra.Command, args []string) {
 		runGetCommand(args)
 	},

@@ -1,4 +1,4 @@
-# kubectl-node-mgr 插件
+# kubectl-node_mgr 插件
 
 这是一个 kubectl 插件，用于管理 Kubernetes 节点的归属标签和 cordon 操作。
 
@@ -19,7 +19,7 @@ go build -o kubectl-node-mgr main.go
 sudo mv kubectl-node-mgr /usr/local/bin/
 
 # 验证安装
-kubectl node-mgr --help
+kubectl node_mgr --help
 ```
 
 ### 方式二：使用 Makefile
@@ -34,77 +34,77 @@ make install-plugin
 
 查看所有节点的调度状态，包括是否被 cordon、禁止调度的原因和时间：
 ```bash
-kubectl node-mgr get
+kubectl node_mgr get
 ```
 
 查看特定节点的调度状态：
 ```bash
-kubectl node-mgr get node1
+kubectl node_mgr get node1
 ```
 
 输出格式化选项：
 ```bash
 # 表格格式（默认）
-kubectl node-mgr get -o table
+kubectl node_mgr get -o table
 
 # JSON 格式
-kubectl node-mgr get -o json
+kubectl node_mgr get -o json
 
 # YAML 格式
-kubectl node-mgr get -o yaml
+kubectl node_mgr get -o yaml
 ```
 
 ### 2. 查看节点归属标签
 
 查看所有节点的 `deeproute.cn/user-type` 标签：
 ```bash
-kubectl node-mgr labels
+kubectl node_mgr labels
 ```
 
 查看特定节点的归属：
 ```bash
-kubectl node-mgr labels node1
+kubectl node_mgr labels node1
 ```
 
 输出格式化选项：
 ```bash
 # 表格格式（默认）
-kubectl node-mgr labels -o table
+kubectl node_mgr labels -o table
 
 # JSON 格式
-kubectl node-mgr labels -o json
+kubectl node_mgr labels -o json
 
 # YAML 格式
-kubectl node-mgr labels -o yaml
+kubectl node_mgr labels -o yaml
 ```
 
 ### 3. Cordon 节点管理
 
 对节点执行 cordon 并添加说明：
 ```bash
-kubectl node-mgr cordon node1 --reason "维护升级"
+kubectl node_mgr cordon node1 --reason "维护升级"
 ```
 
 批量 cordon 多个节点：
 ```bash
-kubectl node-mgr cordon node1,node2,node3 --reason "集群维护"
+kubectl node_mgr cordon node1,node2,node3 --reason "集群维护"
 ```
 
 查看已 cordon 的节点及其说明：
 ```bash
-kubectl node-mgr cordon list
+kubectl node_mgr cordon list
 ```
 
 取消 cordon（uncordon）：
 ```bash
-kubectl node-mgr uncordon node1
+kubectl node_mgr uncordon node1
 ```
 
 ## 命令参考
 
 ### get 子命令
 ```bash
-kubectl node-mgr get [NODE_NAME] [flags]
+kubectl node_mgr get [NODE_NAME] [flags]
 
 Flags:
   -o, --output string   输出格式 (table|json|yaml) (default "table")
@@ -113,7 +113,7 @@ Flags:
 
 ### labels 子命令
 ```bash
-kubectl node-mgr labels [NODE_NAME] [flags]
+kubectl node_mgr labels [NODE_NAME] [flags]
 
 Flags:
   -o, --output string   输出格式 (table|json|yaml) (default "table")
@@ -123,7 +123,7 @@ Flags:
 
 ### cordon 子命令
 ```bash
-kubectl node-mgr cordon NODE_NAME[,NODE_NAME...] [flags]
+kubectl node_mgr cordon NODE_NAME[,NODE_NAME...] [flags]
 
 Flags:
       --reason string     Cordon 原因 (required)
@@ -131,12 +131,12 @@ Flags:
 
 ### uncordon 子命令
 ```bash
-kubectl node-mgr uncordon NODE_NAME[,NODE_NAME...] [flags]
+kubectl node_mgr uncordon NODE_NAME[,NODE_NAME...] [flags]
 ```
 
 ### list 子命令
 ```bash
-kubectl node-mgr cordon list [flags]
+kubectl node_mgr cordon list [flags]
 
 Flags:
   -o, --output string   输出格式 (table|json|yaml) (default "table")
@@ -156,13 +156,13 @@ Flags:
 
 ```bash
 # 使用特定的上下文
-kubectl node-mgr get --context=production
+kubectl node_mgr get --context=production
 
 # 使用特定的 kubeconfig 文件
-kubectl node-mgr labels --kubeconfig=/path/to/config
+kubectl node_mgr labels --kubeconfig=/path/to/config
 
 # 组合使用
-kubectl node-mgr cordon node1 --reason "维护" --context=staging --kubeconfig=/path/to/config
+kubectl node_mgr cordon node1 --reason "维护" --context=staging --kubeconfig=/path/to/config
 ```
 
 ### 多集群配置支持
@@ -172,13 +172,13 @@ kubectl node-mgr cordon node1 --reason "维护" --context=staging --kubeconfig=/
 ```bash
 # 使用 KUBECONFIG 环境变量合并多个配置文件
 export KUBECONFIG=~/.kube/config:~/.kube/staging:~/.kube/production
-kubectl node-mgr get
+kubectl node_mgr get
 
 # 查看合并后的所有上下文
 kubectl config get-contexts
 
 # 使用特定上下文
-kubectl node-mgr get --context=staging-cluster
+kubectl node_mgr get --context=staging-cluster
 ```
 
 ### 故障排除
@@ -187,10 +187,10 @@ kubectl node-mgr get --context=staging-cluster
 
 ```bash
 # 启用调试模式查看详细的配置加载信息
-KUBECTL_NODE_MGR_DEBUG=1 kubectl node-mgr get
+KUBECTL_NODE_MGR_DEBUG=1 kubectl node_mgr get
 
 # 调试特定的 kubeconfig 文件
-KUBECTL_NODE_MGR_DEBUG=1 kubectl node-mgr get --kubeconfig=/path/to/your/config
+KUBECTL_NODE_MGR_DEBUG=1 kubectl node_mgr get --kubeconfig=/path/to/your/config
 ```
 
 调试模式会显示：
@@ -203,7 +203,7 @@ KUBECTL_NODE_MGR_DEBUG=1 kubectl node-mgr get --kubeconfig=/path/to/your/config
 
 ### 查看节点调度状态示例
 ```bash
-$ kubectl node-mgr get
+$ kubectl node_mgr get
 NAME     STATUS   ROLES    AGE    SCHEDULABLE          CORDON-REASON   CORDON-TIME
 node1    Ready    master   10d    Schedulable          -               -
 node2    Ready    worker   10d    SchedulingDisabled   系统维护         2024-01-15 10:30:00
@@ -212,7 +212,7 @@ node3    Ready    worker   10d    Schedulable          -               -
 
 ### 查看节点归属示例
 ```bash
-$ kubectl node-mgr labels
+$ kubectl node_mgr labels
 NAME     STATUS   ROLES    AGE   USER-TYPE
 node1    Ready    master   10d   admin
 node2    Ready    worker   10d   developer
@@ -221,10 +221,10 @@ node3    Ready    worker   10d   tester
 
 ### Cordon 操作示例
 ```bash
-$ kubectl node-mgr cordon node2 --reason "系统升级"
+$ kubectl node_mgr cordon node2 --reason "系统升级"
 Node node2 cordoned successfully with reason: 系统升级
 
-$ kubectl node-mgr cordon list
+$ kubectl node_mgr cordon list
 NAME     STATUS                     REASON      CORDON-TIME
 node2    SchedulingDisabled        系统升级     2024-01-15 10:30:00
 ```

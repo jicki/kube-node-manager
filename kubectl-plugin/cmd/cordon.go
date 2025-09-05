@@ -32,10 +32,10 @@ var cordonCmd = &cobra.Command{
 
 支持批量操作多个节点，节点名称用逗号分隔。`,
 	Example: `  # 对单个节点执行 cordon
-  kubectl node-mgr cordon node1 --reason "系统维护"
+  kubectl node_mgr cordon node1 --reason "系统维护"
 
   # 批量 cordon 多个节点
-  kubectl node-mgr cordon node1,node2,node3 --reason "集群升级"`,
+  kubectl node_mgr cordon node1,node2,node3 --reason "集群升级"`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runCordonCommand(args)
@@ -48,10 +48,10 @@ var cordonListCmd = &cobra.Command{
 	Short: "查看已 cordon 的节点及其说明",
 	Long:  `显示所有已被 cordon 的节点及其详细说明信息。`,
 	Example: `  # 查看所有已 cordon 的节点
-  kubectl node-mgr cordon list
+  kubectl node_mgr cordon list
 
   # 以 JSON 格式输出
-  kubectl node-mgr cordon list -o json`,
+  kubectl node_mgr cordon list -o json`,
 	Run: func(cmd *cobra.Command, args []string) {
 		runCordonListCommand()
 	},

@@ -32,19 +32,19 @@ var labelsCmd = &cobra.Command{
 如果不指定节点名称，将显示所有节点的标签信息。
 可以使用标签选择器来过滤节点。`,
 	Example: `  # 查看所有节点的用户类型标签
-  kubectl node-mgr labels
+  kubectl node_mgr labels
 
   # 查看特定节点的标签
-  kubectl node-mgr labels node1
+  kubectl node_mgr labels node1
 
   # 使用标签选择器过滤节点
-  kubectl node-mgr labels -l "kubernetes.io/arch=amd64"
+  kubectl node_mgr labels -l "kubernetes.io/arch=amd64"
 
   # 显示所有标签，不仅仅是用户类型
-  kubectl node-mgr labels --show-all
+  kubectl node_mgr labels --show-all
 
   # 以 JSON 格式输出
-  kubectl node-mgr labels -o json`,
+  kubectl node_mgr labels -o json`,
 	Run: func(cmd *cobra.Command, args []string) {
 		runLabelsCommand(args)
 	},

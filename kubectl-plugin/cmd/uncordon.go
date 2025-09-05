@@ -21,10 +21,10 @@ var uncordonCmd = &cobra.Command{
 
 支持批量操作多个节点，节点名称用逗号分隔。`,
 	Example: `  # 取消单个节点的 cordon 状态
-  kubectl node-mgr uncordon node1
+  kubectl node_mgr uncordon node1
 
   # 批量取消多个节点的 cordon 状态
-  kubectl node-mgr uncordon node1,node2,node3`,
+  kubectl node_mgr uncordon node1,node2,node3`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		runUncordonCommand(args)

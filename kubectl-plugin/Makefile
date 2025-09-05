@@ -9,7 +9,7 @@ BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS := -ldflags "-X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT) -X main.BuildDate=$(BUILD_DATE)"
 
 # 二进制文件名
-BINARY_NAME := kubectl-node-mgr
+BINARY_NAME := kubectl-node_mgr
 
 # 默认目标
 .PHONY: all
@@ -19,25 +19,25 @@ all: build
 .PHONY: build
 build:
 	@echo "构建 $(BINARY_NAME)..."
-	@go build $(LDFLAGS) -o $(BINARY_NAME) main.go
+	@CGO_ENABLED=0 go build $(LDFLAGS) -o $(BINARY_NAME) main.go
 
 # 构建多平台二进制文件
 .PHONY: build-all
 build-all:
 	@echo "构建多平台二进制文件..."
 	@mkdir -p dist
-	@GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-linux-amd64 main.go
-	@GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-linux-arm64 main.go
-	@GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-darwin-amd64 main.go
-	@GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-darwin-arm64 main.go
-	@GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-windows-amd64.exe main.go
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-linux-amd64 main.go
+	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-linux-arm64 main.go
+	@CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-darwin-amd64 main.go
+	@CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-darwin-arm64 main.go
+	@CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-windows-amd64.exe main.go
 
 # 安装插件到本地
 .PHONY: install
 install: build
 	@echo "安装 $(BINARY_NAME) 到 /usr/local/bin/..."
 	@sudo mv $(BINARY_NAME) /usr/local/bin/
-	@echo "安装完成！可以使用 'kubectl node-mgr --help' 来验证安装"
+	@echo "安装完成！可以使用 'kubectl node_mgr --help' 来验证安装"
 
 # 安装到用户本地 bin 目录
 .PHONY: install-user
@@ -46,7 +46,7 @@ install-user: build
 	@mkdir -p ~/bin
 	@mv $(BINARY_NAME) ~/bin/
 	@echo "安装完成！请确保 ~/bin 在您的 PATH 中"
-	@echo "可以使用 'kubectl node-mgr --help' 来验证安装"
+	@echo "可以使用 'kubectl node_mgr --help' 来验证安装"
 
 # 卸载插件
 .PHONY: uninstall

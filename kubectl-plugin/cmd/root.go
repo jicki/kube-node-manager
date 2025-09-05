@@ -22,31 +22,31 @@ func SetVersionInfo(v, commit, date string) {
 
 // rootCmd 代表基础命令
 var rootCmd = &cobra.Command{
-	Use:   "kubectl-node-mgr",
+	Use:   "kubectl-node_mgr",
 	Short: "Kubernetes 节点管理插件",
-	Long: `kubectl-node-mgr 是一个 kubectl 插件，用于管理 Kubernetes 节点。
+	Long: `kubectl-node_mgr 是一个 kubectl 插件，用于管理 Kubernetes 节点。
 
 功能包括：
 • 查看节点的 deeproute.cn/user-type 标签归属
 • 对节点执行 cordon 操作并添加详细说明 annotations
 • 管理节点的调度状态`,
 	Example: `  # 查看所有节点的调度状态
-  kubectl node-mgr get
+  kubectl node_mgr get
 
   # 查看所有节点的用户类型标签
-  kubectl node-mgr labels
+  kubectl node_mgr labels
 
   # 查看特定节点的标签
-  kubectl node-mgr labels node1
+  kubectl node_mgr labels node1
 
   # 对节点执行 cordon 操作
-  kubectl node-mgr cordon node1 --reason "维护升级"
+  kubectl node_mgr cordon node1 --reason "维护升级"
 
   # 查看已 cordon 的节点
-  kubectl node-mgr cordon list
+  kubectl node_mgr cordon list
 
   # 取消节点的 cordon 状态
-  kubectl node-mgr uncordon node1`,
+  kubectl node_mgr uncordon node1`,
 }
 
 // Execute 添加所有子命令到根命令并设置标志
@@ -60,7 +60,7 @@ func init() {
 		Use:   "version",
 		Short: "显示版本信息",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("kubectl-node-mgr %s\n", version)
+			fmt.Printf("kubectl-node_mgr %s\n", version)
 			fmt.Printf("Git Commit: %s\n", gitCommit)
 			fmt.Printf("Build Date: %s\n", buildDate)
 		},

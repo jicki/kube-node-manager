@@ -1,4 +1,4 @@
-# kubectl-node-mgr 插件实现总结
+# kubectl-node_mgr 插件实现总结
 
 ## 项目概述
 
@@ -87,7 +87,7 @@ kubectl-plugin/
 
 ### labels 命令
 ```bash
-kubectl node-mgr labels [NODE_NAME] [flags]
+kubectl node_mgr labels [NODE_NAME] [flags]
 
 标志:
   -o, --output string     输出格式 (table|json|yaml)
@@ -97,7 +97,7 @@ kubectl node-mgr labels [NODE_NAME] [flags]
 
 ### cordon 命令
 ```bash
-kubectl node-mgr cordon NODE_NAME[,NODE_NAME...] [flags]
+kubectl node_mgr cordon NODE_NAME[,NODE_NAME...] [flags]
 
 标志:
       --reason string           Cordon 原因 (必需)
@@ -108,12 +108,12 @@ kubectl node-mgr cordon NODE_NAME[,NODE_NAME...] [flags]
 
 ### uncordon 命令
 ```bash
-kubectl node-mgr uncordon NODE_NAME[,NODE_NAME...]
+kubectl node_mgr uncordon NODE_NAME[,NODE_NAME...]
 ```
 
 ### cordon list 命令
 ```bash
-kubectl node-mgr cordon list [flags]
+kubectl node_mgr cordon list [flags]
 
 标志:
   -o, --output string   输出格式 (table|json|yaml)
@@ -136,8 +136,8 @@ make install-plugin-user
 ### 手动安装
 ```bash
 cd kubectl-plugin
-go build -o kubectl-node-mgr main.go
-sudo mv kubectl-node-mgr /usr/local/bin/
+go build -o kubectl-node_mgr main.go
+sudo mv kubectl-node_mgr /usr/local/bin/
 ```
 
 ## 配置和上下文支持
@@ -155,40 +155,40 @@ sudo mv kubectl-node-mgr /usr/local/bin/
 ### 查看节点调度状态
 ```bash
 # 查看所有节点调度状态
-kubectl node-mgr get
+kubectl node_mgr get
 
 # 查看特定节点调度状态
-kubectl node-mgr get node1
+kubectl node_mgr get node1
 
 # 使用特定上下文
-kubectl node-mgr get --context=production
+kubectl node_mgr get --context=production
 
 # JSON 格式输出
-kubectl node-mgr get -o json
+kubectl node_mgr get -o json
 ```
 
 ### 查看节点标签归属
 ```bash
 # 查看所有节点
-kubectl node-mgr labels
+kubectl node_mgr labels
 
 # 查看特定节点
-kubectl node-mgr labels node1
+kubectl node_mgr labels node1
 
 # JSON 格式输出
-kubectl node-mgr labels -o json
+kubectl node_mgr labels -o json
 ```
 
 ### 节点维护操作
 ```bash
 # Cordon 节点
-kubectl node-mgr cordon node1 --reason "系统维护"
+kubectl node_mgr cordon node1 --reason "系统维护"
 
 # 查看已 cordon 的节点
-kubectl node-mgr cordon list
+kubectl node_mgr cordon list
 
 # 维护完成后 uncordon
-kubectl node-mgr uncordon node1
+kubectl node_mgr uncordon node1
 ```
 
 ## 测试验证
@@ -278,7 +278,7 @@ make install-plugin
 
 ## 总结
 
-kubectl-node-mgr 插件成功实现了以下目标：
+kubectl-node_mgr 插件成功实现了以下目标：
 
 1. ✅ **功能完整**: 实现了节点标签查看和 cordon 管理功能
 2. ✅ **独立部署**: 不影响原有的 Web 服务
