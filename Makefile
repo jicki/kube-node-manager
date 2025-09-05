@@ -43,7 +43,7 @@ VITE_ENABLE_LDAP ?= false
 # Makefile 配置
 # ================================
 
-.PHONY: help dev build start stop clean install test docker-build docker-build-only docker-push version update-version
+.PHONY: help dev build start stop clean install test docker-build docker-build-only docker-push version update-version build-plugin install-plugin
 
 # 默认目标
 help: ## 显示帮助信息
@@ -344,6 +344,31 @@ k8s-scale: ## 扩缩容 Pod (需要指定副本数)
 	@echo "扩缩容 Pod..."
 	@if [ -z "$(REPLICAS)" ]; then echo "错误: 请指定副本数，例如: make k8s-scale REPLICAS=3"; exit 1; fi
 	kubectl scale statefulset/kube-node-manager --replicas=$(REPLICAS)
+
+# kubectl 插件相关
+build-plugin: ## 构建 kubectl 插件
+	@echo "构建 kubectl 插件..."
+	cd kubectl-plugin && make build
+
+install-plugin: ## 安装 kubectl 插件
+	@echo "安装 kubectl 插件..."
+	cd kubectl-plugin && make install
+
+install-plugin-user: ## 安装 kubectl 插件到用户目录
+	@echo "安装 kubectl 插件到用户目录..."
+	cd kubectl-plugin && make install-user
+
+uninstall-plugin: ## 卸载 kubectl 插件
+	@echo "卸载 kubectl 插件..."
+	cd kubectl-plugin && make uninstall
+
+test-plugin: ## 测试 kubectl 插件
+	@echo "测试 kubectl 插件..."
+	cd kubectl-plugin && make test
+
+clean-plugin: ## 清理 kubectl 插件构建文件
+	@echo "清理 kubectl 插件构建文件..."
+	cd kubectl-plugin && make clean
 
 # 帮助信息
 .DEFAULT_GOAL := help
