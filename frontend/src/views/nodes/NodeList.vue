@@ -308,14 +308,20 @@
                           <!-- 其他标签 -->
                           <div v-if="getOtherLabels(row).length > 0" class="label-group">
                             <div class="group-title">系统标签</div>
-                            <el-tag
+                            <el-tooltip
                               v-for="label in getOtherLabels(row)"
                               :key="`other-${label.key}`"
-                              size="small"
-                              class="dropdown-tag"
+                              :content="`${label.key}=${label.value}`"
+                              placement="top"
+                              :disabled="isDropdownLabelShort(label.key, label.value)"
                             >
-                              {{ label.key }}: {{ label.value }}
-                            </el-tag>
+                              <el-tag
+                                size="small"
+                                class="dropdown-tag"
+                              >
+                                {{ label.key }}: {{ label.value }}
+                              </el-tag>
+                            </el-tooltip>
                           </div>
                         </div>
                         <div class="dropdown-footer">
@@ -1414,6 +1420,12 @@ const getOtherLabelsCount = (node) => {
   return getOtherLabels(node).length
 }
 
+// 判断下拉标签是否较短，不需要tooltip
+const isDropdownLabelShort = (key, value) => {
+  const fullText = `${key}=${value}`
+  return fullText.length <= 40 // 40个字符以内认为是短标签
+}
+
 // 判断是否有标签需要显示
 const hasLabelsToShow = (node) => {
   // 检查是否有角色标签、重要标签或其他标签
@@ -1958,8 +1970,8 @@ onMounted(async () => {
 
 /* 下拉菜单样式 */
 .labels-dropdown {
-  min-width: 280px;
-  max-width: 400px;
+  min-width: 320px;
+  max-width: 500px;  /* 增加最大宽度以容纳更长的标签 */
 }
 
 .dropdown-header {
@@ -1999,11 +2011,16 @@ onMounted(async () => {
 .dropdown-tag {
   margin: 0 4px 4px 0;
   font-size: 11px;
-  height: 22px;
+  min-height: 22px;
   line-height: 20px;
   padding: 0 8px;
   border-radius: 11px;
   font-weight: 500;
+  max-width: 280px;
+  word-break: break-all;
+  white-space: normal;
+  display: inline-block;
+  text-align: left;
 }
 
 .dropdown-footer {
@@ -2458,8 +2475,8 @@ onMounted(async () => {
   }
   
   .labels-dropdown {
-    min-width: 240px;
-    max-width: 300px;
+    min-width: 280px;
+    max-width: 450px;  /* 在小屏幕上也增加最大宽度 */
   }
   
   .dropdown-content {

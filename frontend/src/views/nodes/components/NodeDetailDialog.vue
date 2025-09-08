@@ -85,14 +85,20 @@
       <div class="labels-section" v-if="node.labels">
         <h4>标签</h4>
         <div class="labels-container">
-          <el-tag 
-            v-for="(value, key) in node.labels" 
-            :key="key" 
-            class="label-tag"
-            size="small"
+          <el-tooltip
+            v-for="(value, key) in node.labels"
+            :key="key"
+            :content="`${key}=${value}`"
+            placement="top"
+            :disabled="isLabelShort(key, value)"
           >
-            {{ key }}: {{ value }}
-          </el-tag>
+            <el-tag 
+              class="label-tag"
+              size="small"
+            >
+              {{ key }}: {{ value }}
+            </el-tag>
+          </el-tooltip>
         </div>
       </div>
 
@@ -119,6 +125,12 @@
 <script setup>
 import { computed } from 'vue'
 import { formatTime, formatNodeStatus, formatNodeRoles, formatCPU, formatMemory } from '@/utils/format'
+
+// 判断标签是否较短，不需要tooltip
+const isLabelShort = (key, value) => {
+  const fullText = `${key}=${value}`
+  return fullText.length <= 50 // 50个字符以内认为是短标签
+}
 
 // Props
 const props = defineProps({
@@ -197,19 +209,25 @@ h4 {
 .label-tag {
   margin: 0;
   font-size: 12px;
-  height: 24px;
+  min-height: 24px;
   line-height: 22px;
   padding: 0 10px;
   border-radius: 12px;
   font-weight: 500;
-  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   background: #f0f9ff;
   color: #0958d9;
   border: 1px solid #91d5ff;
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 100%;
+  word-break: break-all;
+  white-space: normal;
+  text-align: left;
+}
+
+/* 当标签内容较长时，允许换行显示 */
+.label-tag {
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 </style>
