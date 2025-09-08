@@ -260,92 +260,188 @@ func (s *Service) GetNode(clusterName, nodeName string) (*NodeInfo, error) {
 	return &nodeInfo, nil
 }
 
-// UpdateNodeLabels 更新节点标签
+// UpdateNodeLabels 更新节点标签（带重试机制）
 func (s *Service) UpdateNodeLabels(clusterName string, req LabelUpdateRequest) error {
 	client, err := s.getClient(clusterName)
 	if err != nil {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	const maxRetries = 5
+	const baseDelay = 100 * time.Millisecond
 
-	// 获取当前节点
-	node, err := client.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-	if err != nil {
-		s.logger.Errorf("Failed to get node %s: %v", req.NodeName, err)
-		return fmt.Errorf("failed to get node: %w", err)
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+		// 获取当前节点（每次重试都重新获取最新版本）
+		node, err := client.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+		if err != nil {
+			cancel()
+			s.logger.Errorf("Failed to get node %s (attempt %d/%d): %v", req.NodeName, attempt+1, maxRetries+1, err)
+			if attempt == maxRetries {
+				return fmt.Errorf("failed to get node after %d attempts: %w", maxRetries+1, err)
+			}
+			// 等待后重试
+			s.waitWithBackoff(attempt, baseDelay)
+			continue
+		}
+
+		// 更新标签
+		if attempt == 0 {
+			s.logger.Infof("Current node labels before update: %+v", node.Labels)
+			s.logger.Infof("Received labels to apply: %+v", req.Labels)
+		} else {
+			s.logger.Infof("Retry attempt %d: Current node labels: %+v", attempt+1, node.Labels)
+		}
+
+		// 不要完全清空标签，因为这会删除系统必需的标签
+		// 相反，我们直接应用传递过来的标签映射，它们已经在上层服务中被正确处理了
+		if node.Labels == nil {
+			node.Labels = make(map[string]string)
+		}
+
+		// 直接应用传递的标签（标签服务已经处理了保留系统标签的逻辑）
+		node.Labels = req.Labels
+
+		s.logger.Infof("Node labels after update: %+v", node.Labels)
+
+		// 尝试更新节点
+		_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+		cancel()
+
+		if err != nil {
+			// 检查是否是资源版本冲突错误
+			if strings.Contains(err.Error(), "the object has been modified") && attempt < maxRetries {
+				s.logger.Warningf("Resource version conflict for node %s (attempt %d/%d), retrying: %v",
+					req.NodeName, attempt+1, maxRetries+1, err)
+
+				// 指数退避等待
+				s.waitWithBackoff(attempt, baseDelay)
+				continue
+			}
+
+			s.logger.Errorf("Failed to update node labels for %s (attempt %d/%d): %v", req.NodeName, attempt+1, maxRetries+1, err)
+			if attempt == maxRetries {
+				return fmt.Errorf("failed to update node labels after %d attempts: %w", maxRetries+1, err)
+			}
+
+			// 其他错误也尝试重试
+			s.waitWithBackoff(attempt, baseDelay)
+			continue
+		}
+
+		// 成功更新
+		if attempt > 0 {
+			s.logger.Infof("Successfully updated labels for node %s in cluster %s (succeeded after %d retries)",
+				req.NodeName, clusterName, attempt)
+		} else {
+			s.logger.Infof("Successfully updated labels for node %s in cluster %s", req.NodeName, clusterName)
+		}
+		return nil
 	}
 
-	// 更新标签
-	s.logger.Infof("Current node labels before update: %+v", node.Labels)
-	s.logger.Infof("Received labels to apply: %+v", req.Labels)
-
-	// 不要完全清空标签，因为这会删除系统必需的标签
-	// 相反，我们直接应用传递过来的标签映射，它们已经在上层服务中被正确处理了
-	if node.Labels == nil {
-		node.Labels = make(map[string]string)
-	}
-
-	// 直接应用传递的标签（标签服务已经处理了保留系统标签的逻辑）
-	node.Labels = req.Labels
-
-	s.logger.Infof("Node labels after update: %+v", node.Labels)
-
-	// 更新节点
-	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
-	if err != nil {
-		s.logger.Errorf("Failed to update node labels for %s: %v", req.NodeName, err)
-		return fmt.Errorf("failed to update node labels: %w", err)
-	}
-
-	s.logger.Infof("Successfully updated labels for node %s in cluster %s", req.NodeName, clusterName)
-	return nil
+	return fmt.Errorf("failed to update node labels after %d attempts", maxRetries+1)
 }
 
-// UpdateNodeTaints 更新节点污点
+// waitWithBackoff 实现指数退避等待
+func (s *Service) waitWithBackoff(attempt int, baseDelay time.Duration) {
+	// 指数退避: baseDelay * (2^attempt) + 随机抖动
+	delay := baseDelay * time.Duration(1<<uint(attempt))
+
+	// 添加最大延迟限制（最多等待2秒）
+	maxDelay := 2 * time.Second
+	if delay > maxDelay {
+		delay = maxDelay
+	}
+
+	// 添加随机抖动 (±25%)
+	jitterPercent := (float64(time.Now().UnixNano()%1000) / 1000.0 * 2.0) - 1.0 // -1 到 1 之间的随机数
+	jitter := time.Duration(float64(delay) * 0.25 * jitterPercent)
+	delay = delay + jitter
+
+	s.logger.Infof("Waiting %v before retry (attempt %d)", delay, attempt+1)
+	time.Sleep(delay)
+}
+
+// UpdateNodeTaints 更新节点污点（带重试机制）
 func (s *Service) UpdateNodeTaints(clusterName string, req TaintUpdateRequest) error {
 	client, err := s.getClient(clusterName)
 	if err != nil {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	const maxRetries = 5
+	const baseDelay = 100 * time.Millisecond
 
-	// 获取当前节点
-	node, err := client.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
-	if err != nil {
-		s.logger.Errorf("Failed to get node %s: %v", req.NodeName, err)
-		return fmt.Errorf("failed to get node: %w", err)
-	}
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
-	// 转换污点
-	var taints []corev1.Taint
-	for _, taint := range req.Taints {
-		k8sTaint := corev1.Taint{
-			Key:    taint.Key,
-			Value:  taint.Value,
-			Effect: corev1.TaintEffect(taint.Effect),
+		// 获取当前节点（每次重试都重新获取最新版本）
+		node, err := client.CoreV1().Nodes().Get(ctx, req.NodeName, metav1.GetOptions{})
+		if err != nil {
+			cancel()
+			s.logger.Errorf("Failed to get node %s (attempt %d/%d): %v", req.NodeName, attempt+1, maxRetries+1, err)
+			if attempt == maxRetries {
+				return fmt.Errorf("failed to get node after %d attempts: %w", maxRetries+1, err)
+			}
+			// 等待后重试
+			s.waitWithBackoff(attempt, baseDelay)
+			continue
 		}
-		if taint.TimeAdded != nil {
-			k8sTaint.TimeAdded = &metav1.Time{Time: *taint.TimeAdded}
+
+		// 转换污点
+		var taints []corev1.Taint
+		for _, taint := range req.Taints {
+			k8sTaint := corev1.Taint{
+				Key:    taint.Key,
+				Value:  taint.Value,
+				Effect: corev1.TaintEffect(taint.Effect),
+			}
+			if taint.TimeAdded != nil {
+				k8sTaint.TimeAdded = &metav1.Time{Time: *taint.TimeAdded}
+			}
+			taints = append(taints, k8sTaint)
 		}
-		taints = append(taints, k8sTaint)
+
+		// 更新污点
+		node.Spec.Taints = taints
+
+		// 尝试更新节点
+		_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+		cancel()
+
+		if err != nil {
+			// 检查是否是资源版本冲突错误
+			if strings.Contains(err.Error(), "the object has been modified") && attempt < maxRetries {
+				s.logger.Warningf("Resource version conflict for node %s taints (attempt %d/%d), retrying: %v",
+					req.NodeName, attempt+1, maxRetries+1, err)
+
+				// 指数退避等待
+				s.waitWithBackoff(attempt, baseDelay)
+				continue
+			}
+
+			s.logger.Errorf("Failed to update node taints for %s (attempt %d/%d): %v", req.NodeName, attempt+1, maxRetries+1, err)
+			if attempt == maxRetries {
+				return fmt.Errorf("failed to update node taints after %d attempts: %w", maxRetries+1, err)
+			}
+
+			// 其他错误也尝试重试
+			s.waitWithBackoff(attempt, baseDelay)
+			continue
+		}
+
+		// 成功更新
+		if attempt > 0 {
+			s.logger.Infof("Successfully updated taints for node %s in cluster %s (succeeded after %d retries)",
+				req.NodeName, clusterName, attempt)
+		} else {
+			s.logger.Infof("Successfully updated taints for node %s in cluster %s", req.NodeName, clusterName)
+		}
+		return nil
 	}
 
-	// 更新污点
-	node.Spec.Taints = taints
-
-	// 更新节点
-	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
-	if err != nil {
-		s.logger.Errorf("Failed to update node taints for %s: %v", req.NodeName, err)
-		return fmt.Errorf("failed to update node taints: %w", err)
-	}
-
-	s.logger.Infof("Successfully updated taints for node %s in cluster %s", req.NodeName, clusterName)
-	return nil
+	return fmt.Errorf("failed to update node taints after %d attempts", maxRetries+1)
 }
 
 // CordonNode 禁止调度节点（仅设置不可调度，不删除pod）

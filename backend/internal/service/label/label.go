@@ -8,6 +8,7 @@ import (
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/pkg/logger"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -226,7 +227,9 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 func (s *Service) BatchUpdateLabels(req BatchUpdateRequest, userID uint) error {
 	var errors []string
 
-	for _, nodeName := range req.NodeNames {
+	s.logger.Infof("Starting batch update for %d nodes in cluster %s", len(req.NodeNames), req.ClusterName)
+
+	for i, nodeName := range req.NodeNames {
 		updateReq := UpdateLabelsRequest{
 			ClusterName: req.ClusterName,
 			NodeName:    nodeName,
@@ -237,7 +240,14 @@ func (s *Service) BatchUpdateLabels(req BatchUpdateRequest, userID uint) error {
 		if err := s.UpdateNodeLabels(updateReq, userID); err != nil {
 			errorMsg := fmt.Sprintf("Node %s: %v", nodeName, err)
 			errors = append(errors, errorMsg)
-			s.logger.Error("Failed to update labels for node %s: %v", nodeName, err)
+			s.logger.Errorf("Failed to update labels for node %s: %v", nodeName, err)
+		} else {
+			s.logger.Infof("Successfully updated labels for node %s (%d/%d)", nodeName, i+1, len(req.NodeNames))
+		}
+
+		// 在批量操作之间添加小延迟，避免过度并发
+		if i < len(req.NodeNames)-1 {
+			time.Sleep(50 * time.Millisecond)
 		}
 	}
 
