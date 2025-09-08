@@ -1216,7 +1216,15 @@ const removeSelectedNode = (nodeName) => {
   selectedNodes.value = selectedNodes.value.filter(name => name !== nodeName)
 }
 
+// 重置搜索状态
+const resetSearchState = () => {
+  searchKeyword.value = ''
+  filteredAndSortedTaints.value = []
+}
+
 onMounted(() => {
+  // 页面进入时重置搜索状态，避免从其他页面切换回来时保留搜索条件
+  resetSearchState()
   refreshData()
   // 初始化筛选结果
   filteredAndSortedTaints.value = taints.value

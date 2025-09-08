@@ -56,6 +56,11 @@ export const useNodeStore = defineStore('node', {
       taintEffect: '',
       nodeOwnership: '' // deeproute.cn/user-type 标签过滤
     },
+    // 添加排序状态
+    sort: {
+      prop: '', // 排序字段
+      order: '' // 排序方向: 'ascending' | 'descending'
+    },
     loading: false
   }),
 
@@ -326,6 +331,44 @@ export const useNodeStore = defineStore('node', {
             return false
           }
           return userTypeLabel === state.filters.nodeOwnership
+        })
+      }
+      
+      // 排序处理
+      if (state.sort.prop && state.sort.order) {
+        filtered = [...filtered].sort((a, b) => {
+          let aVal, bVal
+          
+          switch (state.sort.prop) {
+            case 'name':
+              aVal = a.name || ''
+              bVal = b.name || ''
+              break
+            case 'status':
+              aVal = a.status || ''
+              bVal = b.status || ''
+              break
+            case 'created_at':
+              // 处理创建时间排序
+              aVal = a.created_at ? new Date(a.created_at).getTime() : 0
+              bVal = b.created_at ? new Date(b.created_at).getTime() : 0
+              break
+            default:
+              return 0
+          }
+          
+          // 字符串比较
+          if (typeof aVal === 'string' && typeof bVal === 'string') {
+            const compareResult = aVal.localeCompare(bVal, 'zh-CN')
+            return state.sort.order === 'ascending' ? compareResult : -compareResult
+          }
+          
+          // 数值比较
+          if (typeof aVal === 'number' && typeof bVal === 'number') {
+            return state.sort.order === 'ascending' ? aVal - bVal : bVal - aVal
+          }
+          
+          return 0
         })
       }
       
@@ -658,6 +701,19 @@ export const useNodeStore = defineStore('node', {
         taintEffect: '',
         nodeOwnership: ''
       }
+      // 同时重置排序状态
+      this.sort = {
+        prop: '',
+        order: ''
+      }
+      this.pagination.current = 1
+    },
+
+    // 设置排序
+    setSort({ prop, order }) {
+      this.sort.prop = prop
+      this.sort.order = order
+      // 重置到第一页
       this.pagination.current = 1
     },
 

@@ -941,9 +941,8 @@ const handleSelectionChange = (selection) => {
 
 // 处理排序
 const handleSortChange = ({ prop, order }) => {
-  const sortBy = prop
-  const sortOrder = order === 'ascending' ? 'asc' : 'desc'
-  fetchNodes({ sortBy, sortOrder })
+  // 使用前端排序，不再调用后端API
+  nodeStore.setSort({ prop, order })
 }
 
 // 分页处理
@@ -1050,6 +1049,23 @@ const formatTimeShort = (timestamp) => {
       minute: '2-digit'
     })
   }
+}
+
+// 重置搜索和过滤条件
+const resetSearchFilters = () => {
+  searchKeyword.value = ''
+  statusFilter.value = ''
+  roleFilter.value = ''
+  schedulableFilter.value = ''
+  labelKeyFilter.value = ''
+  labelValueFilter.value = ''
+  taintKeyFilter.value = ''
+  taintValueFilter.value = ''
+  taintEffectFilter.value = ''
+  nodeOwnershipFilter.value = ''
+  
+  // 重置 store 中的过滤状态
+  nodeStore.resetFilters()
 }
 
 // 刷新数据
@@ -1591,6 +1607,9 @@ const getGPUCount = (resources) => {
 }
 
 onMounted(async () => {
+  // 页面进入时重置搜索状态，避免从其他页面切换回来时保留搜索条件
+  resetSearchFilters()
+  
   // 先加载集群信息
   try {
     await clusterStore.fetchClusters()
