@@ -39,16 +39,16 @@
       <el-col :xs="12" :sm="6">
         <el-card class="stat-card">
           <div class="stat-content">
-            <div class="stat-value">{{ labelStats.system }}</div>
-            <div class="stat-label">系统标签</div>
+            <div class="stat-value">{{ labelStats.single }}</div>
+            <div class="stat-label">单个标签</div>
           </div>
         </el-card>
       </el-col>
       <el-col :xs="12" :sm="6">
         <el-card class="stat-card">
           <div class="stat-content">
-            <div class="stat-value">{{ labelStats.custom }}</div>
-            <div class="stat-label">自定义</div>
+            <div class="stat-value">{{ labelStats.multiple }}</div>
+            <div class="stat-label">多个标签组</div>
           </div>
         </el-card>
       </el-col>
@@ -501,19 +501,8 @@ const searchFilters = ref([
     placeholder: '选择标签类型',
     options: [
       { label: '全部', value: '' },
-      { label: '系统标签', value: 'system' },
-      { label: '自定义标签', value: 'custom' }
-    ]
-  },
-  {
-    key: 'usage',
-    label: '使用状态',
-    type: 'select',
-    placeholder: '选择使用状态',
-    options: [
-      { label: '全部', value: '' },
-      { label: '使用中', value: 'used' },
-      { label: '未使用', value: 'unused' }
+      { label: '单个标签', value: 'single' },
+      { label: '多个标签组', value: 'multiple' }
     ]
   }
 ])
@@ -530,24 +519,29 @@ const labelStats = computed(() => {
   // 统计模板数量和标签数量
   const totalTemplates = labels.value.length
   let totalLabels = 0
-  let systemLabels = 0
-  let customLabels = 0
+  let singleLabelTemplates = 0  // 单个标签模板数
+  let multipleLabelTemplates = 0  // 多个标签组模板数
   
   labels.value.forEach(template => {
     if (template.labels && typeof template.labels === 'object') {
       const labelCount = Object.keys(template.labels).length
       totalLabels += labelCount
-      // 由于模板中的标签都是自定义的，所以都算作自定义标签
-      customLabels += labelCount
+      
+      // 根据标签数量分类
+      if (labelCount === 1) {
+        singleLabelTemplates++
+      } else if (labelCount > 1) {
+        multipleLabelTemplates++
+      }
     }
   })
   
-  // 对于模板管理，我们显示模板相关的统计
+  // 返回新的分类统计
   return { 
     total: totalLabels, // 总标签数
-    active: totalTemplates, // 使用中（模板数）
-    system: systemLabels, // 系统标签（模板中通常为0）
-    custom: customLabels // 自定义标签数
+    active: totalTemplates, // 模板数
+    single: singleLabelTemplates, // 单个标签模板数
+    multiple: multipleLabelTemplates // 多个标签组模板数
   }
 })
 
@@ -587,28 +581,21 @@ const applyFiltersAndSort = (keyword, filters) => {
 
   // 按类型筛选
   if (filters.type) {
-    if (filters.type === 'system') {
+    if (filters.type === 'single') {
+      // 筛选只有一个标签的模板
       result = result.filter(template => {
-        // 系统标签通常以特定前缀开头
         if (template.labels && typeof template.labels === 'object') {
-          return Object.keys(template.labels).some(key => 
-            key.startsWith('kubernetes.io/') || 
-            key.startsWith('node.kubernetes.io/') ||
-            key.startsWith('topology.kubernetes.io/')
-          )
+          return Object.keys(template.labels).length === 1
         }
         return false
       })
-    } else if (filters.type === 'custom') {
+    } else if (filters.type === 'multiple') {
+      // 筛选有多个标签的模板（标签组）
       result = result.filter(template => {
         if (template.labels && typeof template.labels === 'object') {
-          return !Object.keys(template.labels).every(key => 
-            key.startsWith('kubernetes.io/') || 
-            key.startsWith('node.kubernetes.io/') ||
-            key.startsWith('topology.kubernetes.io/')
-          )
+          return Object.keys(template.labels).length > 1
         }
-        return true
+        return false
       })
     }
   }
