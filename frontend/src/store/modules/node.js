@@ -29,6 +29,7 @@ export const useNodeStore = defineStore('node', {
     nodes: [],
     selectedNodes: [],
     currentClusterName: '', // 当前集群名称，用于缓存识别
+    cordonHistories: new Map(), // 存储禁止调度历史信息，key为节点名称
     nodeStats: {
       total: 0,
       ready: 0,
@@ -390,6 +391,10 @@ export const useNodeStore = defineStore('node', {
       }
       
       return result
+    },
+    // 获取节点的禁止调度信息
+    getCordonInfo: (state) => (nodeName) => {
+      return state.cordonHistories.get(nodeName) || null
     }
   },
 
@@ -403,6 +408,7 @@ export const useNodeStore = defineStore('node', {
         // 如果没有集群名称，直接返回空结果
         if (!clusterName) {
           this.nodes = []
+          this.cordonHistories = new Map()
           this.updateStats()
           this.updatePaginationTotal()
           return { data: [] }
@@ -423,6 +429,9 @@ export const useNodeStore = defineStore('node', {
         this.updateStats()
         // 重新计算分页总数（基于过滤后的结果）
         this.updatePaginationTotal()
+        
+        // 自动获取禁止调度历史信息
+        await this.fetchCordonHistories(clusterName)
         
         return response
       } catch (error) {
@@ -725,6 +734,45 @@ export const useNodeStore = defineStore('node', {
       }
       this.updateStats()
       this.updatePaginationTotal()
+    },
+
+    // 获取禁止调度历史信息
+    async fetchCordonHistories(clusterName) {
+      try {
+        if (!this.nodes || this.nodes.length === 0) {
+          this.cordonHistories = new Map()
+          return
+        }
+        
+        const nodeNames = this.nodes.map(node => node.name)
+        const usedClusterName = clusterName || this.currentClusterName
+        
+        if (!usedClusterName) {
+          console.warn('No cluster name provided for fetching cordon histories')
+          return
+        }
+        
+        const response = await nodeApi.getBatchCordonHistory({
+          node_names: nodeNames,
+          cluster_name: usedClusterName
+        })
+        
+        if (response.data && response.data.data) {
+          this.cordonHistories = new Map(Object.entries(response.data.data))
+          console.log('获取到禁止调度历史数据:', response.data.data)
+        } else {
+          this.cordonHistories = new Map()
+        }
+      } catch (error) {
+        console.warn('获取禁止调度历史失败:', error)
+        // 不影响主要功能，只是历史信息无法显示
+        this.cordonHistories = new Map()
+      }
+    },
+
+    // 清空禁止调度历史（在切换集群时使用）
+    clearCordonHistories() {
+      this.cordonHistories = new Map()
     }
   }
 })

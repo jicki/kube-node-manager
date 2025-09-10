@@ -158,7 +158,8 @@ const handleClusterChange = async (clusterId) => {
       const { useNodeStore } = await import('@/store/modules/node')
       const nodeStore = useNodeStore()
       
-      // 清空当前节点数据并重新获取
+      // 清空当前节点数据和禁止调度历史，然后重新获取
+      nodeStore.clearCordonHistories()
       await nodeStore.fetchNodes()
       
       // 如果当前页面是Dashboard，触发Dashboard数据刷新

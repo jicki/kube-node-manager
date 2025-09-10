@@ -895,8 +895,7 @@ const availableTaintKeys = computed(() => {
   return Array.from(keys).sort()
 })
 
-// 禁止调度历史信息
-const cordonHistories = ref(new Map())
+// 移除本地的禁止调度历史管理，改用nodeStore
 
 // 搜索和筛选处理函数
 
@@ -967,8 +966,7 @@ const fetchNodes = async (params = {}) => {
   try {
     loading.value = true
     await nodeStore.fetchNodes(params)
-    // 获取节点数据后，批量获取禁止调度历史
-    await fetchCordonHistories()
+    // nodeStore.fetchNodes() 现在会自动获取禁止调度历史，不需要手动调用
   } catch (error) {
     ElMessage.error('获取节点数据失败')
   } finally {
@@ -976,38 +974,13 @@ const fetchNodes = async (params = {}) => {
   }
 }
 
-// 获取禁止调度历史
-const fetchCordonHistories = async () => {
-  try {
-    if (!nodes.value || nodes.value.length === 0) return
-    
-    const nodeNames = nodes.value.map(node => node.name)
-    const clusterName = clusterStore.currentClusterName
-    
-    if (!clusterName) return
-    
-    const response = await nodeApi.getBatchCordonHistory({
-      node_names: nodeNames,
-      cluster_name: clusterName
-    })
-    
-    if (response.data && response.data.data) {
-      cordonHistories.value = new Map(Object.entries(response.data.data))
-      // 调试：检查禁止调度历史数据
-      console.log('禁止调度历史数据:', response.data.data)
-    }
-  } catch (error) {
-    console.warn('获取禁止调度历史失败:', error)
-    // 不影响主要功能，只是历史信息无法显示
-  }
-}
+// 移除fetchCordonHistories函数，现在由nodeStore自动处理
 
 // 获取节点的禁止调度信息
 const getCordonInfo = (node) => {
   // 只有当节点处于不可调度状态时才显示历史信息
-  if (node.schedulable === false && cordonHistories.value.has(node.name)) {
-    const info = cordonHistories.value.get(node.name)
-    return info
+  if (node.schedulable === false) {
+    return nodeStore.getCordonInfo(node.name)
   }
   return null
 }
@@ -1092,7 +1065,7 @@ const refreshData = async () => {
     console.warn('Failed to refresh cluster info:', error)
   }
   
-  // 然后刷新节点数据
+  // 刷新节点数据，fetchNodes现在会自动获取禁止调度历史
   await fetchNodes()
 }
 
@@ -1121,7 +1094,7 @@ const confirmCordon = async () => {
     await nodeStore.cordonNode(node.name, reason)
     ElMessage.success(`节点 ${node.name} 已禁止调度`)
     cordonConfirmVisible.value = false
-    await refreshData()
+    // nodeStore.cordonNode 内部已经调用了 fetchNodes，会自动更新禁止调度历史
   } catch (error) {
     ElMessage.error(`禁止调度节点失败: ${error.message}`)
   }
@@ -1132,7 +1105,7 @@ const uncordonNode = async (node) => {
   try {
     await nodeStore.uncordonNode(node.name)
     ElMessage.success(`节点 ${node.name} 已解除调度限制`)
-    refreshData()
+    // nodeStore.uncordonNode 内部已经调用了 fetchNodes，会自动更新禁止调度历史
   } catch (error) {
     ElMessage.error(`解除调度节点失败: ${error.message}`)
   }
@@ -1191,7 +1164,7 @@ const confirmBatchCordon = async () => {
     ElMessage.success(`成功禁止调度 ${nodeNames.length} 个节点`)
     clearSelection()
     cordonConfirmVisible.value = false
-    await refreshData()
+    // nodeStore.batchCordon 内部已经调用了 fetchNodes，会自动更新禁止调度历史
   } catch (error) {
     ElMessage.error(`批量禁止调度失败: ${error.message}`)
   } finally {
@@ -1208,7 +1181,7 @@ const batchUncordon = async () => {
     await nodeStore.batchUncordon(nodeNames)
     ElMessage.success(`成功解除调度限制 ${nodeNames.length} 个节点`)
     clearSelection()
-    refreshData()
+    // nodeStore.batchUncordon 内部已经调用了 fetchNodes，会自动更新禁止调度历史
   } catch (error) {
     ElMessage.error(`批量解除调度失败: ${error.message}`)
   } finally {
