@@ -1,6 +1,7 @@
 package node
 
 import (
+	"fmt"
 	"net/http"
 
 	"kube-node-manager/internal/model"
@@ -685,6 +686,103 @@ func (h *Handler) GetNodeCordonInfo(c *gin.Context) {
 		Code:    http.StatusOK,
 		Message: "Success",
 		Data:    info,
+	})
+}
+
+// SyncCordonAnnotations 同步kubectl-plugin的禁止调度annotations到审计日志
+// @Summary 同步禁止调度annotations
+// @Description 手动同步kubectl-plugin的禁止调度annotations信息到审计日志
+// @Tags nodes
+// @Accept json
+// @Produce json
+// @Param request body map[string]interface{} true "同步请求"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /nodes/sync-cordon-annotations [post]
+func (h *Handler) SyncCordonAnnotations(c *gin.Context) {
+	var req struct {
+		ClusterName string   `json:"cluster_name" binding:"required"`
+		NodeNames   []string `json:"node_names,omitempty"` // 如果为空，则同步所有被禁止调度的节点
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind sync cordon annotations request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 角色可以同步annotations
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin role can sync annotations",
+		})
+		return
+	}
+
+	var err error
+	var syncedCount int
+
+	if len(req.NodeNames) > 0 {
+		// 同步指定的节点
+		err = h.nodeSvc.BatchSyncCordonAnnotationsToAudit(req.ClusterName, req.NodeNames)
+		syncedCount = len(req.NodeNames)
+	} else {
+		// 获取所有被禁止调度的节点并同步
+		listReq := node.ListRequest{
+			ClusterName: req.ClusterName,
+			Status:      "SchedulingDisabled",
+		}
+
+		nodes, listErr := h.nodeSvc.List(listReq, userID.(uint))
+		if listErr != nil {
+			h.logger.Error("Failed to get cordoned nodes: %v", listErr)
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    http.StatusInternalServerError,
+				Message: "Failed to get cordoned nodes: " + listErr.Error(),
+			})
+			return
+		}
+
+		if len(nodes) > 0 {
+			var nodeNames []string
+			for _, node := range nodes {
+				nodeNames = append(nodeNames, node.Name)
+			}
+			err = h.nodeSvc.BatchSyncCordonAnnotationsToAudit(req.ClusterName, nodeNames)
+			syncedCount = len(nodeNames)
+		}
+	}
+
+	if err != nil {
+		h.logger.Error("Failed to sync cordon annotations: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to sync cordon annotations: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: fmt.Sprintf("Successfully synced %d nodes", syncedCount),
+		Data: map[string]interface{}{
+			"synced_count": syncedCount,
+		},
 	})
 }
 

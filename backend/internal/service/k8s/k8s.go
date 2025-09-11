@@ -571,12 +571,32 @@ func (s *Service) GetNodeCordonInfo(clusterName, nodeName string) (map[string]in
 	info := make(map[string]interface{})
 	info["cordoned"] = node.Spec.Unschedulable
 
-	if node.Spec.Unschedulable && node.Annotations != nil {
-		if reason, exists := node.Annotations["deeproute.cn/kube-node-mgr"]; exists {
-			info["reason"] = reason
+	if node.Spec.Unschedulable {
+		// 首先从我们的自定义 annotations 获取信息
+		if node.Annotations != nil {
+			if reason, exists := node.Annotations["deeproute.cn/kube-node-mgr"]; exists {
+				info["reason"] = reason
+			}
+			if timestamp, exists := node.Annotations["deeproute.cn/kube-node-mgr-timestamp"]; exists {
+				info["timestamp"] = timestamp
+			}
 		}
-		if timestamp, exists := node.Annotations["deeproute.cn/kube-node-mgr-timestamp"]; exists {
-			info["timestamp"] = timestamp
+
+		// 如果没有自定义 timestamp，但有 reason annotation，尝试从 unschedulable taint 获取 timeAdded
+		if _, hasCustomTimestamp := info["timestamp"]; !hasCustomTimestamp {
+			// 只有在存在我们的 reason annotation 时才去获取 taint 时间戳
+			if _, hasReason := info["reason"]; hasReason {
+				for _, taint := range node.Spec.Taints {
+					if taint.Key == "node.kubernetes.io/unschedulable" && taint.TimeAdded != nil {
+						info["timestamp"] = taint.TimeAdded.Format(time.RFC3339)
+						info["timestamp_source"] = "kubernetes_taint"
+						s.logger.Infof("Found unschedulable taint timestamp for node %s with deeproute annotation: %s", node.Name, taint.TimeAdded.Format(time.RFC3339))
+						break
+					}
+				}
+			}
+		} else {
+			info["timestamp_source"] = "kubectl_plugin"
 		}
 	}
 

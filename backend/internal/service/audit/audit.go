@@ -3,6 +3,7 @@ package audit
 import (
 	"kube-node-manager/internal/model"
 	"kube-node-manager/pkg/logger"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -76,6 +77,64 @@ func (s *Service) Log(req LogRequest) {
 	if err := s.db.Create(&auditLog).Error; err != nil {
 		s.logger.Errorf("Failed to create audit log: %v", err)
 	}
+}
+
+// LogWithError 记录审计日志并返回错误
+func (s *Service) LogWithError(req LogRequest) error {
+	var clusterID uint
+	if req.ClusterID != nil {
+		clusterID = *req.ClusterID
+	}
+
+	auditLog := model.AuditLog{
+		UserID:       req.UserID,
+		ClusterID:    clusterID,
+		NodeName:     req.NodeName,
+		Action:       req.Action,
+		ResourceType: req.ResourceType,
+		Details:      req.Details,
+		Reason:       req.Reason,
+		Status:       req.Status,
+		ErrorMsg:     req.ErrorMsg,
+		IPAddress:    req.IPAddress,
+		UserAgent:    req.UserAgent,
+	}
+
+	if err := s.db.Create(&auditLog).Error; err != nil {
+		s.logger.Errorf("Failed to create audit log: %v", err)
+		return err
+	}
+	return nil
+}
+
+// LogWithCustomTime 使用自定义时间记录审计日志
+func (s *Service) LogWithCustomTime(req LogRequest, customTime time.Time) error {
+	var clusterID uint
+	if req.ClusterID != nil {
+		clusterID = *req.ClusterID
+	}
+
+	auditLog := model.AuditLog{
+		UserID:       req.UserID,
+		ClusterID:    clusterID,
+		NodeName:     req.NodeName,
+		Action:       req.Action,
+		ResourceType: req.ResourceType,
+		Details:      req.Details,
+		Reason:       req.Reason,
+		Status:       req.Status,
+		ErrorMsg:     req.ErrorMsg,
+		IPAddress:    req.IPAddress,
+		UserAgent:    req.UserAgent,
+		CreatedAt:    customTime,
+	}
+
+	// 手动设置时间戳，禁用自动时间戳
+	if err := s.db.Set("gorm:update_time_stamp", false).Create(&auditLog).Error; err != nil {
+		s.logger.Errorf("Failed to create audit log with custom time: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (s *Service) List(req ListRequest) (*ListResponse, error) {
@@ -213,4 +272,15 @@ func (s *Service) GetLatestCordonRecords(nodeNames []string, clusterID uint) (ma
 	}
 
 	return result, nil
+}
+
+// GetAdminUserID 获取admin用户的ID
+func (s *Service) GetAdminUserID() (uint, error) {
+	var user model.User
+	err := s.db.Where("username = ?", "admin").First(&user).Error
+	if err != nil {
+		s.logger.Errorf("Failed to find admin user: %v", err)
+		return 0, err
+	}
+	return user.ID, nil
 }

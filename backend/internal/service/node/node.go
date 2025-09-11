@@ -113,6 +113,23 @@ func (s *Service) List(req ListRequest, userID uint) ([]k8s.NodeInfo, error) {
 	// 应用过滤器
 	filteredNodes := s.filterNodes(nodes, req)
 
+	// 检查并同步被禁止调度的节点的annotations信息到审计日志
+	// 同步方法内部会检查是否有 deeproute.cn/kube-node-mgr annotation，没有的话会跳过
+	go func() {
+		var cordonedNodes []string
+		for _, node := range filteredNodes {
+			if !node.Schedulable { // 节点被禁止调度
+				cordonedNodes = append(cordonedNodes, node.Name)
+			}
+		}
+
+		if len(cordonedNodes) > 0 {
+			if err := s.BatchSyncCordonAnnotationsToAudit(req.ClusterName, cordonedNodes); err != nil {
+				s.logger.Warningf("Failed to sync cordon annotations for nodes in cluster %s: %v", req.ClusterName, err)
+			}
+		}
+	}()
+
 	// 只在有特定过滤条件时记录审计日志，避免频繁记录普通列表查看
 	if req.Status != "" || req.Role != "" || req.LabelKey != "" || req.TaintKey != "" {
 		s.auditSvc.Log(audit.LogRequest{
@@ -142,6 +159,16 @@ func (s *Service) Get(req GetRequest, userID uint) (*k8s.NodeInfo, error) {
 			ErrorMsg:     err.Error(),
 		})
 		return nil, fmt.Errorf("failed to get node: %w", err)
+	}
+
+	// 如果节点被禁止调度，检查并同步annotations信息到审计日志
+	// 同步方法内部会检查是否有 deeproute.cn/kube-node-mgr annotation，没有的话会跳过
+	if !node.Schedulable {
+		go func() {
+			if err := s.SyncCordonAnnotationsToAudit(req.ClusterName, req.NodeName); err != nil {
+				s.logger.Warningf("Failed to sync cordon annotations for node %s: %v", req.NodeName, err)
+			}
+		}()
 	}
 
 	s.auditSvc.Log(audit.LogRequest{
@@ -577,4 +604,163 @@ func (s *Service) GetBatchCordonHistory(nodeNames []string, clusterName string) 
 	}
 
 	return result, nil
+}
+
+// SyncCordonAnnotationsToAudit 同步kubectl-plugin的禁止调度annotations到审计日志
+func (s *Service) SyncCordonAnnotationsToAudit(clusterName, nodeName string) error {
+	// 获取节点的禁止调度信息
+	cordonInfo, err := s.k8sSvc.GetNodeCordonInfo(clusterName, nodeName)
+	if err != nil {
+		return fmt.Errorf("failed to get node cordon info: %w", err)
+	}
+
+	// 检查节点是否被禁止调度
+	cordoned, exists := cordonInfo["cordoned"]
+	if !exists || !cordoned.(bool) {
+		return nil // 节点未被禁止调度，无需同步
+	}
+
+	// 关键检查：只有存在 deeproute.cn/kube-node-mgr annotation 时才同步
+	// 这意味着节点要么是通过 kubectl-plugin 禁止调度，要么是手动添加了我们的 annotation
+	if _, hasReason := cordonInfo["reason"]; !hasReason {
+		s.logger.Infof("Skipping sync for node %s: no deeproute.cn/kube-node-mgr annotation found (pure kubectl cordon)", nodeName)
+		return nil // 纯粹的 kubectl cordon 操作，无需同步
+	}
+
+	// 获取admin用户ID
+	adminUserID, err := s.auditSvc.GetAdminUserID()
+	if err != nil {
+		s.logger.Warningf("Failed to get admin user ID: %v, using default ID 1", err)
+		adminUserID = 1 // 默认使用ID为1的用户
+	}
+
+	// 检查是否已经有同步的审计记录
+	existingLog, _ := s.auditSvc.GetLatestCordonRecord(nodeName, 0) // 使用0作为集群ID
+
+	// 从annotations或taints获取时间戳
+	var cordonTime time.Time
+	var timestampSource string
+	if timestampStr, exists := cordonInfo["timestamp"]; exists {
+		if parsedTime, err := time.Parse(time.RFC3339, timestampStr.(string)); err == nil {
+			cordonTime = parsedTime
+			if source, hasSource := cordonInfo["timestamp_source"]; hasSource {
+				timestampSource = source.(string)
+			}
+		}
+	}
+
+	// 获取原因
+	reason := ""
+	if reasonStr, exists := cordonInfo["reason"]; exists {
+		reason = reasonStr.(string)
+	}
+
+	// 决定是否需要同步的逻辑
+	shouldSync := false
+	syncReason := ""
+
+	if existingLog == nil {
+		// 情况1: 没有现有记录，直接同步
+		shouldSync = true
+		syncReason = "no existing record"
+	} else if !cordonTime.IsZero() {
+		// 情况2: 有时间戳（来自kubectl-plugin或K8s taint）
+		if existingLog.CreatedAt.Before(cordonTime) {
+			shouldSync = true
+			if timestampSource == "kubectl_plugin" {
+				syncReason = "newer kubectl-plugin timestamp"
+			} else {
+				syncReason = "newer kubernetes taint timestamp (manual cordon)"
+			}
+		} else if timestampSource == "kubernetes_taint" {
+			// 即使时间相近，如果是从taint获取的时间戳且现有记录不是手动操作记录，也要同步
+			isExistingManual := strings.Contains(existingLog.Details, "manual operation")
+			if !isExistingManual {
+				shouldSync = true
+				syncReason = "manual cordon operation detected via taint timestamp"
+			}
+		}
+	} else {
+		// 情况3: 完全没有时间戳信息，这种情况比较少见
+		// 检查现有记录的类型来决定是否同步
+		isExistingFromSync := strings.Contains(existingLog.Details, "synced from kubectl-plugin") ||
+			strings.Contains(existingLog.Details, "manual operation")
+
+		if !isExistingFromSync {
+			// 现有记录来自web界面等，记录这次手动操作
+			shouldSync = true
+			syncReason = "manual operation after web operation (no timestamp available)"
+		} else {
+			// 检查reason是否不同
+			if reason != existingLog.Reason {
+				shouldSync = true
+				syncReason = "different reason from existing record (no timestamp available)"
+			} else {
+				// 相同信息，不重复同步
+				s.logger.Infof("Skipping sync for node %s: similar operation already recorded", nodeName)
+			}
+		}
+	}
+
+	if shouldSync {
+		s.logger.Infof("Syncing cordon annotation for node %s: %s", nodeName, syncReason)
+
+		// 创建审计日志记录
+		// 根据时间戳来源和annotations确定详情描述
+		var details string
+		if timestampSource == "kubectl_plugin" {
+			// 来自kubectl-plugin的annotations
+			details = fmt.Sprintf("Cordoned node %s for cluster %s (synced from kubectl-plugin)", nodeName, clusterName)
+		} else if timestampSource == "kubernetes_taint" {
+			// 来自kubernetes taint的时间戳，但有我们的annotation，表示手动添加了annotation
+			details = fmt.Sprintf("Cordoned node %s for cluster %s (kubectl cordon + manual annotation, synced via taint timestamp)", nodeName, clusterName)
+		} else {
+			// 没有时间戳信息的手动操作
+			details = fmt.Sprintf("Cordoned node %s for cluster %s (manual operation, synced as admin)", nodeName, clusterName)
+		}
+
+		logReq := audit.LogRequest{
+			UserID:       adminUserID,
+			NodeName:     nodeName,
+			Action:       model.ActionUpdate,
+			ResourceType: model.ResourceNode,
+			Details:      details,
+			Reason:       reason,
+			Status:       model.AuditStatusSuccess,
+		}
+
+		// 如果有时间戳，则使用自定义时间
+		if !cordonTime.IsZero() {
+			err = s.auditSvc.LogWithCustomTime(logReq, cordonTime)
+		} else {
+			err = s.auditSvc.LogWithError(logReq)
+		}
+
+		if err != nil {
+			s.logger.Errorf("Failed to sync cordon annotation to audit log for node %s: %v", nodeName, err)
+			return fmt.Errorf("failed to sync to audit log: %w", err)
+		}
+
+		s.logger.Infof("Successfully synced kubectl-plugin cordon annotation to audit log for node %s", nodeName)
+	}
+
+	return nil
+}
+
+// BatchSyncCordonAnnotationsToAudit 批量同步kubectl-plugin的禁止调度annotations到审计日志
+func (s *Service) BatchSyncCordonAnnotationsToAudit(clusterName string, nodeNames []string) error {
+	errors := make([]string, 0)
+
+	for _, nodeName := range nodeNames {
+		if err := s.SyncCordonAnnotationsToAudit(clusterName, nodeName); err != nil {
+			errors = append(errors, fmt.Sprintf("Node %s: %s", nodeName, err.Error()))
+			s.logger.Errorf("Failed to sync annotations for node %s: %v", nodeName, err)
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to sync some nodes: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
 }

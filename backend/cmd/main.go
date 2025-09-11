@@ -131,6 +131,8 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		nodes.POST("/batch-cordon-history", handlers.Node.GetBatchCordonHistory)
 		nodes.POST("/cordon-history", handlers.Node.GetCordonHistory)
 		nodes.POST("/cordon-info", handlers.Node.GetNodeCordonInfo)
+		// kubectl-plugin annotations同步
+		nodes.POST("/sync-cordon-annotations", handlers.Node.SyncCordonAnnotations)
 		// 批量标签操作
 		nodes.POST("/labels/batch-add", handlers.Label.BatchAddLabels)
 		nodes.POST("/labels/batch-delete", handlers.Label.BatchDeleteLabels)
