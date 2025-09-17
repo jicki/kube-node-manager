@@ -21,18 +21,23 @@
         v-model="currentClusterId"
         placeholder="选择集群"
         size="small"
+        filterable
+        clearable
+        remote
+        :remote-method="handleClusterSearch"
+        :loading="clusterSearchLoading"
         @change="handleClusterChange"
       >
         <el-option
-          v-for="cluster in clusters"
+          v-for="cluster in filteredClusters"
           :key="cluster.id"
           :label="cluster.name"
           :value="cluster.id"
         >
           <div class="cluster-option">
             <span class="cluster-name">{{ cluster.name }}</span>
-            <el-tag 
-              :type="cluster.status === 'active' ? 'success' : 'danger'" 
+            <el-tag
+              :type="cluster.status === 'active' ? 'success' : 'danger'"
               size="small"
             >
               {{ cluster.status === 'active' ? '正常' : '异常' }}
@@ -45,51 +50,68 @@
     <!-- 导航菜单 -->
     <el-menu
       :default-active="activeMenu"
+      :default-openeds="defaultOpeneds"
       :collapse="collapsed"
-      :unique-opened="true"
+      :unique-opened="false"
       background-color="#001529"
       text-color="rgba(255, 255, 255, 0.65)"
       active-text-color="#1890ff"
       class="sidebar-menu"
       router
     >
-      <el-menu-item index="/dashboard">
-        <el-icon><Monitor /></el-icon>
-        <template #title>概览</template>
-      </el-menu-item>
-      
-      <el-menu-item index="/clusters">
-        <el-icon><Connection /></el-icon>
-        <template #title>集群管理</template>
-      </el-menu-item>
-      
-      <el-menu-item index="/nodes">
-        <el-icon><Monitor /></el-icon>
-        <template #title>节点管理</template>
-      </el-menu-item>
-      
-      <el-menu-item index="/labels">
-        <el-icon><CollectionTag /></el-icon>
-        <template #title>标签管理</template>
-      </el-menu-item>
-      
-      <el-menu-item index="/taints">
-        <el-icon><WarningFilled /></el-icon>
-        <template #title>污点管理</template>
-      </el-menu-item>
-      
-      <el-menu-item index="/audit">
-        <el-icon><DocumentCopy /></el-icon>
-        <template #title>审计日志</template>
-      </el-menu-item>
-      
-      <el-menu-item 
-        v-if="hasPermission('admin')"
-        index="/users"
-      >
-        <el-icon><User /></el-icon>
-        <template #title>用户管理</template>
-      </el-menu-item>
+      <!-- 节点管理 -->
+      <el-sub-menu index="node-management">
+        <template #title>
+          <el-icon><Monitor /></el-icon>
+          <span>节点管理</span>
+        </template>
+
+        <el-menu-item index="/dashboard">
+          <el-icon><Monitor /></el-icon>
+          <template #title>概览</template>
+        </el-menu-item>
+
+        <el-menu-item index="/clusters">
+          <el-icon><Connection /></el-icon>
+          <template #title>集群管理</template>
+        </el-menu-item>
+
+        <el-menu-item index="/nodes">
+          <el-icon><Monitor /></el-icon>
+          <template #title>节点管理</template>
+        </el-menu-item>
+
+        <el-menu-item index="/labels">
+          <el-icon><CollectionTag /></el-icon>
+          <template #title>标签管理</template>
+        </el-menu-item>
+
+        <el-menu-item index="/taints">
+          <el-icon><WarningFilled /></el-icon>
+          <template #title>污点管理</template>
+        </el-menu-item>
+      </el-sub-menu>
+
+      <!-- 系统配置 -->
+      <el-sub-menu index="system-config">
+        <template #title>
+          <el-icon><Setting /></el-icon>
+          <span>系统配置</span>
+        </template>
+
+        <el-menu-item index="/audit">
+          <el-icon><DocumentCopy /></el-icon>
+          <template #title>审计日志</template>
+        </el-menu-item>
+
+        <el-menu-item
+          v-if="hasPermission('admin')"
+          index="/users"
+        >
+          <el-icon><User /></el-icon>
+          <template #title>用户管理</template>
+        </el-menu-item>
+      </el-sub-menu>
     </el-menu>
     
     <!-- 折叠按钮 -->
@@ -115,7 +137,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Connection,
-  DocumentCopy
+  DocumentCopy,
+  Setting
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -131,9 +154,28 @@ const clusterStore = useClusterStore()
 // 当前选中的菜单
 const activeMenu = computed(() => route.path)
 
+// 默认展开的子菜单
+const defaultOpeneds = computed(() => {
+  const path = route.path
+  const openedMenus = []
+
+  // 根据当前路径确定应该展开的子菜单
+  if (['/dashboard', '/clusters', '/nodes', '/labels', '/taints'].includes(path)) {
+    openedMenus.push('node-management')
+  }
+
+  if (['/audit', '/users'].includes(path)) {
+    openedMenus.push('system-config')
+  }
+
+  return openedMenus
+})
+
 // 集群列表和当前集群
 const clusters = computed(() => clusterStore.clusters)
 const currentClusterId = ref(clusterStore.currentCluster?.id)
+const filteredClusters = ref([])
+const clusterSearchLoading = ref(false)
 
 // 权限检查
 const hasPermission = (permission) => {
@@ -143,6 +185,21 @@ const hasPermission = (permission) => {
 // 切换折叠状态
 const toggleCollapse = () => {
   emit('toggle-collapse')
+}
+
+// 处理集群搜索
+const handleClusterSearch = (query) => {
+  clusterSearchLoading.value = true
+  setTimeout(() => {
+    if (query) {
+      filteredClusters.value = clusters.value.filter(cluster =>
+        cluster.name.toLowerCase().includes(query.toLowerCase())
+      )
+    } else {
+      filteredClusters.value = [...clusters.value]
+    }
+    clusterSearchLoading.value = false
+  }, 200)
 }
 
 // 处理集群切换
@@ -182,6 +239,15 @@ watch(
     if (newCluster) {
       currentClusterId.value = newCluster.id
     }
+  },
+  { immediate: true }
+)
+
+// 监听集群列表变化，初始化过滤列表
+watch(
+  () => clusters.value,
+  (newClusters) => {
+    filteredClusters.value = [...newClusters]
   },
   { immediate: true }
 )
@@ -271,6 +337,31 @@ onMounted(() => {
 }
 
 .sidebar-menu :deep(.el-menu-item.is-active) {
+  background-color: #1890ff !important;
+  color: #fff !important;
+}
+
+.sidebar-menu :deep(.el-sub-menu__title) {
+  height: 50px;
+  line-height: 50px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.sidebar-menu :deep(.el-sub-menu__title:hover) {
+  background-color: #1890ff !important;
+  color: #fff !important;
+}
+
+.sidebar-menu :deep(.el-sub-menu.is-active .el-sub-menu__title) {
+  color: #1890ff !important;
+}
+
+.sidebar-menu :deep(.el-sub-menu .el-menu-item) {
+  background-color: #000c17 !important;
+  padding-left: 50px !important;
+}
+
+.sidebar-menu :deep(.el-sub-menu .el-menu-item:hover) {
   background-color: #1890ff !important;
   color: #fff !important;
 }
