@@ -186,6 +186,15 @@
           <el-icon><Unlock /></el-icon>
           解除调度
         </el-button>
+        <el-button 
+          v-if="authStore.role === 'admin'"
+          type="danger"
+          @click="batchDrain" 
+          :loading="batchLoading.drain"
+        >
+          <el-icon><VideoPlay /></el-icon>
+          驱逐节点
+        </el-button>
         <el-divider direction="vertical" />
         <el-button type="warning" @click="showBatchDeleteLabelsDialog" :loading="batchLoading.deleteLabels">
           <el-icon><CollectionTag /></el-icon>
@@ -537,6 +546,14 @@
                 </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
+                    <el-dropdown-item 
+                      v-if="authStore.role === 'admin'"
+                      command="drain"
+                      divided
+                    >
+                      <el-icon style="color: #f56c6c;"><VideoPlay /></el-icon>
+                      <span style="color: #f56c6c;">驱逐节点</span>
+                    </el-dropdown-item>
                     <el-dropdown-item command="labels">
                       <el-icon><CollectionTag /></el-icon>
                       管理标签
@@ -637,6 +654,68 @@
           >
             <el-icon><Lock /></el-icon>
             {{ cordonReasonForm.isBatch ? '批量禁止调度' : '禁止调度' }}
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 驱逐确认对话框 -->
+    <el-dialog
+      v-model="drainConfirmVisible"
+      :title="drainReasonForm.isBatch ? '批量驱逐节点' : '驱逐节点'"
+      width="600px"
+      destroy-on-close
+    >
+      <div class="drain-confirm-content">
+        <el-alert
+          :title="drainReasonForm.isBatch ? '批量驱逐确认' : '驱逐确认'"
+          :description="drainReasonForm.isBatch ? 
+            `您即将驱逐以下 ${drainReasonForm.nodes.length} 个节点上的Pod，此操作将：\n1. 禁止节点调度（Cordon）\n2. 驱逐节点上的所有Pod（忽略DaemonSet）\n3. 删除EmptyDir数据\n请确认继续操作。` :
+            `您即将驱逐节点 ${drainReasonForm.node?.name || ''} 上的Pod，此操作将：\n1. 禁止节点调度（Cordon）\n2. 驱逐节点上的所有Pod（忽略DaemonSet）\n3. 删除EmptyDir数据\n请确认继续操作。`
+          "
+          type="warning"
+          show-icon
+          :closable="false"
+        />
+        
+        <el-form :model="drainReasonForm" label-width="100px" style="margin-top: 20px;">
+          <el-form-item label="驱逐原因">
+            <el-input
+              v-model="drainReasonForm.reason"
+              placeholder="请输入驱逐原因（可选）"
+              type="textarea"
+              :rows="3"
+              maxlength="200"
+              show-word-limit
+            />
+          </el-form-item>
+          
+          <el-form-item v-if="drainReasonForm.isBatch" label="目标节点">
+            <div class="nodes-list">
+              <el-tag
+                v-for="(node, index) in drainReasonForm.nodes.slice(0, 5)"
+                :key="node.name"
+                type="danger"
+                size="small"
+              >
+                {{ node.name }}
+              </el-tag>
+              <span v-if="drainReasonForm.nodes.length > 5">... 及其他 {{ drainReasonForm.nodes.length - 5 }} 个节点</span>
+            </div>
+          </el-form-item>
+        </el-form>
+      </div>
+      
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="drainConfirmVisible = false">取消</el-button>
+          <el-button
+            type="danger"
+            @click="drainReasonForm.isBatch ? confirmBatchDrain() : confirmDrain()"
+            :loading="batchLoading.drain"
+          >
+            <el-icon><VideoPlay /></el-icon>
+            {{ drainReasonForm.isBatch ? '批量驱逐' : '驱逐节点' }}
           </el-button>
         </div>
       </template>
@@ -790,6 +869,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNodeStore } from '@/store/modules/node'
 import { useClusterStore } from '@/store/modules/cluster'
+import { useAuthStore } from '@/store/modules/auth'
 import { formatTime, formatNodeStatus, formatNodeRoles, formatCPU, formatMemory } from '@/utils/format'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import NodeDetailDialog from './components/NodeDetailDialog.vue'
@@ -822,6 +902,7 @@ import {
 const router = useRouter()
 const nodeStore = useNodeStore()
 const clusterStore = useClusterStore()
+const authStore = useAuthStore()
 
 // 响应式数据
 const loading = ref(false)
@@ -851,10 +932,20 @@ const cordonReasonForm = ref({
   nodes: []
 })
 
+// 驱逐确认对话框相关
+const drainConfirmVisible = ref(false)
+const drainReasonForm = ref({
+  reason: '',
+  node: null,
+  isBatch: false,
+  nodes: []
+})
+
 // 批量操作加载状态
 const batchLoading = reactive({
   cordon: false,
   uncordon: false,
+  drain: false,
   deleteLabels: false,
   deleteTaints: false
 })
@@ -1189,6 +1280,86 @@ const batchUncordon = async () => {
   }
 }
 
+
+// 处理节点操作
+const handleNodeAction = (command, node) => {
+  switch (command) {
+    case 'drain':
+      drainNode(node)
+      break
+    case 'labels':
+      // 现有的标签管理逻辑
+      router.push(`/labels?cluster=${clusterStore.currentClusterName}&node=${node.name}`)
+      break
+    case 'taints':
+      // 现有的污点管理逻辑
+      router.push(`/taints?cluster=${clusterStore.currentClusterName}&node=${node.name}`)
+      break
+  }
+}
+
+// 驱逐节点
+const drainNode = (node) => {
+  drainReasonForm.value = {
+    reason: '',
+    node: node,
+    isBatch: false,
+    nodes: []
+  }
+  drainConfirmVisible.value = true
+}
+
+// 确认驱逐
+const confirmDrain = async () => {
+  try {
+    batchLoading.drain = true
+    const { reason, node } = drainReasonForm.value
+    
+    await nodeApi.drainNode(node.name, clusterStore.currentClusterName, reason)
+    ElMessage.success(`节点 ${node.name} 驱逐成功`)
+    drainConfirmVisible.value = false
+    await refreshData()
+  } catch (error) {
+    ElMessage.error(`驱逐节点失败: ${error.message}`)
+  } finally {
+    batchLoading.drain = false
+  }
+}
+
+// 批量驱逐节点
+const batchDrain = () => {
+  if (selectedNodes.value.length === 0) {
+    ElMessage.warning('请先选择节点')
+    return
+  }
+  
+  drainReasonForm.value = {
+    reason: '',
+    node: null,
+    isBatch: true,
+    nodes: [...selectedNodes.value]
+  }
+  drainConfirmVisible.value = true
+}
+
+// 确认批量驱逐
+const confirmBatchDrain = async () => {
+  try {
+    batchLoading.drain = true
+    const nodeNames = drainReasonForm.value.nodes.map(node => node.name)
+    const reason = drainReasonForm.value.reason
+    
+    await nodeApi.batchDrain(nodeNames, clusterStore.currentClusterName, reason)
+    ElMessage.success(`成功驱逐 ${nodeNames.length} 个节点`)
+    clearSelection()
+    drainConfirmVisible.value = false
+    await refreshData()
+  } catch (error) {
+    ElMessage.error(`批量驱逐节点失败: ${error.message}`)
+  } finally {
+    batchLoading.drain = false
+  }
+}
 
 // 清空选择
 const clearSelection = () => {

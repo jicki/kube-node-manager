@@ -124,9 +124,11 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		// 单节点操作
 		nodes.POST("/:node_name/cordon", handlers.Node.Cordon)
 		nodes.POST("/:node_name/uncordon", handlers.Node.Uncordon)
+		nodes.POST("/:node_name/drain", handlers.Node.Drain)
 		// 批量节点操作
 		nodes.POST("/batch-cordon", handlers.Node.BatchCordon)
 		nodes.POST("/batch-uncordon", handlers.Node.BatchUncordon)
+		nodes.POST("/batch-drain", handlers.Node.BatchDrain)
 		// 禁止调度历史查询 (避免路由冲突，放在批量操作中)
 		nodes.POST("/batch-cordon-history", handlers.Node.GetBatchCordonHistory)
 		nodes.POST("/cordon-history", handlers.Node.GetCordonHistory)

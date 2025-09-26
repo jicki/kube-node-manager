@@ -300,6 +300,143 @@ func (h *Handler) Uncordon(c *gin.Context) {
 	})
 }
 
+// Drain 驱逐节点
+// @Summary 驱逐节点
+// @Description 驱逐节点上的Pod（忽略DaemonSet和删除空目录数据）
+// @Tags nodes
+// @Accept json
+// @Produce json
+// @Param node_name path string true "节点名称"
+// @Param request body node.DrainRequest true "驱逐请求"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 403 {object} Response
+// @Failure 500 {object} Response
+// @Router /nodes/{node_name}/drain [post]
+func (h *Handler) Drain(c *gin.Context) {
+	nodeName := c.Param("node_name")
+	if nodeName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Node name is required",
+		})
+		return
+	}
+
+	var req node.DrainRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind drain request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
+
+	// 设置从路径参数获取的节点名称
+	req.NodeName = nodeName
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 角色可以驱逐节点（根据requirement要求）
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin role can drain nodes",
+		})
+		return
+	}
+
+	if err := h.nodeSvc.Drain(req, userID.(uint)); err != nil {
+		h.logger.Error("Failed to drain node: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to drain node: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Node drained successfully",
+	})
+}
+
+// BatchDrain 批量驱逐节点
+// @Summary 批量驱逐节点
+// @Description 批量驱逐多个节点上的Pod
+// @Tags nodes
+// @Accept json
+// @Produce json
+// @Param request body node.BatchNodeRequest true "批量驱逐请求"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 403 {object} Response
+// @Failure 500 {object} Response
+// @Router /nodes/batch-drain [post]
+func (h *Handler) BatchDrain(c *gin.Context) {
+	var req node.BatchNodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind batch drain request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
+
+	if len(req.Nodes) == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "No nodes specified for drain operation",
+		})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 角色可以驱逐节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin role can drain nodes",
+		})
+		return
+	}
+
+	results, err := h.nodeSvc.BatchDrain(req, userID.(uint))
+	if err != nil {
+		h.logger.Error("Failed to batch drain nodes: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to batch drain nodes: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Batch drain operation completed",
+		Data:    results,
+	})
+}
+
 // GetSummary 获取节点摘要统计
 // @Summary 获取节点摘要
 // @Description 获取集群节点的统计摘要信息

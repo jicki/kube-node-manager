@@ -42,6 +42,18 @@ const nodeApi = {
     })
   },
 
+  // 驱逐节点
+  drainNode(nodeName, clusterName, reason = '') {
+    return request({
+      url: `/api/v1/nodes/${nodeName}/drain`,
+      method: 'post',
+      data: {
+        cluster_name: clusterName,
+        reason: reason
+      }
+    })
+  },
+
 
   // 批量禁止调度节点
   batchCordon(nodeNames, clusterName, reason = '') {
@@ -60,6 +72,19 @@ const nodeApi = {
   batchUncordon(nodeNames, clusterName, reason = '') {
     return request({
       url: '/api/v1/nodes/batch-uncordon',
+      method: 'post',
+      data: { 
+        nodes: nodeNames,
+        cluster_name: clusterName,
+        reason: reason
+      }
+    })
+  },
+
+  // 批量驱逐节点
+  batchDrain(nodeNames, clusterName, reason = '') {
+    return request({
+      url: '/api/v1/nodes/batch-drain',
       method: 'post',
       data: { 
         nodes: nodeNames,

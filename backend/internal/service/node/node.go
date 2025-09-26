@@ -49,6 +49,13 @@ type BatchNodeRequest struct {
 	Reason      string   `json:"reason"` // 批量操作的原因说明
 }
 
+// DrainRequest 节点驱逐请求
+type DrainRequest struct {
+	ClusterName string `json:"cluster_name" binding:"required"`
+	NodeName    string `json:"node_name"` // 从URL路径参数获取，不需要binding验证
+	Reason      string `json:"reason"`    // 驱逐的原因说明
+}
+
 // CordonInfoRequest 获取禁止调度信息请求
 type CordonInfoRequest struct {
 	ClusterName string `json:"cluster_name" binding:"required"`
@@ -533,6 +540,86 @@ func (s *Service) BatchUncordon(req BatchNodeRequest, userID uint) (map[string]i
 		ResourceType: model.ResourceNode,
 		Details:      fmt.Sprintf("Batch uncordon %d nodes in cluster %s: %d successful, %d failed", len(req.Nodes), req.ClusterName, len(successful), len(errors)),
 		Status:       model.AuditStatusSuccess,
+	})
+
+	return results, nil
+}
+
+// Drain 驱逐节点
+func (s *Service) Drain(req DrainRequest, userID uint) error {
+	s.logger.Infof("User %d initiating drain operation on node %s in cluster %s", userID, req.NodeName, req.ClusterName)
+
+	// 调用k8s服务进行节点驱逐
+	if err := s.k8sSvc.DrainNode(req.ClusterName, req.NodeName, req.Reason); err != nil {
+		s.logger.Errorf("Failed to drain node %s in cluster %s: %v", req.NodeName, req.ClusterName, err)
+		s.auditSvc.Log(audit.LogRequest{
+			UserID:       userID,
+			Action:       model.ActionUpdate,
+			ResourceType: model.ResourceNode,
+			Details:      fmt.Sprintf("Failed to drain node %s in cluster %s", req.NodeName, req.ClusterName),
+			Reason:       req.Reason,
+			Status:       model.AuditStatusFailed,
+			ErrorMsg:     err.Error(),
+		})
+		return fmt.Errorf("failed to drain node: %w", err)
+	}
+
+	// 记录审计日志
+	s.auditSvc.Log(audit.LogRequest{
+		UserID:       userID,
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceNode,
+		Details:      fmt.Sprintf("Drained node %s in cluster %s", req.NodeName, req.ClusterName),
+		Reason:       req.Reason,
+		Status:       model.AuditStatusSuccess,
+	})
+
+	s.logger.Infof("Successfully drained node %s in cluster %s", req.NodeName, req.ClusterName)
+	return nil
+}
+
+// BatchDrain 批量驱逐节点
+func (s *Service) BatchDrain(req BatchNodeRequest, userID uint) (map[string]interface{}, error) {
+	results := make(map[string]interface{})
+	errors := make(map[string]string)
+	successful := make([]string, 0)
+
+	s.logger.Infof("User %d initiating batch drain operation on %d nodes in cluster %s", userID, len(req.Nodes), req.ClusterName)
+
+	for _, nodeName := range req.Nodes {
+		drainReq := DrainRequest{
+			ClusterName: req.ClusterName,
+			NodeName:    nodeName,
+			Reason:      req.Reason,
+		}
+
+		if err := s.Drain(drainReq, userID); err != nil {
+			errors[nodeName] = err.Error()
+			s.logger.Errorf("Failed to drain node %s: %v", nodeName, err)
+		} else {
+			successful = append(successful, nodeName)
+		}
+	}
+
+	results["successful"] = successful
+	results["errors"] = errors
+	results["total"] = len(req.Nodes)
+	results["success_count"] = len(successful)
+	results["error_count"] = len(errors)
+
+	// 记录审计日志
+	status := model.AuditStatusSuccess
+	if len(errors) == len(req.Nodes) {
+		status = model.AuditStatusFailed
+	}
+
+	s.auditSvc.Log(audit.LogRequest{
+		UserID:       userID,
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceNode,
+		Details:      fmt.Sprintf("Batch drain %d nodes in cluster %s: %d successful, %d failed", len(req.Nodes), req.ClusterName, len(successful), len(errors)),
+		Reason:       req.Reason,
+		Status:       status,
 	})
 
 	return results, nil

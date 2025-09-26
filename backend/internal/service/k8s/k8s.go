@@ -9,7 +9,11 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -601,6 +605,185 @@ func (s *Service) GetNodeCordonInfo(clusterName, nodeName string) (map[string]in
 	}
 
 	return info, nil
+}
+
+// DrainNode 驱逐节点上的Pod（类似kubectl drain）
+func (s *Service) DrainNode(clusterName, nodeName, reason string) error {
+	client, err := s.getClient(clusterName)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second) // 5分钟超时
+	defer cancel()
+
+	s.logger.Infof("Starting to drain node %s in cluster %s", nodeName, clusterName)
+
+	// 首先cordon节点，防止新的Pod调度到此节点
+	if err := s.CordonNodeWithReason(clusterName, nodeName, reason); err != nil {
+		return fmt.Errorf("failed to cordon node before draining: %w", err)
+	}
+
+	// 获取节点上的所有Pod
+	fieldSelector := fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName})
+	pods, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+		FieldSelector: fieldSelector.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list pods on node %s: %w", nodeName, err)
+	}
+
+	s.logger.Infof("Found %d pods on node %s", len(pods.Items), nodeName)
+
+	// 过滤需要驱逐的Pod
+	var podsToEvict []corev1.Pod
+	for _, pod := range pods.Items {
+		if s.shouldEvictPod(&pod) {
+			podsToEvict = append(podsToEvict, pod)
+		}
+	}
+
+	s.logger.Infof("Will evict %d pods from node %s", len(podsToEvict), nodeName)
+
+	// 如果没有需要驱逐的Pod，直接返回成功
+	if len(podsToEvict) == 0 {
+		s.logger.Infof("No pods to evict on node %s", nodeName)
+		return nil
+	}
+
+	// 驱逐Pod
+	var evictionErrors []string
+	for _, pod := range podsToEvict {
+		if err := s.evictPod(ctx, client, &pod); err != nil {
+			evictionErrors = append(evictionErrors, fmt.Sprintf("Pod %s/%s: %v", pod.Namespace, pod.Name, err))
+			s.logger.Errorf("Failed to evict pod %s/%s: %v", pod.Namespace, pod.Name, err)
+		} else {
+			s.logger.Infof("Successfully evicted pod %s/%s", pod.Namespace, pod.Name)
+		}
+	}
+
+	// 等待Pod驱逐完成
+	if len(evictionErrors) == 0 {
+		if err := s.waitForPodsEvicted(ctx, client, nodeName, podsToEvict); err != nil {
+			s.logger.Warningf("Some pods may still be terminating on node %s: %v", nodeName, err)
+		}
+	}
+
+	if len(evictionErrors) > 0 {
+		return fmt.Errorf("failed to evict some pods: %s", strings.Join(evictionErrors, "; "))
+	}
+
+	s.logger.Infof("Successfully drained node %s in cluster %s", nodeName, clusterName)
+	return nil
+}
+
+// shouldEvictPod 判断是否应该驱逐Pod
+func (s *Service) shouldEvictPod(pod *corev1.Pod) bool {
+	// 跳过已经完成或正在删除的Pod
+	if pod.DeletionTimestamp != nil || pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+		return false
+	}
+
+	// 跳过DaemonSet管理的Pod（根据requirement要求忽略daemonsets）
+	if s.isDaemonSetPod(pod) {
+		s.logger.Infof("Skipping DaemonSet pod %s/%s", pod.Namespace, pod.Name)
+		return false
+	}
+
+	// 跳过静态Pod（由kubelet直接管理）
+	if s.isStaticPod(pod) {
+		s.logger.Infof("Skipping static pod %s/%s", pod.Namespace, pod.Name)
+		return false
+	}
+
+	return true
+}
+
+// isDaemonSetPod 检查Pod是否由DaemonSet管理
+func (s *Service) isDaemonSetPod(pod *corev1.Pod) bool {
+	for _, ownerRef := range pod.OwnerReferences {
+		if ownerRef.Kind == "DaemonSet" {
+			return true
+		}
+	}
+	return false
+}
+
+// isStaticPod 检查是否为静态Pod
+func (s *Service) isStaticPod(pod *corev1.Pod) bool {
+	for _, ownerRef := range pod.OwnerReferences {
+		if ownerRef.Kind == "Node" {
+			return true
+		}
+	}
+	// 静态Pod通常在mirror pod annotation中有标记
+	if pod.Annotations != nil {
+		if _, exists := pod.Annotations["kubernetes.io/config.mirror"]; exists {
+			return true
+		}
+	}
+	return false
+}
+
+// evictPod 驱逐单个Pod
+func (s *Service) evictPod(ctx context.Context, client kubernetes.Interface, pod *corev1.Pod) error {
+	// 检查是否支持Eviction API（优先使用）
+	eviction := &policyv1.Eviction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		},
+		DeleteOptions: &metav1.DeleteOptions{},
+	}
+
+	err := client.PolicyV1().Evictions(pod.Namespace).Evict(ctx, eviction)
+	if err == nil {
+		return nil
+	}
+
+	// 如果Eviction API不可用，回退到直接删除Pod
+	if apierrors.IsNotFound(err) || apierrors.IsTooManyRequests(err) {
+		s.logger.Warningf("Eviction API failed for pod %s/%s (%v), falling back to direct deletion",
+			pod.Namespace, pod.Name, err)
+
+		deleteOptions := metav1.DeleteOptions{
+			GracePeriodSeconds: func() *int64 { var i int64 = 30; return &i }(), // 30秒优雅关闭
+		}
+
+		return client.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, deleteOptions)
+	}
+
+	return err
+}
+
+// waitForPodsEvicted 等待Pod驱逐完成
+func (s *Service) waitForPodsEvicted(ctx context.Context, client kubernetes.Interface, nodeName string, podsToWait []corev1.Pod) error {
+	return wait.PollImmediate(5*time.Second, 120*time.Second, func() (bool, error) {
+		fieldSelector := fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName})
+		currentPods, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+			FieldSelector: fieldSelector.String(),
+		})
+		if err != nil {
+			return false, err
+		}
+
+		// 检查是否还有需要等待的Pod
+		waitingPods := make(map[string]bool)
+		for _, pod := range podsToWait {
+			waitingPods[pod.Namespace+"/"+pod.Name] = true
+		}
+
+		stillWaiting := 0
+		for _, pod := range currentPods.Items {
+			podKey := pod.Namespace + "/" + pod.Name
+			if waitingPods[podKey] && pod.DeletionTimestamp == nil {
+				stillWaiting++
+			}
+		}
+
+		s.logger.Infof("Still waiting for %d pods to be evicted from node %s", stillWaiting, nodeName)
+		return stillWaiting == 0, nil
+	})
 }
 
 // nodeToNodeInfo 转换节点信息
