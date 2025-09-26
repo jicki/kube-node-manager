@@ -554,6 +554,7 @@ func (s *Service) Drain(req DrainRequest, userID uint) error {
 		s.logger.Errorf("Failed to drain node %s in cluster %s: %v", req.NodeName, req.ClusterName, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			NodeName:     req.NodeName,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceNode,
 			Details:      fmt.Sprintf("Failed to drain node %s in cluster %s", req.NodeName, req.ClusterName),
@@ -564,9 +565,21 @@ func (s *Service) Drain(req DrainRequest, userID uint) error {
 		return fmt.Errorf("failed to drain node: %w", err)
 	}
 
-	// 记录审计日志
+	// 记录禁止调度的审计日志（这样就不需要依赖后续的同步过程）
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		NodeName:     req.NodeName,
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceNode,
+		Details:      fmt.Sprintf("Cordoned node %s in cluster %s", req.NodeName, req.ClusterName),
+		Reason:       req.Reason,
+		Status:       model.AuditStatusSuccess,
+	})
+
+	// 记录驱逐操作的审计日志
+	s.auditSvc.Log(audit.LogRequest{
+		UserID:       userID,
+		NodeName:     req.NodeName,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceNode,
 		Details:      fmt.Sprintf("Drained node %s in cluster %s", req.NodeName, req.ClusterName),
@@ -750,7 +763,20 @@ func (s *Service) SyncCordonAnnotationsToAudit(clusterName, nodeName string) err
 		// 情况1: 没有现有记录，直接同步
 		shouldSync = true
 		syncReason = "no existing record"
-	} else if !cordonTime.IsZero() {
+	} else {
+		// 检查现有记录是否是通过Web界面操作的（非admin用户或包含Cordoned关键词的记录）
+		isWebUIOperation := existingLog.UserID != adminUserID ||
+			(strings.Contains(existingLog.Details, "Cordoned") &&
+				!strings.Contains(existingLog.Details, "kubectl-plugin"))
+
+		if isWebUIOperation {
+			s.logger.Infof("Skipping sync for node %s: existing record from Web UI (User ID: %d)",
+				nodeName, existingLog.UserID)
+			return nil // 跳过同步，保留Web界面的正确用户记录
+		}
+	}
+
+	if existingLog != nil && !cordonTime.IsZero() {
 		// 情况2: 有时间戳（来自kubectl-plugin或K8s taint）
 		if existingLog.CreatedAt.Before(cordonTime) {
 			shouldSync = true
