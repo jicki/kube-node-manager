@@ -1208,6 +1208,9 @@ const uncordonNode = async (node) => {
 // 处理节点操作
 const handleNodeAction = (command, node) => {
   switch (command) {
+    case 'drain':
+      drainNode(node)
+      break
     case 'labels':
       // 跳转到标签管理页面，传递节点信息
       router.push({
@@ -1277,24 +1280,6 @@ const batchUncordon = async () => {
     ElMessage.error(`批量解除调度失败: ${error.message}`)
   } finally {
     batchLoading.uncordon = false
-  }
-}
-
-
-// 处理节点操作
-const handleNodeAction = (command, node) => {
-  switch (command) {
-    case 'drain':
-      drainNode(node)
-      break
-    case 'labels':
-      // 现有的标签管理逻辑
-      router.push(`/labels?cluster=${clusterStore.currentClusterName}&node=${node.name}`)
-      break
-    case 'taints':
-      // 现有的污点管理逻辑
-      router.push(`/taints?cluster=${clusterStore.currentClusterName}&node=${node.name}`)
-      break
   }
 }
 
