@@ -793,8 +793,8 @@ func (s *Service) SyncCordonAnnotationsToAudit(clusterName, nodeName string) err
 				syncReason = "manual cordon operation detected via taint timestamp"
 			}
 		}
-	} else {
-		// 情况3: 完全没有时间戳信息，这种情况比较少见
+	} else if existingLog != nil {
+		// 情况3: existingLog存在但没有时间戳信息
 		// 检查现有记录的类型来决定是否同步
 		isExistingFromSync := strings.Contains(existingLog.Details, "synced from kubectl-plugin") ||
 			strings.Contains(existingLog.Details, "manual operation")
