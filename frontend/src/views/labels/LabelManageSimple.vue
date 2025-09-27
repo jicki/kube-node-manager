@@ -144,11 +144,18 @@ const refreshData = async () => {
     console.log('API响应:', response)
     
     if (response && response.data) {
+      // 处理多种可能的数据格式
       if (Array.isArray(response.data)) {
+        // 数据直接是数组
         labelTemplates.value = response.data
+      } else if (response.data.templates && Array.isArray(response.data.templates)) {
+        // 数据在 templates 字段中（根据API截图）
+        labelTemplates.value = response.data.templates
       } else if (response.data.data && Array.isArray(response.data.data)) {
+        // 数据在 data.data 中
         labelTemplates.value = response.data.data
       } else {
+        console.warn('未识别的数据格式:', response.data)
         labelTemplates.value = []
       }
     } else {
