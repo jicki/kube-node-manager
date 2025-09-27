@@ -93,7 +93,7 @@ export function formatCPU(value, unit = 'm') {
  */
 function formatCPUValue(cores) {
   if (cores >= 1) {
-    return cores.toFixed(2) + ' cores'
+    return cores.toFixed(2) + ' 核'
   } else {
     const millicores = Math.round(cores * 1000)
     return millicores + 'm'
