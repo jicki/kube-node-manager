@@ -137,8 +137,13 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 		userID: userID,
 	}
 
-	// 注册连接
+	// 注册连接（关闭已存在的连接）
 	s.connMutex.Lock()
+	if existingConn, exists := s.connections[userID]; exists {
+		s.logger.Infof("Closing existing WebSocket connection for user %d", userID)
+		close(existingConn.send)
+		existingConn.ws.Close()
+	}
 	s.connections[userID] = conn
 	s.connMutex.Unlock()
 
@@ -213,6 +218,9 @@ func (s *Service) readPump(conn *Connection) {
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				s.logger.Errorf("WebSocket error: %v", err)
+			} else {
+				// 正常关闭、用户主动关闭连接或无状态码关闭，记录为信息级别
+				s.logger.Infof("WebSocket connection closed: %v", err)
 			}
 			break
 		}
@@ -252,6 +260,14 @@ func (s *Service) sendToUser(userID uint, message ProgressMessage) {
 // CreateTask 创建新任务
 func (s *Service) CreateTask(taskID, action string, total int) {
 	s.taskMutex.Lock()
+	defer s.taskMutex.Unlock()
+
+	// 检查是否已存在相同的任务，如果存在则清理
+	if existingTask, exists := s.tasks[taskID]; exists {
+		s.logger.Infof("Replacing existing task %s (action: %s)", taskID, existingTask.Action)
+		existingTask.IsRunning = false
+	}
+
 	s.tasks[taskID] = &TaskProgress{
 		TaskID:    taskID,
 		Action:    action,
@@ -259,7 +275,8 @@ func (s *Service) CreateTask(taskID, action string, total int) {
 		Total:     total,
 		IsRunning: true,
 	}
-	s.taskMutex.Unlock()
+
+	s.logger.Infof("Created task %s with %d total items", taskID, total)
 }
 
 // UpdateProgress 更新任务进度
@@ -269,6 +286,12 @@ func (s *Service) UpdateProgress(taskID string, current int, currentNode string,
 	s.taskMutex.RUnlock()
 
 	if !exists {
+		s.logger.Warningf("Task %s not found for progress update", taskID)
+		return
+	}
+
+	if !task.IsRunning {
+		s.logger.Warningf("Task %s is not running, ignoring progress update", taskID)
 		return
 	}
 
@@ -288,6 +311,7 @@ func (s *Service) UpdateProgress(taskID string, current int, currentNode string,
 	}
 
 	s.sendToUser(userID, message)
+	s.logger.Infof("Progress updated for task %s: %d/%d", taskID, current, task.Total)
 }
 
 // CompleteTask 完成任务
@@ -295,12 +319,18 @@ func (s *Service) CompleteTask(taskID string, userID uint) {
 	s.taskMutex.Lock()
 	task, exists := s.tasks[taskID]
 	if exists {
+		if !task.IsRunning {
+			s.taskMutex.Unlock()
+			s.logger.Warningf("Task %s was already completed or stopped", taskID)
+			return
+		}
 		task.IsRunning = false
 		delete(s.tasks, taskID)
 	}
 	s.taskMutex.Unlock()
 
 	if !exists {
+		s.logger.Warningf("Task %s not found for completion", taskID)
 		return
 	}
 
@@ -316,6 +346,7 @@ func (s *Service) CompleteTask(taskID string, userID uint) {
 	}
 
 	s.sendToUser(userID, message)
+	s.logger.Infof("Task %s completed successfully", taskID)
 }
 
 // ErrorTask 任务错误

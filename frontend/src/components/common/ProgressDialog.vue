@@ -60,7 +60,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { getToken } from '@/utils/auth'
@@ -134,6 +134,13 @@ const connectWebSocket = () => {
     return
   }
 
+  // 先关闭已有连接（防止重复连接）
+  if (websocket.value) {
+    console.log('关闭已有的WebSocket连接以建立新连接')
+    websocket.value.close()
+    websocket.value = null
+  }
+
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
   const token = getToken()
@@ -160,18 +167,28 @@ const connectWebSocket = () => {
       }
     }
 
-    websocket.value.onclose = () => {
-      console.log('WebSocket连接已关闭')
-      // 如果任务未完成，尝试重连
-      if (!isCompleted.value && !isError.value && visible.value) {
-        setTimeout(connectWebSocket, 2000)
+    websocket.value.onclose = (event) => {
+      console.log('WebSocket连接已关闭', { code: event.code, reason: event.reason, wasClean: event.wasClean })
+      
+      // 只在非正常关闭且任务未完成时才重连
+      if (!event.wasClean && !isCompleted.value && !isError.value && visible.value && props.taskId) {
+        console.log('检测到异常关闭，2秒后尝试重连')
+        setTimeout(() => {
+          // 重连前再次检查状态，避免不必要的重连
+          if (!isCompleted.value && !isError.value && visible.value && props.taskId) {
+            connectWebSocket()
+          }
+        }, 2000)
       }
     }
 
     websocket.value.onerror = (error) => {
       console.error('WebSocket错误:', error)
       console.error('WebSocket URL:', wsUrl)
-      ElMessage.error('WebSocket连接失败')
+      console.error('WebSocket状态:', websocket.value?.readyState)
+      
+      // 不要因为连接错误就立即显示错误消息，因为可能是正常的连接替换
+      console.warn('WebSocket连接遇到错误，可能是连接替换导致')
     }
   } catch (error) {
     console.error('创建WebSocket连接失败:', error)
@@ -239,7 +256,19 @@ const handleCancel = () => {
 // 关闭WebSocket连接
 const closeWebSocket = () => {
   if (websocket.value) {
-    websocket.value.close()
+    console.log('正在关闭WebSocket连接')
+    try {
+      // 移除事件监听器，防止触发不必要的重连
+      websocket.value.onclose = null
+      websocket.value.onerror = null
+      websocket.value.onmessage = null
+      websocket.value.onopen = null
+      
+      // 正常关闭连接
+      websocket.value.close(1000, 'Normal closure')
+    } catch (error) {
+      console.error('关闭WebSocket时出错:', error)
+    }
     websocket.value = null
   }
 }
@@ -265,19 +294,34 @@ const resetState = () => {
 // 监听taskId变化
 watch(() => props.taskId, (newTaskId, oldTaskId) => {
   console.log('ProgressDialog taskId changed:', { oldTaskId, newTaskId, visible: props.modelValue })
+  
   if (newTaskId && props.modelValue) {
+    // 新任务开始时，先关闭旧连接，重置状态，再建立新连接
+    closeWebSocket()
     resetState()
-    connectWebSocket()
+    // 延迟一点时间确保旧连接完全关闭
+    nextTick(() => {
+      connectWebSocket()
+    })
+  } else if (!newTaskId) {
+    // 如果taskId为空，关闭连接
+    closeWebSocket()
   }
 })
 
 // 监听对话框显示状态
 watch(() => props.modelValue, (newVal) => {
   console.log('ProgressDialog visibility changed:', newVal, 'taskId:', props.taskId)
+  
   if (newVal && props.taskId) {
+    // 对话框打开且有taskId时，确保状态清理后再连接
+    closeWebSocket()
     resetState()
-    connectWebSocket()
+    nextTick(() => {
+      connectWebSocket()
+    })
   } else if (!newVal) {
+    // 对话框关闭时，立即关闭连接
     closeWebSocket()
   }
 })
