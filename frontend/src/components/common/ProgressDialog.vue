@@ -254,6 +254,15 @@ const resetState = () => {
   isError.value = false
 }
 
+// 监听taskId变化
+watch(() => props.taskId, (newTaskId, oldTaskId) => {
+  console.log('ProgressDialog taskId changed:', { oldTaskId, newTaskId, visible: props.modelValue })
+  if (newTaskId && props.modelValue) {
+    resetState()
+    connectWebSocket()
+  }
+})
+
 // 监听对话框显示状态
 watch(() => props.modelValue, (newVal) => {
   console.log('ProgressDialog visibility changed:', newVal, 'taskId:', props.taskId)

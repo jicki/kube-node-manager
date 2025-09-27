@@ -1263,8 +1263,11 @@ const handleApplyTemplate = async () => {
       })
       
       // 获取任务ID
+      console.log('API response:', progressResponse.data)
       currentTaskId.value = progressResponse.data.task_id
+      console.log('Set currentTaskId to:', currentTaskId.value)
       progressDialogVisible.value = true
+      console.log('Set progressDialogVisible to:', progressDialogVisible.value)
       
       // 关闭应用对话框，但保持applying状态直到进度完成
       // applyDialogVisible.value = false 在进度完成后再关闭
