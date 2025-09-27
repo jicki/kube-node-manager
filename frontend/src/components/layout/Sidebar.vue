@@ -71,11 +71,6 @@
           <template #title>概览</template>
         </el-menu-item>
 
-        <el-menu-item index="/clusters">
-          <el-icon><Connection /></el-icon>
-          <template #title>集群管理</template>
-        </el-menu-item>
-
         <el-menu-item index="/nodes">
           <el-icon><Monitor /></el-icon>
           <template #title>节点管理</template>
@@ -98,6 +93,11 @@
           <el-icon><Setting /></el-icon>
           <span>系统配置</span>
         </template>
+
+        <el-menu-item index="/clusters">
+          <el-icon><Connection /></el-icon>
+          <template #title>集群管理</template>
+        </el-menu-item>
 
         <el-menu-item index="/audit">
           <el-icon><DocumentCopy /></el-icon>
@@ -160,11 +160,11 @@ const defaultOpeneds = computed(() => {
   const openedMenus = []
 
   // 根据当前路径确定应该展开的子菜单
-  if (['/dashboard', '/clusters', '/nodes', '/labels', '/taints'].includes(path)) {
+  if (['/dashboard', '/nodes', '/labels', '/taints'].includes(path)) {
     openedMenus.push('node-management')
   }
 
-  if (['/audit', '/users'].includes(path)) {
+  if (['/clusters', '/audit', '/users'].includes(path)) {
     openedMenus.push('system-config')
   }
 
