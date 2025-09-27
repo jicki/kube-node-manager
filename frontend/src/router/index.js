@@ -38,13 +38,13 @@ const router = createRouter({
         {
           path: 'labels',
           name: 'LabelManage',
-          component: () => import('@/views/labels/LabelManageSimple.vue'),
+          component: () => import('@/views/labels/LabelManage.vue'),
           meta: { title: '标签管理', icon: 'CollectionTag', requiresAuth: true }
         },
         {
           path: 'taints',
           name: 'TaintManage',
-          component: () => import('@/views/taints/TaintManageSimple.vue'),
+          component: () => import('@/views/taints/TaintManage.vue'),
           meta: { title: '污点管理', icon: 'WarningFilled', requiresAuth: true }
         },
         {
