@@ -128,13 +128,20 @@ const getActionText = (action) => {
 
 // 建立WebSocket连接
 const connectWebSocket = () => {
-  if (!props.taskId) return
+  if (!props.taskId) {
+    console.log('No taskId provided, skipping WebSocket connection')
+    return
+  }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
   const token = localStorage.getItem('token')
   
   const wsUrl = `${protocol}//${host}/api/v1/progress/ws?token=${token}`
+  
+  console.log('Attempting to connect WebSocket:', wsUrl)
+  console.log('TaskId:', props.taskId)
+  console.log('Token exists:', !!token)
   
   try {
     websocket.value = new WebSocket(wsUrl)
@@ -162,6 +169,7 @@ const connectWebSocket = () => {
 
     websocket.value.onerror = (error) => {
       console.error('WebSocket错误:', error)
+      console.error('WebSocket URL:', wsUrl)
       ElMessage.error('WebSocket连接失败')
     }
   } catch (error) {
@@ -248,6 +256,7 @@ const resetState = () => {
 
 // 监听对话框显示状态
 watch(() => props.modelValue, (newVal) => {
+  console.log('ProgressDialog visibility changed:', newVal, 'taskId:', props.taskId)
   if (newVal && props.taskId) {
     resetState()
     connectWebSocket()
@@ -257,6 +266,7 @@ watch(() => props.modelValue, (newVal) => {
 })
 
 onMounted(() => {
+  console.log('ProgressDialog mounted, visible:', visible.value, 'taskId:', props.taskId)
   if (visible.value && props.taskId) {
     connectWebSocket()
   }

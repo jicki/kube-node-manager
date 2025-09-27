@@ -86,12 +86,17 @@ func (s *Service) SetAuthService(authService TokenValidator) {
 
 // HandleWebSocket 处理WebSocket连接
 func (s *Service) HandleWebSocket(c *gin.Context) {
+	s.logger.Infof("WebSocket connection attempt from %s", c.ClientIP())
+
 	// 从查询参数获取token
 	token := c.Query("token")
 	if token == "" {
+		s.logger.Errorf("WebSocket connection failed: no token provided")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "缺少认证token"})
 		return
 	}
+
+	s.logger.Infof("WebSocket token received (length: %d)", len(token))
 
 	// 验证token
 	if s.authService == nil {
@@ -100,6 +105,7 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
+	s.logger.Infof("Validating WebSocket token...")
 	claims, err := s.authService.ValidateToken(token)
 	if err != nil {
 		s.logger.Errorf("WebSocket token validation failed: %v", err)
@@ -114,6 +120,7 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 	}
 
 	userID := claims.UserID
+	s.logger.Infof("WebSocket authentication successful for user %d", userID)
 
 	// 升级HTTP连接为WebSocket
 	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
