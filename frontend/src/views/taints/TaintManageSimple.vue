@@ -135,38 +135,57 @@ const taintStats = computed(() => {
 const refreshData = async () => {
   try {
     loading.value = true
-    console.log('正在获取污点模板...')
+    console.log('🚀 开始获取污点模板...')
     
     const response = await taintApi.getTemplateList({
       page: 1,
       page_size: 100
     })
     
-    console.log('API响应:', response)
+    console.log('📡 污点API完整响应:', JSON.stringify(response, null, 2))
+    console.log('📡 response.data类型:', typeof response.data)
+    console.log('📡 response.data内容:', response.data)
     
     if (response && response.data) {
+      console.log('✅ response.data 存在')
+      
       // 处理多种可能的数据格式
       if (Array.isArray(response.data)) {
-        // 数据直接是数组
+        console.log('🔍 数据格式: 直接数组')
         taintTemplates.value = response.data
       } else if (response.data.templates && Array.isArray(response.data.templates)) {
-        // 数据在 templates 字段中（与标签API格式一致）
+        console.log('🔍 数据格式: response.data.templates')
+        console.log('📋 templates内容:', response.data.templates)
         taintTemplates.value = response.data.templates
       } else if (response.data.data && Array.isArray(response.data.data)) {
-        // 数据在 data.data 中
+        console.log('🔍 数据格式: response.data.data')
         taintTemplates.value = response.data.data
       } else {
-        console.warn('未识别的数据格式:', response.data)
+        console.warn('❌ 未识别的数据格式:')
+        console.warn('response.data:', response.data)
+        console.warn('response.data.templates存在?', !!response.data.templates)
+        console.warn('response.data.templates是数组?', Array.isArray(response.data.templates))
+        console.warn('response.data.data存在?', !!response.data.data)
+        console.warn('response.data.data是数组?', Array.isArray(response.data.data))
         taintTemplates.value = []
       }
     } else {
+      console.warn('❌ response.data 不存在')
+      console.warn('response:', response)
       taintTemplates.value = []
     }
     
-    console.log('解析后的模板数据:', taintTemplates.value)
-    ElMessage.success('数据刷新成功')
+    console.log('🎯 最终污点模板数据:', taintTemplates.value)
+    console.log('🎯 污点模板数量:', taintTemplates.value.length)
+    
+    if (taintTemplates.value.length > 0) {
+      ElMessage.success(`成功加载 ${taintTemplates.value.length} 个污点模板`)
+    } else {
+      ElMessage.warning('没有找到污点模板数据')
+    }
   } catch (error) {
-    console.error('获取污点模板失败:', error)
+    console.error('💥 获取污点模板失败:', error)
+    console.error('💥 错误详情:', error.response || error.message || error)
     ElMessage.error('获取污点模板失败: ' + (error.message || '未知错误'))
     taintTemplates.value = []
   } finally {
