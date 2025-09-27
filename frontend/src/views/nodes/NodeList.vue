@@ -406,60 +406,71 @@
         <el-table-column label="资源配置" min-width="320">
           <template #default="{ row }">
             <div class="resource-usage-grid">
-              <!-- 第一行：CPU 和 内存标题 -->
-              <div class="resource-headers">
-                <div class="resource-header-item">
-                  <el-icon class="resource-icon cpu-icon"><Monitor /></el-icon>
-                  <span class="resource-label">CPU</span>
+              <!-- 顶部说明文字 -->
+              <div class="resource-title">
+                总量 / 可分配
+              </div>
+              
+              <!-- 主要资源：CPU 和 内存 -->
+              <div class="resource-main">
+                <div class="resource-item-card">
+                  <div class="resource-item-header">
+                    <el-icon class="resource-icon cpu-icon"><Monitor /></el-icon>
+                    <span class="resource-label">CPU</span>
+                  </div>
+                  <div class="resource-item-value">
+                    <span class="resource-total">{{ formatCPU(row.capacity?.cpu) || 'N/A' }}</span>
+                    <span class="resource-divider">/</span>
+                    <span class="resource-value">{{ formatCPU(row.allocatable?.cpu) || 'N/A' }}</span>
+                  </div>
                 </div>
-                <div class="resource-header-item">
-                  <el-icon class="resource-icon memory-icon"><Monitor /></el-icon>
-                  <span class="resource-label">内存</span>
+                
+                <div class="resource-item-card">
+                  <div class="resource-item-header">
+                    <el-icon class="resource-icon memory-icon"><Monitor /></el-icon>
+                    <span class="resource-label">内存</span>
+                  </div>
+                  <div class="resource-item-value">
+                    <span class="resource-total">{{ formatMemoryCorrect(row.capacity?.memory) }}</span>
+                    <span class="resource-divider">/</span>
+                    <span class="resource-value">{{ formatMemoryCorrect(row.allocatable?.memory) }}</span>
+                  </div>
                 </div>
               </div>
               
-              <!-- 第二行：数值显示 -->
-              <div class="resource-values">
-                <div class="resource-value-item">
-                  <span class="resource-total">{{ formatCPU(row.capacity?.cpu) || 'N/A' }}</span>
-                  <span class="resource-divider">/</span>
-                  <span class="resource-value">{{ formatCPU(row.allocatable?.cpu) || 'N/A' }}</span>
-                </div>
-                <div class="resource-value-item">
-                  <span class="resource-total">{{ formatMemoryCorrect(row.capacity?.memory) }}</span>
-                  <span class="resource-divider">/</span>
-                  <span class="resource-value">{{ formatMemoryCorrect(row.allocatable?.memory) }}</span>
-                </div>
-              </div>
-              
-              <!-- 第三行：说明文字 -->
-              <div class="resource-subtexts">
-                <span class="resource-subtext">总量 / 可分配</span>
-                <span class="resource-subtext">总量 / 可分配</span>
-              </div>
-              
-              <!-- Pod 和 GPU 资源（如果存在则显示在下方） -->
-              <div class="resource-additional" v-if="row.capacity?.pods || hasGPUResources(row)">
-                <div class="resource-extra-headers">
-                  <div class="resource-header-item">
+              <!-- 次要资源：Pod 和 GPU -->
+              <div class="resource-secondary">
+                <div class="resource-item-card">
+                  <div class="resource-item-header">
                     <el-icon class="resource-icon pods-icon"><Grid /></el-icon>
                     <span class="resource-label">Pod</span>
                   </div>
-                  <div class="resource-header-item" v-if="hasGPUResources(row)">
-                    <el-icon class="resource-icon gpu-icon"><VideoPlay /></el-icon>
-                    <span class="resource-label">GPU</span>
-                  </div>
-                </div>
-                <div class="resource-extra-values">
-                  <div class="resource-value-item">
+                  <div class="resource-item-value">
                     <span class="resource-total">{{ row.capacity?.pods || '0' }}</span>
                     <span class="resource-divider">/</span>
                     <span class="resource-value">{{ row.allocatable?.pods || '0' }}</span>
                   </div>
-                  <div class="resource-value-item" v-if="hasGPUResources(row)">
+                </div>
+                
+                <div class="resource-item-card" v-if="hasGPUResources(row)">
+                  <div class="resource-item-header">
+                    <el-icon class="resource-icon gpu-icon"><VideoPlay /></el-icon>
+                    <span class="resource-label">GPU</span>
+                  </div>
+                  <div class="resource-item-value">
                     <span class="resource-total">{{ getGPUCount(row.capacity) || '0' }}</span>
                     <span class="resource-divider">/</span>
                     <span class="resource-value">{{ getGPUCount(row.allocatable) || '0' }}</span>
+                  </div>
+                </div>
+                
+                <!-- 如果没有GPU，显示占位空间保持对齐 -->
+                <div class="resource-item-card resource-placeholder" v-else>
+                  <div class="resource-item-header">
+                    <span class="resource-label-placeholder">-</span>
+                  </div>
+                  <div class="resource-item-value">
+                    <span class="resource-placeholder-text">-</span>
                   </div>
                 </div>
               </div>
@@ -2174,17 +2185,17 @@ onMounted(async () => {
   height: 24px;
 }
 
-/* 新的网格布局样式 */
+/* 新的卡片式布局样式 */
 .resource-usage-grid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 12px;
   background: #fafafa;
-  border-radius: 6px;
+  border-radius: 8px;
   border-left: 3px solid #e8e8e8;
   transition: all 0.2s ease;
-  min-width: 300px;
+  min-width: 320px;
 }
 
 .resource-usage-grid:hover {
@@ -2192,119 +2203,125 @@ onMounted(async () => {
   border-left-color: #1890ff;
 }
 
-/* 第一行：标题行 */
-.resource-headers {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 6px;
-  align-items: center;
-}
-
-.resource-header-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: center;
-  min-height: 24px;
-}
-
-/* 第二行：数值行 */
-.resource-values {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 6px;
-  align-items: center;
-}
-
-.resource-value-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 32px;
-  font-weight: 600;
-}
-
-/* 第三行：说明文字行 */
-.resource-subtexts {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 6px;
-  align-items: center;
-}
-
-.resource-subtexts .resource-subtext {
+/* 顶部标题 */
+.resource-title {
   text-align: center;
-  font-size: 11px;
-  color: #8c8c8c;
-  font-weight: 500;
-}
-
-/* 额外资源区域 */
-.resource-additional {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid #e8e8e8;
-}
-
-.resource-extra-headers {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-  gap: 24px;
-  justify-items: center;
-  margin-bottom: 6px;
-  align-items: center;
-}
-
-.resource-extra-values {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-  gap: 24px;
-  justify-items: center;
-  align-items: center;
-}
-
-.resource-extra-headers .resource-header-item,
-.resource-extra-values .resource-value-item {
-  min-width: 80px;
+  font-size: 12px;
+  color: #666;
   font-weight: 600;
+  padding: 4px 0;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #e8e8e8;
+  letter-spacing: 0.5px;
+}
+
+/* 主要资源区域（CPU、内存） */
+.resource-main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+/* 次要资源区域（Pod、GPU） */
+.resource-secondary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* 资源项卡片 */
+.resource-item-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #e8e8e8;
+  transition: all 0.2s ease;
+  min-height: 60px;
+  justify-content: center;
+}
+
+.resource-item-card:hover {
+  border-color: #91d5ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.08);
+}
+
+/* 占位符卡片（无GPU时） */
+.resource-placeholder {
+  opacity: 0.3;
+  border-style: dashed;
+  background: transparent;
+}
+
+.resource-placeholder:hover {
+  border-color: #e8e8e8;
+  box-shadow: none;
+}
+
+/* 资源项标题 */
+.resource-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+/* 资源项数值 */
+.resource-item-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+/* 占位符样式 */
+.resource-label-placeholder {
+  font-size: 12px;
+  color: #ccc;
+}
+
+.resource-placeholder-text {
+  font-size: 14px;
+  color: #ccc;
 }
 
 .resource-icon {
-  font-size: 12px;
-  padding: 2px;
-  border-radius: 2px;
+  font-size: 14px;
+  padding: 3px;
+  border-radius: 3px;
 }
 
 .cpu-icon {
   color: #52c41a;
-  background: rgba(82, 196, 26, 0.1);
+  background: rgba(82, 196, 26, 0.15);
 }
 
 .memory-icon {
   color: #1890ff;
-  background: rgba(24, 144, 255, 0.1);
+  background: rgba(24, 144, 255, 0.15);
 }
 
 .pods-icon {
   color: #722ed1;
-  background: rgba(114, 46, 209, 0.1);
+  background: rgba(114, 46, 209, 0.15);
 }
 
 .gpu-icon {
   color: #f5222d;
-  background: rgba(245, 34, 45, 0.1);
+  background: rgba(245, 34, 45, 0.15);
 }
 
 .resource-label {
-  color: #666;
+  color: #333;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.5px;
 }
 
 /* 保留原有样式用于兼容，但主要使用新的 resource-value-item */
@@ -2312,35 +2329,27 @@ onMounted(async () => {
 .resource-value {
   color: #52c41a;
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.1px;
   text-shadow: 0 1px 2px rgba(82, 196, 26, 0.1);
   white-space: nowrap;
 }
 
 .resource-divider {
-  color: #8c8c8c;
-  font-weight: 600;
-  margin: 0 4px;
-  font-size: 15px;
+  color: #999;
+  font-weight: 500;
+  margin: 0 3px;
+  font-size: 13px;
 }
 
 .resource-total {
   color: #1890ff;
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.1px;
   text-shadow: 0 1px 2px rgba(24, 144, 255, 0.1);
-  white-space: nowrap;
-}
-
-.resource-subtext {
-  color: #8c8c8c;
-  font-size: 11px;
-  font-weight: 500;
-  margin-top: 2px;
   white-space: nowrap;
 }
 
@@ -2710,62 +2719,55 @@ onMounted(async () => {
   
   /* 移动端资源配置优化 */
   .resource-usage-grid {
-    padding: 8px 10px;
-    gap: 6px;
-    min-width: 280px;
+    padding: 10px;
+    gap: 8px;
+    min-width: 300px;
   }
   
-  .resource-headers,
-  .resource-values,
-  .resource-subtexts {
-    gap: 16px;
+  .resource-title {
+    font-size: 11px;
+    padding: 3px 0;
   }
   
-  .resource-header-item {
-    min-height: 20px;
+  .resource-main,
+  .resource-secondary {
+    gap: 8px;
+    margin-bottom: 6px;
   }
   
-  .resource-value-item {
-    min-height: 28px;
+  .resource-item-card {
+    padding: 6px;
+    min-height: 50px;
     gap: 4px;
   }
   
-  .resource-extra-headers,
-  .resource-extra-values {
-    gap: 16px;
-  }
-  
-  .resource-extra-headers .resource-header-item,
-  .resource-extra-values .resource-value-item {
-    min-width: 70px;
+  .resource-icon {
+    font-size: 12px;
+    padding: 2px;
   }
   
   .resource-label {
-    font-size: 11px;
-    letter-spacing: 0.4px;
-  }
-  
-  .resource-icon {
-    font-size: 11px;
+    font-size: 10px;
+    letter-spacing: 0.3px;
   }
   
   .resource-value,
   .resource-total {
-    font-size: 14px;
-    letter-spacing: 0.1px;
+    font-size: 12px;
+    letter-spacing: 0;
   }
   
   .resource-divider {
-    font-size: 14px;
-    margin: 0 3px;
+    font-size: 12px;
+    margin: 0 2px;
   }
   
-  .resource-subtext {
+  .resource-label-placeholder {
     font-size: 10px;
   }
   
-  .resource-subtexts .resource-subtext {
-    font-size: 10px;
+  .resource-placeholder-text {
+    font-size: 12px;
   }
 }
 </style>
