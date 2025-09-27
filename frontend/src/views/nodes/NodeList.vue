@@ -403,12 +403,12 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="资源配置" min-width="320">
+        <el-table-column label="资源显示" min-width="320">
           <template #default="{ row }">
             <div class="resource-usage-grid">
               <!-- 顶部说明文字 -->
               <div class="resource-title">
-                总量 / 可分配
+                总量 / 可分配 / 使用量
               </div>
               
               <!-- 主要资源：CPU 和 内存 -->
@@ -422,6 +422,8 @@
                     <span class="resource-total">{{ formatCPU(row.capacity?.cpu) || 'N/A' }}</span>
                     <span class="resource-divider">/</span>
                     <span class="resource-value">{{ formatCPU(row.allocatable?.cpu) || 'N/A' }}</span>
+                    <span class="resource-divider">/</span>
+                    <span class="resource-usage">{{ formatCPU(row.usage?.cpu) || 'N/A' }}</span>
                   </div>
                 </div>
                 
@@ -434,6 +436,8 @@
                     <span class="resource-total">{{ formatMemoryCorrect(row.capacity?.memory) }}</span>
                     <span class="resource-divider">/</span>
                     <span class="resource-value">{{ formatMemoryCorrect(row.allocatable?.memory) }}</span>
+                    <span class="resource-divider">/</span>
+                    <span class="resource-usage">{{ formatMemoryCorrect(row.usage?.memory) || 'N/A' }}</span>
                   </div>
                 </div>
               </div>
@@ -449,6 +453,8 @@
                     <span class="resource-total">{{ row.capacity?.pods || '0' }}</span>
                     <span class="resource-divider">/</span>
                     <span class="resource-value">{{ row.allocatable?.pods || '0' }}</span>
+                    <span class="resource-divider">/</span>
+                    <span class="resource-usage">{{ row.usage?.pods || 'N/A' }}</span>
                   </div>
                 </div>
                 
@@ -461,6 +467,8 @@
                     <span class="resource-total">{{ getGPUCount(row.capacity) || '0' }}</span>
                     <span class="resource-divider">/</span>
                     <span class="resource-value">{{ getGPUCount(row.allocatable) || '0' }}</span>
+                    <span class="resource-divider">/</span>
+                    <span class="resource-usage">{{ row.usage?.gpu || 'N/A' }}</span>
                   </div>
                 </div>
                 
@@ -470,7 +478,7 @@
                     <span class="resource-label-placeholder">-</span>
                   </div>
                   <div class="resource-item-value">
-                    <span class="resource-placeholder-text">-</span>
+                    <span class="resource-placeholder-text">- / - / -</span>
                   </div>
                 </div>
               </div>
@@ -2767,6 +2775,13 @@ onMounted(async () => {
   }
   
   .resource-placeholder-text {
+    font-size: 12px;
+  }
+  
+  .resource-usage {
+    color: #ff7875;
+    font-weight: 600;
+    font-family: 'Monaco', 'Consolas', monospace;
     font-size: 12px;
   }
 }

@@ -16,35 +16,39 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
+	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 // Service Kubernetes客户端服务
 type Service struct {
-	logger  *logger.Logger
-	clients map[string]*kubernetes.Clientset
-	mu      sync.RWMutex
+	logger         *logger.Logger
+	clients        map[string]*kubernetes.Clientset
+	metricsClients map[string]*metricsclientset.Clientset
+	mu             sync.RWMutex
 }
 
 // NodeInfo Kubernetes节点信息
 type NodeInfo struct {
-	Name             string            `json:"name"`
-	Status           string            `json:"status"`
-	Schedulable      bool              `json:"schedulable"`
-	Roles            []string          `json:"roles"`
-	Age              string            `json:"age"`
-	Version          string            `json:"version"`
-	InternalIP       string            `json:"internal_ip"`
-	ExternalIP       string            `json:"external_ip"`
-	OS               string            `json:"os"`
-	OSImage          string            `json:"os_image"`
-	KernelVersion    string            `json:"kernel_version"`
-	ContainerRuntime string            `json:"container_runtime"`
-	Capacity         ResourceInfo      `json:"capacity"`
-	Allocatable      ResourceInfo      `json:"allocatable"`
-	Labels           map[string]string `json:"labels"`
-	Taints           []TaintInfo       `json:"taints"`
-	Conditions       []NodeCondition   `json:"conditions"`
-	CreatedAt        time.Time         `json:"created_at"`
+	Name             string             `json:"name"`
+	Status           string             `json:"status"`
+	Schedulable      bool               `json:"schedulable"`
+	Roles            []string           `json:"roles"`
+	Age              string             `json:"age"`
+	Version          string             `json:"version"`
+	InternalIP       string             `json:"internal_ip"`
+	ExternalIP       string             `json:"external_ip"`
+	OS               string             `json:"os"`
+	OSImage          string             `json:"os_image"`
+	KernelVersion    string             `json:"kernel_version"`
+	ContainerRuntime string             `json:"container_runtime"`
+	Capacity         ResourceInfo       `json:"capacity"`
+	Allocatable      ResourceInfo       `json:"allocatable"`
+	Usage            *ResourceUsageInfo `json:"usage,omitempty"` // 资源使用情况
+	Labels           map[string]string  `json:"labels"`
+	Taints           []TaintInfo        `json:"taints"`
+	Conditions       []NodeCondition    `json:"conditions"`
+	CreatedAt        time.Time          `json:"created_at"`
 }
 
 // ResourceInfo 资源信息
@@ -53,6 +57,12 @@ type ResourceInfo struct {
 	Memory string            `json:"memory"`
 	Pods   string            `json:"pods"`
 	GPU    map[string]string `json:"gpu,omitempty"` // 支持多种GPU类型
+}
+
+// ResourceUsageInfo 资源使用信息
+type ResourceUsageInfo struct {
+	CPU    string `json:"cpu"`
+	Memory string `json:"memory"`
 }
 
 // TaintInfo 污点信息
@@ -96,8 +106,9 @@ type ClusterInfo struct {
 // NewService 创建新的Kubernetes服务实例
 func NewService(logger *logger.Logger) *Service {
 	return &Service{
-		logger:  logger,
-		clients: make(map[string]*kubernetes.Clientset),
+		logger:         logger,
+		clients:        make(map[string]*kubernetes.Clientset),
+		metricsClients: make(map[string]*metricsclientset.Clientset),
 	}
 }
 
@@ -140,6 +151,24 @@ func (s *Service) CreateClient(clusterName, kubeconfig string) error {
 	}
 
 	s.clients[clusterName] = clientset
+
+	// 创建metrics client（可选，用于获取资源使用情况）
+	metricsClient, err := metricsclientset.NewForConfig(config)
+	if err != nil {
+		s.logger.Warningf("Failed to create metrics client for cluster %s (metrics may not be available): %v", clusterName, err)
+	} else {
+		// 测试metrics API是否可用
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel2()
+		_, err = metricsClient.MetricsV1beta1().NodeMetricses().List(ctx2, metav1.ListOptions{Limit: 1})
+		if err != nil {
+			s.logger.Warningf("Metrics API not available for cluster %s: %v", clusterName, err)
+		} else {
+			s.metricsClients[clusterName] = metricsClient
+			s.logger.Infof("Successfully created metrics client for cluster: %s", clusterName)
+		}
+	}
+
 	s.logger.Infof("Successfully created Kubernetes client for cluster: %s", clusterName)
 	return nil
 }
@@ -150,6 +179,7 @@ func (s *Service) RemoveClient(clusterName string) {
 	defer s.mu.Unlock()
 
 	delete(s.clients, clusterName)
+	delete(s.metricsClients, clusterName)
 	s.logger.Infof("Removed Kubernetes client for cluster: %s", clusterName)
 }
 
@@ -162,6 +192,18 @@ func (s *Service) getClient(clusterName string) (*kubernetes.Clientset, error) {
 	if !exists {
 		s.logger.Errorf("Kubernetes client not found for cluster: %s. Available clusters: %v", clusterName, s.getAvailableClusterNames())
 		return nil, fmt.Errorf("kubernetes client not found for cluster: %s. Please check if the cluster is properly configured and connected", clusterName)
+	}
+	return client, nil
+}
+
+// getMetricsClient 获取指定集群的metrics客户端
+func (s *Service) getMetricsClient(clusterName string) (*metricsclientset.Clientset, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	client, exists := s.metricsClients[clusterName]
+	if !exists {
+		return nil, fmt.Errorf("metrics client not found for cluster: %s (metrics may not be available)", clusterName)
 	}
 	return client, nil
 }
@@ -241,6 +283,9 @@ func (s *Service) ListNodes(clusterName string) ([]NodeInfo, error) {
 		nodes = append(nodes, nodeInfo)
 	}
 
+	// 尝试获取资源使用情况
+	s.enrichNodesWithMetrics(clusterName, nodes)
+
 	return nodes, nil
 }
 
@@ -261,6 +306,10 @@ func (s *Service) GetNode(clusterName, nodeName string) (*NodeInfo, error) {
 	}
 
 	nodeInfo := s.nodeToNodeInfo(node)
+
+	// 尝试获取单个节点的资源使用情况
+	s.enrichNodeWithMetrics(clusterName, &nodeInfo)
+
 	return &nodeInfo, nil
 }
 
@@ -998,4 +1047,69 @@ func (s *Service) extractGPUResources(resources corev1.ResourceList) map[string]
 	}
 
 	return gpuResources
+}
+
+// enrichNodesWithMetrics 为节点列表添加资源使用情况
+func (s *Service) enrichNodesWithMetrics(clusterName string, nodes []NodeInfo) {
+	metricsClient, err := s.getMetricsClient(clusterName)
+	if err != nil {
+		s.logger.Warningf("Failed to get metrics client for cluster %s: %v", clusterName, err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 获取所有节点的metrics
+	nodeMetricsList, err := metricsClient.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		s.logger.Warningf("Failed to get node metrics for cluster %s: %v", clusterName, err)
+		return
+	}
+
+	// 创建metrics映射
+	metricsMap := make(map[string]*metricsv1beta1.NodeMetrics)
+	for i := range nodeMetricsList.Items {
+		metric := &nodeMetricsList.Items[i]
+		metricsMap[metric.Name] = metric
+	}
+
+	// 为每个节点添加使用情况
+	for i := range nodes {
+		if metric, exists := metricsMap[nodes[i].Name]; exists {
+			nodes[i].Usage = &ResourceUsageInfo{
+				CPU:    metric.Usage.Cpu().String(),
+				Memory: metric.Usage.Memory().String(),
+			}
+		}
+	}
+
+	s.logger.Infof("Successfully enriched %d nodes with metrics for cluster %s", len(nodes), clusterName)
+}
+
+// enrichNodeWithMetrics 为单个节点添加资源使用情况
+func (s *Service) enrichNodeWithMetrics(clusterName string, node *NodeInfo) {
+	metricsClient, err := s.getMetricsClient(clusterName)
+	if err != nil {
+		s.logger.Warningf("Failed to get metrics client for cluster %s: %v", clusterName, err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 获取单个节点的metrics
+	nodeMetrics, err := metricsClient.MetricsV1beta1().NodeMetricses().Get(ctx, node.Name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Warningf("Failed to get metrics for node %s in cluster %s: %v", node.Name, clusterName, err)
+		return
+	}
+
+	// 添加使用情况
+	node.Usage = &ResourceUsageInfo{
+		CPU:    nodeMetrics.Usage.Cpu().String(),
+		Memory: nodeMetrics.Usage.Memory().String(),
+	}
+
+	s.logger.Infof("Successfully enriched node %s with metrics for cluster %s", node.Name, clusterName)
 }
