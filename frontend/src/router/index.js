@@ -32,19 +32,19 @@ const router = createRouter({
         {
           path: 'nodes',
           name: 'NodeList',
-          component: () => import('@/views/nodes/NodeListOptimized.vue'),
+          component: () => import('@/views/nodes/NodeList.vue'),
           meta: { title: '节点管理', icon: 'Monitor', requiresAuth: true }
         },
         {
           path: 'labels',
           name: 'LabelManage',
-          component: () => import('@/views/labels/LabelManageOptimized.vue'),
+          component: () => import('@/views/labels/LabelManageSimple.vue'),
           meta: { title: '标签管理', icon: 'CollectionTag', requiresAuth: true }
         },
         {
           path: 'taints',
           name: 'TaintManage',
-          component: () => import('@/views/taints/TaintManageOptimized.vue'),
+          component: () => import('@/views/taints/TaintManageSimple.vue'),
           meta: { title: '污点管理', icon: 'WarningFilled', requiresAuth: true }
         },
         {
