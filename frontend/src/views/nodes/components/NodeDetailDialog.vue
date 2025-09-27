@@ -23,38 +23,78 @@
           {{ node.version }}
         </el-descriptions-item>
         <el-descriptions-item label="操作系统">
-          {{ node.osImage }}
+          {{ node.os_image || node.osImage || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="容器运行时">
-          {{ node.containerRuntime }}
+          {{ node.container_runtime || node.containerRuntime || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="内核版本">
-          {{ node.kernelVersion }}
+          {{ node.kernel_version || node.kernelVersion || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="创建时间">
-          {{ formatTime(node.createdAt) }}
+          {{ formatTime(node.created_at || node.createdAt) }}
         </el-descriptions-item>
       </el-descriptions>
 
       <!-- 资源信息 -->
       <el-descriptions title="资源信息" :column="2" border style="margin-top: 20px;">
         <el-descriptions-item label="CPU">
-          {{ formatCPU(node.cpu) }}
+          <div class="resource-detail">
+            <div class="resource-line">
+              <span class="resource-type">总量：</span>
+              <span class="resource-value-total">{{ formatCPU(node.capacity?.cpu) || 'N/A' }}</span>
+            </div>
+            <div class="resource-line">
+              <span class="resource-type">可分配：</span>
+              <span class="resource-value-allocatable">{{ formatCPU(node.allocatable?.cpu) || 'N/A' }}</span>
+            </div>
+          </div>
         </el-descriptions-item>
         <el-descriptions-item label="内存">
-          {{ formatMemory(node.memory) }}
+          <div class="resource-detail">
+            <div class="resource-line">
+              <span class="resource-type">总量：</span>
+              <span class="resource-value-total">{{ formatMemoryCorrect(node.capacity?.memory) || 'N/A' }}</span>
+            </div>
+            <div class="resource-line">
+              <span class="resource-type">可分配：</span>
+              <span class="resource-value-allocatable">{{ formatMemoryCorrect(node.allocatable?.memory) || 'N/A' }}</span>
+            </div>
+          </div>
         </el-descriptions-item>
         <el-descriptions-item label="存储">
-          {{ formatMemory(node.storage) }}
+          <div class="resource-detail">
+            <div class="resource-line">
+              <span class="resource-type">总量：</span>
+              <span class="resource-value-total">{{ formatMemoryCorrect(node.capacity?.['ephemeral-storage']) || 'N/A' }}</span>
+            </div>
+            <div class="resource-line">
+              <span class="resource-type">可分配：</span>
+              <span class="resource-value-allocatable">{{ formatMemoryCorrect(node.allocatable?.['ephemeral-storage']) || 'N/A' }}</span>
+            </div>
+          </div>
         </el-descriptions-item>
         <el-descriptions-item label="Pod数量">
-          {{ node.pods }}
+          <div class="resource-detail">
+            <div class="resource-line">
+              <span class="resource-type">总量：</span>
+              <span class="resource-value-total">{{ node.capacity?.pods || '0' }}</span>
+            </div>
+            <div class="resource-line">
+              <span class="resource-type">可分配：</span>
+              <span class="resource-value-allocatable">{{ node.allocatable?.pods || '0' }}</span>
+            </div>
+          </div>
         </el-descriptions-item>
       </el-descriptions>
 
       <!-- 地址信息 -->
-      <el-descriptions title="地址信息" :column="1" border style="margin-top: 20px;" v-if="node.addresses">
-        <el-descriptions-item v-for="address in node.addresses" :key="address.type" :label="address.type">
+      <el-descriptions title="地址信息" :column="1" border style="margin-top: 20px;" v-if="node.addresses && node.addresses.length > 0">
+        <el-descriptions-item 
+          v-for="address in node.addresses" 
+          :key="address.type" 
+          :label="formatAddressType(address.type)"
+        >
           {{ address.address }}
         </el-descriptions-item>
       </el-descriptions>
@@ -125,6 +165,62 @@
 <script setup>
 import { computed } from 'vue'
 import { formatTime, formatNodeStatus, formatNodeRoles, formatCPU, formatMemory } from '@/utils/format'
+
+// 正确的内存格式化函数，处理Kubernetes内存格式
+const formatMemoryCorrect = (value) => {
+  if (!value) return 'N/A'
+  
+  // 解析Kubernetes内存格式（例如：3906252Ki, 4Gi等）
+  const memStr = String(value).trim()
+  
+  // 匹配数字和单位
+  const match = memStr.match(/^(\d+(?:\.\d+)?)(.*)?$/)
+  if (!match) return value
+  
+  const [, numStr, unit = ''] = match
+  const num = parseFloat(numStr)
+  
+  // 单位转换表（字节）
+  const unitMap = {
+    'Ki': 1024,
+    'Mi': 1024 * 1024,  
+    'Gi': 1024 * 1024 * 1024,
+    'Ti': 1024 * 1024 * 1024 * 1024,
+    'K': 1000,
+    'M': 1000 * 1000,
+    'G': 1000 * 1000 * 1000,
+    'T': 1000 * 1000 * 1000 * 1000,
+    '': 1 // 如果没有单位，假设为字节
+  }
+  
+  const multiplier = unitMap[unit] || 1
+  const bytes = num * multiplier
+  
+  // 转换为适合显示的单位
+  if (bytes >= 1024 * 1024 * 1024 * 1024) {
+    return (bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1) + ' Ti'
+  } else if (bytes >= 1024 * 1024 * 1024) {
+    return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' Gi'
+  } else if (bytes >= 1024 * 1024) {
+    return (bytes / (1024 * 1024)).toFixed(1) + ' Mi'
+  } else if (bytes >= 1024) {
+    return (bytes / 1024).toFixed(1) + ' Ki'
+  } else {
+    return bytes + ' B'
+  }
+}
+
+// 格式化地址类型
+const formatAddressType = (type) => {
+  const typeMap = {
+    'InternalIP': '内网IP',
+    'ExternalIP': '外网IP',
+    'Hostname': '主机名',
+    'InternalDNS': '内网DNS',
+    'ExternalDNS': '外网DNS'
+  }
+  return typeMap[type] || type
+}
 
 // 判断标签是否较短，不需要tooltip
 const isLabelShort = (key, value) => {
@@ -229,5 +325,39 @@ h4 {
 .label-tag {
   overflow-wrap: break-word;
   hyphens: auto;
+}
+
+/* 资源详情样式 */
+.resource-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resource-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.resource-type {
+  font-size: 12px;
+  color: #666;
+  min-width: 50px;
+  font-weight: 500;
+}
+
+.resource-value-total {
+  color: #1890ff;
+  font-weight: 600;
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 13px;
+}
+
+.resource-value-allocatable {
+  color: #52c41a;
+  font-weight: 600;
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 13px;
 }
 </style>
