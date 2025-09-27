@@ -42,29 +42,10 @@ export function formatMemory(value, unit = 'Ki') {
 }
 
 /**
- * 格式化CPU（毫核心）
+ * 格式化CPU（统一格式，处理各种CPU数值）
  */
 export function formatCPU(value, unit = 'm') {
   if (!value) return '0'
-  
-  const num = parseFloat(value)
-  if (isNaN(num)) return value
-  
-  if (unit === 'm') {
-    if (num >= 1000) {
-      return (num / 1000).toFixed(2) + ' cores'
-    }
-    return num + 'm'
-  }
-  
-  return num + ' cores'
-}
-
-/**
- * 格式化CPU使用量（处理Kubernetes metrics格式）
- */
-export function formatCPUUsage(value) {
-  if (!value) return 'N/A'
   
   const cpuStr = String(value).trim()
   
@@ -74,11 +55,7 @@ export function formatCPUUsage(value) {
     const nano = parseFloat(nanoStr)
     if (!isNaN(nano)) {
       const cores = nano / 1000000000  // 1 core = 1,000,000,000 nanoseconds
-      if (cores >= 1) {
-        return cores.toFixed(2) + ' cores'
-      }
-      const millicores = Math.round(cores * 1000)
-      return millicores + 'm'
+      return formatCPUValue(cores)
     }
   }
   
@@ -87,11 +64,8 @@ export function formatCPUUsage(value) {
     const microStr = cpuStr.slice(0, -1)
     const micro = parseFloat(microStr)
     if (!isNaN(micro)) {
-      const millicores = micro / 1000  // 1000 microseconds = 1 millisecond
-      if (millicores >= 1000) {
-        return (millicores / 1000).toFixed(2) + ' cores'
-      }
-      return Math.round(millicores) + 'm'
+      const cores = micro / 1000000  // 1 core = 1,000,000 microseconds
+      return formatCPUValue(cores)
     }
   }
   
@@ -100,24 +74,32 @@ export function formatCPUUsage(value) {
     const milliStr = cpuStr.slice(0, -1)
     const milli = parseFloat(milliStr)
     if (!isNaN(milli)) {
-      if (milli >= 1000) {
-        return (milli / 1000).toFixed(2) + ' cores'
-      }
-      return Math.round(milli) + 'm'
+      const cores = milli / 1000  // 1 core = 1000 millicores
+      return formatCPUValue(cores)
     }
   }
   
   // 处理纯数字cores (如: "2.5")
   const num = parseFloat(cpuStr)
   if (!isNaN(num)) {
-    if (num >= 1) {
-      return num.toFixed(2) + ' cores'
-    }
-    return Math.round(num * 1000) + 'm'
+    return formatCPUValue(num)
   }
   
   return value
 }
+
+/**
+ * 格式化CPU值为统一格式
+ */
+function formatCPUValue(cores) {
+  if (cores >= 1) {
+    return cores.toFixed(2) + ' cores'
+  } else {
+    const millicores = Math.round(cores * 1000)
+    return millicores + 'm'
+  }
+}
+
 
 /**
  * 格式化时间
