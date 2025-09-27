@@ -423,7 +423,7 @@
                     <span class="resource-divider">/</span>
                     <span class="resource-value">{{ formatCPU(row.allocatable?.cpu) || 'N/A' }}</span>
                     <span class="resource-divider">/</span>
-                    <span class="resource-usage">{{ formatCPU(row.usage?.cpu) || 'N/A' }}</span>
+                    <span class="resource-usage">{{ formatCPUUsage(row.usage?.cpu) || 'N/A' }}</span>
                   </div>
                 </div>
                 
@@ -898,7 +898,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNodeStore } from '@/store/modules/node'
 import { useClusterStore } from '@/store/modules/cluster'
 import { useAuthStore } from '@/store/modules/auth'
-import { formatTime, formatNodeStatus, formatNodeRoles, formatCPU, formatMemory } from '@/utils/format'
+import { formatTime, formatNodeStatus, formatNodeRoles, formatCPU, formatCPUUsage, formatMemory } from '@/utils/format'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import NodeDetailDialog from './components/NodeDetailDialog.vue'
 import labelApi from '@/api/label'

@@ -61,6 +61,65 @@ export function formatCPU(value, unit = 'm') {
 }
 
 /**
+ * 格式化CPU使用量（处理Kubernetes metrics格式）
+ */
+export function formatCPUUsage(value) {
+  if (!value) return 'N/A'
+  
+  const cpuStr = String(value).trim()
+  
+  // 处理纳秒cores (如: "2033181390n")  
+  if (cpuStr.endsWith('n')) {
+    const nanoStr = cpuStr.slice(0, -1)
+    const nano = parseFloat(nanoStr)
+    if (!isNaN(nano)) {
+      const cores = nano / 1000000000  // 1 core = 1,000,000,000 nanoseconds
+      if (cores >= 1) {
+        return cores.toFixed(2) + ' cores'
+      }
+      const millicores = Math.round(cores * 1000)
+      return millicores + 'm'
+    }
+  }
+  
+  // 处理微秒cores (如: "2033181u")  
+  if (cpuStr.endsWith('u')) {
+    const microStr = cpuStr.slice(0, -1)
+    const micro = parseFloat(microStr)
+    if (!isNaN(micro)) {
+      const millicores = micro / 1000  // 1000 microseconds = 1 millisecond
+      if (millicores >= 1000) {
+        return (millicores / 1000).toFixed(2) + ' cores'
+      }
+      return Math.round(millicores) + 'm'
+    }
+  }
+  
+  // 处理毫cores (如: "256m")
+  if (cpuStr.endsWith('m')) {
+    const milliStr = cpuStr.slice(0, -1)
+    const milli = parseFloat(milliStr)
+    if (!isNaN(milli)) {
+      if (milli >= 1000) {
+        return (milli / 1000).toFixed(2) + ' cores'
+      }
+      return Math.round(milli) + 'm'
+    }
+  }
+  
+  // 处理纯数字cores (如: "2.5")
+  const num = parseFloat(cpuStr)
+  if (!isNaN(num)) {
+    if (num >= 1) {
+      return num.toFixed(2) + ' cores'
+    }
+    return Math.round(num * 1000) + 'm'
+  }
+  
+  return value
+}
+
+/**
  * 格式化时间
  */
 export function formatTime(time, format = 'YYYY-MM-DD HH:mm:ss') {
