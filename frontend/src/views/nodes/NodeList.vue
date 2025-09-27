@@ -2179,11 +2179,12 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px;
+  padding: 10px 12px;
   background: #fafafa;
   border-radius: 6px;
   border-left: 3px solid #e8e8e8;
   transition: all 0.2s ease;
+  min-width: 300px;
 }
 
 .resource-usage-grid:hover {
@@ -2195,8 +2196,9 @@ onMounted(async () => {
 .resource-headers {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 4px;
+  gap: 24px;
+  margin-bottom: 6px;
+  align-items: center;
 }
 
 .resource-header-item {
@@ -2204,58 +2206,71 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   justify-content: center;
+  min-height: 24px;
 }
 
 /* 第二行：数值行 */
 .resource-values {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 4px;
+  gap: 24px;
+  margin-bottom: 6px;
+  align-items: center;
 }
 
 .resource-value-item {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
+  min-height: 32px;
+  font-weight: 600;
 }
 
 /* 第三行：说明文字行 */
 .resource-subtexts {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 4px;
+  gap: 24px;
+  margin-bottom: 6px;
+  align-items: center;
 }
 
 .resource-subtexts .resource-subtext {
   text-align: center;
+  font-size: 11px;
+  color: #8c8c8c;
+  font-weight: 500;
 }
 
 /* 额外资源区域 */
 .resource-additional {
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px solid #e8e8e8;
 }
 
 .resource-extra-headers {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
   gap: 24px;
-  justify-content: center;
-  margin-bottom: 4px;
+  justify-items: center;
+  margin-bottom: 6px;
+  align-items: center;
 }
 
 .resource-extra-values {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
   gap: 24px;
-  justify-content: center;
+  justify-items: center;
+  align-items: center;
 }
 
 .resource-extra-headers .resource-header-item,
 .resource-extra-values .resource-value-item {
   min-width: 80px;
+  font-weight: 600;
 }
 
 .resource-icon {
@@ -2297,26 +2312,28 @@ onMounted(async () => {
 .resource-value {
   color: #52c41a;
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
   text-shadow: 0 1px 2px rgba(82, 196, 26, 0.1);
+  white-space: nowrap;
 }
 
 .resource-divider {
   color: #8c8c8c;
-  font-weight: 500;
-  margin: 0 6px;
-  font-size: 16px;
+  font-weight: 600;
+  margin: 0 4px;
+  font-size: 15px;
 }
 
 .resource-total {
   color: #1890ff;
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Monaco', 'Menlo', monospace;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
   text-shadow: 0 1px 2px rgba(24, 144, 255, 0.1);
+  white-space: nowrap;
 }
 
 .resource-subtext {
@@ -2324,6 +2341,7 @@ onMounted(async () => {
   font-size: 11px;
   font-weight: 500;
   margin-top: 2px;
+  white-space: nowrap;
 }
 
 .version-text {
@@ -2692,14 +2710,24 @@ onMounted(async () => {
   
   /* 移动端资源配置优化 */
   .resource-usage-grid {
-    padding: 6px;
+    padding: 8px 10px;
     gap: 6px;
+    min-width: 280px;
   }
   
   .resource-headers,
   .resource-values,
   .resource-subtexts {
-    gap: 12px;
+    gap: 16px;
+  }
+  
+  .resource-header-item {
+    min-height: 20px;
+  }
+  
+  .resource-value-item {
+    min-height: 28px;
+    gap: 4px;
   }
   
   .resource-extra-headers,
@@ -2707,17 +2735,36 @@ onMounted(async () => {
     gap: 16px;
   }
   
+  .resource-extra-headers .resource-header-item,
+  .resource-extra-values .resource-value-item {
+    min-width: 70px;
+  }
+  
   .resource-label {
     font-size: 11px;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.4px;
+  }
+  
+  .resource-icon {
+    font-size: 11px;
   }
   
   .resource-value,
   .resource-total {
     font-size: 14px;
+    letter-spacing: 0.1px;
+  }
+  
+  .resource-divider {
+    font-size: 14px;
+    margin: 0 3px;
   }
   
   .resource-subtext {
+    font-size: 10px;
+  }
+  
+  .resource-subtexts .resource-subtext {
     font-size: 10px;
   }
 }
