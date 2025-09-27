@@ -403,56 +403,65 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="资源配置" min-width="280">
+        <el-table-column label="资源配置" min-width="320">
           <template #default="{ row }">
-            <div class="resource-usage">
-              <div class="resource-item">
-                <div class="resource-header">
+            <div class="resource-usage-grid">
+              <!-- 第一行：CPU 和 内存标题 -->
+              <div class="resource-headers">
+                <div class="resource-header-item">
                   <el-icon class="resource-icon cpu-icon"><Monitor /></el-icon>
                   <span class="resource-label">CPU</span>
                 </div>
-                <div class="resource-content">
+                <div class="resource-header-item">
+                  <el-icon class="resource-icon memory-icon"><Monitor /></el-icon>
+                  <span class="resource-label">内存</span>
+                </div>
+              </div>
+              
+              <!-- 第二行：数值显示 -->
+              <div class="resource-values">
+                <div class="resource-value-item">
                   <span class="resource-total">{{ formatCPU(row.capacity?.cpu) || 'N/A' }}</span>
                   <span class="resource-divider">/</span>
                   <span class="resource-value">{{ formatCPU(row.allocatable?.cpu) || 'N/A' }}</span>
                 </div>
-                <span class="resource-subtext">总量 / 可分配</span>
-              </div>
-              <div class="resource-item">
-                <div class="resource-header">
-                  <el-icon class="resource-icon memory-icon"><Monitor /></el-icon>
-                  <span class="resource-label">内存</span>
-                </div>
-                <div class="resource-content">
+                <div class="resource-value-item">
                   <span class="resource-total">{{ formatMemoryCorrect(row.capacity?.memory) }}</span>
                   <span class="resource-divider">/</span>
                   <span class="resource-value">{{ formatMemoryCorrect(row.allocatable?.memory) }}</span>
                 </div>
+              </div>
+              
+              <!-- 第三行：说明文字 -->
+              <div class="resource-subtexts">
+                <span class="resource-subtext">总量 / 可分配</span>
                 <span class="resource-subtext">总量 / 可分配</span>
               </div>
-              <div class="resource-item">
-                <div class="resource-header">
-                  <el-icon class="resource-icon pods-icon"><Grid /></el-icon>
-                  <span class="resource-label">Pod</span>
+              
+              <!-- Pod 和 GPU 资源（如果存在则显示在下方） -->
+              <div class="resource-additional" v-if="row.capacity?.pods || hasGPUResources(row)">
+                <div class="resource-extra-headers">
+                  <div class="resource-header-item">
+                    <el-icon class="resource-icon pods-icon"><Grid /></el-icon>
+                    <span class="resource-label">Pod</span>
+                  </div>
+                  <div class="resource-header-item" v-if="hasGPUResources(row)">
+                    <el-icon class="resource-icon gpu-icon"><VideoPlay /></el-icon>
+                    <span class="resource-label">GPU</span>
+                  </div>
                 </div>
-                <div class="resource-content">
-                  <span class="resource-total">{{ row.capacity?.pods || '0' }}</span>
-                  <span class="resource-divider">/</span>
-                  <span class="resource-value">{{ row.allocatable?.pods || '0' }}</span>
+                <div class="resource-extra-values">
+                  <div class="resource-value-item">
+                    <span class="resource-total">{{ row.capacity?.pods || '0' }}</span>
+                    <span class="resource-divider">/</span>
+                    <span class="resource-value">{{ row.allocatable?.pods || '0' }}</span>
+                  </div>
+                  <div class="resource-value-item" v-if="hasGPUResources(row)">
+                    <span class="resource-total">{{ getGPUCount(row.capacity) || '0' }}</span>
+                    <span class="resource-divider">/</span>
+                    <span class="resource-value">{{ getGPUCount(row.allocatable) || '0' }}</span>
+                  </div>
                 </div>
-                <span class="resource-subtext">总量 / 可分配</span>
-              </div>
-              <div class="resource-item" v-if="hasGPUResources(row)">
-                <div class="resource-header">
-                  <el-icon class="resource-icon gpu-icon"><VideoPlay /></el-icon>
-                  <span class="resource-label">GPU</span>
-                </div>
-                <div class="resource-content">
-                  <span class="resource-total">{{ getGPUCount(row.capacity) || '0' }}</span>
-                  <span class="resource-divider">/</span>
-                  <span class="resource-value">{{ getGPUCount(row.allocatable) || '0' }}</span>
-                </div>
-                <span class="resource-subtext">总量 / 可分配</span>
               </div>
             </div>
           </template>
@@ -2165,32 +2174,88 @@ onMounted(async () => {
   height: 24px;
 }
 
-.resource-usage {
+/* 新的网格布局样式 */
+.resource-usage-grid {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.resource-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 8px;
   background: #fafafa;
-  border-radius: 4px;
-  border-left: 3px solid transparent;
+  border-radius: 6px;
+  border-left: 3px solid #e8e8e8;
   transition: all 0.2s ease;
 }
 
-.resource-item:hover {
+.resource-usage-grid:hover {
   background: #f0f9ff;
   border-left-color: #1890ff;
 }
 
-.resource-header {
+/* 第一行：标题行 */
+.resource-headers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.resource-header-item {
   display: flex;
   align-items: center;
   gap: 6px;
+  justify-content: center;
+}
+
+/* 第二行：数值行 */
+.resource-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.resource-value-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+/* 第三行：说明文字行 */
+.resource-subtexts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.resource-subtexts .resource-subtext {
+  text-align: center;
+}
+
+/* 额外资源区域 */
+.resource-additional {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e8e8e8;
+}
+
+.resource-extra-headers {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.resource-extra-values {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+}
+
+.resource-extra-headers .resource-header-item,
+.resource-extra-values .resource-value-item {
+  min-width: 80px;
 }
 
 .resource-icon {
@@ -2227,12 +2292,7 @@ onMounted(async () => {
   letter-spacing: 0.8px;
 }
 
-.resource-content {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 2px 0;
-}
+/* 保留原有样式用于兼容，但主要使用新的 resource-value-item */
 
 .resource-value {
   color: #52c41a;
@@ -2628,6 +2688,37 @@ onMounted(async () => {
   
   .more-actions-btn .el-icon--right {
     font-size: 9px;
+  }
+  
+  /* 移动端资源配置优化 */
+  .resource-usage-grid {
+    padding: 6px;
+    gap: 6px;
+  }
+  
+  .resource-headers,
+  .resource-values,
+  .resource-subtexts {
+    gap: 12px;
+  }
+  
+  .resource-extra-headers,
+  .resource-extra-values {
+    gap: 16px;
+  }
+  
+  .resource-label {
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+  
+  .resource-value,
+  .resource-total {
+    font-size: 14px;
+  }
+  
+  .resource-subtext {
+    font-size: 10px;
   }
 }
 </style>
