@@ -200,6 +200,13 @@ const handleProgressUpdate = (data) => {
       isCompleted.value = true
       ElMessage.success(data.message || '批量操作完成')
       emit('completed', data)
+      
+      // 3秒后自动关闭弹窗
+      setTimeout(() => {
+        if (isCompleted.value) {
+          emit('update:modelValue', false)
+        }
+      }, 3000)
       break
       
     case 'error':

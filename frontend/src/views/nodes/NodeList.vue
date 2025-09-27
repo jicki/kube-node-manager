@@ -888,6 +888,15 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 进度对话框 -->
+    <ProgressDialog 
+      v-model="progressDialogVisible"
+      :task-id="currentTaskId"
+      @completed="handleProgressCompleted"
+      @error="handleProgressError"
+      @cancelled="handleProgressCancelled"
+    />
   </div>
 </template>
 
@@ -901,6 +910,7 @@ import { useAuthStore } from '@/store/modules/auth'
 import { formatTime, formatNodeStatus, formatNodeRoles, formatCPU, formatMemory } from '@/utils/format'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import NodeDetailDialog from './components/NodeDetailDialog.vue'
+import ProgressDialog from '@/components/common/ProgressDialog.vue'
 import labelApi from '@/api/label'
 import taintApi from '@/api/taint'
 import nodeApi from '@/api/node'
@@ -977,6 +987,10 @@ const batchLoading = reactive({
   deleteLabels: false,
   deleteTaints: false
 })
+
+// 进度对话框相关
+const progressDialogVisible = ref(false)
+const currentTaskId = ref('')
 
 // 批量删除标签对话框相关
 const batchDeleteLabelsVisible = ref(false)
@@ -1282,15 +1296,35 @@ const confirmBatchCordon = async () => {
     batchLoading.cordon = true
     const { reason, nodes } = cordonReasonForm.value
     const nodeNames = nodes.map(node => node.name)
-    await nodeStore.batchCordon(nodeNames, reason)
-    ElMessage.success(`成功禁止调度 ${nodeNames.length} 个节点`)
-    clearSelection()
-    cordonConfirmVisible.value = false
-    // nodeStore.batchCordon 内部已经调用了 fetchNodes，会自动更新禁止调度历史
+    
+    // 检查节点数量，如果大于5个则使用带进度的API
+    if (nodeNames.length > 5) {
+      // 使用带进度推送的批量操作
+      const progressResponse = await nodeApi.batchCordonWithProgress(
+        nodeNames, 
+        clusterStore.currentClusterName, 
+        reason
+      )
+      
+      // 获取任务ID
+      currentTaskId.value = progressResponse.data.data.task_id
+      progressDialogVisible.value = true
+      cordonConfirmVisible.value = false
+      
+      // 不立即设置loading为false，等进度完成后再处理
+    } else {
+      // 对于少量节点，使用原有的同步方式
+      await nodeStore.batchCordon(nodeNames, reason)
+      ElMessage.success(`成功禁止调度 ${nodeNames.length} 个节点`)
+      clearSelection()
+      cordonConfirmVisible.value = false
+      batchLoading.cordon = false
+    }
   } catch (error) {
     ElMessage.error(`批量禁止调度失败: ${error.message}`)
-  } finally {
-    batchLoading.cordon = false
+    if (cordonReasonForm.value.nodes.length <= 5) {
+      batchLoading.cordon = false
+    }
   }
 }
 
@@ -1300,14 +1334,32 @@ const batchUncordon = async () => {
   try {
     batchLoading.uncordon = true
     const nodeNames = selectedNodes.value.map(node => node.name)
-    await nodeStore.batchUncordon(nodeNames)
-    ElMessage.success(`成功解除调度限制 ${nodeNames.length} 个节点`)
-    clearSelection()
-    // nodeStore.batchUncordon 内部已经调用了 fetchNodes，会自动更新禁止调度历史
+    
+    // 检查节点数量，如果大于5个则使用带进度的API
+    if (nodeNames.length > 5) {
+      // 使用带进度推送的批量操作
+      const progressResponse = await nodeApi.batchUncordonWithProgress(
+        nodeNames, 
+        clusterStore.currentClusterName
+      )
+      
+      // 获取任务ID
+      currentTaskId.value = progressResponse.data.data.task_id
+      progressDialogVisible.value = true
+      
+      // 不立即设置loading为false，等进度完成后再处理
+    } else {
+      // 对于少量节点，使用原有的同步方式
+      await nodeStore.batchUncordon(nodeNames)
+      ElMessage.success(`成功解除调度限制 ${nodeNames.length} 个节点`)
+      clearSelection()
+      batchLoading.uncordon = false
+    }
   } catch (error) {
     ElMessage.error(`批量解除调度失败: ${error.message}`)
-  } finally {
-    batchLoading.uncordon = false
+    if (selectedNodes.value.length <= 5) {
+      batchLoading.uncordon = false
+    }
   }
 }
 
@@ -1362,15 +1414,35 @@ const confirmBatchDrain = async () => {
     const nodeNames = drainReasonForm.value.nodes.map(node => node.name)
     const reason = drainReasonForm.value.reason
     
-    await nodeApi.batchDrain(nodeNames, clusterStore.currentClusterName, reason)
-    ElMessage.success(`成功驱逐 ${nodeNames.length} 个节点`)
-    clearSelection()
-    drainConfirmVisible.value = false
-    await refreshData()
+    // 检查节点数量，如果大于5个则使用带进度的API
+    if (nodeNames.length > 5) {
+      // 使用带进度推送的批量操作
+      const progressResponse = await nodeApi.batchDrainWithProgress(
+        nodeNames, 
+        clusterStore.currentClusterName, 
+        reason
+      )
+      
+      // 获取任务ID
+      currentTaskId.value = progressResponse.data.data.task_id
+      progressDialogVisible.value = true
+      drainConfirmVisible.value = false
+      
+      // 不立即设置loading为false，等进度完成后再处理
+    } else {
+      // 对于少量节点，使用原有的同步方式
+      await nodeApi.batchDrain(nodeNames, clusterStore.currentClusterName, reason)
+      ElMessage.success(`成功驱逐 ${nodeNames.length} 个节点`)
+      clearSelection()
+      drainConfirmVisible.value = false
+      await refreshData()
+      batchLoading.drain = false
+    }
   } catch (error) {
     ElMessage.error(`批量驱逐节点失败: ${error.message}`)
-  } finally {
-    batchLoading.drain = false
+    if (drainReasonForm.value.nodes.length <= 5) {
+      batchLoading.drain = false
+    }
   }
 }
 
@@ -1411,19 +1483,34 @@ const confirmBatchDeleteLabels = async () => {
       cluster_name: clusterStore.currentClusterName
     }
 
-    // 使用配置好的API方法而不是原生fetch
-    const response = await labelApi.batchDeleteLabels(requestData, {
-      params: { cluster_name: clusterStore.currentClusterName }
-    })
-    
-    ElMessage.success(`成功删除 ${selectedNodes.value.length} 个节点的标签`)
-    batchDeleteLabelsVisible.value = false
-    clearSelection()
-    refreshData()
+    // 检查节点数量，如果大于5个则使用带进度的API
+    if (selectedNodes.value.length > 5) {
+      // 使用带进度推送的批量删除
+      const progressResponse = await labelApi.batchDeleteLabelsWithProgress(requestData)
+      
+      // 获取任务ID
+      currentTaskId.value = progressResponse.data.data.task_id
+      progressDialogVisible.value = true
+      batchDeleteLabelsVisible.value = false
+      
+      // 不立即设置loading为false，等进度完成后再处理
+    } else {
+      // 对于少量节点，使用原有的同步方式
+      await labelApi.batchDeleteLabels(requestData, {
+        params: { cluster_name: clusterStore.currentClusterName }
+      })
+      
+      ElMessage.success(`成功删除 ${selectedNodes.value.length} 个节点的标签`)
+      batchDeleteLabelsVisible.value = false
+      clearSelection()
+      refreshData()
+    }
   } catch (error) {
     ElMessage.error(`批量删除标签失败: ${error.message || '未知错误'}`)
   } finally {
-    batchLoading.deleteLabels = false
+    if (selectedNodes.value.length <= 5) {
+      batchLoading.deleteLabels = false
+    }
   }
 }
 
@@ -1459,19 +1546,34 @@ const confirmBatchDeleteTaints = async () => {
       cluster_name: clusterStore.currentClusterName
     }
 
-    // 使用配置好的API方法而不是原生fetch
-    const response = await taintApi.batchDeleteTaints(requestData, {
-      params: { cluster_name: clusterStore.currentClusterName }
-    })
-    
-    ElMessage.success(`成功删除 ${selectedNodes.value.length} 个节点的污点`)
-    batchDeleteTaintsVisible.value = false
-    clearSelection()
-    refreshData()
+    // 检查节点数量，如果大于5个则使用带进度的API
+    if (selectedNodes.value.length > 5) {
+      // 使用带进度推送的批量删除
+      const progressResponse = await taintApi.batchDeleteTaintsWithProgress(requestData)
+      
+      // 获取任务ID
+      currentTaskId.value = progressResponse.data.data.task_id
+      progressDialogVisible.value = true
+      batchDeleteTaintsVisible.value = false
+      
+      // 不立即设置loading为false，等进度完成后再处理
+    } else {
+      // 对于少量节点，使用原有的同步方式
+      await taintApi.batchDeleteTaints(requestData, {
+        params: { cluster_name: clusterStore.currentClusterName }
+      })
+      
+      ElMessage.success(`成功删除 ${selectedNodes.value.length} 个节点的污点`)
+      batchDeleteTaintsVisible.value = false
+      clearSelection()
+      refreshData()
+    }
   } catch (error) {
     ElMessage.error(`批量删除污点失败: ${error.message || '未知错误'}`)
   } finally {
-    batchLoading.deleteTaints = false
+    if (selectedNodes.value.length <= 5) {
+      batchLoading.deleteTaints = false
+    }
   }
 }
 
@@ -1492,6 +1594,43 @@ const addCustomLabelKey = () => {
   } else {
     ElMessage.warning('该标签键已存在')
   }
+}
+
+// 进度处理函数
+const handleProgressCompleted = (data) => {
+  ElMessage.success('批量操作完成')
+  refreshData()
+  clearSelection()
+  
+  // 重置loading状态
+  batchLoading.cordon = false
+  batchLoading.uncordon = false
+  batchLoading.drain = false
+  batchLoading.deleteLabels = false
+  batchLoading.deleteTaints = false
+}
+
+const handleProgressError = (data) => {
+  console.error('批量操作失败:', data)
+  ElMessage.error('批量操作失败')
+  
+  // 重置loading状态
+  batchLoading.cordon = false
+  batchLoading.uncordon = false
+  batchLoading.drain = false
+  batchLoading.deleteLabels = false
+  batchLoading.deleteTaints = false
+}
+
+const handleProgressCancelled = () => {
+  console.log('批量操作已取消')
+  
+  // 重置loading状态
+  batchLoading.cordon = false
+  batchLoading.uncordon = false
+  batchLoading.drain = false
+  batchLoading.deleteLabels = false
+  batchLoading.deleteTaints = false
 }
 
 // 污点键管理方法

@@ -64,6 +64,15 @@ const labelApi = {
     })
   },
 
+  // 批量删除标签（带进度）
+  batchDeleteLabelsWithProgress(requestData) {
+    return request({
+      url: '/api/v1/nodes/labels/batch-delete-progress',
+      method: 'post',
+      data: requestData
+    })
+  },
+
   // 获取所有标签
   getAllLabels(params) {
     return request({

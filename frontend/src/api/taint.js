@@ -63,6 +63,15 @@ const taintApi = {
     })
   },
 
+  // 批量删除污点（带进度）
+  batchDeleteTaintsWithProgress(requestData) {
+    return request({
+      url: '/api/v1/nodes/taints/batch-delete-progress',
+      method: 'post',
+      data: requestData
+    })
+  },
+
   // 获取所有污点
   getAllTaints(params) {
     return request({

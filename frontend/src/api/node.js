@@ -94,6 +94,45 @@ const nodeApi = {
     })
   },
 
+  // 批量禁止调度（带进度）
+  batchCordonWithProgress(nodeNames, clusterName, reason = '') {
+    return request({
+      url: '/api/v1/nodes/batch-cordon-progress',
+      method: 'post',
+      data: { 
+        nodes: nodeNames,
+        cluster_name: clusterName,
+        reason: reason
+      }
+    })
+  },
+
+  // 批量解除调度（带进度）
+  batchUncordonWithProgress(nodeNames, clusterName, reason = '') {
+    return request({
+      url: '/api/v1/nodes/batch-uncordon-progress',
+      method: 'post',
+      data: { 
+        nodes: nodeNames,
+        cluster_name: clusterName,
+        reason: reason
+      }
+    })
+  },
+
+  // 批量驱逐节点（带进度）
+  batchDrainWithProgress(nodeNames, clusterName, reason = '') {
+    return request({
+      url: '/api/v1/nodes/batch-drain-progress',
+      method: 'post',
+      data: { 
+        nodes: nodeNames,
+        cluster_name: clusterName,
+        reason: reason
+      }
+    })
+  },
+
 
   // 获取节点资源使用情况
   getNodeResources(nodeName) {
