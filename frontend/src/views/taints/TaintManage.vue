@@ -1242,7 +1242,7 @@ const handleApplyTemplate = async () => {
       })
       
       // 获取任务ID
-      currentTaskId.value = progressResponse.data.task_id
+      currentTaskId.value = progressResponse.data.data.task_id
       progressDialogVisible.value = true
       
       // 关闭应用对话框，但保持applying状态直到进度完成

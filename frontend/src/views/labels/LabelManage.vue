@@ -1264,7 +1264,7 @@ const handleApplyTemplate = async () => {
       
       // 获取任务ID
       console.log('API response:', progressResponse.data)
-      currentTaskId.value = progressResponse.data.task_id
+      currentTaskId.value = progressResponse.data.data.task_id
       console.log('Set currentTaskId to:', currentTaskId.value)
       progressDialogVisible.value = true
       console.log('Set progressDialogVisible to:', progressDialogVisible.value)
