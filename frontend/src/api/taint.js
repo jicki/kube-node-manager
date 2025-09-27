@@ -44,6 +44,15 @@ const taintApi = {
     })
   },
 
+  // 带进度推送的批量添加污点
+  batchAddTaintsWithProgress(requestData) {
+    return request({
+      url: '/api/v1/nodes/taints/batch-add-progress',
+      method: 'post',
+      data: requestData
+    })
+  },
+
   // 批量删除污点
   batchDeleteTaints(requestData, config = {}) {
     return request({

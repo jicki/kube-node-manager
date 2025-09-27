@@ -45,6 +45,15 @@ const labelApi = {
     })
   },
 
+  // 带进度推送的批量添加标签
+  batchAddLabelsWithProgress(requestData) {
+    return request({
+      url: '/api/v1/nodes/labels/batch-add-progress',
+      method: 'post',
+      data: requestData
+    })
+  },
+
   // 批量删除标签
   batchDeleteLabels(requestData, config = {}) {
     return request({

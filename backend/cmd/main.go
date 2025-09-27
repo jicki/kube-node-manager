@@ -95,6 +95,9 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 	protected := api.Group("/")
 	protected.Use(handlers.Auth.AuthMiddleware())
 
+	// WebSocket 进度推送
+	protected.GET("/progress/ws", handlers.Progress.HandleWebSocket)
+
 	users := protected.Group("/users")
 	{
 		users.GET("", handlers.User.List)
@@ -138,9 +141,11 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		// 批量标签操作
 		nodes.POST("/labels/batch-add", handlers.Label.BatchAddLabels)
 		nodes.POST("/labels/batch-delete", handlers.Label.BatchDeleteLabels)
+		nodes.POST("/labels/batch-add-progress", handlers.Label.BatchAddLabelsWithProgress)
 		// 批量污点操作
 		nodes.POST("/taints/batch-add", handlers.Taint.BatchAddTaints)
 		nodes.POST("/taints/batch-delete", handlers.Taint.BatchDeleteTaints)
+		nodes.POST("/taints/batch-add-progress", handlers.Taint.BatchAddTaintsWithProgress)
 	}
 
 	labels := protected.Group("/labels")

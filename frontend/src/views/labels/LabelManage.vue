@@ -434,6 +434,15 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 进度对话框 -->
+    <ProgressDialog 
+      v-model="progressDialogVisible"
+      :task-id="currentTaskId"
+      @completed="handleProgressCompleted"
+      @error="handleProgressError"
+      @cancelled="handleProgressCancelled"
+    />
   </div>
 </template>
 
@@ -445,6 +454,7 @@ import { useClusterStore } from '@/store/modules/cluster'
 import { useNodeStore } from '@/store/modules/node'
 import SearchBox from '@/components/common/SearchBox.vue'
 import NodeSelector from '@/components/common/NodeSelector.vue'
+import ProgressDialog from '@/components/common/ProgressDialog.vue'
 import {
   Plus,
   Refresh,
@@ -467,6 +477,10 @@ const searchKeyword = ref('')
 const labelDialogVisible = ref(false)
 const nodesDialogVisible = ref(false)
 const applyDialogVisible = ref(false)
+
+// 进度对话框相关
+const progressDialogVisible = ref(false)
+const currentTaskId = ref('')
 const isEditing = ref(false)
 const labelFormRef = ref()
 
@@ -1151,6 +1165,22 @@ const showApplyDialog = async (template) => {
   applyDialogVisible.value = true
 }
 
+// 进度处理函数
+const handleProgressCompleted = (data) => {
+  ElMessage.success('批量标签操作完成')
+  refreshData()
+  applyDialogVisible.value = false
+}
+
+const handleProgressError = (data) => {
+  console.error('批量标签操作失败:', data)
+  applying.value = false
+}
+
+const handleProgressCancelled = () => {
+  applying.value = false
+}
+
 // 应用模板
 const handleApplyTemplate = async () => {
   try {
@@ -1223,9 +1253,27 @@ const handleApplyTemplate = async () => {
     console.log('即将发送给后端的数据:', applyData)
     console.log('标签数据详情:', JSON.stringify(labelsToApply, null, 2))
     
-    await labelApi.applyTemplate(applyData)
-    ElMessage.success('模板应用成功')
-    applyDialogVisible.value = false
+    // 检查节点数量，如果大于5个则使用带进度的API
+    if (selectedNodes.value.length > 5) {
+      // 使用带进度推送的批量操作
+      const progressResponse = await labelApi.batchAddLabelsWithProgress({
+        nodes: selectedNodes.value,
+        labels: Object.entries(labelsToApply).map(([key, value]) => ({ key, value })),
+        cluster: clusterName
+      })
+      
+      // 获取任务ID
+      currentTaskId.value = progressResponse.data.task_id
+      progressDialogVisible.value = true
+      
+      // 关闭应用对话框，但保持applying状态直到进度完成
+      // applyDialogVisible.value = false 在进度完成后再关闭
+    } else {
+      // 对于少量节点，仍使用原有的同步方式
+      await labelApi.applyTemplate(applyData)
+      ElMessage.success('模板应用成功')
+      applyDialogVisible.value = false
+    }
     
   } catch (error) {
     console.error('应用标签模板失败:', error)

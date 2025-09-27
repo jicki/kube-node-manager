@@ -10,6 +10,7 @@ require (
 	github.com/glebarez/sqlite v1.10.0
 	github.com/go-ldap/ldap/v3 v3.4.6
 	github.com/golang-jwt/jwt/v5 v5.0.0
+	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/rakyll/statik v0.1.7
 	github.com/spf13/viper v1.17.0
 	golang.org/x/crypto v0.36.0

@@ -1,11 +1,13 @@
 package label
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/k8s"
+	"kube-node-manager/internal/service/progress"
 	"kube-node-manager/pkg/logger"
 	"strings"
 	"time"
@@ -15,10 +17,11 @@ import (
 
 // Service 标签管理服务
 type Service struct {
-	db       *gorm.DB
-	logger   *logger.Logger
-	auditSvc *audit.Service
-	k8sSvc   *k8s.Service
+	db          *gorm.DB
+	logger      *logger.Logger
+	auditSvc    *audit.Service
+	k8sSvc      *k8s.Service
+	progressSvc *progress.Service
 }
 
 // UpdateLabelsRequest 更新节点标签请求
@@ -103,6 +106,11 @@ func NewService(db *gorm.DB, logger *logger.Logger, auditSvc *audit.Service, k8s
 		auditSvc: auditSvc,
 		k8sSvc:   k8sSvc,
 	}
+}
+
+// SetProgressService 设置进度推送服务
+func (s *Service) SetProgressService(progressSvc *progress.Service) {
+	s.progressSvc = progressSvc
 }
 
 // UpdateNodeLabels 更新单个节点标签
@@ -223,45 +231,99 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 	return nil
 }
 
-// BatchUpdateLabels 批量更新节点标签
-func (s *Service) BatchUpdateLabels(req BatchUpdateRequest, userID uint) error {
-	var errors []string
+// LabelProcessor 实现 BatchProcessor 接口
+type LabelProcessor struct {
+	svc    *Service
+	req    BatchUpdateRequest
+	userID uint
+}
 
-	s.logger.Infof("Starting batch update for %d nodes in cluster %s", len(req.NodeNames), req.ClusterName)
-
-	for i, nodeName := range req.NodeNames {
-		updateReq := UpdateLabelsRequest{
-			ClusterName: req.ClusterName,
-			NodeName:    nodeName,
-			Labels:      req.Labels,
-			Operation:   req.Operation,
-		}
-
-		if err := s.UpdateNodeLabels(updateReq, userID); err != nil {
-			errorMsg := fmt.Sprintf("Node %s: %v", nodeName, err)
-			errors = append(errors, errorMsg)
-			s.logger.Errorf("Failed to update labels for node %s: %v", nodeName, err)
-		} else {
-			s.logger.Infof("Successfully updated labels for node %s (%d/%d)", nodeName, i+1, len(req.NodeNames))
-		}
-
-		// 在批量操作之间添加小延迟，避免过度并发
-		if i < len(req.NodeNames)-1 {
-			time.Sleep(50 * time.Millisecond)
-		}
+func (p *LabelProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
+	updateReq := UpdateLabelsRequest{
+		ClusterName: p.req.ClusterName,
+		NodeName:    nodeName,
+		Labels:      p.req.Labels,
+		Operation:   p.req.Operation,
 	}
 
-	if len(errors) > 0 {
-		combinedError := strings.Join(errors, "; ")
-		s.auditSvc.Log(audit.LogRequest{
-			UserID:       userID,
-			Action:       model.ActionUpdate,
-			ResourceType: model.ResourceLabel,
-			Details:      fmt.Sprintf("Batch update labels failed for %d nodes", len(errors)),
-			Status:       model.AuditStatusFailed,
-			ErrorMsg:     combinedError,
-		})
-		return fmt.Errorf("batch update failed for some nodes: %s", combinedError)
+	return p.svc.UpdateNodeLabels(updateReq, p.userID)
+}
+
+// BatchUpdateLabels 批量更新节点标签 (带进度推送)
+func (s *Service) BatchUpdateLabels(req BatchUpdateRequest, userID uint) error {
+	return s.BatchUpdateLabelsWithProgress(req, userID, "")
+}
+
+// BatchUpdateLabelsWithProgress 批量更新节点标签 (带进度推送)
+func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID uint, taskID string) error {
+	s.logger.Infof("Starting batch update for %d nodes in cluster %s", len(req.NodeNames), req.ClusterName)
+
+	// 如果提供了taskID，则使用进度推送
+	if taskID != "" && s.progressSvc != nil {
+		processor := &LabelProcessor{
+			svc:    s,
+			req:    req,
+			userID: userID,
+		}
+
+		// 使用进度推送的并发处理
+		maxConcurrency := 5 // 限制并发数避免过载
+		if err := s.progressSvc.ProcessBatchWithProgress(
+			context.Background(),
+			taskID,
+			"batch_label",
+			req.NodeNames,
+			userID,
+			maxConcurrency,
+			processor,
+		); err != nil {
+			s.auditSvc.Log(audit.LogRequest{
+				UserID:       userID,
+				Action:       model.ActionUpdate,
+				ResourceType: model.ResourceLabel,
+				Details:      fmt.Sprintf("Batch update labels failed for %d nodes", len(req.NodeNames)),
+				Status:       model.AuditStatusFailed,
+				ErrorMsg:     err.Error(),
+			})
+			return err
+		}
+	} else {
+		// 传统的顺序处理方式（向后兼容）
+		var errors []string
+		for i, nodeName := range req.NodeNames {
+			updateReq := UpdateLabelsRequest{
+				ClusterName: req.ClusterName,
+				NodeName:    nodeName,
+				Labels:      req.Labels,
+				Operation:   req.Operation,
+			}
+
+			if err := s.UpdateNodeLabels(updateReq, userID); err != nil {
+				errorMsg := fmt.Sprintf("Node %s: %v", nodeName, err)
+				errors = append(errors, errorMsg)
+				s.logger.Errorf("Failed to update labels for node %s: %v", nodeName, err)
+			} else {
+				s.logger.Infof("Successfully updated labels for node %s (%d/%d)", nodeName, i+1, len(req.NodeNames))
+			}
+
+			// 在批量操作之间添加小延迟，避免过度并发
+			if i < len(req.NodeNames)-1 {
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+
+		if len(errors) > 0 {
+			combinedError := strings.Join(errors, "; ")
+			s.auditSvc.Log(audit.LogRequest{
+				UserID:       userID,
+				Action:       model.ActionUpdate,
+				ResourceType: model.ResourceLabel,
+				Details:      fmt.Sprintf("Batch update labels failed for %d nodes", len(errors)),
+				Status:       model.AuditStatusFailed,
+				ErrorMsg:     combinedError,
+			})
+			return fmt.Errorf("batch update failed for some nodes: %s", combinedError)
+		}
 	}
 
 	s.auditSvc.Log(audit.LogRequest{

@@ -1,11 +1,13 @@
 package taint
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/k8s"
+	"kube-node-manager/internal/service/progress"
 	"kube-node-manager/pkg/logger"
 	"strings"
 	"time"
@@ -15,10 +17,11 @@ import (
 
 // Service 污点管理服务
 type Service struct {
-	db       *gorm.DB
-	logger   *logger.Logger
-	auditSvc *audit.Service
-	k8sSvc   *k8s.Service
+	db          *gorm.DB
+	logger      *logger.Logger
+	auditSvc    *audit.Service
+	k8sSvc      *k8s.Service
+	progressSvc *progress.Service
 }
 
 // UpdateTaintsRequest 更新节点污点请求
@@ -120,6 +123,11 @@ func NewService(db *gorm.DB, logger *logger.Logger, auditSvc *audit.Service, k8s
 		auditSvc: auditSvc,
 		k8sSvc:   k8sSvc,
 	}
+}
+
+// SetProgressService 设置进度推送服务
+func (s *Service) SetProgressService(progressSvc *progress.Service) {
+	s.progressSvc = progressSvc
 }
 
 // UpdateNodeTaints 更新单个节点污点
@@ -228,36 +236,92 @@ func (s *Service) UpdateNodeTaints(req UpdateTaintsRequest, userID uint) error {
 	return nil
 }
 
-// BatchUpdateTaints 批量更新节点污点
-func (s *Service) BatchUpdateTaints(req BatchUpdateRequest, userID uint) error {
-	var errors []string
+// TaintProcessor 实现 BatchProcessor 接口
+type TaintProcessor struct {
+	svc    *Service
+	req    BatchUpdateRequest
+	userID uint
+}
 
-	for _, nodeName := range req.NodeNames {
-		updateReq := UpdateTaintsRequest{
-			ClusterName: req.ClusterName,
-			NodeName:    nodeName,
-			Taints:      req.Taints,
-			Operation:   req.Operation,
-		}
-
-		if err := s.UpdateNodeTaints(updateReq, userID); err != nil {
-			errorMsg := fmt.Sprintf("Node %s: %v", nodeName, err)
-			errors = append(errors, errorMsg)
-			s.logger.Errorf("Failed to update taints for node %s: %v", nodeName, err)
-		}
+func (p *TaintProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
+	updateReq := UpdateTaintsRequest{
+		ClusterName: p.req.ClusterName,
+		NodeName:    nodeName,
+		Taints:      p.req.Taints,
+		Operation:   p.req.Operation,
 	}
 
-	if len(errors) > 0 {
-		combinedError := strings.Join(errors, "; ")
-		s.auditSvc.Log(audit.LogRequest{
-			UserID:       userID,
-			Action:       model.ActionUpdate,
-			ResourceType: model.ResourceTaint,
-			Details:      fmt.Sprintf("Batch update taints failed for %d nodes", len(errors)),
-			Status:       model.AuditStatusFailed,
-			ErrorMsg:     combinedError,
-		})
-		return fmt.Errorf("batch update failed for some nodes: %s", combinedError)
+	return p.svc.UpdateNodeTaints(updateReq, p.userID)
+}
+
+// BatchUpdateTaints 批量更新节点污点 (带进度推送)
+func (s *Service) BatchUpdateTaints(req BatchUpdateRequest, userID uint) error {
+	return s.BatchUpdateTaintsWithProgress(req, userID, "")
+}
+
+// BatchUpdateTaintsWithProgress 批量更新节点污点 (带进度推送)
+func (s *Service) BatchUpdateTaintsWithProgress(req BatchUpdateRequest, userID uint, taskID string) error {
+	s.logger.Infof("Starting batch taint update for %d nodes in cluster %s", len(req.NodeNames), req.ClusterName)
+
+	// 如果提供了taskID，则使用进度推送
+	if taskID != "" && s.progressSvc != nil {
+		processor := &TaintProcessor{
+			svc:    s,
+			req:    req,
+			userID: userID,
+		}
+
+		// 使用进度推送的并发处理
+		maxConcurrency := 5 // 限制并发数避免过载
+		if err := s.progressSvc.ProcessBatchWithProgress(
+			context.Background(),
+			taskID,
+			"batch_taint",
+			req.NodeNames,
+			userID,
+			maxConcurrency,
+			processor,
+		); err != nil {
+			s.auditSvc.Log(audit.LogRequest{
+				UserID:       userID,
+				Action:       model.ActionUpdate,
+				ResourceType: model.ResourceTaint,
+				Details:      fmt.Sprintf("Batch update taints failed for %d nodes", len(req.NodeNames)),
+				Status:       model.AuditStatusFailed,
+				ErrorMsg:     err.Error(),
+			})
+			return err
+		}
+	} else {
+		// 传统的顺序处理方式（向后兼容）
+		var errors []string
+		for _, nodeName := range req.NodeNames {
+			updateReq := UpdateTaintsRequest{
+				ClusterName: req.ClusterName,
+				NodeName:    nodeName,
+				Taints:      req.Taints,
+				Operation:   req.Operation,
+			}
+
+			if err := s.UpdateNodeTaints(updateReq, userID); err != nil {
+				errorMsg := fmt.Sprintf("Node %s: %v", nodeName, err)
+				errors = append(errors, errorMsg)
+				s.logger.Errorf("Failed to update taints for node %s: %v", nodeName, err)
+			}
+		}
+
+		if len(errors) > 0 {
+			combinedError := strings.Join(errors, "; ")
+			s.auditSvc.Log(audit.LogRequest{
+				UserID:       userID,
+				Action:       model.ActionUpdate,
+				ResourceType: model.ResourceTaint,
+				Details:      fmt.Sprintf("Batch update taints failed for %d nodes", len(errors)),
+				Status:       model.AuditStatusFailed,
+				ErrorMsg:     combinedError,
+			})
+			return fmt.Errorf("batch update failed for some nodes: %s", combinedError)
+		}
 	}
 
 	s.auditSvc.Log(audit.LogRequest{

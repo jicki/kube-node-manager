@@ -3,6 +3,7 @@ package taint
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/k8s"
@@ -176,5 +177,92 @@ func (h *Handler) BatchDeleteTaints(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{
 		Code:    http.StatusOK,
 		Message: "批量删除污点成功",
+	})
+}
+
+// BatchAddTaintsWithProgress 带进度推送的批量添加污点
+func (h *Handler) BatchAddTaintsWithProgress(c *gin.Context) {
+	var req BatchTaintRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Errorf("Failed to bind batch add taints with progress request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "请求参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取当前用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "用户未认证",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以批量添加污点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "权限不足。只有管理员和用户角色可以批量添加污点",
+		})
+		return
+	}
+
+	// 从请求参数中获取集群名称，如果没有提供则从查询参数获取
+	clusterName := req.Cluster
+	if clusterName == "" {
+		clusterName = c.Query("cluster_name")
+		if clusterName == "" {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    http.StatusBadRequest,
+				Message: "缺少集群名称参数",
+			})
+			return
+		}
+	}
+
+	// 生成任务ID
+	taskID := fmt.Sprintf("taint_batch_%d_%d", userID.(uint), time.Now().UnixNano())
+
+	// 构建批量更新请求
+	var taints []k8s.TaintInfo
+	for _, taintData := range req.Taints {
+		if key, ok := taintData["key"].(string); ok {
+			if value, ok := taintData["value"].(string); ok {
+				if effect, ok := taintData["effect"].(string); ok {
+					taints = append(taints, k8s.TaintInfo{
+						Key:    key,
+						Value:  value,
+						Effect: effect,
+					})
+				}
+			}
+		}
+	}
+
+	batchReq := taint.BatchUpdateRequest{
+		ClusterName: clusterName,
+		NodeNames:   req.Nodes,
+		Taints:      taints,
+		Operation:   "add",
+	}
+
+	// 启动异步批量操作
+	go func() {
+		if err := h.taintSvc.BatchUpdateTaintsWithProgress(batchReq, userID.(uint), taskID); err != nil {
+			h.logger.Errorf("Failed to batch add taints with progress: %v", err)
+		}
+	}()
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "批量添加污点任务已启动",
+		Data: map[string]string{
+			"task_id": taskID,
+		},
 	})
 }

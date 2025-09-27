@@ -2,13 +2,14 @@ package service
 
 import (
 	"kube-node-manager/internal/config"
-	"kube-node-manager/internal/service/auth"
 	"kube-node-manager/internal/service/audit"
+	"kube-node-manager/internal/service/auth"
 	"kube-node-manager/internal/service/cluster"
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/internal/service/label"
 	"kube-node-manager/internal/service/ldap"
 	"kube-node-manager/internal/service/node"
+	"kube-node-manager/internal/service/progress"
 	"kube-node-manager/internal/service/taint"
 	"kube-node-manager/internal/service/user"
 	"kube-node-manager/pkg/logger"
@@ -17,31 +18,42 @@ import (
 )
 
 type Services struct {
-	Auth    *auth.Service
-	User    *user.Service
-	Cluster *cluster.Service
-	Node    *node.Service
-	Label   *label.Service
-	Taint   *taint.Service
-	Audit   *audit.Service
-	LDAP    *ldap.Service
-	K8s     *k8s.Service
+	Auth     *auth.Service
+	User     *user.Service
+	Cluster  *cluster.Service
+	Node     *node.Service
+	Label    *label.Service
+	Taint    *taint.Service
+	Audit    *audit.Service
+	LDAP     *ldap.Service
+	K8s      *k8s.Service
+	Progress *progress.Service
 }
 
 func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Services {
 	auditSvc := audit.NewService(db, logger)
 	k8sSvc := k8s.NewService(logger)
 	ldapSvc := ldap.NewService(logger, cfg.LDAP)
-	
+	progressSvc := progress.NewService(logger)
+
+	// 创建服务实例
+	labelSvc := label.NewService(db, logger, auditSvc, k8sSvc)
+	taintSvc := taint.NewService(db, logger, auditSvc, k8sSvc)
+
+	// 设置进度服务
+	labelSvc.SetProgressService(progressSvc)
+	taintSvc.SetProgressService(progressSvc)
+
 	return &Services{
-		Auth:    auth.NewService(db, logger, cfg.JWT, ldapSvc, auditSvc),
-		User:    user.NewService(db, logger, auditSvc),
-		Cluster: cluster.NewService(db, logger, auditSvc, k8sSvc),
-		Node:    node.NewService(logger, k8sSvc, auditSvc),
-		Label:   label.NewService(db, logger, auditSvc, k8sSvc),
-		Taint:   taint.NewService(db, logger, auditSvc, k8sSvc),
-		Audit:   auditSvc,
-		LDAP:    ldapSvc,
-		K8s:     k8sSvc,
+		Auth:     auth.NewService(db, logger, cfg.JWT, ldapSvc, auditSvc),
+		User:     user.NewService(db, logger, auditSvc),
+		Cluster:  cluster.NewService(db, logger, auditSvc, k8sSvc),
+		Node:     node.NewService(logger, k8sSvc, auditSvc),
+		Label:    labelSvc,
+		Taint:    taintSvc,
+		Audit:    auditSvc,
+		LDAP:     ldapSvc,
+		K8s:      k8sSvc,
+		Progress: progressSvc,
 	}
 }

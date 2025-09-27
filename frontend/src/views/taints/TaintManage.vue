@@ -459,6 +459,15 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 进度对话框 -->
+    <ProgressDialog 
+      v-model="progressDialogVisible"
+      :task-id="currentTaskId"
+      @completed="handleProgressCompleted"
+      @error="handleProgressError"
+      @cancelled="handleProgressCancelled"
+    />
   </div>
 </template>
 
@@ -471,6 +480,7 @@ import { useNodeStore } from '@/store/modules/node'
 import { formatTaintEffect } from '@/utils/format'
 import SearchBox from '@/components/common/SearchBox.vue'
 import NodeSelector from '@/components/common/NodeSelector.vue'
+import ProgressDialog from '@/components/common/ProgressDialog.vue'
 import {
   Plus,
   Refresh,
@@ -490,6 +500,10 @@ const saving = ref(false)
 const applying = ref(false)
 const taintDialogVisible = ref(false)
 const applyDialogVisible = ref(false)
+
+// 进度对话框相关
+const progressDialogVisible = ref(false)
+const currentTaskId = ref('')
 const isEditing = ref(false)
 const taintFormRef = ref()
 
@@ -1145,6 +1159,22 @@ const applyTemplateToNodes = async (template) => {
   applyDialogVisible.value = true
 }
 
+// 进度处理函数
+const handleProgressCompleted = (data) => {
+  ElMessage.success('批量污点操作完成')
+  refreshData()
+  applyDialogVisible.value = false
+}
+
+const handleProgressError = (data) => {
+  console.error('批量污点操作失败:', data)
+  applying.value = false
+}
+
+const handleProgressCancelled = () => {
+  applying.value = false
+}
+
 // 应用模板
 const handleApplyTemplate = async () => {
   try {
@@ -1198,9 +1228,31 @@ const handleApplyTemplate = async () => {
       taints: taintsToApply // 包含选定的污点值
     }
     
-    await taintApi.applyTemplate(applyData)
-    ElMessage.success('模板应用成功')
-    applyDialogVisible.value = false
+    // 检查节点数量，如果大于5个则使用带进度的API
+    if (selectedNodes.value.length > 5) {
+      // 使用带进度推送的批量操作
+      const progressResponse = await taintApi.batchAddTaintsWithProgress({
+        nodes: selectedNodes.value,
+        taints: taintsToApply.map(taint => ({
+          key: taint.key,
+          value: taint.value,
+          effect: taint.effect
+        })),
+        cluster: clusterName
+      })
+      
+      // 获取任务ID
+      currentTaskId.value = progressResponse.data.task_id
+      progressDialogVisible.value = true
+      
+      // 关闭应用对话框，但保持applying状态直到进度完成
+      // applyDialogVisible.value = false 在进度完成后再关闭
+    } else {
+      // 对于少量节点，仍使用原有的同步方式
+      await taintApi.applyTemplate(applyData)
+      ElMessage.success('模板应用成功')
+      applyDialogVisible.value = false
+    }
     
   } catch (error) {
     console.error('应用污点模板失败:', error)
