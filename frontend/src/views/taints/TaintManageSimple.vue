@@ -153,6 +153,10 @@ const refreshData = async () => {
       if (Array.isArray(response.data)) {
         console.log('🔍 数据格式: 直接数组')
         taintTemplates.value = response.data
+      } else if (response.data.data && response.data.data.templates && Array.isArray(response.data.data.templates)) {
+        console.log('🔍 数据格式: response.data.data.templates ✅')
+        console.log('📋 templates内容:', response.data.data.templates)
+        taintTemplates.value = response.data.data.templates
       } else if (response.data.templates && Array.isArray(response.data.templates)) {
         console.log('🔍 数据格式: response.data.templates')
         console.log('📋 templates内容:', response.data.templates)
@@ -163,10 +167,11 @@ const refreshData = async () => {
       } else {
         console.warn('❌ 未识别的数据格式:')
         console.warn('response.data:', response.data)
+        console.warn('response.data.data存在?', !!response.data.data)
+        console.warn('response.data.data.templates存在?', !!(response.data.data && response.data.data.templates))
+        console.warn('response.data.data.templates是数组?', !!(response.data.data && Array.isArray(response.data.data.templates)))
         console.warn('response.data.templates存在?', !!response.data.templates)
         console.warn('response.data.templates是数组?', Array.isArray(response.data.templates))
-        console.warn('response.data.data存在?', !!response.data.data)
-        console.warn('response.data.data是数组?', Array.isArray(response.data.data))
         taintTemplates.value = []
       }
     } else {
