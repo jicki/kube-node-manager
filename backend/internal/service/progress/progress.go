@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"kube-node-manager/internal/service/auth"
 	"kube-node-manager/pkg/logger"
 
 	"github.com/gin-gonic/gin"
@@ -50,6 +51,11 @@ type Connection struct {
 	userID uint
 }
 
+// TokenValidator JWT token验证接口
+type TokenValidator interface {
+	ValidateToken(tokenString string) (*auth.Claims, error)
+}
+
 // Service 进度推送服务
 type Service struct {
 	// 存储用户连接
@@ -59,8 +65,9 @@ type Service struct {
 	// 保护连接映射
 	connMutex sync.RWMutex
 	// 保护任务映射
-	taskMutex sync.RWMutex
-	logger    *logger.Logger
+	taskMutex   sync.RWMutex
+	logger      *logger.Logger
+	authService TokenValidator
 }
 
 // NewService 创建进度推送服务
@@ -72,14 +79,41 @@ func NewService(logger *logger.Logger) *Service {
 	}
 }
 
+// SetAuthService 设置认证服务
+func (s *Service) SetAuthService(authService TokenValidator) {
+	s.authService = authService
+}
+
 // HandleWebSocket 处理WebSocket连接
 func (s *Service) HandleWebSocket(c *gin.Context) {
-	// 获取用户ID
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未认证"})
+	// 从查询参数获取token
+	token := c.Query("token")
+	if token == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "缺少认证token"})
 		return
 	}
+
+	// 验证token
+	if s.authService == nil {
+		s.logger.Errorf("Auth service not set for WebSocket authentication")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "认证服务未配置"})
+		return
+	}
+
+	claims, err := s.authService.ValidateToken(token)
+	if err != nil {
+		s.logger.Errorf("WebSocket token validation failed: %v", err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	if claims.Type != "access" {
+		s.logger.Errorf("Invalid token type for WebSocket: %s", claims.Type)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token type"})
+		return
+	}
+
+	userID := claims.UserID
 
 	// 升级HTTP连接为WebSocket
 	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -93,15 +127,15 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 	conn := &Connection{
 		ws:     ws,
 		send:   make(chan ProgressMessage, 256),
-		userID: userID.(uint),
+		userID: userID,
 	}
 
 	// 注册连接
 	s.connMutex.Lock()
-	s.connections[userID.(uint)] = conn
+	s.connections[userID] = conn
 	s.connMutex.Unlock()
 
-	s.logger.Infof("WebSocket connected for user %d", userID.(uint))
+	s.logger.Infof("WebSocket connected for user %d", userID)
 
 	// 启动消息发送goroutine
 	go s.writePump(conn)
@@ -110,7 +144,7 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 	go s.readPump(conn)
 
 	// 发送连接确认消息
-	s.sendToUser(userID.(uint), ProgressMessage{
+	s.sendToUser(userID, ProgressMessage{
 		Type:      "connected",
 		Message:   "WebSocket连接成功",
 		Timestamp: time.Now(),

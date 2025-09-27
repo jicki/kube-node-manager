@@ -95,8 +95,8 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 	protected := api.Group("/")
 	protected.Use(handlers.Auth.AuthMiddleware())
 
-	// WebSocket 进度推送
-	protected.GET("/progress/ws", handlers.Progress.HandleWebSocket)
+	// WebSocket 进度推送 (不需要中间件，在内部处理认证)
+	api.GET("/progress/ws", handlers.Progress.HandleWebSocket)
 
 	users := protected.Group("/users")
 	{
