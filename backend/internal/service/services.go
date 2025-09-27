@@ -40,17 +40,19 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	authSvc := auth.NewService(db, logger, cfg.JWT, ldapSvc, auditSvc)
 	labelSvc := label.NewService(db, logger, auditSvc, k8sSvc)
 	taintSvc := taint.NewService(db, logger, auditSvc, k8sSvc)
+	nodeSvc := node.NewService(logger, k8sSvc, auditSvc)
 
 	// 设置进度服务
 	progressSvc.SetAuthService(authSvc)
 	labelSvc.SetProgressService(progressSvc)
 	taintSvc.SetProgressService(progressSvc)
+	nodeSvc.SetProgressService(progressSvc)
 
 	return &Services{
 		Auth:     authSvc,
 		User:     user.NewService(db, logger, auditSvc),
 		Cluster:  cluster.NewService(db, logger, auditSvc, k8sSvc),
-		Node:     node.NewService(logger, k8sSvc, auditSvc),
+		Node:     nodeSvc,
 		Label:    labelSvc,
 		Taint:    taintSvc,
 		Audit:    auditSvc,

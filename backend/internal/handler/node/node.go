@@ -3,6 +3,7 @@ package node
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/node"
@@ -1075,5 +1076,215 @@ func (h *Handler) GetByLabels(c *gin.Context) {
 		Code:    http.StatusOK,
 		Message: "Success",
 		Data:    nodes,
+	})
+}
+
+// BatchCordonWithProgress 批量禁止调度节点（带进度）
+func (h *Handler) BatchCordonWithProgress(c *gin.Context) {
+	var req node.BatchNodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind batch cordon with progress request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
+
+	if len(req.Nodes) == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "At least one node is required",
+		})
+		return
+	}
+
+	if req.ClusterName == "" {
+		req.ClusterName = c.Query("cluster_name")
+		if req.ClusterName == "" {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    http.StatusBadRequest,
+				Message: "cluster_name is required",
+			})
+			return
+		}
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以批量禁止调度节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can batch cordon nodes",
+		})
+		return
+	}
+
+	// 生成任务ID
+	taskID := fmt.Sprintf("node_cordon_batch_%d_%d", userID.(uint), time.Now().UnixNano())
+
+	// 启动异步批量操作
+	go func() {
+		if err := h.nodeSvc.BatchCordonWithProgress(req, userID.(uint), taskID); err != nil {
+			h.logger.Error("Failed to batch cordon nodes with progress: %v", err)
+		}
+	}()
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "批量禁止调度任务已启动",
+		Data: map[string]string{
+			"task_id": taskID,
+		},
+	})
+}
+
+// BatchUncordonWithProgress 批量解除调度节点（带进度）
+func (h *Handler) BatchUncordonWithProgress(c *gin.Context) {
+	var req node.BatchNodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind batch uncordon with progress request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
+
+	if len(req.Nodes) == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "At least one node is required",
+		})
+		return
+	}
+
+	if req.ClusterName == "" {
+		req.ClusterName = c.Query("cluster_name")
+		if req.ClusterName == "" {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    http.StatusBadRequest,
+				Message: "cluster_name is required",
+			})
+			return
+		}
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以批量解除调度节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin and user roles can batch uncordon nodes",
+		})
+		return
+	}
+
+	// 生成任务ID
+	taskID := fmt.Sprintf("node_uncordon_batch_%d_%d", userID.(uint), time.Now().UnixNano())
+
+	// 启动异步批量操作
+	go func() {
+		if err := h.nodeSvc.BatchUncordonWithProgress(req, userID.(uint), taskID); err != nil {
+			h.logger.Error("Failed to batch uncordon nodes with progress: %v", err)
+		}
+	}()
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "批量解除调度任务已启动",
+		Data: map[string]string{
+			"task_id": taskID,
+		},
+	})
+}
+
+// BatchDrainWithProgress 批量驱逐节点（带进度）
+func (h *Handler) BatchDrainWithProgress(c *gin.Context) {
+	var req node.BatchNodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind batch drain with progress request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request parameters: " + err.Error(),
+		})
+		return
+	}
+
+	if len(req.Nodes) == 0 {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "No nodes specified for drain operation",
+		})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 角色可以驱逐节点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin role can drain nodes",
+		})
+		return
+	}
+
+	// 从请求参数中获取集群名称，如果没有提供则从查询参数获取
+	clusterName := req.ClusterName
+	if clusterName == "" {
+		clusterName = c.Query("cluster_name")
+		if clusterName == "" {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    http.StatusBadRequest,
+				Message: "cluster_name is required",
+			})
+			return
+		}
+	}
+	req.ClusterName = clusterName
+
+	// 生成任务ID
+	taskID := fmt.Sprintf("node_drain_batch_%d_%d", userID.(uint), time.Now().UnixNano())
+
+	// 启动异步批量操作
+	go func() {
+		if err := h.nodeSvc.BatchDrainWithProgress(req, userID.(uint), taskID); err != nil {
+			h.logger.Error("Failed to batch drain nodes with progress: %v", err)
+		}
+	}()
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "批量驱逐任务已启动",
+		Data: map[string]string{
+			"task_id": taskID,
+		},
 	})
 }

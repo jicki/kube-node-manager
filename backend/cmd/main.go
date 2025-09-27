@@ -142,10 +142,16 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		nodes.POST("/labels/batch-add", handlers.Label.BatchAddLabels)
 		nodes.POST("/labels/batch-delete", handlers.Label.BatchDeleteLabels)
 		nodes.POST("/labels/batch-add-progress", handlers.Label.BatchAddLabelsWithProgress)
+		nodes.POST("/labels/batch-delete-progress", handlers.Label.BatchDeleteLabelsWithProgress)
 		// 批量污点操作
 		nodes.POST("/taints/batch-add", handlers.Taint.BatchAddTaints)
 		nodes.POST("/taints/batch-delete", handlers.Taint.BatchDeleteTaints)
 		nodes.POST("/taints/batch-add-progress", handlers.Taint.BatchAddTaintsWithProgress)
+		nodes.POST("/taints/batch-delete-progress", handlers.Taint.BatchDeleteTaintsWithProgress)
+		// 节点操作（带进度）
+		nodes.POST("/batch-cordon-progress", handlers.Node.BatchCordonWithProgress)
+		nodes.POST("/batch-uncordon-progress", handlers.Node.BatchUncordonWithProgress)
+		nodes.POST("/batch-drain-progress", handlers.Node.BatchDrainWithProgress)
 	}
 
 	labels := protected.Group("/labels")

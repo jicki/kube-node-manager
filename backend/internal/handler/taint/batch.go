@@ -266,3 +266,87 @@ func (h *Handler) BatchAddTaintsWithProgress(c *gin.Context) {
 		},
 	})
 }
+
+// BatchDeleteTaintsWithProgress 带进度推送的批量删除污点
+func (h *Handler) BatchDeleteTaintsWithProgress(c *gin.Context) {
+	var req struct {
+		Nodes       []string `json:"nodes" binding:"required"`
+		Keys        []string `json:"keys" binding:"required"`
+		ClusterName string   `json:"cluster_name"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Errorf("Failed to bind batch delete taints with progress request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "请求参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取当前用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "用户未认证",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以批量删除污点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "权限不足。只有管理员和用户角色可以批量删除污点",
+		})
+		return
+	}
+
+	// 从请求参数中获取集群名称，如果没有提供则从查询参数获取
+	clusterName := req.ClusterName
+	if clusterName == "" {
+		clusterName = c.Query("cluster_name")
+		if clusterName == "" {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    http.StatusBadRequest,
+				Message: "缺少集群名称参数",
+			})
+			return
+		}
+	}
+
+	// 生成任务ID
+	taskID := fmt.Sprintf("taint_delete_batch_%d_%d", userID.(uint), time.Now().UnixNano())
+
+	// 构建批量更新请求
+	var taints []k8s.TaintInfo
+	for _, key := range req.Keys {
+		taints = append(taints, k8s.TaintInfo{
+			Key: key,
+		})
+	}
+
+	batchReq := taint.BatchUpdateRequest{
+		ClusterName: clusterName,
+		NodeNames:   req.Nodes,
+		Taints:      taints,
+		Operation:   "remove",
+	}
+
+	// 启动异步批量操作
+	go func() {
+		if err := h.taintSvc.BatchUpdateTaintsWithProgress(batchReq, userID.(uint), taskID); err != nil {
+			h.logger.Errorf("Failed to batch delete taints with progress: %v", err)
+		}
+	}()
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "批量删除污点任务已启动",
+		Data: map[string]string{
+			"task_id": taskID,
+		},
+	})
+}

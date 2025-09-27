@@ -254,3 +254,85 @@ func (h *Handler) BatchAddLabelsWithProgress(c *gin.Context) {
 		},
 	})
 }
+
+// BatchDeleteLabelsWithProgress 带进度推送的批量删除标签
+func (h *Handler) BatchDeleteLabelsWithProgress(c *gin.Context) {
+	var req struct {
+		Nodes       []string `json:"nodes" binding:"required"`
+		Keys        []string `json:"keys" binding:"required"`
+		ClusterName string   `json:"cluster_name"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Errorf("Failed to bind batch delete labels with progress request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "请求参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取当前用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "用户未认证",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以批量删除标签
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "权限不足。只有管理员和用户角色可以批量删除标签",
+		})
+		return
+	}
+
+	// 从请求参数中获取集群名称，如果没有提供则从查询参数获取
+	clusterName := req.ClusterName
+	if clusterName == "" {
+		clusterName = c.Query("cluster_name")
+		if clusterName == "" {
+			c.JSON(http.StatusBadRequest, Response{
+				Code:    http.StatusBadRequest,
+				Message: "缺少集群名称参数",
+			})
+			return
+		}
+	}
+
+	// 生成任务ID
+	taskID := fmt.Sprintf("label_delete_batch_%d_%d", userID.(uint), time.Now().UnixNano())
+
+	// 构建批量更新请求
+	labels := make(map[string]string)
+	for _, key := range req.Keys {
+		labels[key] = "" // 空值表示删除
+	}
+
+	batchReq := label.BatchUpdateRequest{
+		ClusterName: clusterName,
+		NodeNames:   req.Nodes,
+		Labels:      labels,
+		Operation:   "remove",
+	}
+
+	// 启动异步批量操作
+	go func() {
+		if err := h.labelSvc.BatchUpdateLabelsWithProgress(batchReq, userID.(uint), taskID); err != nil {
+			h.logger.Errorf("Failed to batch delete labels with progress: %v", err)
+		}
+	}()
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "批量删除标签任务已启动",
+		Data: map[string]string{
+			"task_id": taskID,
+		},
+	})
+}

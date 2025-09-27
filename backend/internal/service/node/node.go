@@ -1,10 +1,12 @@
 package node
 
 import (
+	"context"
 	"fmt"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/k8s"
+	"kube-node-manager/internal/service/progress"
 	"kube-node-manager/pkg/logger"
 	"strings"
 	"time"
@@ -12,9 +14,10 @@ import (
 
 // Service 节点管理服务
 type Service struct {
-	logger   *logger.Logger
-	k8sSvc   *k8s.Service
-	auditSvc *audit.Service
+	logger      *logger.Logger
+	k8sSvc      *k8s.Service
+	auditSvc    *audit.Service
+	progressSvc *progress.Service
 }
 
 // ListRequest 节点列表请求
@@ -641,6 +644,137 @@ func (s *Service) BatchDrain(req BatchNodeRequest, userID uint) (map[string]inte
 // GetNodeCordonInfo 获取节点的禁止调度信息（从annotations）
 func (s *Service) GetNodeCordonInfo(clusterName, nodeName string) (map[string]interface{}, error) {
 	return s.k8sSvc.GetNodeCordonInfo(clusterName, nodeName)
+}
+
+// SetProgressService 设置进度推送服务
+func (s *Service) SetProgressService(progressSvc *progress.Service) {
+	s.progressSvc = progressSvc
+}
+
+// CordonProcessor 禁止调度处理器
+type CordonProcessor struct {
+	svc         *Service
+	clusterName string
+	reason      string
+	userID      uint
+}
+
+func (p *CordonProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
+	req := CordonRequest{
+		ClusterName: p.clusterName,
+		NodeName:    nodeName,
+		Reason:      p.reason,
+	}
+	return p.svc.Cordon(req, p.userID)
+}
+
+// UncordonProcessor 解除调度处理器
+type UncordonProcessor struct {
+	svc         *Service
+	clusterName string
+	reason      string
+	userID      uint
+}
+
+func (p *UncordonProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
+	req := CordonRequest{
+		ClusterName: p.clusterName,
+		NodeName:    nodeName,
+		Reason:      p.reason,
+	}
+	return p.svc.Uncordon(req, p.userID)
+}
+
+// DrainProcessor 驱逐处理器
+type DrainProcessor struct {
+	svc         *Service
+	clusterName string
+	reason      string
+	userID      uint
+}
+
+func (p *DrainProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
+	req := DrainRequest{
+		ClusterName: p.clusterName,
+		NodeName:    nodeName,
+		Reason:      p.reason,
+	}
+	return p.svc.Drain(req, p.userID)
+}
+
+// BatchCordonWithProgress 批量禁止调度节点（带进度）
+func (s *Service) BatchCordonWithProgress(req BatchNodeRequest, userID uint, taskID string) error {
+	if s.progressSvc == nil {
+		return fmt.Errorf("progress service not set")
+	}
+
+	processor := &CordonProcessor{
+		svc:         s,
+		clusterName: req.ClusterName,
+		reason:      req.Reason,
+		userID:      userID,
+	}
+
+	ctx := context.Background()
+	return s.progressSvc.ProcessBatchWithProgress(
+		ctx,
+		taskID,
+		"batch_cordon",
+		req.Nodes,
+		userID,
+		5, // 并发数
+		processor,
+	)
+}
+
+// BatchUncordonWithProgress 批量解除调度节点（带进度）
+func (s *Service) BatchUncordonWithProgress(req BatchNodeRequest, userID uint, taskID string) error {
+	if s.progressSvc == nil {
+		return fmt.Errorf("progress service not set")
+	}
+
+	processor := &UncordonProcessor{
+		svc:         s,
+		clusterName: req.ClusterName,
+		reason:      req.Reason,
+		userID:      userID,
+	}
+
+	ctx := context.Background()
+	return s.progressSvc.ProcessBatchWithProgress(
+		ctx,
+		taskID,
+		"batch_uncordon",
+		req.Nodes,
+		userID,
+		5, // 并发数
+		processor,
+	)
+}
+
+// BatchDrainWithProgress 批量驱逐节点（带进度）
+func (s *Service) BatchDrainWithProgress(req BatchNodeRequest, userID uint, taskID string) error {
+	if s.progressSvc == nil {
+		return fmt.Errorf("progress service not set")
+	}
+
+	processor := &DrainProcessor{
+		svc:         s,
+		clusterName: req.ClusterName,
+		reason:      req.Reason,
+		userID:      userID,
+	}
+
+	ctx := context.Background()
+	return s.progressSvc.ProcessBatchWithProgress(
+		ctx,
+		taskID,
+		"batch_drain",
+		req.Nodes,
+		userID,
+		3, // 驱逐操作较重，减少并发数
+		processor,
+	)
 }
 
 // GetCordonHistory 获取节点的禁止调度历史
