@@ -63,6 +63,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
+import { getToken } from '@/utils/auth'
 
 const props = defineProps({
   modelValue: {
@@ -135,7 +136,7 @@ const connectWebSocket = () => {
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
-  const token = localStorage.getItem('token')
+  const token = getToken()
   
   const wsUrl = `${protocol}//${host}/api/v1/progress/ws?token=${token}`
   
