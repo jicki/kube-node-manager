@@ -130,6 +130,11 @@ func (s *Service) SetProgressService(progressSvc *progress.Service) {
 	s.progressSvc = progressSvc
 }
 
+// getClusterIDByName 根据集群名称获取集群ID
+func (s *Service) getClusterIDByName(clusterName string) (uint, error) {
+	return s.auditSvc.GetClusterIDByName(clusterName)
+}
+
 // UpdateNodeTaints 更新单个节点污点
 func (s *Service) UpdateNodeTaints(req UpdateTaintsRequest, userID uint) error {
 	// 验证污点信息
@@ -141,8 +146,13 @@ func (s *Service) UpdateNodeTaints(req UpdateTaintsRequest, userID uint) error {
 	currentNode, err := s.k8sSvc.GetNode(req.ClusterName, req.NodeName)
 	if err != nil {
 		s.logger.Errorf("Failed to get node %s in cluster %s: %v", req.NodeName, req.ClusterName, err)
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			ClusterID:    clusterID,
 			NodeName:     req.NodeName,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceTaint,
@@ -211,8 +221,13 @@ func (s *Service) UpdateNodeTaints(req UpdateTaintsRequest, userID uint) error {
 
 	if err := s.k8sSvc.UpdateNodeTaints(req.ClusterName, updateReq); err != nil {
 		s.logger.Errorf("Failed to update node taints: %v", err)
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			ClusterID:    clusterID,
 			NodeName:     req.NodeName,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceTaint,
@@ -224,8 +239,13 @@ func (s *Service) UpdateNodeTaints(req UpdateTaintsRequest, userID uint) error {
 	}
 
 	s.logger.Infof("Successfully updated taints for node %s", req.NodeName)
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		NodeName:     req.NodeName,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceTaint,
@@ -282,8 +302,13 @@ func (s *Service) BatchUpdateTaintsWithProgress(req BatchUpdateRequest, userID u
 			maxConcurrency,
 			processor,
 		); err != nil {
+			var clusterID *uint
+			if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+				clusterID = &cID
+			}
 			s.auditSvc.Log(audit.LogRequest{
 				UserID:       userID,
+				ClusterID:    clusterID,
 				Action:       model.ActionUpdate,
 				ResourceType: model.ResourceTaint,
 				Details:      fmt.Sprintf("Batch update taints failed for %d nodes", len(req.NodeNames)),
@@ -312,8 +337,13 @@ func (s *Service) BatchUpdateTaintsWithProgress(req BatchUpdateRequest, userID u
 
 		if len(errors) > 0 {
 			combinedError := strings.Join(errors, "; ")
+			var clusterID *uint
+			if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+				clusterID = &cID
+			}
 			s.auditSvc.Log(audit.LogRequest{
 				UserID:       userID,
+				ClusterID:    clusterID,
 				Action:       model.ActionUpdate,
 				ResourceType: model.ResourceTaint,
 				Details:      fmt.Sprintf("Batch update taints failed for %d nodes", len(errors)),
@@ -324,8 +354,13 @@ func (s *Service) BatchUpdateTaintsWithProgress(req BatchUpdateRequest, userID u
 		}
 	}
 
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceTaint,
 		Details:      fmt.Sprintf("Batch updated taints for %d nodes in cluster %s", len(req.NodeNames), req.ClusterName),
@@ -652,8 +687,13 @@ func (s *Service) ApplyTemplate(req ApplyTemplateRequest, userID uint) error {
 	}
 
 	if err := s.BatchUpdateTaints(batchReq, userID); err != nil {
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			ClusterID:    clusterID,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceTaint,
 			Details:      fmt.Sprintf("Failed to apply template %s to nodes", template.Name),
@@ -663,8 +703,13 @@ func (s *Service) ApplyTemplate(req ApplyTemplateRequest, userID uint) error {
 		return fmt.Errorf("failed to apply template: %w", err)
 	}
 
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceTaint,
 		Details:      fmt.Sprintf("Applied template %s to %d nodes in cluster %s", template.Name, len(req.NodeNames), req.ClusterName),

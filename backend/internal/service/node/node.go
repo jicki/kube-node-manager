@@ -108,8 +108,14 @@ func (s *Service) List(req ListRequest, userID uint) ([]k8s.NodeInfo, error) {
 	nodes, err := s.k8sSvc.ListNodes(req.ClusterName)
 	if err != nil {
 		s.logger.Errorf("Failed to list nodes for cluster %s: %v", req.ClusterName, err)
+		// 尝试获取集群ID以正确记录审计日志
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			ClusterID:    clusterID,
 			Action:       model.ActionView,
 			ResourceType: model.ResourceNode,
 			Details:      fmt.Sprintf("Failed to list nodes for cluster %s: %s", req.ClusterName, err.Error()),
@@ -142,8 +148,14 @@ func (s *Service) List(req ListRequest, userID uint) ([]k8s.NodeInfo, error) {
 
 	// 只在有特定过滤条件时记录审计日志，避免频繁记录普通列表查看
 	if req.Status != "" || req.Role != "" || req.LabelKey != "" || req.TaintKey != "" {
+		// 获取集群ID以正确记录审计日志
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			ClusterID:    clusterID,
 			Action:       model.ActionView,
 			ResourceType: model.ResourceNode,
 			Details:      fmt.Sprintf("Filtered nodes for cluster %s with conditions", req.ClusterName),
@@ -498,8 +510,13 @@ func (s *Service) BatchCordon(req BatchNodeRequest, userID uint) (map[string]int
 	results["error_count"] = len(errors)
 
 	// 记录审计日志
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceNode,
 		Details:      fmt.Sprintf("Batch cordon %d nodes in cluster %s: %d successful, %d failed", len(req.Nodes), req.ClusterName, len(successful), len(errors)),
@@ -537,8 +554,13 @@ func (s *Service) BatchUncordon(req BatchNodeRequest, userID uint) (map[string]i
 	results["error_count"] = len(errors)
 
 	// 记录审计日志
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceNode,
 		Details:      fmt.Sprintf("Batch uncordon %d nodes in cluster %s: %d successful, %d failed", len(req.Nodes), req.ClusterName, len(successful), len(errors)),
@@ -552,11 +574,18 @@ func (s *Service) BatchUncordon(req BatchNodeRequest, userID uint) (map[string]i
 func (s *Service) Drain(req DrainRequest, userID uint) error {
 	s.logger.Infof("User %d initiating drain operation on node %s in cluster %s", userID, req.NodeName, req.ClusterName)
 
+	// 获取集群ID以正确记录审计日志
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
+
 	// 调用k8s服务进行节点驱逐
 	if err := s.k8sSvc.DrainNode(req.ClusterName, req.NodeName, req.Reason); err != nil {
 		s.logger.Errorf("Failed to drain node %s in cluster %s: %v", req.NodeName, req.ClusterName, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			ClusterID:    clusterID,
 			NodeName:     req.NodeName,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceNode,
@@ -571,6 +600,7 @@ func (s *Service) Drain(req DrainRequest, userID uint) error {
 	// 记录禁止调度的审计日志（这样就不需要依赖后续的同步过程）
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		NodeName:     req.NodeName,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceNode,
@@ -582,6 +612,7 @@ func (s *Service) Drain(req DrainRequest, userID uint) error {
 	// 记录驱逐操作的审计日志
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		NodeName:     req.NodeName,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceNode,
@@ -629,8 +660,13 @@ func (s *Service) BatchDrain(req BatchNodeRequest, userID uint) (map[string]inte
 		status = model.AuditStatusFailed
 	}
 
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceNode,
 		Details:      fmt.Sprintf("Batch drain %d nodes in cluster %s: %d successful, %d failed", len(req.Nodes), req.ClusterName, len(successful), len(errors)),
@@ -779,9 +815,12 @@ func (s *Service) BatchDrainWithProgress(req BatchNodeRequest, userID uint, task
 
 // GetCordonHistory 获取节点的禁止调度历史
 func (s *Service) GetCordonHistory(nodeName, clusterName string, userID uint) (*CordonHistoryResponse, error) {
-	// 尝试获取集群信息以获取集群ID（这里简化处理，实际可能需要从cluster service获取）
-	// 暂时使用0作为集群ID，表示不按集群ID过滤
-	clusterID := uint(0)
+	// 获取正确的集群ID
+	clusterID, err := s.getClusterIDByName(clusterName)
+	if err != nil {
+		s.logger.Warningf("Failed to get cluster ID for %s: %v, using ID 0", clusterName, err)
+		clusterID = 0 // 作为备用方案
+	}
 
 	log, err := s.auditSvc.GetLatestCordonRecord(nodeName, clusterID)
 	if err != nil {
@@ -815,8 +854,12 @@ func (s *Service) GetBatchCordonHistory(nodeNames []string, clusterName string) 
 		return make(map[string]*CordonHistoryResponse), nil
 	}
 
-	// 暂时使用0作为集群ID
-	clusterID := uint(0)
+	// 获取正确的集群ID
+	clusterID, err := s.getClusterIDByName(clusterName)
+	if err != nil {
+		s.logger.Warningf("Failed to get cluster ID for %s: %v, using ID 0", clusterName, err)
+		clusterID = 0 // 作为备用方案
+	}
 
 	logs, err := s.auditSvc.GetLatestCordonRecords(nodeNames, clusterID)
 	if err != nil {
@@ -840,6 +883,11 @@ func (s *Service) GetBatchCordonHistory(nodeNames []string, clusterName string) 
 	return result, nil
 }
 
+// getClusterIDByName 根据集群名称获取集群ID
+func (s *Service) getClusterIDByName(clusterName string) (uint, error) {
+	return s.auditSvc.GetClusterIDByName(clusterName)
+}
+
 // SyncCordonAnnotationsToAudit 同步kubectl-plugin的禁止调度annotations到审计日志
 func (s *Service) SyncCordonAnnotationsToAudit(clusterName, nodeName string) error {
 	// 获取节点的禁止调度信息
@@ -861,6 +909,13 @@ func (s *Service) SyncCordonAnnotationsToAudit(clusterName, nodeName string) err
 		return nil // 纯粹的 kubectl cordon 操作，无需同步
 	}
 
+	// 获取集群ID
+	clusterID, err := s.getClusterIDByName(clusterName)
+	if err != nil {
+		s.logger.Warningf("Failed to get cluster ID for %s: %v", clusterName, err)
+		return fmt.Errorf("failed to get cluster ID: %w", err)
+	}
+
 	// 获取admin用户ID
 	adminUserID, err := s.auditSvc.GetAdminUserID()
 	if err != nil {
@@ -868,8 +923,8 @@ func (s *Service) SyncCordonAnnotationsToAudit(clusterName, nodeName string) err
 		adminUserID = 1 // 默认使用ID为1的用户
 	}
 
-	// 检查是否已经有同步的审计记录
-	existingLog, _ := s.auditSvc.GetLatestCordonRecord(nodeName, 0) // 使用0作为集群ID
+	// 检查是否已经有同步的审计记录 - 使用正确的集群ID
+	existingLog, _ := s.auditSvc.GetLatestCordonRecord(nodeName, clusterID)
 
 	// 从annotations或taints获取时间戳
 	var cordonTime time.Time
@@ -968,6 +1023,7 @@ func (s *Service) SyncCordonAnnotationsToAudit(clusterName, nodeName string) err
 
 		logReq := audit.LogRequest{
 			UserID:       adminUserID,
+			ClusterID:    &clusterID, // 设置正确的集群ID
 			NodeName:     nodeName,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceNode,

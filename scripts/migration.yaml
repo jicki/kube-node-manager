@@ -10,6 +10,6 @@ postgresql:
   host: "pgm-wz9lq79tmh67w5y4.pg.rds.aliyuncs.com"
   port: 5432
   username: "kube_node_mgr"
-  password: "xxxxxxxxxxxxx"  # 实际密码
+  password: "3OBs4fb9CiHvMU5j"
   database: "kube_node_mgr"
   ssl_mode: "disable"

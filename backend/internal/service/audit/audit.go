@@ -284,3 +284,16 @@ func (s *Service) GetAdminUserID() (uint, error) {
 	}
 	return user.ID, nil
 }
+
+// GetClusterIDByName 根据集群名称获取集群ID
+func (s *Service) GetClusterIDByName(clusterName string) (uint, error) {
+	var cluster struct {
+		ID uint `gorm:"column:id"`
+	}
+	err := s.db.Table("clusters").Where("name = ?", clusterName).First(&cluster).Error
+	if err != nil {
+		s.logger.Errorf("Failed to find cluster by name %s: %v", clusterName, err)
+		return 0, err
+	}
+	return cluster.ID, nil
+}
