@@ -162,17 +162,21 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 		Timestamp: time.Now(),
 	})
 
+	// 检查是否有正在进行或刚完成的任务，发送状态更新
+	s.sendCurrentTaskStatus(userID)
+
 	// 等待连接关闭
 	select {}
 }
 
 // writePump 发送消息到客户端
 func (s *Service) writePump(conn *Connection) {
-	ticker := time.NewTicker(54 * time.Second) // 心跳间隔
+	ticker := time.NewTicker(30 * time.Second) // 缩短心跳间隔到30秒
 	defer func() {
 		ticker.Stop()
 		conn.ws.Close()
 		s.removeConnection(conn.userID)
+		s.logger.Infof("WritePump closed for user %d", conn.userID)
 	}()
 
 	for {
@@ -180,19 +184,24 @@ func (s *Service) writePump(conn *Connection) {
 		case message, ok := <-conn.send:
 			conn.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if !ok {
+				s.logger.Warningf("Send channel closed for user %d", conn.userID)
 				conn.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
 			if err := conn.ws.WriteJSON(message); err != nil {
-				s.logger.Errorf("Failed to write message: %v", err)
+				s.logger.Errorf("Failed to write message to user %d: %v", conn.userID, err)
 				return
+			}
+			// 添加发送成功日志（仅对重要消息）
+			if message.Type == "complete" || message.Type == "error" {
+				s.logger.Infof("Successfully sent %s message to user %d for task %s", message.Type, conn.userID, message.TaskID)
 			}
 
 		case <-ticker.C:
 			conn.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := conn.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
-				s.logger.Errorf("Failed to send ping: %v", err)
+				s.logger.Errorf("Failed to send ping to user %d: %v", conn.userID, err)
 				return
 			}
 		}
@@ -246,14 +255,31 @@ func (s *Service) sendToUser(userID uint, message ProgressMessage) {
 	s.connMutex.RUnlock()
 
 	if !exists {
+		s.logger.Warningf("No WebSocket connection found for user %d", userID)
 		return
 	}
 
 	select {
 	case conn.send <- message:
-	case <-time.After(1 * time.Second):
-		s.logger.Warningf("Failed to send message to user %d: timeout", userID)
-		s.removeConnection(userID)
+		// 消息发送成功
+		if message.Type == "complete" || message.Type == "error" {
+			s.logger.Infof("Queued %s message for user %d, task %s", message.Type, userID, message.TaskID)
+		}
+	case <-time.After(3 * time.Second): // 增加超时时间到3秒
+		s.logger.Errorf("Failed to send message to user %d: timeout (type: %s)", userID, message.Type)
+		// 对于重要消息，尝试重新发送一次
+		if message.Type == "complete" || message.Type == "error" {
+			s.logger.Infof("Retrying important message for user %d", userID)
+			select {
+			case conn.send <- message:
+				s.logger.Infof("Retry successful for user %d", userID)
+			default:
+				s.logger.Errorf("Retry failed for user %d, removing connection", userID)
+				s.removeConnection(userID)
+			}
+		} else {
+			s.removeConnection(userID)
+		}
 	}
 }
 
@@ -325,7 +351,14 @@ func (s *Service) CompleteTask(taskID string, userID uint) {
 			return
 		}
 		task.IsRunning = false
-		delete(s.tasks, taskID)
+		// 保留任务状态一段时间，以便重连的客户端获取状态
+		// 使用延时删除，给重连客户端一些时间获取状态
+		go func() {
+			time.Sleep(30 * time.Second) // 保留30秒
+			s.taskMutex.Lock()
+			delete(s.tasks, taskID)
+			s.taskMutex.Unlock()
+		}()
 	}
 	s.taskMutex.Unlock()
 
@@ -345,8 +378,14 @@ func (s *Service) CompleteTask(taskID string, userID uint) {
 		Timestamp: time.Now(),
 	}
 
-	s.sendToUser(userID, message)
-	s.logger.Infof("Task %s completed successfully", taskID)
+	// 多次发送完成消息以确保客户端收到
+	for i := 0; i < 3; i++ {
+		s.sendToUser(userID, message)
+		if i < 2 {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+	s.logger.Infof("Task %s completed successfully, sent completion messages", taskID)
 }
 
 // ErrorTask 任务错误
@@ -374,6 +413,44 @@ func (s *Service) ErrorTask(taskID string, err error, userID uint) {
 	}
 
 	s.sendToUser(userID, message)
+}
+
+// sendCurrentTaskStatus 发送当前任务状态给重连的用户
+func (s *Service) sendCurrentTaskStatus(userID uint) {
+	s.taskMutex.RLock()
+	defer s.taskMutex.RUnlock()
+
+	// 查找当前用户的相关任务
+	for taskID, task := range s.tasks {
+		// 发送任务状态
+		var messageType string
+		var progress float64
+		var message string
+
+		if task.IsRunning {
+			messageType = "progress"
+			progress = float64(task.Current) / float64(task.Total) * 100
+			message = fmt.Sprintf("正在处理 (%d/%d)", task.Current, task.Total)
+		} else {
+			messageType = "complete"
+			progress = 100
+			message = fmt.Sprintf("批量操作完成，共处理 %d 个节点", task.Total)
+		}
+
+		statusMessage := ProgressMessage{
+			TaskID:    taskID,
+			Type:      messageType,
+			Action:    task.Action,
+			Current:   task.Current,
+			Total:     task.Total,
+			Progress:  progress,
+			Message:   message,
+			Timestamp: time.Now(),
+		}
+
+		s.sendToUser(userID, statusMessage)
+		s.logger.Infof("Sent current task status for %s to user %d: %s", taskID, userID, messageType)
+	}
 }
 
 // NodeResult 单个节点处理结果
