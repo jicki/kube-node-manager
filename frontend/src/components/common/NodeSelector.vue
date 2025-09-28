@@ -17,7 +17,7 @@
       
       <div class="filter-section">
         <el-row :gutter="12">
-          <el-col :span="8">
+          <el-col :span="6">
             <el-select
               v-model="statusFilter"
               placeholder="状态筛选"
@@ -27,9 +27,10 @@
               <el-option label="全部状态" value="" />
               <el-option label="Ready" value="Ready" />
               <el-option label="NotReady" value="NotReady" />
+              <el-option label="Unknown" value="Unknown" />
             </el-select>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="6">
             <el-select
               v-model="roleFilter"
               placeholder="角色筛选"
@@ -41,7 +42,20 @@
               <el-option label="Worker" value="worker" />
             </el-select>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="6">
+            <el-select
+              v-model="schedulableFilter"
+              placeholder="调度状态"
+              clearable
+              @change="handleFilter"
+            >
+              <el-option label="全部状态" value="" />
+              <el-option label="可调度" value="schedulable" />
+              <el-option label="有限调度" value="limited" />
+              <el-option label="不可调度" value="unschedulable" />
+            </el-select>
+          </el-col>
+          <el-col :span="6">
             <el-select
               v-model="nodeOwnershipFilter"
               placeholder="节点归属"
@@ -203,6 +217,18 @@
                   >
                     {{ node.status || 'Unknown' }}
                   </el-tag>
+                  
+                  <el-tag
+                    :type="getSchedulingStatusType(node).type"
+                    size="small"
+                    class="scheduling-tag"
+                  >
+                    <el-icon style="margin-right: 4px;">
+                      <component :is="getSchedulingStatusType(node).icon" />
+                    </el-icon>
+                    {{ getSchedulingStatusType(node).text }}
+                  </el-tag>
+                  
                   <span v-if="node.roles?.length" class="node-roles">
                     {{ node.roles.join(', ') }}
                   </span>
@@ -347,7 +373,8 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { Search, Location, Collection, Warning, ArrowDown, Filter, WarningFilled, Edit, ArrowUp, CollectionTag, Loading } from '@element-plus/icons-vue'
+import { Search, Location, Collection, Warning, ArrowDown, Filter, WarningFilled, Edit, ArrowUp, CollectionTag, Loading, Check, QuestionFilled, Lock } from '@element-plus/icons-vue'
+import { getSmartSchedulingStatus, getSchedulingStatusDisplay } from '@/utils/nodeScheduling'
 
 const props = defineProps({
   modelValue: {
@@ -379,6 +406,7 @@ const searchQuery = ref('')
 const debouncedSearchQuery = ref('')
 const statusFilter = ref('')
 const roleFilter = ref('')
+const schedulableFilter = ref('')
 const labelKeyFilter = ref('')
 const labelValueFilter = ref('')
 const nodeOwnershipFilter = ref('')
@@ -416,6 +444,9 @@ watch(selectedNodes, (newValue) => {
 const getNodeName = (node) => {
   return node?.name || node?.node_name || node?.nodeName || node?.metadata?.name || null
 }
+
+// 使用统一的调度状态工具函数
+// getSmartSchedulingStatus 已从 @/utils/nodeScheduling 导入
 
 // 数据验证函数 - 宽松但合理的验证
 const validateNodeData = (node) => {
@@ -499,6 +530,14 @@ const filteredNodesCache = computed(() => {
       }
       
       return false
+    })
+  }
+
+  // 调度状态筛选
+  if (schedulableFilter.value) {
+    result = result.filter(node => {
+      const schedulingStatus = getSmartSchedulingStatus(node)
+      return schedulingStatus === schedulableFilter.value
     })
   }
 
@@ -630,6 +669,7 @@ const handleFilter = () => {
   console.log('Filter changed:', { 
     status: statusFilter.value, 
     role: roleFilter.value, 
+    schedulable: schedulableFilter.value,
     labelKey: labelKeyFilter.value,
     labelValue: labelValueFilter.value,
     nodeOwnership: nodeOwnershipFilter.value,
@@ -673,6 +713,11 @@ const getStatusType = (status) => {
     'Unknown': 'warning'
   }
   return statusMap[status] || 'info'
+}
+
+// 获取调度状态显示信息
+const getSchedulingStatusType = (node) => {
+  return getSchedulingStatusDisplay(node)
 }
 
 const getDisplayLabels = (labels) => {
