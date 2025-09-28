@@ -69,9 +69,15 @@ func InitDatabase(config DatabaseConfig) (*gorm.DB, error) {
 func initPostgreSQL(config DatabaseConfig, gormConfig *gorm.Config) (*gorm.DB, error) {
 	var dsn string
 
-	if config.DSN != "" {
+	// 检查 DSN 是否是 PostgreSQL 格式
+	if config.DSN != "" && isPostgreSQLDSN(config.DSN) {
 		dsn = config.DSN
+		log.Println("Using provided PostgreSQL DSN")
 	} else {
+		if config.DSN != "" && !isPostgreSQLDSN(config.DSN) {
+			log.Printf("Warning: DSN '%s' does not appear to be a PostgreSQL DSN, building DSN from individual components", config.DSN)
+		}
+
 		// Build DSN from individual components
 		dsn = fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=%s",
 			config.Host,
@@ -84,6 +90,7 @@ func initPostgreSQL(config DatabaseConfig, gormConfig *gorm.Config) (*gorm.DB, e
 		if config.Password != "" {
 			dsn += fmt.Sprintf(" password=%s", config.Password)
 		}
+		log.Println("Built PostgreSQL DSN from individual components")
 	}
 
 	log.Printf("Connecting to PostgreSQL database: %s", maskPasswordInDSN(dsn))
@@ -195,6 +202,22 @@ func configureConnectionPool(db *gorm.DB, config DatabaseConfig) error {
 		maxOpenConns, maxIdleConns, maxLifetime)
 
 	return nil
+}
+
+// isPostgreSQLDSN 检查 DSN 是否为 PostgreSQL 格式
+func isPostgreSQLDSN(dsn string) bool {
+	// PostgreSQL DSN 通常包含这些关键字之一
+	pgKeywords := []string{"host=", "user=", "dbname=", "sslmode=", "port="}
+	for _, keyword := range pgKeywords {
+		if strings.Contains(dsn, keyword) {
+			return true
+		}
+	}
+	// 如果 DSN 看起来像文件路径，则不是 PostgreSQL DSN
+	if strings.HasPrefix(dsn, "./") || strings.HasPrefix(dsn, "/") || dsn == ":memory:" {
+		return false
+	}
+	return false
 }
 
 // maskPasswordInDSN masks password in DSN for logging

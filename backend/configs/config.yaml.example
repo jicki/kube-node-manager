@@ -14,6 +14,7 @@ database:
   dsn: "./data/kube-node-manager.db"
   
   # PostgreSQL 配置 (当 type = "postgres" 时使用)
+  # 注意: 使用 PostgreSQL 时请清空或删除上面的 dsn 字段，或提供正确的 PostgreSQL DSN
   # host: "localhost"
   # port: 5432
   # database: "kube_node_manager"
@@ -21,9 +22,14 @@ database:
   # password: "your-password"
   # ssl_mode: "disable"  # disable, require, verify-ca, verify-full
   
-  # 完整 DSN 连接字符串 (可选，优先级高于单独配置项)
-  # 对于 PostgreSQL: "host=localhost port=5432 user=postgres dbname=kube_node_manager sslmode=disable password=your-password"
-  # 对于 SQLite: "./data/kube-node-manager.db" 或 ":memory:"
+  # 完整 DSN 连接字符串 (可选)
+  # 如果提供了 DSN，系统会优先使用 DSN 而不是上面的单独配置项
+  # PostgreSQL DSN 格式: "host=localhost port=5432 user=postgres dbname=kube_node_manager sslmode=disable password=your-password"
+  # SQLite DSN 格式: "./data/kube-node-manager.db" 或 ":memory:"
+  # 
+  # 重要提示: 
+  # - 使用 SQLite 时，dsn 应该是文件路径
+  # - 使用 PostgreSQL 时，dsn 应该是 PostgreSQL 连接字符串，或者留空使用上面的单独配置项
   
   # 连接池配置 (PostgreSQL 专用，SQLite 忽略)
   max_open_conns: 25    # 最大打开连接数
