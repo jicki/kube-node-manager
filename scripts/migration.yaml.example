@@ -1,0 +1,23 @@
+# SQLite to PostgreSQL Migration Configuration
+
+# SQLite 数据库配置
+sqlite:
+  path: "./backend/data/kube-node-manager.db"  # SQLite 数据库文件路径
+
+# PostgreSQL 数据库配置
+postgresql:
+  host: "localhost"              # PostgreSQL 服务器地址
+  port: 5432                     # PostgreSQL 服务器端口
+  username: "postgres"           # 数据库用户名
+  password: "your-password"      # 数据库密码
+  database: "kube_node_manager"  # 目标数据库名
+  ssl_mode: "disable"            # SSL 模式: disable, require, verify-ca, verify-full
+
+# 环境变量示例：
+# export MIGRATION_SQLITE_PATH="./backend/data/kube-node-manager.db"
+# export MIGRATION_POSTGRESQL_HOST="localhost"
+# export MIGRATION_POSTGRESQL_PORT="5432"
+# export MIGRATION_POSTGRESQL_USERNAME="postgres"
+# export MIGRATION_POSTGRESQL_PASSWORD="your-password"
+# export MIGRATION_POSTGRESQL_DATABASE="kube_node_manager"
+# export MIGRATION_POSTGRESQL_SSL_MODE="disable"
