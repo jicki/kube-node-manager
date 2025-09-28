@@ -1,9 +1,34 @@
 server:
   port: "8080"
   mode: "debug"  # debug, release, test
+  read_timeout: 30    # HTTP 读取超时 (秒)
+  write_timeout: 30   # HTTP 写入超时 (秒) 
+  idle_timeout: 120   # HTTP 空闲超时 (秒)
+  shutdown_timeout: 30 # 优雅关闭超时 (秒)
 
 database:
+  # 数据库类型: sqlite, postgres
+  type: "sqlite"  # 选择使用的数据库类型
+  
+  # SQLite 配置 (当 type = "sqlite" 时使用)
   dsn: "./data/kube-node-manager.db"
+  
+  # PostgreSQL 配置 (当 type = "postgres" 时使用)
+  # host: "localhost"
+  # port: 5432
+  # database: "kube_node_manager"
+  # username: "postgres"
+  # password: "your-password"
+  # ssl_mode: "disable"  # disable, require, verify-ca, verify-full
+  
+  # 完整 DSN 连接字符串 (可选，优先级高于单独配置项)
+  # 对于 PostgreSQL: "host=localhost port=5432 user=postgres dbname=kube_node_manager sslmode=disable password=your-password"
+  # 对于 SQLite: "./data/kube-node-manager.db" 或 ":memory:"
+  
+  # 连接池配置 (PostgreSQL 专用，SQLite 忽略)
+  max_open_conns: 25    # 最大打开连接数
+  max_idle_conns: 10    # 最大空闲连接数
+  max_lifetime: 3600    # 连接最大生存时间 (秒)
 
 jwt:
   secret: "your-jwt-secret-change-in-production"
@@ -57,3 +82,33 @@ ldap:
   # - 管理员只能修改 LDAP 用户的角色和状态
   # - LDAP 用户不能在本系统中修改密码（密码由 LDAP 管理）
   # - 用户信息会在每次登录时从 LDAP 目录自动同步
+
+# 日志配置
+logging:
+  # 日志格式: text, json
+  format: "text"      # 生产环境建议使用 json 格式
+  level: "info"       # debug, info, warn, error
+  structured: false   # 是否启用结构化日志
+
+# 监控配置
+monitoring:
+  enabled: true       # 是否启用监控指标端点
+  path: "/metrics"    # 监控指标端点路径
+
+# 健康检查配置  
+health:
+  enabled: true       # 是否启用健康检查端点
+  database_timeout: 5 # 数据库健康检查超时 (秒)
+
+# 微服务配置
+microservice:
+  service_name: "kube-node-manager"
+  instance_id: ""     # 实例ID，留空自动生成
+  register_interval: 30 # 服务注册间隔 (秒)
+  
+# 环境变量覆盖说明:
+# - PORT: 覆盖 server.port
+# - LOG_FORMAT: 覆盖 logging.format (text/json)
+# - LOG_LEVEL: 覆盖 logging.level  
+# - DATABASE_URL: 覆盖完整数据库连接字符串
+# - SERVICE_NAME: 覆盖 microservice.service_name

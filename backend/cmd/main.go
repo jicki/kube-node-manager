@@ -1,19 +1,26 @@
 package main
 
 import (
+	"context"
 	"kube-node-manager/internal/config"
 	"kube-node-manager/internal/handler"
+	"kube-node-manager/internal/handler/health"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service"
 	"kube-node-manager/pkg/database"
 	"kube-node-manager/pkg/logger"
 	"kube-node-manager/pkg/static"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -21,7 +28,21 @@ func main() {
 
 	logger := logger.NewLogger()
 
-	db, err := database.InitDatabase(cfg.Database.DSN)
+	// 初始化数据库
+	dbConfig := database.DatabaseConfig{
+		Type:         cfg.Database.Type,
+		DSN:          cfg.Database.DSN,
+		Host:         cfg.Database.Host,
+		Port:         cfg.Database.Port,
+		Database:     cfg.Database.Database,
+		Username:     cfg.Database.Username,
+		Password:     cfg.Database.Password,
+		SSLMode:      cfg.Database.SSLMode,
+		MaxOpenConns: cfg.Database.MaxOpenConns,
+		MaxIdleConns: cfg.Database.MaxIdleConns,
+		MaxLifetime:  cfg.Database.MaxLifetime,
+	}
+	db, err := database.InitDatabase(dbConfig)
 	if err != nil {
 		log.Fatal("Failed to initialize database:", err)
 	}
@@ -36,6 +57,7 @@ func main() {
 
 	services := service.NewServices(db, logger, cfg)
 	handlers := handler.NewHandlers(services, logger)
+	healthHandler := health.NewHealthHandler(db)
 
 	router := gin.Default()
 
@@ -51,22 +73,48 @@ func main() {
 	}
 
 	// 设置API路由
-	setupRoutes(router, handlers)
+	setupRoutes(router, handlers, healthHandler)
 
 	// 设置静态文件服务（必须在API路由之后）
 	router.Use(static.StaticFileHandler())
 
-	logger.Info("Server starting on port " + cfg.Server.Port)
-	if err := router.Run(":" + cfg.Server.Port); err != nil {
-		log.Fatal("Failed to start server:", err)
+	// 创建HTTP服务器
+	srv := &http.Server{
+		Addr:           ":" + cfg.Server.Port,
+		Handler:        router,
+		ReadTimeout:    30 * time.Second,
+		WriteTimeout:   30 * time.Second,
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
+
+	// 启动服务器
+	go func() {
+		logger.Info("Server starting on port " + cfg.Server.Port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Failed to start server:", err)
+		}
+	}()
+
+	// 优雅关闭
+	gracefulShutdown(srv, db, logger)
 }
 
-func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
-	// 健康检查端点
-	router.GET("/api/v1/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "healthy", "service": "kube-node-manager"})
-	})
+func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *health.HealthHandler) {
+	// 健康检查端点（支持微服务架构）
+	healthGroup := router.Group("/health")
+	{
+		healthGroup.GET("/", healthHandler.HealthCheck)                 // 基础健康检查
+		healthGroup.GET("/live", healthHandler.LivenessProbe)           // K8s 存活探针
+		healthGroup.GET("/ready", healthHandler.ReadinessProbe)         // K8s 就绪探针
+		healthGroup.GET("/detailed", healthHandler.DetailedHealthCheck) // 详细健康检查
+	}
+
+	// 监控指标端点
+	router.GET("/metrics", healthHandler.HealthMetrics)
+
+	// 保持向后兼容的健康检查端点
+	router.GET("/api/v1/health", healthHandler.HealthCheck)
 
 	// 版本信息端点
 	router.GET("/api/v1/version", func(c *gin.Context) {
@@ -183,6 +231,41 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers) {
 		audit.GET("/logs", handlers.Audit.List)
 		audit.GET("/logs/:id", handlers.Audit.GetByID)
 	}
+}
+
+// gracefulShutdown 优雅关闭服务器
+func gracefulShutdown(srv *http.Server, db *gorm.DB, logger *logger.Logger) {
+	// 创建一个接收系统信号的channel
+	quit := make(chan os.Signal, 1)
+
+	// 监听指定的信号: SIGINT (Ctrl+C) 和 SIGTERM
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// 阻塞等待信号
+	sig := <-quit
+	logger.Info("Received signal: " + sig.String() + ", shutting down server gracefully...")
+
+	// 创建一个带超时的context，给服务器30秒时间来完成正在处理的请求
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// 关闭HTTP服务器
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("Server forced to shutdown: " + err.Error())
+	}
+
+	// 关闭数据库连接
+	if db != nil {
+		if sqlDB, err := db.DB(); err == nil {
+			if err := sqlDB.Close(); err != nil {
+				logger.Error("Failed to close database connection: " + err.Error())
+			} else {
+				logger.Info("Database connection closed")
+			}
+		}
+	}
+
+	logger.Info("Server shutdown completed")
 }
 
 // getVersion 读取VERSION文件内容
