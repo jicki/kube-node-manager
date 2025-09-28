@@ -57,7 +57,7 @@ func LoadConfig() *Config {
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
 	viper.SetDefault("database.type", "sqlite")
-	viper.SetDefault("database.dsn", "./data/kube-node-manager.db")
+	// 不设置 database.dsn 的默认值，让它根据数据库类型动态确定
 	viper.SetDefault("database.host", "localhost")
 	viper.SetDefault("database.port", 5432)
 	viper.SetDefault("database.database", "kube_node_manager")
@@ -89,6 +89,17 @@ func LoadConfig() *Config {
 
 	if port := os.Getenv("PORT"); port != "" {
 		config.Server.Port = port
+	}
+
+	// 根据数据库类型设置合适的默认 DSN（如果 DSN 为空）
+	if config.Database.DSN == "" {
+		switch config.Database.Type {
+		case "sqlite":
+			config.Database.DSN = "./data/kube-node-manager.db"
+		case "postgres", "postgresql":
+			// PostgreSQL 不设置默认 DSN，让系统从单独的参数构建
+			config.Database.DSN = ""
+		}
 	}
 
 	return &config

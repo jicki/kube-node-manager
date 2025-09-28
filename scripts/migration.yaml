@@ -1,0 +1,15 @@
+# SQLite to PostgreSQL Migration Configuration
+# 根据你的实际配置调整
+
+# SQLite 数据库配置
+sqlite:
+  path: "../backend/data/kube-node-manager.db"  # 原 SQLite 数据库路径
+
+# PostgreSQL 数据库配置 (使用你的阿里云 RDS 配置)
+postgresql:
+  host: "pgm-wz9lq79tmh67w5y4.pg.rds.aliyuncs.com"
+  port: 5432
+  username: "kube_node_mgr"
+  password: "3OBs4fb9CiHvMU5j"  # 实际密码
+  database: "kube_node_mgr"
+  ssl_mode: "disable"
