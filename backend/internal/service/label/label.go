@@ -123,7 +123,7 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 	// 获取当前节点信息
 	currentNode, err := s.k8sSvc.GetNode(req.ClusterName, req.NodeName)
 	if err != nil {
-		s.logger.Error("Failed to get node %s in cluster %s: %v", req.NodeName, req.ClusterName, err)
+		s.logger.Errorf("Failed to get node %s in cluster %s: %v", req.NodeName, req.ClusterName, err)
 		var clusterID *uint
 		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
 			clusterID = &cID
@@ -156,33 +156,33 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 		// 添加或更新标签
 		for k, v := range req.Labels {
 			// 验证并清理标签值
-			s.logger.Info("Processing label: key=%s, original_value=%s", k, v)
+			s.logger.Infof("Processing label: key=%s, original_value=%s", k, v)
 			cleanedValue := s.sanitizeLabelValue(v)
-			s.logger.Info("Cleaned label: key=%s, cleaned_value=%s", k, cleanedValue)
+			s.logger.Infof("Cleaned label: key=%s, cleaned_value=%s", k, cleanedValue)
 			if cleanedValue != "" {
 				updatedLabels[k] = cleanedValue
 			} else {
-				s.logger.Warning("Skipping invalid label value for key %s: original=%s, cleaned=%s", k, v, cleanedValue)
+				s.logger.Warningf("Skipping invalid label value for key %s: original=%s, cleaned=%s", k, v, cleanedValue)
 				// 如果清理后的值为空，保留原有标签值（如果存在）
 				if existingValue, exists := currentNode.Labels[k]; exists {
-					s.logger.Info("Preserving existing label value for key %s: %s", k, existingValue)
+					s.logger.Infof("Preserving existing label value for key %s: %s", k, existingValue)
 					updatedLabels[k] = existingValue
 				}
 			}
 		}
 	case "remove":
 		// 删除指定标签
-		s.logger.Info("Starting remove operation for labels: %+v", req.Labels)
+		s.logger.Infof("Starting remove operation for labels: %+v", req.Labels)
 		for k := range req.Labels {
-			s.logger.Info("Removing label key: %s", k)
+			s.logger.Infof("Removing label key: %s", k)
 			if _, exists := updatedLabels[k]; exists {
 				delete(updatedLabels, k)
-				s.logger.Info("Successfully removed label key: %s", k)
+				s.logger.Infof("Successfully removed label key: %s", k)
 			} else {
-				s.logger.Warning("Label key %s not found on node %s", k, req.NodeName)
+				s.logger.Warningf("Label key %s not found on node %s", k, req.NodeName)
 			}
 		}
-		s.logger.Info("Labels after removal: %+v", updatedLabels)
+		s.logger.Infof("Labels after removal: %+v", updatedLabels)
 	case "replace":
 		// 替换所有自定义标签（保留系统标签）
 		systemLabels := make(map[string]string)
@@ -194,13 +194,13 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 		updatedLabels = systemLabels
 		for k, v := range req.Labels {
 			// 验证并清理标签值
-			s.logger.Info("Processing replace label: key=%s, original_value=%s", k, v)
+			s.logger.Infof("Processing replace label: key=%s, original_value=%s", k, v)
 			cleanedValue := s.sanitizeLabelValue(v)
-			s.logger.Info("Cleaned replace label: key=%s, cleaned_value=%s", k, cleanedValue)
+			s.logger.Infof("Cleaned replace label: key=%s, cleaned_value=%s", k, cleanedValue)
 			if cleanedValue != "" {
 				updatedLabels[k] = cleanedValue
 			} else {
-				s.logger.Warning("Skipping invalid label value for key %s: original=%s, cleaned=%s", k, v, cleanedValue)
+				s.logger.Warningf("Skipping invalid label value for key %s: original=%s, cleaned=%s", k, v, cleanedValue)
 			}
 		}
 	default:
@@ -208,14 +208,14 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 	}
 
 	// 更新节点标签
-	s.logger.Info("Final labels to apply: %+v", updatedLabels)
+	s.logger.Infof("Final labels to apply: %+v", updatedLabels)
 	updateReq := k8s.LabelUpdateRequest{
 		NodeName: req.NodeName,
 		Labels:   updatedLabels,
 	}
 
 	if err := s.k8sSvc.UpdateNodeLabels(req.ClusterName, updateReq); err != nil {
-		s.logger.Error("Failed to update node labels: %v", err)
+		s.logger.Errorf("Failed to update node labels: %v", err)
 		var clusterID *uint
 		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
 			clusterID = &cID
@@ -233,7 +233,7 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 		return fmt.Errorf("failed to update node labels: %w", err)
 	}
 
-	s.logger.Info("Successfully updated labels for node %s", req.NodeName)
+	// 成功日志已在k8s服务中记录，避免重复
 	var clusterID *uint
 	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
 		clusterID = &cID
@@ -577,7 +577,7 @@ func (s *Service) DeleteTemplate(id uint, userID uint) error {
 	}
 
 	if err := s.db.Delete(&template).Error; err != nil {
-		s.logger.Error("Failed to delete label template %s: %v", template.Name, err)
+		s.logger.Errorf("Failed to delete label template %s: %v", template.Name, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			Action:       model.ActionDelete,
@@ -589,7 +589,7 @@ func (s *Service) DeleteTemplate(id uint, userID uint) error {
 		return fmt.Errorf("failed to delete template: %w", err)
 	}
 
-	s.logger.Info("Successfully deleted label template: %s", template.Name)
+	s.logger.Infof("Successfully deleted label template: %s", template.Name)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		Action:       model.ActionDelete,
@@ -632,7 +632,7 @@ func (s *Service) ListTemplates(req TemplateListRequest, userID uint) (*Template
 	for _, template := range templates {
 		info, err := s.getTemplateInfo(&template)
 		if err != nil {
-			s.logger.Error("Failed to parse template %s: %v", template.Name, err)
+			s.logger.Errorf("Failed to parse template %s: %v", template.Name, err)
 			continue
 		}
 		templateInfos = append(templateInfos, *info)
@@ -659,16 +659,16 @@ func (s *Service) ApplyTemplate(req ApplyTemplateRequest, userID uint) error {
 
 	// 使用用户提供的标签值，如果没有提供则使用模板标签
 	var labels map[string]string
-	if req.Labels != nil && len(req.Labels) > 0 {
+	if len(req.Labels) > 0 {
 		// 使用前端发送的用户选择的标签值
 		labels = req.Labels
-		s.logger.Info("Using user-selected labels: %+v", labels)
+		s.logger.Infof("Using user-selected labels: %+v", labels)
 	} else {
 		// 回退到模板的原始标签
 		if err := json.Unmarshal([]byte(template.Labels), &labels); err != nil {
 			return fmt.Errorf("failed to parse template labels: %w", err)
 		}
-		s.logger.Info("Using template labels: %+v", labels)
+		s.logger.Infof("Using template labels: %+v", labels)
 	}
 
 	// 应用到所有指定节点
@@ -856,7 +856,7 @@ func (s *Service) getTemplateInfo(template *model.LabelTemplate) (*TemplateInfo,
 	// 加载创建者信息
 	var creator model.User
 	if err := s.db.First(&creator, template.CreatedBy).Error; err != nil {
-		s.logger.Error("Failed to load creator for template %s: %v", template.Name, err)
+		s.logger.Errorf("Failed to load creator for template %s: %v", template.Name, err)
 		// 不返回错误，继续处理
 	}
 

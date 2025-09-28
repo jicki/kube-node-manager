@@ -378,14 +378,18 @@ func (s *Service) CompleteTask(taskID string, userID uint) {
 		Timestamp: time.Now(),
 	}
 
-	// 多次发送完成消息以确保客户端收到
-	for i := 0; i < 3; i++ {
+	// 检查连接状态并发送完成消息
+	s.connMutex.RLock()
+	_, hasConnection := s.connections[userID]
+	s.connMutex.RUnlock()
+
+	if hasConnection {
+		// 发送完成消息
 		s.sendToUser(userID, message)
-		if i < 2 {
-			time.Sleep(500 * time.Millisecond)
-		}
+		s.logger.Infof("Task %s completed successfully, sent completion message to connected user %d", taskID, userID)
+	} else {
+		s.logger.Warningf("Task %s completed but no WebSocket connection for user %d, task status preserved for recovery", taskID, userID)
 	}
-	s.logger.Infof("Task %s completed successfully, sent completion messages", taskID)
 }
 
 // ErrorTask 任务错误
@@ -420,6 +424,7 @@ func (s *Service) sendCurrentTaskStatus(userID uint) {
 	s.taskMutex.RLock()
 	defer s.taskMutex.RUnlock()
 
+	sentCount := 0
 	// 查找当前用户的相关任务
 	for taskID, task := range s.tasks {
 		// 发送任务状态
@@ -449,7 +454,14 @@ func (s *Service) sendCurrentTaskStatus(userID uint) {
 		}
 
 		s.sendToUser(userID, statusMessage)
-		s.logger.Infof("Sent current task status for %s to user %d: %s", taskID, userID, messageType)
+		s.logger.Infof("Sent recovery task status for %s to user %d: %s (%.1f%%)", taskID, userID, messageType, progress)
+		sentCount++
+	}
+
+	if sentCount == 0 {
+		s.logger.Infof("No pending tasks found for user %d on reconnection", userID)
+	} else {
+		s.logger.Infof("Sent %d task status updates to user %d on reconnection", sentCount, userID)
 	}
 }
 
