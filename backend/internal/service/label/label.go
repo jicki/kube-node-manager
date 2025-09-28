@@ -113,14 +113,24 @@ func (s *Service) SetProgressService(progressSvc *progress.Service) {
 	s.progressSvc = progressSvc
 }
 
+// getClusterIDByName 根据集群名称获取集群ID
+func (s *Service) getClusterIDByName(clusterName string) (uint, error) {
+	return s.auditSvc.GetClusterIDByName(clusterName)
+}
+
 // UpdateNodeLabels 更新单个节点标签
 func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 	// 获取当前节点信息
 	currentNode, err := s.k8sSvc.GetNode(req.ClusterName, req.NodeName)
 	if err != nil {
 		s.logger.Error("Failed to get node %s in cluster %s: %v", req.NodeName, req.ClusterName, err)
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			ClusterID:    clusterID,
 			NodeName:     req.NodeName,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceLabel,
@@ -206,8 +216,13 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 
 	if err := s.k8sSvc.UpdateNodeLabels(req.ClusterName, updateReq); err != nil {
 		s.logger.Error("Failed to update node labels: %v", err)
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			ClusterID:    clusterID,
 			NodeName:     req.NodeName,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceLabel,
@@ -219,8 +234,13 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 	}
 
 	s.logger.Info("Successfully updated labels for node %s", req.NodeName)
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		NodeName:     req.NodeName,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceLabel,
@@ -277,8 +297,13 @@ func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID u
 			maxConcurrency,
 			processor,
 		); err != nil {
+			var clusterID *uint
+			if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+				clusterID = &cID
+			}
 			s.auditSvc.Log(audit.LogRequest{
 				UserID:       userID,
+				ClusterID:    clusterID,
 				Action:       model.ActionUpdate,
 				ResourceType: model.ResourceLabel,
 				Details:      fmt.Sprintf("Batch update labels failed for %d nodes", len(req.NodeNames)),
@@ -314,8 +339,13 @@ func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID u
 
 		if len(errors) > 0 {
 			combinedError := strings.Join(errors, "; ")
+			var clusterID *uint
+			if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+				clusterID = &cID
+			}
 			s.auditSvc.Log(audit.LogRequest{
 				UserID:       userID,
+				ClusterID:    clusterID,
 				Action:       model.ActionUpdate,
 				ResourceType: model.ResourceLabel,
 				Details:      fmt.Sprintf("Batch update labels failed for %d nodes", len(errors)),
@@ -326,8 +356,13 @@ func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID u
 		}
 	}
 
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceLabel,
 		Details:      fmt.Sprintf("Batch updated labels for %d nodes in cluster %s", len(req.NodeNames), req.ClusterName),
@@ -650,8 +685,13 @@ func (s *Service) ApplyTemplate(req ApplyTemplateRequest, userID uint) error {
 	}
 
 	if err := s.BatchUpdateLabels(batchReq, userID); err != nil {
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			ClusterID:    clusterID,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceLabel,
 			Details:      fmt.Sprintf("Failed to apply template %s to nodes", template.Name),
@@ -661,8 +701,13 @@ func (s *Service) ApplyTemplate(req ApplyTemplateRequest, userID uint) error {
 		return fmt.Errorf("failed to apply template: %w", err)
 	}
 
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceLabel,
 		Details:      fmt.Sprintf("Applied template %s to %d nodes in cluster %s", template.Name, len(req.NodeNames), req.ClusterName),
@@ -720,8 +765,13 @@ func (s *Service) GetLabelUsage(clusterName string, userID uint) ([]LabelUsage, 
 		})
 	}
 
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(clusterName); err == nil {
+		clusterID = &cID
+	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		Action:       model.ActionView,
 		ResourceType: model.ResourceLabel,
 		Details:      fmt.Sprintf("Viewed label usage for cluster %s", clusterName),

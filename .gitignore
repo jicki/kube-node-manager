@@ -3,6 +3,8 @@
 .kube-node-mgr
 backend/kube-node-manager
 backend/kube-node-mgr
+backend/bin/kube-node-manager
+backend/bin/kube-node-mgr
 kubectl-plugin/kubectl-node-mgr
 
 # 环境变量和配置
