@@ -46,9 +46,10 @@ type TaskProgress struct {
 
 // Connection WebSocket连接
 type Connection struct {
-	ws     *websocket.Conn
-	send   chan ProgressMessage
-	userID uint
+	ws       *websocket.Conn
+	send     chan ProgressMessage
+	userID   uint
+	lastSeen time.Time // 添加最后活跃时间
 }
 
 // TokenValidator JWT token验证接口
@@ -72,11 +73,16 @@ type Service struct {
 
 // NewService 创建进度推送服务
 func NewService(logger *logger.Logger) *Service {
-	return &Service{
+	s := &Service{
 		connections: make(map[uint]*Connection),
 		tasks:       make(map[string]*TaskProgress),
 		logger:      logger,
 	}
+
+	// 启动定期清理goroutine
+	go s.cleanupStaleConnections()
+
+	return s
 }
 
 // SetAuthService 设置认证服务
@@ -132,9 +138,10 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 
 	// 创建连接
 	conn := &Connection{
-		ws:     ws,
-		send:   make(chan ProgressMessage, 256),
-		userID: userID,
+		ws:       ws,
+		send:     make(chan ProgressMessage, 512), // 增加缓冲区大小
+		userID:   userID,
+		lastSeen: time.Now(),
 	}
 
 	// 注册连接（关闭已存在的连接）
@@ -171,7 +178,7 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 
 // writePump 发送消息到客户端
 func (s *Service) writePump(conn *Connection) {
-	ticker := time.NewTicker(30 * time.Second) // 缩短心跳间隔到30秒
+	ticker := time.NewTicker(25 * time.Second) // 进一步缩短心跳间隔
 	defer func() {
 		ticker.Stop()
 		conn.ws.Close()
@@ -182,9 +189,9 @@ func (s *Service) writePump(conn *Connection) {
 	for {
 		select {
 		case message, ok := <-conn.send:
-			conn.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			conn.ws.SetWriteDeadline(time.Now().Add(15 * time.Second)) // 增加写入超时时间
 			if !ok {
-				s.logger.Warningf("Send channel closed for user %d", conn.userID)
+				s.logger.Infof("Send channel closed for user %d, sending close message", conn.userID)
 				conn.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
@@ -193,6 +200,10 @@ func (s *Service) writePump(conn *Connection) {
 				s.logger.Errorf("Failed to write message to user %d: %v", conn.userID, err)
 				return
 			}
+
+			// 更新活跃时间
+			conn.lastSeen = time.Now()
+
 			// 添加发送成功日志（仅对重要消息）
 			if message.Type == "complete" || message.Type == "error" {
 				s.logger.Infof("Successfully sent %s message to user %d for task %s", message.Type, conn.userID, message.TaskID)
@@ -204,6 +215,7 @@ func (s *Service) writePump(conn *Connection) {
 				s.logger.Errorf("Failed to send ping to user %d: %v", conn.userID, err)
 				return
 			}
+			s.logger.Infof("Sent ping to user %d", conn.userID) // 添加心跳日志用于调试
 		}
 	}
 }
@@ -213,25 +225,40 @@ func (s *Service) readPump(conn *Connection) {
 	defer func() {
 		conn.ws.Close()
 		s.removeConnection(conn.userID)
+		s.logger.Infof("ReadPump closed for user %d", conn.userID)
 	}()
 
-	conn.ws.SetReadLimit(512)
-	conn.ws.SetReadDeadline(time.Now().Add(60 * time.Second))
+	conn.ws.SetReadLimit(1024)
+	conn.ws.SetReadDeadline(time.Now().Add(70 * time.Second)) // 增加读取超时时间
 	conn.ws.SetPongHandler(func(string) error {
-		conn.ws.SetReadDeadline(time.Now().Add(60 * time.Second))
+		conn.lastSeen = time.Now() // 更新活跃时间
+		conn.ws.SetReadDeadline(time.Now().Add(70 * time.Second))
 		return nil
 	})
 
 	for {
-		_, _, err := conn.ws.ReadMessage()
+		messageType, message, err := conn.ws.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				s.logger.Errorf("WebSocket error: %v", err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure) {
+				s.logger.Errorf("WebSocket error for user %d: %v", conn.userID, err)
 			} else {
-				// 正常关闭、用户主动关闭连接或无状态码关闭，记录为信息级别
-				s.logger.Infof("WebSocket connection closed: %v", err)
+				s.logger.Infof("WebSocket connection closed for user %d: %v", conn.userID, err)
 			}
 			break
+		}
+
+		// 更新活跃时间
+		conn.lastSeen = time.Now()
+
+		// 处理不同类型的消息
+		switch messageType {
+		case websocket.TextMessage:
+			s.logger.Infof("Received text message from user %d: %s", conn.userID, string(message))
+		case websocket.BinaryMessage:
+			s.logger.Infof("Received binary message from user %d", conn.userID)
+		case websocket.PingMessage:
+			// 响应ping消息
+			conn.ws.WriteMessage(websocket.PongMessage, nil)
 		}
 	}
 }
@@ -255,7 +282,10 @@ func (s *Service) sendToUser(userID uint, message ProgressMessage) {
 	s.connMutex.RUnlock()
 
 	if !exists {
-		s.logger.Warningf("No WebSocket connection found for user %d", userID)
+		// 只对重要消息记录警告
+		if message.Type == "complete" || message.Type == "error" {
+			s.logger.Warningf("No WebSocket connection found for user %d (message: %s)", userID, message.Type)
+		}
 		return
 	}
 
@@ -265,20 +295,17 @@ func (s *Service) sendToUser(userID uint, message ProgressMessage) {
 		if message.Type == "complete" || message.Type == "error" {
 			s.logger.Infof("Queued %s message for user %d, task %s", message.Type, userID, message.TaskID)
 		}
-	case <-time.After(3 * time.Second): // 增加超时时间到3秒
-		s.logger.Errorf("Failed to send message to user %d: timeout (type: %s)", userID, message.Type)
-		// 对于重要消息，尝试重新发送一次
+	case <-time.After(1 * time.Second): // 快速超时，避免阻塞
+		s.logger.Warningf("Send queue timeout for user %d (type: %s)", userID, message.Type)
+		// 对于重要消息，尝试一次非阻塞发送
 		if message.Type == "complete" || message.Type == "error" {
-			s.logger.Infof("Retrying important message for user %d", userID)
 			select {
 			case conn.send <- message:
 				s.logger.Infof("Retry successful for user %d", userID)
 			default:
-				s.logger.Errorf("Retry failed for user %d, removing connection", userID)
-				s.removeConnection(userID)
+				s.logger.Warningf("Send queue full for user %d, may need to reconnect", userID)
+				// 不立即移除连接，让心跳机制处理
 			}
-		} else {
-			s.removeConnection(userID)
 		}
 	}
 }
@@ -324,20 +351,32 @@ func (s *Service) UpdateProgress(taskID string, current int, currentNode string,
 	task.Current = current
 	progress := float64(current) / float64(task.Total) * 100
 
-	message := ProgressMessage{
-		TaskID:      taskID,
-		Type:        "progress",
-		Action:      task.Action,
-		Current:     current,
-		Total:       task.Total,
-		Progress:    progress,
-		CurrentNode: currentNode,
-		Message:     fmt.Sprintf("正在处理节点 %s (%d/%d)", currentNode, current, task.Total),
-		Timestamp:   time.Now(),
-	}
+	// 检查WebSocket连接状态，避免无效发送
+	s.connMutex.RLock()
+	_, hasConnection := s.connections[userID]
+	s.connMutex.RUnlock()
 
-	s.sendToUser(userID, message)
-	s.logger.Infof("Progress updated for task %s: %d/%d", taskID, current, task.Total)
+	if hasConnection {
+		message := ProgressMessage{
+			TaskID:      taskID,
+			Type:        "progress",
+			Action:      task.Action,
+			Current:     current,
+			Total:       task.Total,
+			Progress:    progress,
+			CurrentNode: currentNode,
+			Message:     fmt.Sprintf("正在处理节点 %s (%d/%d)", currentNode, current, task.Total),
+			Timestamp:   time.Now(),
+		}
+
+		s.sendToUser(userID, message)
+		s.logger.Infof("Progress updated for task %s: %d/%d", taskID, current, task.Total)
+	} else {
+		// 只在关键节点记录连接缺失（减少日志噪音）
+		if current == task.Total || current%5 == 0 {
+			s.logger.Infof("Progress update for task %s (%d/%d) - no WebSocket connection for user %d", taskID, current, task.Total, userID)
+		}
+	}
 }
 
 // CompleteTask 完成任务
@@ -417,6 +456,36 @@ func (s *Service) ErrorTask(taskID string, err error, userID uint) {
 	}
 
 	s.sendToUser(userID, message)
+}
+
+// cleanupStaleConnections 定期清理不活跃的连接
+func (s *Service) cleanupStaleConnections() {
+	ticker := time.NewTicker(60 * time.Second) // 每60秒检查一次
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now()
+		var staleUsers []uint
+
+		s.connMutex.RLock()
+		for userID, conn := range s.connections {
+			// 如果连接超过2分钟没有活动，标记为过期
+			if now.Sub(conn.lastSeen) > 2*time.Minute {
+				staleUsers = append(staleUsers, userID)
+			}
+		}
+		s.connMutex.RUnlock()
+
+		// 清理过期连接
+		for _, userID := range staleUsers {
+			s.logger.Warningf("Cleaning up stale connection for user %d", userID)
+			s.removeConnection(userID)
+		}
+
+		if len(staleUsers) > 0 {
+			s.logger.Infof("Cleaned up %d stale connections", len(staleUsers))
+		}
+	}
 }
 
 // sendCurrentTaskStatus 发送当前任务状态给重连的用户
