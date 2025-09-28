@@ -3,9 +3,10 @@
     v-model="visible"
     title="批量操作进度"
     width="500px"
-    :close-on-click-modal="false"
-    :close-on-press-escape="false"
-    :show-close="isCompleted"
+    :close-on-click-modal="true"
+    :close-on-press-escape="true"
+    :show-close="true"
+    @close="handleClose"
   >
     <div class="progress-content">
       <!-- 进度条 -->
@@ -43,17 +44,14 @@
           <span class="label">操作类型:</span>
           <span class="value">{{ getActionText(progressData.action) }}</span>
         </div>
-        <div class="detail-item" v-if="progressData.task_id">
-          <span class="label">任务ID:</span>
-          <span class="value">{{ progressData.task_id }}</span>
-        </div>
+        <!-- 任务ID已隐藏，优化用户界面 -->
       </div>
     </div>
 
     <template #footer>
       <div class="dialog-footer">
-        <el-button v-if="isCompleted" @click="handleClose">关闭</el-button>
-        <el-button v-else @click="handleCancel" type="danger">取消</el-button>
+        <el-button @click="handleClose">关闭</el-button>
+        <el-button v-if="!isCompleted && !isError" @click="handleCancel" type="danger">取消任务</el-button>
       </div>
     </template>
   </el-dialog>
@@ -240,7 +238,17 @@ const handleProgressUpdate = (data) => {
 
 // 关闭对话框
 const handleClose = () => {
-  visible.value = false
+  console.log('关闭进度对话框')
+  
+  // 如果任务正在进行中，给用户提示
+  if (!isCompleted.value && !isError.value && progressData.value.task_id) {
+    console.log('任务仍在进行中，但用户选择关闭弹窗')
+  }
+  
+  // 关闭弹窗
+  emit('update:modelValue', false)
+  
+  // 清理资源
   closeWebSocket()
   resetState()
 }
