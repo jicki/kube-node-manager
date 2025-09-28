@@ -36,12 +36,16 @@ type ProgressMessage struct {
 
 // TaskProgress 任务进度
 type TaskProgress struct {
-	TaskID    string
-	Action    string
-	Current   int
-	Total     int
-	IsRunning bool
-	Error     error
+	TaskID       string
+	Action       string
+	Current      int
+	Total        int
+	IsRunning    bool
+	Error        error
+	Completed    bool
+	CompletedAt  time.Time
+	UserID       uint
+	PendingMessages []ProgressMessage // 待发送的消息队列
 }
 
 // Connection WebSocket连接
@@ -69,14 +73,18 @@ type Service struct {
 	taskMutex   sync.RWMutex
 	logger      *logger.Logger
 	authService TokenValidator
+	// 新增：完成任务的消息队列，用于重连时恢复
+	completedTasks map[uint][]ProgressMessage
+	completedMutex sync.RWMutex
 }
 
 // NewService 创建进度推送服务
 func NewService(logger *logger.Logger) *Service {
 	s := &Service{
-		connections: make(map[uint]*Connection),
-		tasks:       make(map[string]*TaskProgress),
-		logger:      logger,
+		connections:    make(map[uint]*Connection),
+		tasks:          make(map[string]*TaskProgress),
+		completedTasks: make(map[uint][]ProgressMessage),
+		logger:         logger,
 	}
 
 	// 启动定期清理goroutine
@@ -178,7 +186,7 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 
 // writePump 发送消息到客户端
 func (s *Service) writePump(conn *Connection) {
-	ticker := time.NewTicker(25 * time.Second) // 进一步缩短心跳间隔
+	ticker := time.NewTicker(20 * time.Second) // 缩短心跳间隔以提高连接检测
 	defer func() {
 		ticker.Stop()
 		conn.ws.Close()
@@ -189,15 +197,38 @@ func (s *Service) writePump(conn *Connection) {
 	for {
 		select {
 		case message, ok := <-conn.send:
-			conn.ws.SetWriteDeadline(time.Now().Add(15 * time.Second)) // 增加写入超时时间
+			conn.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if !ok {
 				s.logger.Infof("Send channel closed for user %d, sending close message", conn.userID)
 				conn.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
-			if err := conn.ws.WriteJSON(message); err != nil {
-				s.logger.Errorf("Failed to write message to user %d: %v", conn.userID, err)
+			// 对于重要消息，多次尝试发送
+			maxRetries := 1
+			if message.Type == "complete" || message.Type == "error" {
+				maxRetries = 3
+			}
+
+			var err error
+			for i := 0; i <= maxRetries; i++ {
+				if i > 0 {
+					time.Sleep(100 * time.Millisecond) // 重试间隔
+					conn.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				}
+				err = conn.ws.WriteJSON(message)
+				if err == nil {
+					break
+				}
+				s.logger.Warningf("Write attempt %d failed for user %d: %v", i+1, conn.userID, err)
+			}
+
+			if err != nil {
+				s.logger.Errorf("Failed to write message to user %d after %d attempts: %v", conn.userID, maxRetries+1, err)
+				// 对于重要消息，保存到队列中
+				if message.Type == "complete" || message.Type == "error" {
+					s.queueCompletionMessage(conn.userID, message)
+				}
 				return
 			}
 
@@ -210,12 +241,15 @@ func (s *Service) writePump(conn *Connection) {
 			}
 
 		case <-ticker.C:
-			conn.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			conn.ws.SetWriteDeadline(time.Now().Add(5 * time.Second))
 			if err := conn.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
 				s.logger.Errorf("Failed to send ping to user %d: %v", conn.userID, err)
 				return
 			}
-			s.logger.Infof("Sent ping to user %d", conn.userID) // 添加心跳日志用于调试
+			// 减少心跳日志噪音
+			if conn.userID%10 == 0 { // 只为部分用户记录心跳
+				s.logger.Infof("Sent ping to user %d", conn.userID)
+			}
 		}
 	}
 }
@@ -229,10 +263,10 @@ func (s *Service) readPump(conn *Connection) {
 	}()
 
 	conn.ws.SetReadLimit(1024)
-	conn.ws.SetReadDeadline(time.Now().Add(70 * time.Second)) // 增加读取超时时间
+	conn.ws.SetReadDeadline(time.Now().Add(60 * time.Second)) // 调整读取超时时间
 	conn.ws.SetPongHandler(func(string) error {
 		conn.lastSeen = time.Now() // 更新活跃时间
-		conn.ws.SetReadDeadline(time.Now().Add(70 * time.Second))
+		conn.ws.SetReadDeadline(time.Now().Add(60 * time.Second))
 		return nil
 	})
 
@@ -253,12 +287,19 @@ func (s *Service) readPump(conn *Connection) {
 		// 处理不同类型的消息
 		switch messageType {
 		case websocket.TextMessage:
-			s.logger.Infof("Received text message from user %d: %s", conn.userID, string(message))
+			// 减少日志噪音，只记录重要消息
+			if len(message) > 0 && string(message) != "ping" {
+				s.logger.Infof("Received text message from user %d: %s", conn.userID, string(message))
+			}
 		case websocket.BinaryMessage:
 			s.logger.Infof("Received binary message from user %d", conn.userID)
 		case websocket.PingMessage:
 			// 响应ping消息
-			conn.ws.WriteMessage(websocket.PongMessage, nil)
+			conn.ws.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if err := conn.ws.WriteMessage(websocket.PongMessage, nil); err != nil {
+				s.logger.Errorf("Failed to send pong to user %d: %v", conn.userID, err)
+				return
+			}
 		}
 	}
 }
@@ -282,36 +323,50 @@ func (s *Service) sendToUser(userID uint, message ProgressMessage) {
 	s.connMutex.RUnlock()
 
 	if !exists {
-		// 只对重要消息记录警告
+		// 如果是重要消息（完成或错误），保存到队列中
 		if message.Type == "complete" || message.Type == "error" {
-			s.logger.Warningf("No WebSocket connection found for user %d (message: %s)", userID, message.Type)
+			s.queueCompletionMessage(userID, message)
+			s.logger.Warningf("No WebSocket connection found for user %d, queued %s message for task %s", userID, message.Type, message.TaskID)
 		}
 		return
+	}
+
+	// 尝试发送消息，使用更长的超时时间处理重要消息
+	timeout := 1 * time.Second
+	if message.Type == "complete" || message.Type == "error" {
+		timeout = 3 * time.Second // 重要消息使用更长超时
 	}
 
 	select {
 	case conn.send <- message:
 		// 消息发送成功
 		if message.Type == "complete" || message.Type == "error" {
-			s.logger.Infof("Queued %s message for user %d, task %s", message.Type, userID, message.TaskID)
+			s.logger.Infof("Successfully sent %s message to user %d for task %s", message.Type, userID, message.TaskID)
 		}
-	case <-time.After(1 * time.Second): // 快速超时，避免阻塞
+	case <-time.After(timeout):
 		s.logger.Warningf("Send queue timeout for user %d (type: %s)", userID, message.Type)
-		// 对于重要消息，尝试一次非阻塞发送
+		// 对于重要消息，保存到队列中并立即尝试重连
 		if message.Type == "complete" || message.Type == "error" {
-			select {
-			case conn.send <- message:
-				s.logger.Infof("Retry successful for user %d", userID)
-			default:
-				s.logger.Warningf("Send queue full for user %d, may need to reconnect", userID)
-				// 不立即移除连接，让心跳机制处理
-			}
+			s.queueCompletionMessage(userID, message)
+			s.logger.Warningf("Queued important message for user %d due to send timeout", userID)
+			// 连接可能有问题，标记为需要重连
+			go func() {
+				time.Sleep(500 * time.Millisecond)
+				s.connMutex.RLock()
+				if currentConn, stillExists := s.connections[userID]; stillExists && currentConn == conn {
+					s.connMutex.RUnlock()
+					// 如果连接仍存在且是同一个，关闭它以触发重连
+					currentConn.ws.Close()
+				} else {
+					s.connMutex.RUnlock()
+				}
+			}()
 		}
 	}
 }
 
 // CreateTask 创建新任务
-func (s *Service) CreateTask(taskID, action string, total int) {
+func (s *Service) CreateTask(taskID, action string, total int, userID uint) {
 	s.taskMutex.Lock()
 	defer s.taskMutex.Unlock()
 
@@ -322,14 +377,17 @@ func (s *Service) CreateTask(taskID, action string, total int) {
 	}
 
 	s.tasks[taskID] = &TaskProgress{
-		TaskID:    taskID,
-		Action:    action,
-		Current:   0,
-		Total:     total,
-		IsRunning: true,
+		TaskID:          taskID,
+		Action:          action,
+		Current:         0,
+		Total:           total,
+		IsRunning:       true,
+		Completed:       false,
+		UserID:          userID,
+		PendingMessages: make([]ProgressMessage, 0),
 	}
 
-	s.logger.Infof("Created task %s with %d total items", taskID, total)
+	s.logger.Infof("Created task %s with %d total items for user %d", taskID, total, userID)
 }
 
 // UpdateProgress 更新任务进度
@@ -390,14 +448,8 @@ func (s *Service) CompleteTask(taskID string, userID uint) {
 			return
 		}
 		task.IsRunning = false
-		// 保留任务状态一段时间，以便重连的客户端获取状态
-		// 使用延时删除，给重连客户端一些时间获取状态
-		go func() {
-			time.Sleep(30 * time.Second) // 保留30秒
-			s.taskMutex.Lock()
-			delete(s.tasks, taskID)
-			s.taskMutex.Unlock()
-		}()
+		task.Completed = true
+		task.CompletedAt = time.Now()
 	}
 	s.taskMutex.Unlock()
 
@@ -427,8 +479,35 @@ func (s *Service) CompleteTask(taskID string, userID uint) {
 		s.sendToUser(userID, message)
 		s.logger.Infof("Task %s completed successfully, sent completion message to connected user %d", taskID, userID)
 	} else {
-		s.logger.Warningf("Task %s completed but no WebSocket connection for user %d, task status preserved for recovery", taskID, userID)
+		// 没有连接时，将消息保存到队列中等待重连
+		s.queueCompletionMessage(userID, message)
+		s.logger.Warningf("Task %s completed but no WebSocket connection for user %d, message queued for recovery", taskID, userID)
 	}
+
+	// 延时清理任务和完成消息
+	go func() {
+		time.Sleep(60 * time.Second) // 增加到60秒，给更多时间重连
+		s.taskMutex.Lock()
+		delete(s.tasks, taskID)
+		s.taskMutex.Unlock()
+
+		// 清理过期的完成消息
+		s.completedMutex.Lock()
+		if messages, exists := s.completedTasks[userID]; exists {
+			var remaining []ProgressMessage
+			for _, msg := range messages {
+				if time.Since(msg.Timestamp) < 60*time.Second {
+					remaining = append(remaining, msg)
+				}
+			}
+			if len(remaining) > 0 {
+				s.completedTasks[userID] = remaining
+			} else {
+				delete(s.completedTasks, userID)
+			}
+		}
+		s.completedMutex.Unlock()
+	}()
 }
 
 // ErrorTask 任务错误
@@ -488,15 +567,49 @@ func (s *Service) cleanupStaleConnections() {
 	}
 }
 
+// queueCompletionMessage 将完成消息加入队列，等待重连时发送
+func (s *Service) queueCompletionMessage(userID uint, message ProgressMessage) {
+	s.completedMutex.Lock()
+	defer s.completedMutex.Unlock()
+
+	// 初始化用户的消息队列
+	if s.completedTasks[userID] == nil {
+		s.completedTasks[userID] = make([]ProgressMessage, 0)
+	}
+
+	// 添加消息到队列
+	s.completedTasks[userID] = append(s.completedTasks[userID], message)
+	s.logger.Infof("Queued completion message for user %d, task %s", userID, message.TaskID)
+}
+
 // sendCurrentTaskStatus 发送当前任务状态给重连的用户
 func (s *Service) sendCurrentTaskStatus(userID uint) {
-	s.taskMutex.RLock()
-	defer s.taskMutex.RUnlock()
-
 	sentCount := 0
-	// 查找当前用户的相关任务
+
+	// 先发送待处理的完成消息
+	s.completedMutex.Lock()
+	if messages, exists := s.completedTasks[userID]; exists {
+		for _, message := range messages {
+			// 只发送未过期的消息（60秒内）
+			if time.Since(message.Timestamp) < 60*time.Second {
+				s.sendToUser(userID, message)
+				s.logger.Infof("Sent recovery task status for %s to user %d: %s (%.1f%%)", message.TaskID, userID, message.Type, message.Progress)
+				sentCount++
+			}
+		}
+		// 清理已发送的消息
+		delete(s.completedTasks, userID)
+	}
+	s.completedMutex.Unlock()
+
+	// 再发送当前正在运行的任务状态
+	s.taskMutex.RLock()
 	for taskID, task := range s.tasks {
-		// 发送任务状态
+		// 只处理当前用户的任务
+		if task.UserID != userID {
+			continue
+		}
+
 		var messageType string
 		var progress float64
 		var message string
@@ -505,10 +618,12 @@ func (s *Service) sendCurrentTaskStatus(userID uint) {
 			messageType = "progress"
 			progress = float64(task.Current) / float64(task.Total) * 100
 			message = fmt.Sprintf("正在处理 (%d/%d)", task.Current, task.Total)
-		} else {
+		} else if task.Completed {
 			messageType = "complete"
 			progress = 100
 			message = fmt.Sprintf("批量操作完成，共处理 %d 个节点", task.Total)
+		} else {
+			continue // 跳过已停止但未完成的任务
 		}
 
 		statusMessage := ProgressMessage{
@@ -526,6 +641,7 @@ func (s *Service) sendCurrentTaskStatus(userID uint) {
 		s.logger.Infof("Sent recovery task status for %s to user %d: %s (%.1f%%)", taskID, userID, messageType, progress)
 		sentCount++
 	}
+	s.taskMutex.RUnlock()
 
 	if sentCount == 0 {
 		s.logger.Infof("No pending tasks found for user %d on reconnection", userID)
@@ -559,7 +675,7 @@ func (s *Service) ProcessBatchWithProgress(
 	total := len(nodeNames)
 
 	// 创建任务
-	s.CreateTask(taskID, action, total)
+	s.CreateTask(taskID, action, total, userID)
 
 	// 使用信号量控制并发
 	semaphore := make(chan struct{}, maxConcurrency)
