@@ -204,7 +204,8 @@ export function formatNodeRoles(roles) {
   const roleMap = {
     master: '主节点',
     worker: '工作节点',
-    control: '控制节点'
+    control: '控制节点',
+    'control-plane': '主节点'
   }
   
   return roles.map(role => roleMap[role] || role).join(', ')
