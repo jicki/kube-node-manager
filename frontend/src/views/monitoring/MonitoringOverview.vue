@@ -173,25 +173,47 @@ const alerts = ref([])
 // 计算属性
 const currentCluster = computed(() => clusterStore.currentCluster)
 const monitoringConfigured = computed(() => {
-  return currentCluster.value?.monitoring_enabled || false
+  const cluster = currentCluster.value
+  console.log('Computing monitoringConfigured for cluster:', cluster)
+  return cluster?.monitoring_enabled === true
 })
 
 // 检查监控状态
 const checkMonitoringStatus = async () => {
-  if (!monitoringConfigured.value) {
+  // 调试输出当前集群信息
+  console.log('Current cluster:', currentCluster.value)
+  console.log('Monitoring configured:', monitoringConfigured.value)
+
+  if (!currentCluster.value) {
+    console.log('No current cluster selected')
     return
   }
 
   try {
     loading.value = true
-    // 这里可以调用API获取监控状态
-    console.log('Checking monitoring status for cluster:', currentCluster.value?.name)
 
-    // 模拟数据，实际应该从API获取
-    nodeMetrics.value = {
-      total: currentCluster.value?.node_count || 0,
-      healthy: currentCluster.value?.node_count || 0,
-      warning: 0
+    // 始终调用监控状态 API，不管配置如何
+    const response = await fetch(`/api/v1/clusters/${currentCluster.value.id}/monitoring/status`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      console.log('Monitoring status response:', data)
+
+      if (data.data && data.data.enabled) {
+        // 更新节点指标数据
+        nodeMetrics.value = {
+          total: currentCluster.value?.node_count || 0,
+          healthy: currentCluster.value?.node_count || 0,
+          warning: 0
+        }
+      }
+    } else {
+      console.error('Failed to fetch monitoring status:', response.status)
     }
 
   } catch (error) {
@@ -233,7 +255,18 @@ const testNetworkConnectivity = async () => {
 }
 
 onMounted(() => {
-  checkMonitoringStatus()
+  // 确保集群列表是最新的
+  clusterStore.fetchClusters().then(() => {
+    // 如果有当前集群，更新到最新数据
+    if (currentCluster.value) {
+      const updatedCluster = clusterStore.clusters.find(c => c.id === currentCluster.value.id)
+      if (updatedCluster) {
+        clusterStore.setCurrentCluster(updatedCluster)
+      }
+    }
+    // 然后检查监控状态
+    checkMonitoringStatus()
+  })
 })
 </script>
 
