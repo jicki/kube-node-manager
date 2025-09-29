@@ -119,6 +119,17 @@
           </template>
         </el-table-column>
 
+        <el-table-column prop="monitoring" label="监控状态" width="100">
+          <template #default="{ row }">
+            <el-tag
+              :type="row.monitoring_enabled ? 'success' : 'info'"
+              size="small"
+            >
+              {{ row.monitoring_enabled ? '已启用' : '未配置' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
         <el-table-column prop="current" label="当前集群" width="100">
           <template #default="{ row }">
             <el-tag v-if="row.id === currentCluster?.id" type="primary" size="small">
@@ -237,6 +248,34 @@
             </el-alert>
           </div>
         </el-form-item>
+
+        <!-- 监控配置 -->
+        <el-form-item label="监控设置">
+          <el-switch
+            v-model="form.monitoring_enabled"
+            active-text="启用监控"
+            inactive-text="禁用监控"
+          />
+        </el-form-item>
+
+        <template v-if="form.monitoring_enabled">
+          <el-form-item label="监控类型" prop="monitoring_type">
+            <el-radio-group v-model="form.monitoring_type">
+              <el-radio label="prometheus">Prometheus</el-radio>
+              <el-radio label="victoriametrics">VictoriaMetrics</el-radio>
+            </el-radio-group>
+          </el-form-item>
+
+          <el-form-item label="监控地址" prop="monitoring_endpoint">
+            <el-input
+              v-model="form.monitoring_endpoint"
+              placeholder="请输入监控系统地址，如: http://prometheus.example.com:9090"
+            />
+            <div class="form-help-text">
+              <p class="help-tip">请确保此地址可以访问到 node-exporter 的指标数据</p>
+            </div>
+          </el-form-item>
+        </template>
       </el-form>
       
       <template #footer>
@@ -281,7 +320,10 @@ const testingClusters = ref({})
 const form = reactive({
   name: '',
   description: '',
-  kube_config: ''
+  kube_config: '',
+  monitoring_enabled: false,
+  monitoring_type: 'prometheus',
+  monitoring_endpoint: ''
 })
 
 // 表单验证规则
@@ -292,6 +334,18 @@ const formRules = {
   ],
   kube_config: [
     { required: true, message: '请输入Kubeconfig内容', trigger: 'blur' }
+  ],
+  monitoring_endpoint: [
+    {
+      validator: (rule, value, callback) => {
+        if (form.monitoring_enabled && (!value || value.trim() === '')) {
+          callback(new Error('请输入监控系统地址'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
   ]
 }
 
@@ -342,13 +396,16 @@ const showAddDialog = () => {
 const showEditDialog = (cluster) => {
   isEdit.value = true
   dialogVisible.value = true
-  
+
   // 填充表单数据
   Object.assign(form, {
     id: cluster.id,
     name: cluster.name,
     description: cluster.description || '',
-    kube_config: cluster.kube_config || ''
+    kube_config: cluster.kube_config || '',
+    monitoring_enabled: cluster.monitoring_enabled || false,
+    monitoring_type: cluster.monitoring_type || 'prometheus',
+    monitoring_endpoint: cluster.monitoring_endpoint || ''
   })
 }
 
@@ -358,9 +415,12 @@ const resetForm = () => {
     id: null,
     name: '',
     description: '',
-    kube_config: ''
+    kube_config: '',
+    monitoring_enabled: false,
+    monitoring_type: 'prometheus',
+    monitoring_endpoint: ''
   })
-  
+
   if (formRef.value) {
     formRef.value.resetFields()
   }
@@ -626,6 +686,12 @@ onMounted(() => {
 .form-help-text li {
   margin: 4px 0;
   line-height: 1.4;
+}
+
+.help-tip {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
 }
 
 /* 响应式设计 */

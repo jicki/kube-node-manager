@@ -231,6 +231,23 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		audit.GET("/logs", handlers.Audit.List)
 		audit.GET("/logs/:id", handlers.Audit.GetByID)
 	}
+
+	// 监控相关路由
+	monitoring := protected.Group("/monitoring")
+	{
+		monitoring.POST("/test", handlers.Monitoring.TestMonitoringEndpoint)
+	}
+
+	// 集群监控路由
+	clusterMonitoring := protected.Group("/clusters/:id/monitoring")
+	{
+		clusterMonitoring.GET("/status", handlers.Monitoring.GetMonitoringStatus)
+		clusterMonitoring.GET("/nodes", handlers.Monitoring.GetNodeMetrics)
+		clusterMonitoring.GET("/topology", handlers.Monitoring.GetNetworkTopology)
+		clusterMonitoring.POST("/connectivity", handlers.Monitoring.TestNetworkConnectivity)
+		clusterMonitoring.GET("/alerts", handlers.Monitoring.GetAlerts)
+		clusterMonitoring.POST("/query", handlers.Monitoring.PrometheusQuery)
+	}
 }
 
 // gracefulShutdown 优雅关闭服务器

@@ -21,16 +21,22 @@ type Service struct {
 
 // CreateRequest 创建集群请求
 type CreateRequest struct {
-	Name        string `json:"name" binding:"required"`
-	Description string `json:"description"`
-	KubeConfig  string `json:"kube_config" binding:"required"`
+	Name                string `json:"name" binding:"required"`
+	Description         string `json:"description"`
+	KubeConfig          string `json:"kube_config" binding:"required"`
+	MonitoringEnabled   bool   `json:"monitoring_enabled"`
+	MonitoringType      string `json:"monitoring_type"`
+	MonitoringEndpoint  string `json:"monitoring_endpoint"`
 }
 
 // UpdateRequest 更新集群请求
 type UpdateRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	KubeConfig  string `json:"kube_config"`
+	Name                string `json:"name"`
+	Description         string `json:"description"`
+	KubeConfig          string `json:"kube_config"`
+	MonitoringEnabled   *bool  `json:"monitoring_enabled"`
+	MonitoringType      string `json:"monitoring_type"`
+	MonitoringEndpoint  string `json:"monitoring_endpoint"`
 }
 
 // ListRequest 集群列表请求
@@ -124,11 +130,14 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 
 	// 创建集群记录
 	cluster := model.Cluster{
-		Name:        req.Name,
-		Description: req.Description,
-		KubeConfig:  req.KubeConfig,
-		Status:      model.ClusterStatusActive,
-		CreatedBy:   userID,
+		Name:               req.Name,
+		Description:        req.Description,
+		KubeConfig:         req.KubeConfig,
+		Status:             model.ClusterStatusActive,
+		MonitoringEnabled:  req.MonitoringEnabled,
+		MonitoringType:     req.MonitoringType,
+		MonitoringEndpoint: req.MonitoringEndpoint,
+		CreatedBy:          userID,
 	}
 
 	if err := s.db.Create(&cluster).Error; err != nil {
@@ -263,6 +272,18 @@ func (s *Service) Update(id uint, req UpdateRequest, userID uint) (*model.Cluste
 
 	if req.Description != "" {
 		updates["description"] = req.Description
+	}
+
+	if req.MonitoringEnabled != nil {
+		updates["monitoring_enabled"] = *req.MonitoringEnabled
+	}
+
+	if req.MonitoringType != "" {
+		updates["monitoring_type"] = req.MonitoringType
+	}
+
+	if req.MonitoringEndpoint != "" {
+		updates["monitoring_endpoint"] = req.MonitoringEndpoint
 	}
 
 	if req.KubeConfig != "" && req.KubeConfig != cluster.KubeConfig {

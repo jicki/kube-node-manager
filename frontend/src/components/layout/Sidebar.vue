@@ -87,6 +87,29 @@
         </el-menu-item>
       </el-sub-menu>
 
+      <!-- 监控信息 -->
+      <el-sub-menu index="monitoring">
+        <template #title>
+          <el-icon><DataLine /></el-icon>
+          <span>监控信息</span>
+        </template>
+
+        <el-menu-item index="/monitoring/overview">
+          <el-icon><Monitor /></el-icon>
+          <template #title>监控概览</template>
+        </el-menu-item>
+
+        <el-menu-item index="/monitoring/nodes">
+          <el-icon><CPU /></el-icon>
+          <template #title>节点监控</template>
+        </el-menu-item>
+
+        <el-menu-item index="/monitoring/network">
+          <el-icon><Connection /></el-icon>
+          <template #title>网络拓扑</template>
+        </el-menu-item>
+      </el-sub-menu>
+
       <!-- 系统配置 -->
       <el-sub-menu index="system-config">
         <template #title>
@@ -138,7 +161,9 @@ import {
   ArrowRight,
   Connection,
   DocumentCopy,
-  Setting
+  Setting,
+  DataLine,
+  CPU
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -162,6 +187,10 @@ const defaultOpeneds = computed(() => {
   // 根据当前路径确定应该展开的子菜单
   if (['/dashboard', '/nodes', '/labels', '/taints'].includes(path)) {
     openedMenus.push('node-management')
+  }
+
+  if (path.startsWith('/monitoring')) {
+    openedMenus.push('monitoring')
   }
 
   if (['/clusters', '/audit', '/users'].includes(path)) {
