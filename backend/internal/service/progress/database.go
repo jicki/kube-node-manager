@@ -1,0 +1,342 @@
+package progress
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"kube-node-manager/internal/model"
+	"kube-node-manager/pkg/logger"
+
+	"gorm.io/gorm"
+)
+
+// DatabaseProgressService 基于数据库的进度服务，支持多副本
+type DatabaseProgressService struct {
+	db                *gorm.DB
+	logger            *logger.Logger
+	wsService         *Service // 原有的WebSocket服务
+	stopPolling       chan struct{}
+	pollingWg         sync.WaitGroup
+	lastProcessedTime time.Time
+	pollInterval      time.Duration
+}
+
+// NewDatabaseProgressService 创建数据库进度服务
+func NewDatabaseProgressService(db *gorm.DB, logger *logger.Logger, wsService *Service) *DatabaseProgressService {
+	dps := &DatabaseProgressService{
+		db:           db,
+		logger:       logger,
+		wsService:    wsService,
+		stopPolling:  make(chan struct{}),
+		pollInterval: 1 * time.Second, // 每秒检查一次新消息
+	}
+
+	// 启动消息轮询
+	go dps.startMessagePolling()
+
+	return dps
+}
+
+// CreateTask 创建任务
+func (dps *DatabaseProgressService) CreateTask(taskID, action string, total int, userID uint) error {
+	task := &model.ProgressTask{
+		TaskID:      taskID,
+		UserID:      userID,
+		Action:      action,
+		Status:      model.TaskStatusRunning,
+		Current:     0,
+		Total:       total,
+		Progress:    0,
+		Message:     "任务已创建，准备开始处理",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	if err := dps.db.Create(task).Error; err != nil {
+		dps.logger.Errorf("Failed to create task %s: %v", taskID, err)
+		return err
+	}
+
+	dps.logger.Infof("Created database task %s with %d total items for user %d", taskID, total, userID)
+	return nil
+}
+
+// UpdateProgress 更新任务进度
+func (dps *DatabaseProgressService) UpdateProgress(taskID string, current int, currentNode string, userID uint) error {
+	var task model.ProgressTask
+	if err := dps.db.Where("task_id = ?", taskID).First(&task).Error; err != nil {
+		dps.logger.Warningf("Task %s not found for progress update: %v", taskID, err)
+		return err
+	}
+
+	// 更新进度
+	task.UpdateProgress(current, currentNode)
+	task.Message = fmt.Sprintf("正在处理节点 %s (%d/%d)", currentNode, current, task.Total)
+
+	if err := dps.db.Save(&task).Error; err != nil {
+		dps.logger.Errorf("Failed to update task %s progress: %v", taskID, err)
+		return err
+	}
+
+	// 创建进度消息
+	return dps.createProgressMessage(&task, "progress")
+}
+
+// CompleteTask 完成任务
+func (dps *DatabaseProgressService) CompleteTask(taskID string, userID uint) error {
+	var task model.ProgressTask
+	if err := dps.db.Where("task_id = ?", taskID).First(&task).Error; err != nil {
+		dps.logger.Warningf("Task %s not found for completion: %v", taskID, err)
+		return err
+	}
+
+	// 标记完成
+	task.MarkCompleted()
+	task.Message = fmt.Sprintf("批量操作完成，共处理 %d 个节点", task.Total)
+
+	if err := dps.db.Save(&task).Error; err != nil {
+		dps.logger.Errorf("Failed to complete task %s: %v", taskID, err)
+		return err
+	}
+
+	// 创建完成消息
+	if err := dps.createProgressMessage(&task, "complete"); err != nil {
+		return err
+	}
+
+	dps.logger.Infof("Task %s completed successfully in database", taskID)
+
+	// 设置延时清理
+	go func() {
+		time.Sleep(60 * time.Second)
+		dps.cleanupTask(taskID)
+	}()
+
+	return nil
+}
+
+// ErrorTask 标记任务失败
+func (dps *DatabaseProgressService) ErrorTask(taskID string, err error, userID uint) error {
+	var task model.ProgressTask
+	if dbErr := dps.db.Where("task_id = ?", taskID).First(&task).Error; dbErr != nil {
+		dps.logger.Warningf("Task %s not found for error marking: %v", taskID, dbErr)
+		return dbErr
+	}
+
+	// 标记失败
+	task.MarkFailed(err.Error())
+	task.Message = "批量操作失败"
+
+	if dbErr := dps.db.Save(&task).Error; dbErr != nil {
+		dps.logger.Errorf("Failed to mark task %s as failed: %v", taskID, dbErr)
+		return dbErr
+	}
+
+	// 创建错误消息
+	return dps.createProgressMessage(&task, "error")
+}
+
+// createProgressMessage 创建进度消息
+func (dps *DatabaseProgressService) createProgressMessage(task *model.ProgressTask, msgType string) error {
+	msg := &model.ProgressMessage{
+		UserID:   task.UserID,
+		TaskID:   task.TaskID,
+		Type:     msgType,
+		Action:   task.Action,
+		Current:  task.Current,
+		Total:    task.Total,
+		Progress: task.Progress,
+		Message:  task.Message,
+		ErrorMsg: task.ErrorMsg,
+	}
+
+	if err := dps.db.Create(msg).Error; err != nil {
+		dps.logger.Errorf("Failed to create progress message for task %s: %v", task.TaskID, err)
+		return err
+	}
+
+	dps.logger.Infof("Created %s message for task %s, user %d", msgType, task.TaskID, task.UserID)
+	return nil
+}
+
+// startMessagePolling 启动消息轮询，处理未发送的消息
+func (dps *DatabaseProgressService) startMessagePolling() {
+	dps.pollingWg.Add(1)
+	defer dps.pollingWg.Done()
+
+	ticker := time.NewTicker(dps.pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-dps.stopPolling:
+			dps.logger.Infof("Message polling stopped")
+			return
+		case <-ticker.C:
+			dps.processUnsentMessages()
+		}
+	}
+}
+
+// processUnsentMessages 处理未发送的消息
+func (dps *DatabaseProgressService) processUnsentMessages() {
+	var messages []model.ProgressMessage
+
+	// 查询未处理的消息，按创建时间排序
+	query := dps.db.Where("processed = ? AND created_at > ?", false, dps.lastProcessedTime).
+		Order("created_at ASC").
+		Limit(100) // 限制批次大小
+
+	if err := query.Find(&messages).Error; err != nil {
+		dps.logger.Errorf("Failed to query unsent messages: %v", err)
+		return
+	}
+
+	if len(messages) == 0 {
+		return
+	}
+
+	dps.logger.Infof("Processing %d unsent messages", len(messages))
+
+	for _, msg := range messages {
+		// 转换为WebSocket消息格式
+		wsMessage := ProgressMessage{
+			TaskID:      msg.TaskID,
+			Type:        msg.Type,
+			Action:      msg.Action,
+			Current:     msg.Current,
+			Total:       msg.Total,
+			Progress:    msg.Progress,
+			CurrentNode: "", // 这个字段在数据库中没有存储
+			Message:     msg.Message,
+			Error:       msg.ErrorMsg,
+			Timestamp:   msg.CreatedAt,
+		}
+
+		// 尝试发送到WebSocket
+		dps.wsService.sendToUser(msg.UserID, wsMessage)
+
+		// 标记为已处理
+		if err := dps.db.Model(&msg).Update("processed", true).Error; err != nil {
+			dps.logger.Errorf("Failed to mark message %d as processed: %v", msg.ID, err)
+		} else {
+			dps.logger.Infof("Sent and marked message %d as processed for user %d", msg.ID, msg.UserID)
+		}
+	}
+
+	// 更新最后处理时间
+	if len(messages) > 0 {
+		dps.lastProcessedTime = messages[len(messages)-1].CreatedAt
+	}
+}
+
+// cleanupTask 清理旧任务
+func (dps *DatabaseProgressService) cleanupTask(taskID string) {
+	// 软删除任务
+	if err := dps.db.Where("task_id = ?", taskID).Delete(&model.ProgressTask{}).Error; err != nil {
+		dps.logger.Errorf("Failed to cleanup task %s: %v", taskID, err)
+	} else {
+		dps.logger.Infof("Cleaned up task %s", taskID)
+	}
+
+	// 清理相关的已处理消息
+	if err := dps.db.Where("task_id = ? AND processed = ?", taskID, true).Delete(&model.ProgressMessage{}).Error; err != nil {
+		dps.logger.Errorf("Failed to cleanup messages for task %s: %v", taskID, err)
+	}
+}
+
+// GetUserTasks 获取用户的任务列表
+func (dps *DatabaseProgressService) GetUserTasks(userID uint, status model.TaskStatus) ([]model.ProgressTask, error) {
+	var tasks []model.ProgressTask
+	query := dps.db.Where("user_id = ?", userID)
+
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	if err := query.Order("created_at DESC").Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+
+	return tasks, nil
+}
+
+// Stop 停止服务
+func (dps *DatabaseProgressService) Stop() {
+	close(dps.stopPolling)
+	dps.pollingWg.Wait()
+	dps.logger.Infof("Database progress service stopped")
+}
+
+// ProcessBatchWithProgress 带数据库持久化的批量处理
+func (dps *DatabaseProgressService) ProcessBatchWithProgress(
+	ctx context.Context,
+	taskID string,
+	action string,
+	nodeNames []string,
+	userID uint,
+	maxConcurrency int,
+	processor BatchProcessor,
+) error {
+	total := len(nodeNames)
+
+	// 创建数据库任务
+	if err := dps.CreateTask(taskID, action, total, userID); err != nil {
+		return err
+	}
+
+	// 使用信号量控制并发
+	semaphore := make(chan struct{}, maxConcurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errors []string
+	processed := 0
+
+	for i, nodeName := range nodeNames {
+		wg.Add(1)
+		go func(index int, node string) {
+			defer wg.Done()
+
+			// 获取信号量
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			// 更新进度
+			mu.Lock()
+			processed++
+			currentIndex := processed
+			mu.Unlock()
+
+			dps.UpdateProgress(taskID, currentIndex, node, userID)
+
+			// 处理节点
+			if err := processor.ProcessNode(ctx, node, index); err != nil {
+				mu.Lock()
+				errors = append(errors, fmt.Sprintf("%s: %v", node, err))
+				mu.Unlock()
+				dps.logger.Errorf("Failed to process node %s: %v", node, err)
+			} else {
+				dps.logger.Infof("Successfully processed node %s (%d/%d)", node, currentIndex, total)
+			}
+		}(i, nodeName)
+	}
+
+	// 等待所有任务完成
+	wg.Wait()
+
+	// 处理结果
+	if len(errors) > 0 {
+		errorMsg := fmt.Sprintf("部分节点处理失败: %s", errors[0])
+		if len(errors) > 1 {
+			errorMsg = fmt.Sprintf("部分节点处理失败: %s 等 %d 个错误", errors[0], len(errors))
+		}
+		err := fmt.Errorf("%s", errorMsg)
+		dps.ErrorTask(taskID, err, userID)
+		return err
+	}
+
+	dps.CompleteTask(taskID, userID)
+	return nil
+}

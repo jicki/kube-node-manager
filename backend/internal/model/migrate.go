@@ -11,6 +11,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&LabelTemplate{},
 		&TaintTemplate{},
 		&AuditLog{},
+		&ProgressTask{},
+		&ProgressMessage{},
 	)
 }
 

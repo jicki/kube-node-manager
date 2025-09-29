@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	LDAP     LDAPConfig     `mapstructure:"ldap"`
+	Server   ServerConfig    `mapstructure:"server"`
+	Database DatabaseConfig  `mapstructure:"database"`
+	JWT      JWTConfig       `mapstructure:"jwt"`
+	LDAP     LDAPConfig      `mapstructure:"ldap"`
+	Progress ProgressConfig  `mapstructure:"progress"`
 }
 
 type ServerConfig struct {
@@ -48,6 +49,10 @@ type LDAPConfig struct {
 	AdminPass  string `mapstructure:"admin_pass"`
 }
 
+type ProgressConfig struct {
+	EnableDatabase bool `mapstructure:"enable_database"` // 启用数据库模式用于多副本支持
+}
+
 func LoadConfig() *Config {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -71,6 +76,7 @@ func LoadConfig() *Config {
 	viper.SetDefault("jwt.expire_time", 86400)
 	viper.SetDefault("ldap.enabled", false)
 	viper.SetDefault("ldap.port", 389)
+	viper.SetDefault("progress.enable_database", false)
 
 	viper.AutomaticEnv()
 

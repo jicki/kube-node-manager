@@ -36,6 +36,12 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	ldapSvc := ldap.NewService(logger, cfg.LDAP)
 	progressSvc := progress.NewService(logger)
 
+	// 检查是否启用数据库模式（用于多副本环境）
+	if cfg.Progress.EnableDatabase {
+		progressSvc.EnableDatabaseMode(db)
+		logger.Infof("Progress service database mode enabled for multi-replica support")
+	}
+
 	// 创建服务实例
 	authSvc := auth.NewService(db, logger, cfg.JWT, ldapSvc, auditSvc)
 	labelSvc := label.NewService(db, logger, auditSvc, k8sSvc)

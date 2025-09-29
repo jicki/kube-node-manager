@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"gorm.io/gorm"
 )
 
 var upgrader = websocket.Upgrader{
@@ -76,6 +77,9 @@ type Service struct {
 	// 新增：完成任务的消息队列，用于重连时恢复
 	completedTasks map[uint][]ProgressMessage
 	completedMutex sync.RWMutex
+	// 数据库进度服务（用于多副本环境）
+	dbProgressService *DatabaseProgressService
+	useDatabase       bool
 }
 
 // NewService 创建进度推送服务
@@ -85,12 +89,20 @@ func NewService(logger *logger.Logger) *Service {
 		tasks:          make(map[string]*TaskProgress),
 		completedTasks: make(map[uint][]ProgressMessage),
 		logger:         logger,
+		useDatabase:    false, // 默认使用内存模式
 	}
 
 	// 启动定期清理goroutine
 	go s.cleanupStaleConnections()
 
 	return s
+}
+
+// EnableDatabaseMode 启用数据库模式（用于多副本环境）
+func (s *Service) EnableDatabaseMode(db *gorm.DB) {
+	s.dbProgressService = NewDatabaseProgressService(db, s.logger, s)
+	s.useDatabase = true
+	s.logger.Infof("Progress service enabled database mode for multi-replica support")
 }
 
 // SetAuthService 设置认证服务
@@ -672,6 +684,12 @@ func (s *Service) ProcessBatchWithProgress(
 	maxConcurrency int,
 	processor BatchProcessor,
 ) error {
+	// 如果启用了数据库模式，使用数据库进度服务
+	if s.useDatabase && s.dbProgressService != nil {
+		return s.dbProgressService.ProcessBatchWithProgress(ctx, taskID, action, nodeNames, userID, maxConcurrency, processor)
+	}
+
+	// 否则使用原有的内存模式
 	total := len(nodeNames)
 
 	// 创建任务
