@@ -113,7 +113,7 @@
           <div class="topology-container" ref="topologyRef">
             <div v-loading="loading" class="topology-svg-container">
               <!-- 简化的SVG拓扑图 -->
-              <svg width="100%" height="400" viewBox="0 0 800 400">
+              <svg width="100%" :height="400" :viewBox="currentViewBox" preserveAspectRatio="xMidYMid meet">
                 <!-- 定义渐变 -->
                 <defs>
                   <radialGradient id="nodeGradient" cx="50%" cy="50%" r="50%">
@@ -179,22 +179,22 @@
                   </g>
                 </g>
 
-                <!-- 图例 -->
-                <g class="legend" transform="translate(10, 330)">
-                  <rect x="0" y="0" width="280" height="60" fill="rgba(255,255,255,0.9)" stroke="#ddd" rx="4"/>
-                  <circle cx="15" cy="15" r="8" fill="url(#masterGradient)" />
-                  <text x="30" y="19" font-size="11" fill="#333">Master节点</text>
-                  <circle cx="15" cy="30" r="8" fill="url(#nodeGradient)" />
-                  <text x="30" y="34" font-size="11" fill="#333">Worker节点</text>
+                <!-- 图例 - 使用相对定位 -->
+                <g class="legend">
+                  <rect x="10" y="10" width="280" height="60" fill="rgba(255,255,255,0.9)" stroke="#ddd" rx="4"/>
+                  <circle cx="25" cy="25" r="8" fill="url(#masterGradient)" />
+                  <text x="40" y="29" font-size="11" fill="#333">Master节点</text>
+                  <circle cx="25" cy="40" r="8" fill="url(#nodeGradient)" />
+                  <text x="40" y="44" font-size="11" fill="#333">Worker节点</text>
 
-                  <line x1="120" y1="12" x2="140" y2="12" stroke="#52c41a" stroke-width="2"/>
-                  <text x="145" y="16" font-size="11" fill="#333">物理连接</text>
-                  <line x1="120" y1="22" x2="140" y2="22" stroke="#1890ff" stroke-width="1.5" stroke-dasharray="2,2" opacity="0.7"/>
-                  <text x="145" y="26" font-size="11" fill="#333">逻辑连接</text>
-                  <line x1="120" y1="32" x2="140" y2="32" stroke="#ff4d4f" stroke-width="2" stroke-dasharray="5,5"/>
-                  <text x="145" y="36" font-size="11" fill="#333">异常连接</text>
+                  <line x1="130" y1="22" x2="150" y2="22" stroke="#52c41a" stroke-width="2"/>
+                  <text x="155" y="26" font-size="11" fill="#333">物理连接</text>
+                  <line x1="130" y1="32" x2="150" y2="32" stroke="#1890ff" stroke-width="1.5" stroke-dasharray="2,2" opacity="0.7"/>
+                  <text x="155" y="36" font-size="11" fill="#333">逻辑连接</text>
+                  <line x1="130" y1="42" x2="150" y2="42" stroke="#ff4d4f" stroke-width="2" stroke-dasharray="5,5"/>
+                  <text x="155" y="46" font-size="11" fill="#333">异常连接</text>
 
-                  <text x="5" y="50" font-size="10" fill="#666">当前视图: {{ viewMode === 'physical' ? '物理视图' : '逻辑视图' }}</text>
+                  <text x="15" y="60" font-size="10" fill="#666">当前视图: {{ viewMode === 'physical' ? '物理视图' : '逻辑视图' }}</text>
                 </g>
               </svg>
             </div>
@@ -327,6 +327,7 @@ const connections = ref([])
 const connectivityResults = ref([])
 const realNodesData = ref([])
 const monitoringStatus = ref(null)
+const currentViewBox = ref('0 0 800 400')
 
 // 计算属性
 const currentCluster = computed(() => clusterStore.currentCluster)
@@ -367,7 +368,7 @@ const fetchMonitoringStatus = async () => {
 // 生成拓扑图数据（基于真实节点数据）
 const generateTopologyData = (nodes = realNodesData.value) => {
   if (!nodes || nodes.length === 0) {
-    return { nodes: [], connections: [] }
+    return { nodes: [], connections: [], viewBox: '0 0 800 400' }
   }
 
   const topologyNodesData = []
@@ -383,10 +384,19 @@ const generateTopologyData = (nodes = realNodesData.value) => {
     !masterNodes.some(master => master.name === node.name)
   )
 
-  // 布局配置
-  const centerX = 400
-  const centerY = 200
-  const radius = Math.max(120, 30 * workerNodes.length)
+  // 动态布局配置
+  const totalNodes = nodes.length
+  const minDimension = 300
+  const nodeSpacing = 60
+  const padding = 80
+
+  // 根据节点数量计算最佳布局尺寸
+  const radius = Math.max(100, Math.min(200, nodeSpacing * Math.sqrt(workerNodes.length)))
+  const layoutWidth = Math.max(minDimension, (radius + padding) * 2)
+  const layoutHeight = Math.max(minDimension, (radius + padding) * 2)
+
+  const centerX = layoutWidth / 2
+  const centerY = layoutHeight / 2
 
   // 添加master节点（居中布局）
   masterNodes.forEach((node, index) => {
@@ -444,29 +454,59 @@ const generateTopologyData = (nodes = realNodesData.value) => {
   // 在逻辑视图模式下，添加额外的连接
   if (viewMode.value === 'logical') {
     // 添加worker之间的逻辑连接（基于服务发现、网络策略等）
-    for (let i = 0; i < Math.min(workerNodes.length, 6); i++) {
-      for (let j = i + 1; j < Math.min(workerNodes.length, 6); j++) {
-        if (Math.random() > 0.7) { // 30%概率存在逻辑连接
-          const node1 = topologyNodesData.find(n => n.name === workerNodes[i].name)
-          const node2 = topologyNodesData.find(n => n.name === workerNodes[j].name)
-          if (node1 && node2) {
-            connectionsData.push({
-              from: node1.id,
-              to: node2.id,
-              status: 'healthy',
-              x1: node1.x,
-              y1: node1.y,
-              x2: node2.x,
-              y2: node2.y,
-              type: 'logical'
-            })
-          }
-        }
+    // 使用更智能的连接算法，而不是随机
+    const maxLogicalConnections = Math.min(workerNodes.length - 1, 4)
+
+    for (let i = 0; i < workerNodes.length && connectionsData.filter(c => c.type === 'logical').length < maxLogicalConnections; i++) {
+      // 连接相邻的worker节点以形成逻辑服务链
+      const nextIndex = (i + 1) % workerNodes.length
+      const node1 = topologyNodesData.find(n => n.name === workerNodes[i].name)
+      const node2 = topologyNodesData.find(n => n.name === workerNodes[nextIndex].name)
+
+      if (node1 && node2 && i !== nextIndex) {
+        connectionsData.push({
+          from: node1.id,
+          to: node2.id,
+          status: 'healthy',
+          x1: node1.x,
+          y1: node1.y,
+          x2: node2.x,
+          y2: node2.y,
+          type: 'logical'
+        })
+      }
+    }
+
+    // 如果节点数量较多，添加一些跨越连接以展示服务网格
+    if (workerNodes.length >= 4) {
+      const node1 = topologyNodesData.find(n => n.name === workerNodes[0].name)
+      const node2 = topologyNodesData.find(n => n.name === workerNodes[Math.floor(workerNodes.length / 2)].name)
+
+      if (node1 && node2) {
+        connectionsData.push({
+          from: node1.id,
+          to: node2.id,
+          status: 'healthy',
+          x1: node1.x,
+          y1: node1.y,
+          x2: node2.x,
+          y2: node2.y,
+          type: 'logical'
+        })
       }
     }
   }
 
-  return { nodes: topologyNodesData, connections: connectionsData }
+  // 生成动态viewBox
+  const viewBox = `0 0 ${layoutWidth} ${layoutHeight}`
+
+  return {
+    nodes: topologyNodesData,
+    connections: connectionsData,
+    viewBox,
+    layoutWidth,
+    layoutHeight
+  }
 }
 
 // 获取连接颜色
@@ -521,9 +561,10 @@ const refreshTopology = async () => {
     const nodes = await fetchNodesData()
 
     // 生成拓扑数据
-    const { nodes: topologyNodesData, connections: connectionsData } = generateTopologyData(nodes)
+    const { nodes: topologyNodesData, connections: connectionsData, viewBox } = generateTopologyData(nodes)
     topologyNodes.value = topologyNodesData
     connections.value = connectionsData
+    currentViewBox.value = viewBox
 
     // 更新网络统计
     const healthyNodes = nodes.filter(node => node.status?.toLowerCase() === 'ready')
@@ -673,12 +714,36 @@ watch(viewMode, async (newMode, oldMode) => {
   if (newMode !== oldMode && realNodesData.value.length > 0) {
     console.log(`View mode changed from ${oldMode} to ${newMode}`)
 
+    // 添加过渡效果
+    loading.value = true
+
+    // 短暂延迟以显示加载效果
+    await new Promise(resolve => setTimeout(resolve, 300))
+
     // 重新生成拓扑数据以反映视图变化
-    const { nodes: topologyNodesData, connections: connectionsData } = generateTopologyData(realNodesData.value)
+    const { nodes: topologyNodesData, connections: connectionsData, viewBox } = generateTopologyData(realNodesData.value)
     topologyNodes.value = topologyNodesData
     connections.value = connectionsData
+    currentViewBox.value = viewBox
 
-    ElMessage.success(`已切换到${newMode === 'physical' ? '物理视图' : '逻辑视图'}`)
+    loading.value = false
+
+    // 显示不同的消息以明确视图差异
+    const physicalMessage = '物理视图：显示节点间的直接网络连接'
+    const logicalMessage = '逻辑视图：显示服务间的逻辑关系和通信路径'
+    const message = newMode === 'physical' ? physicalMessage : logicalMessage
+
+    ElMessage.success({
+      message: `已切换到${newMode === 'physical' ? '物理视图' : '逻辑视图'}\n${message}`,
+      duration: 3000
+    })
+
+    console.log(`Topology updated for ${newMode} view:`, {
+      nodes: topologyNodesData.length,
+      connections: connectionsData.length,
+      physicalConnections: connectionsData.filter(c => c.type !== 'logical').length,
+      logicalConnections: connectionsData.filter(c => c.type === 'logical').length
+    })
   }
 })
 
@@ -826,8 +891,29 @@ onMounted(() => {
 
 .topology-svg-container {
   min-height: 400px;
+  max-height: 600px;
   border: 1px solid #f0f0f0;
   border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.topology-svg-container svg {
+  width: 100%;
+  height: auto;
+  min-height: 400px;
+  max-height: 600px;
+  transition: all 0.3s ease;
+}
+
+/* 连接线动画 */
+.connections line {
+  transition: all 0.3s ease;
+}
+
+/* 节点动画 */
+.nodes g {
+  transition: all 0.3s ease;
 }
 
 .node-circle {
@@ -942,6 +1028,16 @@ onMounted(() => {
     grid-template-columns: 1fr;
     gap: 16px;
   }
+
+  .topology-svg-container {
+    min-height: 350px;
+    max-height: 500px;
+  }
+
+  .topology-svg-container svg {
+    min-height: 350px;
+    max-height: 500px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -957,6 +1053,25 @@ onMounted(() => {
   .topology-controls {
     flex-direction: column;
     gap: 8px;
+  }
+
+  .topology-svg-container {
+    min-height: 300px;
+    max-height: 400px;
+  }
+
+  .topology-svg-container svg {
+    min-height: 300px;
+    max-height: 400px;
+  }
+
+  /* 隐藏图例中的部分元素以节省空间 */
+  .legend text {
+    font-size: 10px;
+  }
+
+  .legend rect {
+    width: 220px;
   }
 }
 </style>

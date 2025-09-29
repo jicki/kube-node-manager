@@ -181,6 +181,7 @@ import { useRouter } from 'vue-router'
 import { useClusterStore } from '@/store/modules/cluster'
 import { formatTime } from '@/utils/format'
 import monitoringApi from '@/api/monitoring'
+import nodeApi from '@/api/node'
 import { ElMessage } from 'element-plus'
 import {
   Refresh,
@@ -231,20 +232,14 @@ const checkMonitoringStatus = async () => {
     addMonitoringLog('info', 'System', `开始检查集群 ${currentCluster.value.name} 的监控状态`)
 
     // 获取集群节点数据来计算监控节点数量
-    const nodesResponse = await fetch(`/api/v1/nodes?cluster_name=${currentCluster.value.name}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
+    try {
+      const nodesResponse = await nodeApi.getNodes({ cluster_name: currentCluster.value.name })
+      console.log('Nodes data response:', nodesResponse)
 
-    if (nodesResponse.ok) {
-      const nodesData = await nodesResponse.json()
-      console.log('Nodes data response:', nodesData)
-
-      if (nodesData.data && nodesData.data.nodes) {
-        const totalNodes = nodesData.data.nodes.length
-        const healthyNodes = nodesData.data.nodes.filter(node => node.status === 'Ready').length
+      if (nodesResponse.data.data?.nodes) {
+        const nodes = nodesResponse.data.data.nodes
+        const totalNodes = nodes.length
+        const healthyNodes = nodes.filter(node => node.status?.toLowerCase() === 'ready').length
         const warningNodes = totalNodes - healthyNodes
 
         // 更新节点指标数据
@@ -257,28 +252,22 @@ const checkMonitoringStatus = async () => {
         addMonitoringLog('success', 'NodeMetrics', `发现 ${totalNodes} 个节点，其中 ${healthyNodes} 个健康，${warningNodes} 个异常`)
         console.log('Updated node metrics:', nodeMetrics.value)
       }
-    } else {
-      addMonitoringLog('error', 'NodeMetrics', `获取节点数据失败: HTTP ${nodesResponse.status}`)
+    } catch (error) {
+      console.error('Failed to fetch nodes:', error)
+      addMonitoringLog('error', 'NodeMetrics', `获取节点数据失败: ${error.message}`)
     }
 
     // 可选：同时调用监控状态 API（如果启用了监控）
     if (currentCluster.value.monitoring_enabled) {
       addMonitoringLog('info', 'Monitoring', '检查监控系统状态')
 
-      const monitoringResponse = await fetch(`/api/v1/clusters/${currentCluster.value.id}/monitoring/status`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (monitoringResponse.ok) {
-        const monitoringData = await monitoringResponse.json()
-        console.log('Monitoring status response:', monitoringData)
+      try {
+        const monitoringResponse = await monitoringApi.getMonitoringStatus(currentCluster.value.id)
+        console.log('Monitoring status response:', monitoringResponse)
         addMonitoringLog('success', 'Monitoring', '监控系统运行正常')
-      } else {
-        console.error('Failed to fetch monitoring status:', monitoringResponse.status)
-        addMonitoringLog('error', 'Monitoring', `监控状态检查失败: HTTP ${monitoringResponse.status}`)
+      } catch (error) {
+        console.error('Failed to fetch monitoring status:', error)
+        addMonitoringLog('error', 'Monitoring', `监控状态检查失败: ${error.message}`)
       }
     } else {
       addMonitoringLog('warning', 'Monitoring', '集群未启用监控功能')
