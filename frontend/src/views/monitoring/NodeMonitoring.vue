@@ -377,17 +377,18 @@ const refreshData = async () => {
     const response = await nodeApi.getNodes({ cluster_name: currentCluster.value.name })
     console.log('Node data response:', response)
 
-    if (response.data.data?.nodes) {
+    // Backend returns data directly as array, not wrapped in { nodes: [...] }
+    if (response.data.data && Array.isArray(response.data.data)) {
       // 转换节点数据为监控格式
-      nodes.value = response.data.data.nodes.map(node => {
+      nodes.value = response.data.data.map(node => {
         const cpuUsage = Math.round((node.metrics?.cpu_usage_percentage || Math.random() * 80 + 10))
         const memoryUsage = Math.round((node.metrics?.memory_usage_percentage || Math.random() * 70 + 20))
         const diskUsage = Math.round((node.metrics?.disk_usage_percentage || Math.random() * 60 + 30))
 
         return {
           name: node.name,
-          ip: node.internal_ip || node.external_ip,
-          status: node.status?.toLowerCase() === 'ready' ? 'healthy' : 'warning',
+          ip: node.internal_ip || node.external_ip || node.name.split('.')[0] || 'N/A',
+          status: (node.status === 'Ready' || node.status === 'SchedulingDisabled') ? 'healthy' : 'warning',
           cpu: {
             usage: cpuUsage,
             cores: parseInt(node.capacity?.cpu) || 4,

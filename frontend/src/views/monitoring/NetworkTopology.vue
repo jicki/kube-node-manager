@@ -345,7 +345,10 @@ const fetchNodesData = async () => {
 
   try {
     const response = await nodeApi.getNodes({ cluster_name: currentCluster.value.name })
-    const nodes = response.data.data?.nodes || []
+    console.log('Full API response:', response)
+
+    // Backend returns data directly as array, not wrapped in { nodes: [...] }
+    const nodes = response.data.data || []
     realNodesData.value = nodes
     console.log('Fetched nodes data:', nodes)
     return nodes
@@ -380,14 +383,18 @@ const generateTopologyData = (nodes = realNodesData.value) => {
   const topologyNodesData = []
   const connectionsData = []
 
-  // 分离master和worker节点
+  // 分离master和worker节点 - 基于实际API响应中的roles字段
   const masterNodes = nodes.filter(node =>
-    node.role === 'master' ||
-    node.labels?.['node-role.kubernetes.io/master'] === '' ||
-    node.labels?.['node-role.kubernetes.io/control-plane'] === ''
+    node.roles && (
+      node.roles.includes('master') ||
+      node.roles.includes('control-plane') ||
+      node.roles.includes('controller')
+    )
   )
   const workerNodes = nodes.filter(node =>
-    !masterNodes.some(master => master.name === node.name)
+    !node.roles ||
+    node.roles.includes('worker') ||
+    (!node.roles.includes('master') && !node.roles.includes('control-plane') && !node.roles.includes('controller'))
   )
 
   // 动态布局配置
@@ -411,14 +418,15 @@ const generateTopologyData = (nodes = realNodesData.value) => {
       id: node.name,
       name: node.name,
       type: 'master',
-      status: node.status?.toLowerCase() === 'ready' ? 'healthy' : 'error',
-      ip: node.internal_ip || node.external_ip || 'N/A',
+      status: (node.status === 'Ready' || node.status === 'SchedulingDisabled') ? 'healthy' : 'error',
+      ip: node.internal_ip || node.external_ip || node.name.split('.')[0] || 'N/A',
       connections: workerNodes.length,
       x: masterX,
       y: centerY - 50,
       nodeVersion: node.node_info?.kubelet_version,
       osImage: node.node_info?.os_image,
-      allocatableResources: node.status?.allocatable
+      allocatableResources: node.status?.allocatable,
+      schedulable: node.schedulable
     })
   })
 
@@ -432,14 +440,15 @@ const generateTopologyData = (nodes = realNodesData.value) => {
       id: node.name,
       name: node.name,
       type: 'worker',
-      status: node.status?.toLowerCase() === 'ready' ? 'healthy' : 'error',
-      ip: node.internal_ip || node.external_ip || 'N/A',
+      status: (node.status === 'Ready' || node.status === 'SchedulingDisabled') ? 'healthy' : 'error',
+      ip: node.internal_ip || node.external_ip || node.name.split('.')[0] || 'N/A',
       connections: Math.floor(Math.random() * 50) + 10,
       x,
       y,
       nodeVersion: node.node_info?.kubelet_version,
       osImage: node.node_info?.os_image,
-      allocatableResources: node.status?.allocatable
+      allocatableResources: node.status?.allocatable,
+      schedulable: node.schedulable
     })
 
     // 创建master到worker的连接
@@ -448,7 +457,8 @@ const generateTopologyData = (nodes = realNodesData.value) => {
       connectionsData.push({
         from: master.name,
         to: node.name,
-        status: (node.status?.toLowerCase() === 'ready' && master.status?.toLowerCase() === 'ready') ? 'healthy' : 'error',
+        status: ((node.status === 'Ready' || node.status === 'SchedulingDisabled') &&
+                 (master.status === 'Ready' || master.status === 'SchedulingDisabled')) ? 'healthy' : 'error',
         x1: masterNode.x,
         y1: masterNode.y,
         x2: x,
@@ -573,7 +583,7 @@ const refreshTopology = async () => {
     currentViewBox.value = viewBox
 
     // 更新网络统计
-    const healthyNodes = nodes.filter(node => node.status?.toLowerCase() === 'ready')
+    const healthyNodes = nodes.filter(node => node.status === 'Ready' || node.status === 'SchedulingDisabled')
     const healthyConnections = connectionsData.filter(c => c.status === 'healthy')
 
     networkStats.value = {
@@ -615,22 +625,54 @@ const testConnectivity = async () => {
     testingConnectivity.value = true
     connectivityResults.value = []
 
-    // 生成测试任务
+    // 确保有拓扑节点数据
+    if (topologyNodes.value.length === 0) {
+      ElMessage.warning('请先刷新拓扑图以获取节点数据')
+      return
+    }
+
+    // 生成测试任务 - 确保生成足够的测试用例
     const testTasks = []
-    topologyNodes.value.forEach(from => {
-      topologyNodes.value.forEach(to => {
-        if (from.id !== to.id && testTasks.length < 6) { // 限制测试数量
-          testTasks.push({
-            from: from.name,
-            to: to.name,
-            status: 'testing',
-            timestamp: new Date()
-          })
+
+    // 生成有代表性的测试用例
+    const allNodes = topologyNodes.value
+    const maxTests = Math.min(8, allNodes.length * (allNodes.length - 1) / 2) // 最多8个测试
+
+    for (let i = 0; i < allNodes.length && testTasks.length < maxTests; i++) {
+      for (let j = i + 1; j < allNodes.length && testTasks.length < maxTests; j++) {
+        testTasks.push({
+          from: allNodes[i].name,
+          to: allNodes[j].name,
+          status: 'testing',
+          timestamp: new Date()
+        })
+      }
+    }
+
+    // 如果测试用例太少，添加一些单向测试
+    if (testTasks.length < 4 && allNodes.length >= 2) {
+      for (let i = 0; i < allNodes.length && testTasks.length < 6; i++) {
+        for (let j = 0; j < allNodes.length && testTasks.length < 6; j++) {
+          if (i !== j) {
+            const existingTest = testTasks.find(t =>
+              (t.from === allNodes[i].name && t.to === allNodes[j].name) ||
+              (t.from === allNodes[j].name && t.to === allNodes[i].name)
+            )
+            if (!existingTest) {
+              testTasks.push({
+                from: allNodes[i].name,
+                to: allNodes[j].name,
+                status: 'testing',
+                timestamp: new Date()
+              })
+            }
+          }
         }
-      })
-    })
+      }
+    }
 
     connectivityResults.value = testTasks
+    console.log('Generated connectivity test tasks:', testTasks)
 
     // 调用监控API进行连通性测试
     try {
@@ -663,8 +705,12 @@ const testConnectivity = async () => {
       console.warn('Real API failed, falling back to simulation:', apiError)
 
       // 如果API失败，使用模拟数据
-      for (let i = 0; i < connectivityResults.value.length; i++) {
-        await new Promise(resolve => setTimeout(resolve, 500))
+      const totalTests = connectivityResults.value.length
+      console.log(`Running simulation for ${totalTests} tests`)
+
+      for (let i = 0; i < totalTests; i++) {
+        // 添加延迟以显示测试进度
+        await new Promise(resolve => setTimeout(resolve, 300))
 
         const success = Math.random() > 0.2 // 80%成功率
         connectivityResults.value[i] = {
@@ -672,8 +718,11 @@ const testConnectivity = async () => {
           status: success ? 'success' : 'error',
           latency: success ? Math.floor(Math.random() * 100) + 10 : null,
           packetLoss: success ? Math.floor(Math.random() * 5) : null,
-          error: success ? null : '连接超时'
+          error: success ? null : '连接超时',
+          timestamp: new Date()
         }
+
+        console.log(`Test ${i + 1}/${totalTests} completed:`, connectivityResults.value[i])
       }
     }
 

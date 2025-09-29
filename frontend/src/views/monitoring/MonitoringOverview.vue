@@ -236,10 +236,11 @@ const checkMonitoringStatus = async () => {
       const nodesResponse = await nodeApi.getNodes({ cluster_name: currentCluster.value.name })
       console.log('Nodes data response:', nodesResponse)
 
-      if (nodesResponse.data.data?.nodes) {
-        const nodes = nodesResponse.data.data.nodes
+      // Backend returns data directly as array, not wrapped in { nodes: [...] }
+      if (nodesResponse.data.data && Array.isArray(nodesResponse.data.data)) {
+        const nodes = nodesResponse.data.data
         const totalNodes = nodes.length
-        const healthyNodes = nodes.filter(node => node.status?.toLowerCase() === 'ready').length
+        const healthyNodes = nodes.filter(node => node.status === 'Ready' || node.status === 'SchedulingDisabled').length
         const warningNodes = totalNodes - healthyNodes
 
         // 更新节点指标数据
