@@ -73,9 +73,9 @@ const router = createRouter({
         },
         {
           path: 'monitoring/network',
-          name: 'NetworkTopology',
+          name: 'NetworkDetection',
           component: () => import('@/views/monitoring/NetworkTopology.vue'),
-          meta: { title: '网络拓扑', icon: 'Connection', requiresAuth: true }
+          meta: { title: '网络检测', icon: 'Connection', requiresAuth: true }
         },
         {
           path: 'profile',

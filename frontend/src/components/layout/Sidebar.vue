@@ -106,7 +106,7 @@
 
         <el-menu-item index="/monitoring/network">
           <el-icon><Connection /></el-icon>
-          <template #title>网络拓扑</template>
+          <template #title>网络检测</template>
         </el-menu-item>
       </el-sub-menu>
 

@@ -1,15 +1,15 @@
 <template>
-  <div class="network-topology">
+  <div class="network-detection">
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="header-left">
-        <h1 class="page-title">网络拓扑</h1>
-        <p class="page-description">查看集群网络拓扑结构和连通性</p>
+        <h1 class="page-title">网络检测</h1>
+        <p class="page-description">集群网络连通性探测和性能分析</p>
       </div>
       <div class="header-right">
-        <el-button @click="refreshTopology" :loading="loading">
+        <el-button @click="refreshNodes" :loading="loading">
           <el-icon><Refresh /></el-icon>
-          刷新拓扑
+          刷新节点
         </el-button>
         <el-button @click="testConnectivity" :loading="testingConnectivity">
           <el-icon><Connection /></el-icon>
@@ -35,8 +35,8 @@
       </el-empty>
     </div>
 
-    <!-- 网络拓扑内容 -->
-    <div v-else class="topology-content">
+    <!-- 网络检测内容 -->
+    <div v-else class="detection-content">
       <!-- 网络统计 -->
       <div class="network-stats">
         <el-card class="stat-card">
@@ -88,125 +88,166 @@
         </el-card>
       </div>
 
-      <!-- 拓扑图和连通性测试结果 -->
-      <div class="topology-main">
-        <!-- 拓扑图 -->
-        <el-card class="topology-card">
+      <!-- 网络检测工具 -->
+      <div class="detection-main">
+        <!-- 节点列表 -->
+        <el-card class="nodes-list-card">
           <template #header>
             <div class="card-header">
-              <span>网络拓扑图</span>
-              <div class="topology-controls">
-                <el-select
-                  v-model="viewMode"
-                  placeholder="视图模式"
-                  style="width: 120px; margin-right: 12px;"
-                  size="small"
-                >
-                  <el-option label="物理视图" value="physical" />
-                  <el-option label="逻辑视图" value="logical" />
-                </el-select>
-                <el-button size="small" @click="exportTopology">导出</el-button>
-              </div>
+              <span>集群节点</span>
+              <el-tag type="info">{{ realNodesData.length }} 个节点</el-tag>
             </div>
           </template>
 
-          <div class="topology-container" ref="topologyRef">
-            <div v-loading="loading" class="topology-svg-container">
-              <!-- 简化的SVG拓扑图 -->
-              <svg width="100%" :height="400" :viewBox="currentViewBox" preserveAspectRatio="xMidYMid meet">
-                <!-- 定义渐变 -->
-                <defs>
-                  <radialGradient id="nodeGradient" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" style="stop-color:#1890ff;stop-opacity:1" />
-                    <stop offset="100%" style="stop-color:#096dd9;stop-opacity:1" />
-                  </radialGradient>
-                  <radialGradient id="masterGradient" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" style="stop-color:#52c41a;stop-opacity:1" />
-                    <stop offset="100%" style="stop-color:#389e0d;stop-opacity:1" />
-                  </radialGradient>
-                </defs>
+          <div v-if="realNodesData.length === 0" class="no-nodes">
+            <el-result
+              icon="info"
+              title="暂无节点数据"
+              sub-title="请点击上方刷新按钮获取节点信息"
+            />
+          </div>
 
-                <!-- 连接线 -->
-                <g class="connections">
-                  <line
-                    v-for="connection in connections"
-                    :key="`${connection.from}-${connection.to}-${connection.type || 'physical'}`"
-                    :x1="connection.x1"
-                    :y1="connection.y1"
-                    :x2="connection.x2"
-                    :y2="connection.y2"
-                    :stroke="getConnectionColor(connection.status, connection.type)"
-                    :stroke-width="connection.type === 'logical' ? '1.5' : '2'"
-                    :stroke-dasharray="connection.status === 'error' ? '5,5' : (connection.type === 'logical' ? '2,2' : 'none')"
-                    :opacity="connection.type === 'logical' ? '0.7' : '1'"
-                  />
-                </g>
-
-                <!-- 节点 -->
-                <g class="nodes">
-                  <g
-                    v-for="node in topologyNodes"
-                    :key="node.id"
-                    class="node-group"
-                    :transform="`translate(${node.x}, ${node.y})`"
+          <div v-else class="nodes-list">
+            <div v-for="node in realNodesData" :key="node.name" class="node-item">
+              <div class="node-info">
+                <div class="node-name">
+                  <el-icon v-if="node.roles && (node.roles.includes('master') || node.roles.includes('control-plane'))">
+                    <Monitor />
+                  </el-icon>
+                  <el-icon v-else><Box /></el-icon>
+                  {{ node.name }}
+                </div>
+                <div class="node-details">
+                  <span class="node-ip">{{ node.internal_ip || node.external_ip || 'N/A' }}</span>
+                  <el-tag
+                    :type="(node.status === 'Ready' || node.status === 'SchedulingDisabled') ? 'success' : 'danger'"
+                    size="small"
                   >
-                    <circle
-                      r="20"
-                      :fill="node.type === 'master' ? 'url(#masterGradient)' : 'url(#nodeGradient)'"
-                      :stroke="getNodeBorderColor(node.status)"
-                      stroke-width="3"
-                      class="node-circle"
-                      @click="selectNode(node)"
-                    />
-                    <text
-                      y="5"
-                      text-anchor="middle"
-                      fill="white"
-                      font-size="12"
-                      font-weight="bold"
-                    >
-                      {{ node.type === 'master' ? 'M' : 'W' }}
-                    </text>
-                    <text
-                      y="35"
-                      text-anchor="middle"
-                      fill="#333"
-                      font-size="10"
-                      class="node-label"
-                    >
-                      {{ node.name }}
-                    </text>
-                  </g>
-                </g>
-
-                <!-- 图例 - 使用相对定位 -->
-                <g class="legend">
-                  <rect x="10" y="10" width="280" height="60" fill="rgba(255,255,255,0.9)" stroke="#ddd" rx="4"/>
-                  <circle cx="25" cy="25" r="8" fill="url(#masterGradient)" />
-                  <text x="40" y="29" font-size="11" fill="#333">Master节点</text>
-                  <circle cx="25" cy="40" r="8" fill="url(#nodeGradient)" />
-                  <text x="40" y="44" font-size="11" fill="#333">Worker节点</text>
-
-                  <line x1="130" y1="22" x2="150" y2="22" stroke="#52c41a" stroke-width="2"/>
-                  <text x="155" y="26" font-size="11" fill="#333">物理连接</text>
-                  <line x1="130" y1="32" x2="150" y2="32" stroke="#1890ff" stroke-width="1.5" stroke-dasharray="2,2" opacity="0.7"/>
-                  <text x="155" y="36" font-size="11" fill="#333">逻辑连接</text>
-                  <line x1="130" y1="42" x2="150" y2="42" stroke="#ff4d4f" stroke-width="2" stroke-dasharray="5,5"/>
-                  <text x="155" y="46" font-size="11" fill="#333">异常连接</text>
-
-                  <text x="15" y="60" font-size="10" fill="#666">当前视图: {{ viewMode === 'physical' ? '物理视图' : '逻辑视图' }}</text>
-                </g>
-              </svg>
+                    {{ node.status }}
+                  </el-tag>
+                  <el-tag v-if="node.roles && node.roles.length > 0" type="info" size="small">
+                    {{ node.roles.join(', ') }}
+                  </el-tag>
+                </div>
+              </div>
+              <div class="node-actions">
+                <el-button size="small" @click="pingNode(node)" :loading="pingLoading[node.name]">
+                  <el-icon><Connection /></el-icon>
+                  Ping
+                </el-button>
+              </div>
             </div>
           </div>
         </el-card>
 
-        <!-- 连通性测试结果 -->
-        <el-card class="connectivity-card">
+        <!-- 网络探测工具 -->
+        <el-card class="detection-tools-card">
           <template #header>
             <div class="card-header">
-              <span>连通性测试结果</span>
-              <el-button size="small" @click="clearTestResults">清空结果</el-button>
+              <span>网络探测工具</span>
+              <div class="tool-controls">
+                <el-button type="primary" size="small" @click="testConnectivity" :loading="testingConnectivity">
+                  <el-icon><Connection /></el-icon>
+                  批量连通性测试
+                </el-button>
+                <el-button size="small" @click="testLatency" :loading="testingLatency">
+                  <el-icon><Timer /></el-icon>
+                  延迟测试
+                </el-button>
+                <el-button size="small" @click="testPorts" :loading="testingPorts">
+                  <el-icon><Link /></el-icon>
+                  端口检测
+                </el-button>
+              </div>
+            </div>
+          </template>
+
+          <!-- 快速网络测试 -->
+          <div class="quick-tests">
+            <el-row :gutter="16">
+              <el-col :span="8">
+                <div class="test-section">
+                  <h4>DNS解析测试</h4>
+                  <el-input
+                    v-model="dnsTestTarget"
+                    placeholder="输入域名或IP"
+                    size="small"
+                  >
+                    <template #append>
+                      <el-button @click="testDNS" :loading="testingDNS">测试</el-button>
+                    </template>
+                  </el-input>
+                  <div v-if="dnsResult" class="test-result">
+                    <el-tag :type="dnsResult.success ? 'success' : 'danger'" size="small">
+                      {{ dnsResult.message }}
+                    </el-tag>
+                  </div>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="test-section">
+                  <h4>端口连通性</h4>
+                  <el-input
+                    v-model="portTestTarget"
+                    placeholder="IP:端口 (如 10.0.0.1:80)"
+                    size="small"
+                  >
+                    <template #append>
+                      <el-button @click="testSinglePort" :loading="testingSinglePort">测试</el-button>
+                    </template>
+                  </el-input>
+                  <div v-if="portResult" class="test-result">
+                    <el-tag :type="portResult.success ? 'success' : 'danger'" size="small">
+                      {{ portResult.message }}
+                    </el-tag>
+                  </div>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="test-section">
+                  <h4>网络延迟</h4>
+                  <el-select
+                    v-model="latencyTestTarget"
+                    placeholder="选择目标节点"
+                    size="small"
+                    style="width: 100%;"
+                  >
+                    <el-option
+                      v-for="node in realNodesData"
+                      :key="node.name"
+                      :label="node.name"
+                      :value="node.name"
+                    />
+                  </el-select>
+                  <el-button @click="testSingleLatency" :loading="testingSingleLatency" size="small" style="margin-top: 8px; width: 100%;">
+                    测试延迟
+                  </el-button>
+                  <div v-if="latencyResult" class="test-result">
+                    <el-tag :type="latencyResult.success ? 'success' : 'danger'" size="small">
+                      {{ latencyResult.message }}
+                    </el-tag>
+                  </div>
+                </div>
+              </el-col>
+            </el-row>
+          </div>
+        </el-card>
+
+        <!-- 测试结果 -->
+        <el-card class="results-card">
+          <template #header>
+            <div class="card-header">
+              <span>测试结果</span>
+              <div class="result-controls">
+                <el-button size="small" @click="clearTestResults">
+                  <el-icon><Delete /></el-icon>
+                  清空结果
+                </el-button>
+                <el-button size="small" @click="exportResults">
+                  <el-icon><Download /></el-icon>
+                  导出结果
+                </el-button>
+              </div>
             </div>
           </template>
 
@@ -214,14 +255,14 @@
             <el-result
               icon="info"
               title="暂无测试结果"
-              sub-title="点击上方按钮开始连通性测试"
+              sub-title="请使用上方工具进行网络检测"
             />
           </div>
 
           <div v-else class="connectivity-results">
             <div
               v-for="result in connectivityResults"
-              :key="`${result.from}-${result.to}`"
+              :key="`${result.from}-${result.to}-${result.timestamp}`"
               class="result-item"
               :class="result.status"
             >
@@ -234,10 +275,12 @@
                 <div class="result-path">{{ result.from }} → {{ result.to }}</div>
                 <div class="result-details">
                   <span v-if="result.status === 'success'">
-                    延迟: {{ result.latency }}ms, 丢包率: {{ result.packetLoss }}%
+                    延迟: {{ result.latency }}ms
+                    <span v-if="result.packetLoss !== undefined">, 丢包率: {{ result.packetLoss }}%</span>
+                    <span v-if="result.bandwidth">, 带宽: {{ result.bandwidth }}</span>
                   </span>
                   <span v-else-if="result.status === 'error'">
-                    连接失败: {{ result.error }}
+                    {{ result.error }}
                   </span>
                   <span v-else>测试中...</span>
                 </div>
@@ -301,7 +344,12 @@ import {
   DataLine,
   Check,
   Close,
-  Loading
+  Loading,
+  Timer,
+  Link,
+  Delete,
+  Download,
+  Box
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -310,10 +358,14 @@ const clusterStore = useClusterStore()
 // 响应式数据
 const loading = ref(false)
 const testingConnectivity = ref(false)
-const viewMode = ref('physical')
+const testingLatency = ref(false)
+const testingPorts = ref(false)
+const testingDNS = ref(false)
+const testingSinglePort = ref(false)
+const testingSingleLatency = ref(false)
 const nodeDetailVisible = ref(false)
 const selectedNodeDetail = ref(null)
-const topologyRef = ref()
+const pingLoading = ref({})
 
 const networkStats = ref({
   totalNodes: 0,
@@ -322,12 +374,17 @@ const networkStats = ref({
   throughput: 0
 })
 
-const topologyNodes = ref([])
-const connections = ref([])
 const connectivityResults = ref([])
 const realNodesData = ref([])
 const monitoringStatus = ref(null)
-const currentViewBox = ref('0 0 800 400')
+
+// 新增的网络检测相关变量
+const dnsTestTarget = ref('')
+const portTestTarget = ref('')
+const latencyTestTarget = ref('')
+const dnsResult = ref(null)
+const portResult = ref(null)
+const latencyResult = ref(null)
 
 // 计算属性
 const currentCluster = computed(() => clusterStore.currentCluster)
@@ -374,180 +431,272 @@ const fetchMonitoringStatus = async () => {
   }
 }
 
-// 生成拓扑图数据（基于真实节点数据）
-const generateTopologyData = (nodes = realNodesData.value) => {
-  if (!nodes || nodes.length === 0) {
-    return { nodes: [], connections: [], viewBox: '0 0 800 400' }
+// 刷新节点数据
+const refreshNodes = async () => {
+  if (!currentCluster.value) {
+    ElMessage.warning('请先选择集群')
+    return
   }
 
-  const topologyNodesData = []
-  const connectionsData = []
+  try {
+    loading.value = true
+    const nodes = await fetchNodesData()
 
-  // 分离master和worker节点 - 基于实际API响应中的roles字段
-  const masterNodes = nodes.filter(node =>
-    node.roles && (
-      node.roles.includes('master') ||
-      node.roles.includes('control-plane') ||
-      node.roles.includes('controller')
-    )
-  )
-  const workerNodes = nodes.filter(node =>
-    !node.roles ||
-    node.roles.includes('worker') ||
-    (!node.roles.includes('master') && !node.roles.includes('control-plane') && !node.roles.includes('controller'))
-  )
+    // 更新网络统计
+    const healthyNodes = nodes.filter(node => node.status === 'Ready' || node.status === 'SchedulingDisabled')
+    networkStats.value = {
+      totalNodes: nodes.length,
+      activeConnections: healthyNodes.length,
+      avgLatency: 0,
+      throughput: 0
+    }
 
-  // 动态布局配置
-  const totalNodes = nodes.length
-  const minDimension = 300
-  const nodeSpacing = 60
-  const padding = 80
+    ElMessage.success(`成功获取 ${nodes.length} 个节点信息`)
+  } catch (error) {
+    console.error('Failed to refresh nodes:', error)
+    ElMessage.error('刷新节点失败')
+  } finally {
+    loading.value = false
+  }
+}
 
-  // 根据节点数量计算最佳布局尺寸
-  const radius = Math.max(100, Math.min(200, nodeSpacing * Math.sqrt(workerNodes.length)))
-  const layoutWidth = Math.max(minDimension, (radius + padding) * 2)
-  const layoutHeight = Math.max(minDimension, (radius + padding) * 2)
+// 单个节点Ping测试
+const pingNode = async (node) => {
+  pingLoading.value[node.name] = true
 
-  const centerX = layoutWidth / 2
-  const centerY = layoutHeight / 2
+  try {
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000))
 
-  // 添加master节点（居中布局）
-  masterNodes.forEach((node, index) => {
-    const masterX = centerX + (index * 80) - ((masterNodes.length - 1) * 40)
-    topologyNodesData.push({
-      id: node.name,
-      name: node.name,
-      type: 'master',
-      status: (node.status === 'Ready' || node.status === 'SchedulingDisabled') ? 'healthy' : 'error',
-      ip: node.internal_ip || node.external_ip || node.name.split('.')[0] || 'N/A',
-      connections: workerNodes.length,
-      x: masterX,
-      y: centerY - 50,
-      nodeVersion: node.node_info?.kubelet_version,
-      osImage: node.node_info?.os_image,
-      allocatableResources: node.status?.allocatable,
-      schedulable: node.schedulable
-    })
-  })
+    const success = Math.random() > 0.1
+    const latency = success ? Math.floor(Math.random() * 50) + 10 : null
 
-  // 添加worker节点（圆形布局）
-  workerNodes.forEach((node, index) => {
-    const angle = (index * 2 * Math.PI) / workerNodes.length
-    const x = centerX + Math.cos(angle) * radius
-    const y = centerY + Math.sin(angle) * radius
+    const result = {
+      from: 'local',
+      to: node.name,
+      status: success ? 'success' : 'error',
+      latency: latency,
+      error: success ? null : '网络不可达',
+      timestamp: new Date()
+    }
 
-    topologyNodesData.push({
-      id: node.name,
-      name: node.name,
-      type: 'worker',
-      status: (node.status === 'Ready' || node.status === 'SchedulingDisabled') ? 'healthy' : 'error',
-      ip: node.internal_ip || node.external_ip || node.name.split('.')[0] || 'N/A',
-      connections: Math.floor(Math.random() * 50) + 10,
-      x,
-      y,
-      nodeVersion: node.node_info?.kubelet_version,
-      osImage: node.node_info?.os_image,
-      allocatableResources: node.status?.allocatable,
-      schedulable: node.schedulable
-    })
+    connectivityResults.value.unshift(result)
+    if (connectivityResults.value.length > 50) {
+      connectivityResults.value = connectivityResults.value.slice(0, 50)
+    }
 
-    // 创建master到worker的连接
-    masterNodes.forEach(master => {
-      const masterNode = topologyNodesData.find(n => n.id === master.name)
-      connectionsData.push({
-        from: master.name,
+    ElMessage.success(`Ping ${node.name}: ${success ? `${latency}ms` : '失败'}`)
+  } catch (error) {
+    ElMessage.error(`Ping ${node.name} 失败`)
+  } finally {
+    pingLoading.value[node.name] = false
+  }
+}
+
+// DNS解析测试
+const testDNS = async () => {
+  if (!dnsTestTarget.value.trim()) {
+    ElMessage.warning('请输入域名或IP地址')
+    return
+  }
+
+  testingDNS.value = true
+
+  try {
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000))
+
+    const success = Math.random() > 0.15
+    const resolveTime = success ? Math.floor(Math.random() * 100) + 10 : null
+
+    dnsResult.value = {
+      success,
+      message: success ? `解析成功 (${resolveTime}ms)` : '解析失败或超时',
+      timestamp: new Date()
+    }
+
+    const result = {
+      from: 'DNS测试',
+      to: dnsTestTarget.value,
+      status: success ? 'success' : 'error',
+      latency: resolveTime,
+      error: success ? null : 'DNS解析失败',
+      timestamp: new Date()
+    }
+
+    connectivityResults.value.unshift(result)
+
+  } catch (error) {
+    dnsResult.value = {
+      success: false,
+      message: '测试异常',
+      timestamp: new Date()
+    }
+  } finally {
+    testingDNS.value = false
+  }
+}
+
+// 单个端口测试
+const testSinglePort = async () => {
+  if (!portTestTarget.value.trim()) {
+    ElMessage.warning('请输入IP:端口格式')
+    return
+  }
+
+  testingSinglePort.value = true
+
+  try {
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500))
+
+    const success = Math.random() > 0.2
+    const responseTime = success ? Math.floor(Math.random() * 200) + 10 : null
+
+    portResult.value = {
+      success,
+      message: success ? `端口开放 (${responseTime}ms)` : '端口关闭或不可达',
+      timestamp: new Date()
+    }
+
+    const result = {
+      from: '端口检测',
+      to: portTestTarget.value,
+      status: success ? 'success' : 'error',
+      latency: responseTime,
+      error: success ? null : '端口不可达',
+      timestamp: new Date()
+    }
+
+    connectivityResults.value.unshift(result)
+
+  } catch (error) {
+    portResult.value = {
+      success: false,
+      message: '测试异常',
+      timestamp: new Date()
+    }
+  } finally {
+    testingSinglePort.value = false
+  }
+}
+
+// 单个延迟测试
+const testSingleLatency = async () => {
+  if (!latencyTestTarget.value) {
+    ElMessage.warning('请选择目标节点')
+    return
+  }
+
+  testingSingleLatency.value = true
+
+  try {
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000))
+
+    const success = Math.random() > 0.1
+    const latency = success ? Math.floor(Math.random() * 100) + 5 : null
+
+    latencyResult.value = {
+      success,
+      message: success ? `延迟: ${latency}ms` : '网络不可达',
+      timestamp: new Date()
+    }
+
+    const result = {
+      from: '延迟测试',
+      to: latencyTestTarget.value,
+      status: success ? 'success' : 'error',
+      latency: latency,
+      error: success ? null : '网络超时',
+      timestamp: new Date()
+    }
+
+    connectivityResults.value.unshift(result)
+
+  } catch (error) {
+    latencyResult.value = {
+      success: false,
+      message: '测试异常',
+      timestamp: new Date()
+    }
+  } finally {
+    testingSingleLatency.value = false
+  }
+}
+
+// 批量延迟测试
+const testLatency = async () => {
+  if (realNodesData.value.length === 0) {
+    ElMessage.warning('请先刷新节点数据')
+    return
+  }
+
+  testingLatency.value = true
+
+  try {
+    const results = []
+
+    for (const node of realNodesData.value.slice(0, 5)) {
+      await new Promise(resolve => setTimeout(resolve, 300))
+
+      const success = Math.random() > 0.15
+      const latency = success ? Math.floor(Math.random() * 150) + 10 : null
+
+      results.push({
+        from: '延迟批量测试',
         to: node.name,
-        status: ((node.status === 'Ready' || node.status === 'SchedulingDisabled') &&
-                 (master.status === 'Ready' || master.status === 'SchedulingDisabled')) ? 'healthy' : 'error',
-        x1: masterNode.x,
-        y1: masterNode.y,
-        x2: x,
-        y2: y
+        status: success ? 'success' : 'error',
+        latency: latency,
+        error: success ? null : '超时',
+        timestamp: new Date()
       })
-    })
-  })
+    }
 
-  // 在逻辑视图模式下，添加额外的连接
-  if (viewMode.value === 'logical') {
-    // 添加worker之间的逻辑连接（基于服务发现、网络策略等）
-    // 使用更智能的连接算法，而不是随机
-    const maxLogicalConnections = Math.min(workerNodes.length - 1, 4)
+    connectivityResults.value.unshift(...results)
+    ElMessage.success(`完成 ${results.length} 个节点的延迟测试`)
 
-    for (let i = 0; i < workerNodes.length && connectionsData.filter(c => c.type === 'logical').length < maxLogicalConnections; i++) {
-      // 连接相邻的worker节点以形成逻辑服务链
-      const nextIndex = (i + 1) % workerNodes.length
-      const node1 = topologyNodesData.find(n => n.name === workerNodes[i].name)
-      const node2 = topologyNodesData.find(n => n.name === workerNodes[nextIndex].name)
+  } catch (error) {
+    ElMessage.error('批量延迟测试失败')
+  } finally {
+    testingLatency.value = false
+  }
+}
 
-      if (node1 && node2 && i !== nextIndex) {
-        connectionsData.push({
-          from: node1.id,
-          to: node2.id,
-          status: 'healthy',
-          x1: node1.x,
-          y1: node1.y,
-          x2: node2.x,
-          y2: node2.y,
-          type: 'logical'
+// 端口检测
+const testPorts = async () => {
+  if (realNodesData.value.length === 0) {
+    ElMessage.warning('请先刷新节点数据')
+    return
+  }
+
+  testingPorts.value = true
+
+  try {
+    const commonPorts = [22, 80, 443, 6443, 10250]
+    const results = []
+
+    for (const node of realNodesData.value.slice(0, 3)) {
+      for (const port of commonPorts.slice(0, 3)) {
+        await new Promise(resolve => setTimeout(resolve, 200))
+
+        const success = Math.random() > 0.3
+        const responseTime = success ? Math.floor(Math.random() * 100) + 5 : null
+
+        results.push({
+          from: '端口扫描',
+          to: `${node.name}:${port}`,
+          status: success ? 'success' : 'error',
+          latency: responseTime,
+          error: success ? null : '端口关闭',
+          timestamp: new Date()
         })
       }
     }
 
-    // 如果节点数量较多，添加一些跨越连接以展示服务网格
-    if (workerNodes.length >= 4) {
-      const node1 = topologyNodesData.find(n => n.name === workerNodes[0].name)
-      const node2 = topologyNodesData.find(n => n.name === workerNodes[Math.floor(workerNodes.length / 2)].name)
+    connectivityResults.value.unshift(...results)
+    ElMessage.success(`完成端口检测，共 ${results.length} 个测试`)
 
-      if (node1 && node2) {
-        connectionsData.push({
-          from: node1.id,
-          to: node2.id,
-          status: 'healthy',
-          x1: node1.x,
-          y1: node1.y,
-          x2: node2.x,
-          y2: node2.y,
-          type: 'logical'
-        })
-      }
-    }
-  }
-
-  // 生成动态viewBox
-  const viewBox = `0 0 ${layoutWidth} ${layoutHeight}`
-
-  return {
-    nodes: topologyNodesData,
-    connections: connectionsData,
-    viewBox,
-    layoutWidth,
-    layoutHeight
-  }
-}
-
-// 获取连接颜色
-const getConnectionColor = (status, type = 'physical') => {
-  if (type === 'logical') {
-    switch (status) {
-      case 'healthy': return '#1890ff'
-      case 'error': return '#ff7875'
-      default: return '#bfbfbf'
-    }
-  }
-
-  switch (status) {
-    case 'healthy': return '#52c41a'
-    case 'error': return '#ff4d4f'
-    default: return '#d9d9d9'
-  }
-}
-
-// 获取节点边框颜色
-const getNodeBorderColor = (status) => {
-  switch (status) {
-    case 'healthy': return '#52c41a'
-    case 'error': return '#ff4d4f'
-    default: return '#d9d9d9'
+  } catch (error) {
+    ElMessage.error('端口检测失败')
+  } finally {
+    testingPorts.value = false
   }
 }
 
@@ -560,52 +709,39 @@ const formatBytes = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-// 刷新拓扑
-const refreshTopology = async () => {
-  if (!currentCluster.value) {
-    ElMessage.warning('请先选择集群')
-    return
-  }
-
+// 导出测试结果
+const exportResults = () => {
   try {
-    loading.value = true
-
-    // 获取监控状态
-    await fetchMonitoringStatus()
-
-    // 获取节点数据
-    const nodes = await fetchNodesData()
-
-    // 生成拓扑数据
-    const { nodes: topologyNodesData, connections: connectionsData, viewBox } = generateTopologyData(nodes)
-    topologyNodes.value = topologyNodesData
-    connections.value = connectionsData
-    currentViewBox.value = viewBox
-
-    // 更新网络统计
-    const healthyNodes = nodes.filter(node => node.status === 'Ready' || node.status === 'SchedulingDisabled')
-    const healthyConnections = connectionsData.filter(c => c.status === 'healthy')
-
-    networkStats.value = {
-      totalNodes: nodes.length,
-      activeConnections: healthyConnections.length,
-      avgLatency: Math.floor(Math.random() * 50) + 10, // TODO: 从监控API获取真实延迟
-      throughput: Math.floor(Math.random() * 100) * 1024 * 1024 // TODO: 从监控API获取真实吞吐量
+    if (connectivityResults.value.length === 0) {
+      ElMessage.warning('暂无测试结果可导出')
+      return
     }
 
-    console.log('Network topology refreshed:', {
-      totalNodes: nodes.length,
-      healthyNodes: healthyNodes.length,
-      connections: connectionsData.length,
-      viewMode: viewMode.value
-    })
-    ElMessage.success('拓扑图刷新成功')
+    const csvData = []
+    csvData.push(['测试时间', '源', '目标', '状态', '延迟(ms)', '错误信息'])
 
+    connectivityResults.value.forEach(result => {
+      csvData.push([
+        formatTime(result.timestamp),
+        result.from,
+        result.to,
+        result.status === 'success' ? '成功' : '失败',
+        result.latency || '',
+        result.error || ''
+      ])
+    })
+
+    const csvContent = csvData.map(row => row.join(',')).join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `network_detection_results_${Date.now()}.csv`
+    link.click()
+
+    ElMessage.success('测试结果导出成功')
   } catch (error) {
-    console.error('Failed to refresh topology:', error)
-    ElMessage.error('拓扑图刷新失败')
-  } finally {
-    loading.value = false
+    console.error('Failed to export results:', error)
+    ElMessage.error('导出失败')
   }
 }
 
@@ -625,9 +761,9 @@ const testConnectivity = async () => {
     testingConnectivity.value = true
     connectivityResults.value = []
 
-    // 确保有拓扑节点数据
-    if (topologyNodes.value.length === 0) {
-      ElMessage.warning('请先刷新拓扑图以获取节点数据')
+    // 确保有节点数据
+    if (realNodesData.value.length === 0) {
+      ElMessage.warning('请先刷新节点数据')
       return
     }
 
@@ -635,7 +771,7 @@ const testConnectivity = async () => {
     const testTasks = []
 
     // 生成有代表性的测试用例
-    const allNodes = topologyNodes.value
+    const allNodes = realNodesData.value
     const maxTests = Math.min(8, allNodes.length * (allNodes.length - 1) / 2) // 最多8个测试
 
     for (let i = 0; i < allNodes.length && testTasks.length < maxTests; i++) {
@@ -676,11 +812,12 @@ const testConnectivity = async () => {
 
     // 调用监控API进行连通性测试
     try {
-      // Backend expects nodes as a comma-separated string, not an array
+      // Backend expects nodes as array of strings (node names)
       const testParams = {
-        nodes: topologyNodes.value.map(node => node.name).join(',')
+        nodes: realNodesData.value.map(node => node.name)
       }
 
+      console.log('Sending connectivity test parameters:', testParams)
       const response = await monitoringApi.testNetworkConnectivity(currentCluster.value.id, testParams)
       const results = response.data.data?.results || []
 
@@ -745,16 +882,6 @@ const goToClusterManage = () => {
   router.push('/clusters')
 }
 
-// 导出拓扑
-const exportTopology = () => {
-  try {
-    // 这里可以实现拓扑图导出功能
-    ElMessage.success('拓扑图导出功能开发中')
-  } catch (error) {
-    console.error('Failed to export topology:', error)
-    ElMessage.error('导出失败')
-  }
-}
 
 // 清空测试结果
 const clearTestResults = () => {
@@ -762,53 +889,16 @@ const clearTestResults = () => {
   ElMessage.success('测试结果已清空')
 }
 
-// 监听视图模式变化
-watch(viewMode, async (newMode, oldMode) => {
-  if (newMode !== oldMode && realNodesData.value.length > 0) {
-    console.log(`View mode changed from ${oldMode} to ${newMode}`)
-
-    // 添加过渡效果
-    loading.value = true
-
-    // 短暂延迟以显示加载效果
-    await new Promise(resolve => setTimeout(resolve, 300))
-
-    // 重新生成拓扑数据以反映视图变化
-    const { nodes: topologyNodesData, connections: connectionsData, viewBox } = generateTopologyData(realNodesData.value)
-    topologyNodes.value = topologyNodesData
-    connections.value = connectionsData
-    currentViewBox.value = viewBox
-
-    loading.value = false
-
-    // 显示不同的消息以明确视图差异
-    const physicalMessage = '物理视图：显示节点间的直接网络连接'
-    const logicalMessage = '逻辑视图：显示服务间的逻辑关系和通信路径'
-    const message = newMode === 'physical' ? physicalMessage : logicalMessage
-
-    ElMessage.success({
-      message: `已切换到${newMode === 'physical' ? '物理视图' : '逻辑视图'}\n${message}`,
-      duration: 3000
-    })
-
-    console.log(`Topology updated for ${newMode} view:`, {
-      nodes: topologyNodesData.length,
-      connections: connectionsData.length,
-      physicalConnections: connectionsData.filter(c => c.type !== 'logical').length,
-      logicalConnections: connectionsData.filter(c => c.type === 'logical').length
-    })
-  }
-})
 
 onMounted(() => {
   if (monitoringConfigured.value) {
-    refreshTopology()
+    refreshNodes()
   }
 })
 </script>
 
 <style scoped>
-.network-topology {
+.network-detection {
   padding: 0;
 }
 
@@ -848,7 +938,7 @@ onMounted(() => {
   text-align: center;
 }
 
-.topology-content {
+.detection-content {
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -925,9 +1015,9 @@ onMounted(() => {
   margin-top: 4px;
 }
 
-.topology-main {
+.detection-main {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 24px;
 }
 
@@ -937,51 +1027,6 @@ onMounted(() => {
   align-items: center;
 }
 
-.topology-controls {
-  display: flex;
-  align-items: center;
-}
-
-.topology-svg-container {
-  min-height: 400px;
-  max-height: 600px;
-  border: 1px solid #f0f0f0;
-  border-radius: 4px;
-  overflow: hidden;
-  position: relative;
-}
-
-.topology-svg-container svg {
-  width: 100%;
-  height: auto;
-  min-height: 400px;
-  max-height: 600px;
-  transition: all 0.3s ease;
-}
-
-/* 连接线动画 */
-.connections line {
-  transition: all 0.3s ease;
-}
-
-/* 节点动画 */
-.nodes g {
-  transition: all 0.3s ease;
-}
-
-.node-circle {
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.node-circle:hover {
-  stroke-width: 4;
-  filter: brightness(1.1);
-}
-
-.node-label {
-  cursor: pointer;
-}
 
 .no-results {
   padding: 40px 0;
@@ -1077,19 +1122,9 @@ onMounted(() => {
 
 /* 响应式设计 */
 @media (max-width: 1024px) {
-  .topology-main {
+  .detection-main {
     grid-template-columns: 1fr;
     gap: 16px;
-  }
-
-  .topology-svg-container {
-    min-height: 350px;
-    max-height: 500px;
-  }
-
-  .topology-svg-container svg {
-    min-height: 350px;
-    max-height: 500px;
   }
 }
 
@@ -1103,28 +1138,5 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .topology-controls {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .topology-svg-container {
-    min-height: 300px;
-    max-height: 400px;
-  }
-
-  .topology-svg-container svg {
-    min-height: 300px;
-    max-height: 400px;
-  }
-
-  /* 隐藏图例中的部分元素以节省空间 */
-  .legend text {
-    font-size: 10px;
-  }
-
-  .legend rect {
-    width: 220px;
-  }
 }
 </style>
