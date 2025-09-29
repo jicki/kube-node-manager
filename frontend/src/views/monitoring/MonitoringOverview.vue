@@ -192,28 +192,49 @@ const checkMonitoringStatus = async () => {
   try {
     loading.value = true
 
-    // 始终调用监控状态 API，不管配置如何
-    const response = await fetch(`/api/v1/clusters/${currentCluster.value.id}/monitoring/status`, {
+    // 获取集群节点数据来计算监控节点数量
+    const nodesResponse = await fetch(`/api/v1/nodes?cluster_name=${currentCluster.value.name}`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
         'Content-Type': 'application/json'
       }
     })
 
-    if (response.ok) {
-      const data = await response.json()
-      console.log('Monitoring status response:', data)
+    if (nodesResponse.ok) {
+      const nodesData = await nodesResponse.json()
+      console.log('Nodes data response:', nodesData)
 
-      if (data.data && data.data.enabled) {
+      if (nodesData.data && nodesData.data.nodes) {
+        const totalNodes = nodesData.data.nodes.length
+        const healthyNodes = nodesData.data.nodes.filter(node => node.status === 'Ready').length
+        const warningNodes = totalNodes - healthyNodes
+
         // 更新节点指标数据
         nodeMetrics.value = {
-          total: currentCluster.value?.node_count || 0,
-          healthy: currentCluster.value?.node_count || 0,
-          warning: 0
+          total: totalNodes,
+          healthy: healthyNodes,
+          warning: warningNodes
         }
+
+        console.log('Updated node metrics:', nodeMetrics.value)
       }
-    } else {
-      console.error('Failed to fetch monitoring status:', response.status)
+    }
+
+    // 可选：同时调用监控状态 API（如果启用了监控）
+    if (currentCluster.value.monitoring_enabled) {
+      const monitoringResponse = await fetch(`/api/v1/clusters/${currentCluster.value.id}/monitoring/status`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (monitoringResponse.ok) {
+        const monitoringData = await monitoringResponse.json()
+        console.log('Monitoring status response:', monitoringData)
+      } else {
+        console.error('Failed to fetch monitoring status:', monitoringResponse.status)
+      }
     }
 
   } catch (error) {

@@ -329,7 +329,7 @@ const generateTopologyData = () => {
   const nodes = []
   const conns = []
 
-  // 创建master节点
+  // 创建master节点 - 放在中心位置
   nodes.push({
     id: 'master-1',
     name: 'master-1',
@@ -338,15 +338,18 @@ const generateTopologyData = () => {
     ip: '192.168.1.10',
     connections: nodeCount,
     x: 400,
-    y: 100
+    y: 200
   })
 
-  // 创建worker节点
-  const angleStep = (2 * Math.PI) / nodeCount
+  // 创建worker节点 - 使用圆形布局，确保足够的间距
+  const radius = Math.max(120, 30 * nodeCount) // 根据节点数量调整半径
+  const centerX = 400
+  const centerY = 200
+
   for (let i = 0; i < nodeCount; i++) {
-    const angle = i * angleStep
-    const x = 400 + Math.cos(angle) * 150
-    const y = 250 + Math.sin(angle) * 100
+    const angle = (i * 2 * Math.PI) / nodeCount // 均匀分布角度
+    const x = centerX + Math.cos(angle) * radius
+    const y = centerY + Math.sin(angle) * radius
 
     nodes.push({
       id: `worker-${i + 1}`,
@@ -364,17 +367,17 @@ const generateTopologyData = () => {
       from: 'master-1',
       to: `worker-${i + 1}`,
       status: Math.random() > 0.9 ? 'error' : 'healthy',
-      x1: 400,
-      y1: 100,
+      x1: centerX,
+      y1: centerY,
       x2: x,
       y2: y
     })
   }
 
-  // 创建worker之间的连接
-  for (let i = 0; i < nodeCount; i++) {
-    for (let j = i + 1; j < nodeCount; j++) {
-      if (Math.random() > 0.5) { // 50%概率存在worker间连接
+  // 创建部分worker之间的连接（避免过于复杂）
+  for (let i = 0; i < nodeCount && i < 4; i++) {
+    for (let j = i + 1; j < nodeCount && j < 4; j++) {
+      if (Math.random() > 0.6) { // 40%概率存在worker间连接
         const node1 = nodes[i + 1]
         const node2 = nodes[j + 1]
         conns.push({
