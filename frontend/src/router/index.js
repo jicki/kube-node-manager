@@ -69,7 +69,7 @@ const router = createRouter({
           path: 'monitoring/nodes',
           name: 'NodeMonitoring',
           component: () => import('@/views/monitoring/NodeMonitoring.vue'),
-          meta: { title: '节点监控', icon: 'CPU', requiresAuth: true }
+          meta: { title: '节点监控', icon: 'Monitor', requiresAuth: true }
         },
         {
           path: 'monitoring/network',

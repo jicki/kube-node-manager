@@ -100,7 +100,7 @@
         </el-menu-item>
 
         <el-menu-item index="/monitoring/nodes">
-          <el-icon><CPU /></el-icon>
+          <el-icon><Monitor /></el-icon>
           <template #title>节点监控</template>
         </el-menu-item>
 
@@ -162,8 +162,7 @@ import {
   Connection,
   DocumentCopy,
   Setting,
-  DataLine,
-  CPU
+  DataLine
 } from '@element-plus/icons-vue'
 
 const props = defineProps({

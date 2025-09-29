@@ -88,7 +88,7 @@
               type="primary"
               @click="$router.push('/monitoring/nodes')"
             >
-              <el-icon><CPU /></el-icon>
+              <el-icon><Monitor /></el-icon>
               查看节点监控
             </el-button>
             <el-button
@@ -102,7 +102,7 @@
               @click="testNetworkConnectivity"
               :loading="testingNetwork"
             >
-              <el-icon><Promotion /></el-icon>
+              <el-icon><Monitor /></el-icon>
               网络连通性测试
             </el-button>
           </div>
@@ -153,9 +153,7 @@ import {
   Check,
   Monitor,
   DataLine,
-  CPU,
   Connection,
-  Promotion,
   Warning
 } from '@element-plus/icons-vue'
 

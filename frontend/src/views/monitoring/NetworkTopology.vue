@@ -66,7 +66,7 @@
         <el-card class="stat-card">
           <div class="stat-content">
             <div class="stat-icon latency">
-              <el-icon><Timer /></el-icon>
+              <el-icon><Monitor /></el-icon>
             </div>
             <div class="stat-info">
               <div class="stat-value">{{ networkStats.avgLatency }}ms</div>
@@ -289,7 +289,6 @@ import {
   Connection,
   Setting,
   Monitor,
-  Timer,
   DataLine,
   Check,
   Close,

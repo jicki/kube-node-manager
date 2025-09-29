@@ -74,7 +74,7 @@
         <el-card class="stat-card">
           <div class="stat-content">
             <div class="stat-icon cpu">
-              <el-icon><CPU /></el-icon>
+              <el-icon><Monitor /></el-icon>
             </div>
             <div class="stat-info">
               <div class="stat-value">{{ nodeStats.avgCpuUsage }}%</div>
@@ -244,8 +244,7 @@ import {
   Setting,
   Monitor,
   Check,
-  Warning,
-  CPU
+  Warning
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
