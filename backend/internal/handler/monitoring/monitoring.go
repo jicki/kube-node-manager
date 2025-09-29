@@ -1,13 +1,9 @@
 package monitoring
 
 import (
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
-	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/monitoring"
 	"kube-node-manager/pkg/logger"
 

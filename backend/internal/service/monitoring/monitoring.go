@@ -6,8 +6,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"net/url"
-	"strconv"
 	"time"
 
 	"kube-node-manager/internal/model"
@@ -174,7 +172,7 @@ func (s *Service) GetMonitoringStatus(clusterID uint, userID uint) (*MonitoringS
 
 	if cluster.MonitoringEnabled && cluster.MonitoringEndpoint != "" {
 		// 测试监控端点连接
-		testResult, err := s.testEndpointConnection(cluster.MonitoringEndpoint, cluster.MonitoringType)
+		_, err := s.testEndpointConnection(cluster.MonitoringEndpoint, cluster.MonitoringType)
 		if err != nil {
 			status.Status = "error"
 			status.ErrorMsg = err.Error()
