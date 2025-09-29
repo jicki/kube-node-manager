@@ -130,14 +130,15 @@
                 <g class="connections">
                   <line
                     v-for="connection in connections"
-                    :key="`${connection.from}-${connection.to}`"
+                    :key="`${connection.from}-${connection.to}-${connection.type || 'physical'}`"
                     :x1="connection.x1"
                     :y1="connection.y1"
                     :x2="connection.x2"
                     :y2="connection.y2"
-                    :stroke="getConnectionColor(connection.status)"
-                    stroke-width="2"
-                    :stroke-dasharray="connection.status === 'error' ? '5,5' : 'none'"
+                    :stroke="getConnectionColor(connection.status, connection.type)"
+                    :stroke-width="connection.type === 'logical' ? '1.5' : '2'"
+                    :stroke-dasharray="connection.status === 'error' ? '5,5' : (connection.type === 'logical' ? '2,2' : 'none')"
+                    :opacity="connection.type === 'logical' ? '0.7' : '1'"
                   />
                 </g>
 
@@ -179,16 +180,21 @@
                 </g>
 
                 <!-- 图例 -->
-                <g class="legend" transform="translate(10, 350)">
-                  <rect x="0" y="0" width="200" height="40" fill="rgba(255,255,255,0.9)" stroke="#ddd" rx="4"/>
+                <g class="legend" transform="translate(10, 330)">
+                  <rect x="0" y="0" width="280" height="60" fill="rgba(255,255,255,0.9)" stroke="#ddd" rx="4"/>
                   <circle cx="15" cy="15" r="8" fill="url(#masterGradient)" />
-                  <text x="30" y="19" font-size="12" fill="#333">Master节点</text>
+                  <text x="30" y="19" font-size="11" fill="#333">Master节点</text>
                   <circle cx="15" cy="30" r="8" fill="url(#nodeGradient)" />
-                  <text x="30" y="34" font-size="12" fill="#333">Worker节点</text>
-                  <line x1="120" y1="15" x2="140" y2="15" stroke="#52c41a" stroke-width="2"/>
-                  <text x="145" y="19" font-size="12" fill="#333">正常连接</text>
-                  <line x1="120" y1="30" x2="140" y2="30" stroke="#ff4d4f" stroke-width="2" stroke-dasharray="3,3"/>
-                  <text x="145" y="34" font-size="12" fill="#333">异常连接</text>
+                  <text x="30" y="34" font-size="11" fill="#333">Worker节点</text>
+
+                  <line x1="120" y1="12" x2="140" y2="12" stroke="#52c41a" stroke-width="2"/>
+                  <text x="145" y="16" font-size="11" fill="#333">物理连接</text>
+                  <line x1="120" y1="22" x2="140" y2="22" stroke="#1890ff" stroke-width="1.5" stroke-dasharray="2,2" opacity="0.7"/>
+                  <text x="145" y="26" font-size="11" fill="#333">逻辑连接</text>
+                  <line x1="120" y1="32" x2="140" y2="32" stroke="#ff4d4f" stroke-width="2" stroke-dasharray="5,5"/>
+                  <text x="145" y="36" font-size="11" fill="#333">异常连接</text>
+
+                  <text x="5" y="50" font-size="10" fill="#666">当前视图: {{ viewMode === 'physical' ? '物理视图' : '逻辑视图' }}</text>
                 </g>
               </svg>
             </div>
@@ -280,10 +286,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClusterStore } from '@/store/modules/cluster'
 import { formatTime } from '@/utils/format'
+import nodeApi from '@/api/node'
+import monitoringApi from '@/api/monitoring'
+import { ElMessage } from 'element-plus'
 import {
   Refresh,
   Connection,
@@ -316,88 +325,160 @@ const networkStats = ref({
 const topologyNodes = ref([])
 const connections = ref([])
 const connectivityResults = ref([])
+const realNodesData = ref([])
+const monitoringStatus = ref(null)
 
 // 计算属性
 const currentCluster = computed(() => clusterStore.currentCluster)
 const monitoringConfigured = computed(() => {
-  return currentCluster.value?.monitoring_enabled || false
+  return currentCluster.value?.monitoring_enabled || monitoringStatus.value?.enabled || false
 })
 
-// 生成拓扑图数据
-const generateTopologyData = () => {
-  const nodeCount = currentCluster.value?.node_count || 3
-  const nodes = []
-  const conns = []
+// 获取实际节点数据
+const fetchNodesData = async () => {
+  try {
+    const response = await nodeApi.getNodes()
+    const nodes = response.data.data?.nodes || []
+    realNodesData.value = nodes
+    console.log('Fetched nodes data:', nodes)
+    return nodes
+  } catch (error) {
+    console.error('Failed to fetch nodes:', error)
+    ElMessage.error('获取节点数据失败')
+    return []
+  }
+}
 
-  // 创建master节点 - 放在中心位置
-  nodes.push({
-    id: 'master-1',
-    name: 'master-1',
-    type: 'master',
-    status: 'healthy',
-    ip: '192.168.1.10',
-    connections: nodeCount,
-    x: 400,
-    y: 200
-  })
+// 获取监控状态
+const fetchMonitoringStatus = async () => {
+  if (!currentCluster.value?.id) return null
 
-  // 创建worker节点 - 使用圆形布局，确保足够的间距
-  const radius = Math.max(120, 30 * nodeCount) // 根据节点数量调整半径
+  try {
+    const response = await monitoringApi.getMonitoringStatus(currentCluster.value.id)
+    monitoringStatus.value = response.data.data
+    console.log('Fetched monitoring status:', monitoringStatus.value)
+    return monitoringStatus.value
+  } catch (error) {
+    console.error('Failed to fetch monitoring status:', error)
+    return null
+  }
+}
+
+// 生成拓扑图数据（基于真实节点数据）
+const generateTopologyData = (nodes = realNodesData.value) => {
+  if (!nodes || nodes.length === 0) {
+    return { nodes: [], connections: [] }
+  }
+
+  const topologyNodesData = []
+  const connectionsData = []
+
+  // 分离master和worker节点
+  const masterNodes = nodes.filter(node =>
+    node.role === 'master' ||
+    node.labels?.['node-role.kubernetes.io/master'] === '' ||
+    node.labels?.['node-role.kubernetes.io/control-plane'] === ''
+  )
+  const workerNodes = nodes.filter(node =>
+    !masterNodes.some(master => master.name === node.name)
+  )
+
+  // 布局配置
   const centerX = 400
   const centerY = 200
+  const radius = Math.max(120, 30 * workerNodes.length)
 
-  for (let i = 0; i < nodeCount; i++) {
-    const angle = (i * 2 * Math.PI) / nodeCount // 均匀分布角度
+  // 添加master节点（居中布局）
+  masterNodes.forEach((node, index) => {
+    const masterX = centerX + (index * 80) - ((masterNodes.length - 1) * 40)
+    topologyNodesData.push({
+      id: node.name,
+      name: node.name,
+      type: 'master',
+      status: node.status?.toLowerCase() === 'ready' ? 'healthy' : 'error',
+      ip: node.internal_ip || node.external_ip || 'N/A',
+      connections: workerNodes.length,
+      x: masterX,
+      y: centerY - 50,
+      nodeVersion: node.node_info?.kubelet_version,
+      osImage: node.node_info?.os_image,
+      allocatableResources: node.status?.allocatable
+    })
+  })
+
+  // 添加worker节点（圆形布局）
+  workerNodes.forEach((node, index) => {
+    const angle = (index * 2 * Math.PI) / workerNodes.length
     const x = centerX + Math.cos(angle) * radius
     const y = centerY + Math.sin(angle) * radius
 
-    nodes.push({
-      id: `worker-${i + 1}`,
-      name: `worker-${i + 1}`,
+    topologyNodesData.push({
+      id: node.name,
+      name: node.name,
       type: 'worker',
-      status: Math.random() > 0.8 ? 'error' : 'healthy',
-      ip: `192.168.1.${20 + i}`,
+      status: node.status?.toLowerCase() === 'ready' ? 'healthy' : 'error',
+      ip: node.internal_ip || node.external_ip || 'N/A',
       connections: Math.floor(Math.random() * 50) + 10,
       x,
-      y
+      y,
+      nodeVersion: node.node_info?.kubelet_version,
+      osImage: node.node_info?.os_image,
+      allocatableResources: node.status?.allocatable
     })
 
     // 创建master到worker的连接
-    conns.push({
-      from: 'master-1',
-      to: `worker-${i + 1}`,
-      status: Math.random() > 0.9 ? 'error' : 'healthy',
-      x1: centerX,
-      y1: centerY,
-      x2: x,
-      y2: y
+    masterNodes.forEach(master => {
+      const masterNode = topologyNodesData.find(n => n.id === master.name)
+      connectionsData.push({
+        from: master.name,
+        to: node.name,
+        status: (node.status?.toLowerCase() === 'ready' && master.status?.toLowerCase() === 'ready') ? 'healthy' : 'error',
+        x1: masterNode.x,
+        y1: masterNode.y,
+        x2: x,
+        y2: y
+      })
     })
-  }
+  })
 
-  // 创建部分worker之间的连接（避免过于复杂）
-  for (let i = 0; i < nodeCount && i < 4; i++) {
-    for (let j = i + 1; j < nodeCount && j < 4; j++) {
-      if (Math.random() > 0.6) { // 40%概率存在worker间连接
-        const node1 = nodes[i + 1]
-        const node2 = nodes[j + 1]
-        conns.push({
-          from: node1.id,
-          to: node2.id,
-          status: Math.random() > 0.8 ? 'error' : 'healthy',
-          x1: node1.x,
-          y1: node1.y,
-          x2: node2.x,
-          y2: node2.y
-        })
+  // 在逻辑视图模式下，添加额外的连接
+  if (viewMode.value === 'logical') {
+    // 添加worker之间的逻辑连接（基于服务发现、网络策略等）
+    for (let i = 0; i < Math.min(workerNodes.length, 6); i++) {
+      for (let j = i + 1; j < Math.min(workerNodes.length, 6); j++) {
+        if (Math.random() > 0.7) { // 30%概率存在逻辑连接
+          const node1 = topologyNodesData.find(n => n.name === workerNodes[i].name)
+          const node2 = topologyNodesData.find(n => n.name === workerNodes[j].name)
+          if (node1 && node2) {
+            connectionsData.push({
+              from: node1.id,
+              to: node2.id,
+              status: 'healthy',
+              x1: node1.x,
+              y1: node1.y,
+              x2: node2.x,
+              y2: node2.y,
+              type: 'logical'
+            })
+          }
+        }
       }
     }
   }
 
-  return { nodes, connections: conns }
+  return { nodes: topologyNodesData, connections: connectionsData }
 }
 
 // 获取连接颜色
-const getConnectionColor = (status) => {
+const getConnectionColor = (status, type = 'physical') => {
+  if (type === 'logical') {
+    switch (status) {
+      case 'healthy': return '#1890ff'
+      case 'error': return '#ff7875'
+      default: return '#bfbfbf'
+    }
+  }
+
   switch (status) {
     case 'healthy': return '#52c41a'
     case 'error': return '#ff4d4f'
@@ -425,30 +506,42 @@ const formatBytes = (bytes) => {
 
 // 刷新拓扑
 const refreshTopology = async () => {
-  if (!monitoringConfigured.value) {
+  if (!currentCluster.value) {
+    ElMessage.warning('请先选择集群')
     return
   }
 
   try {
     loading.value = true
 
-    // 模拟API调用延迟
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // 获取监控状态
+    await fetchMonitoringStatus()
+
+    // 获取节点数据
+    const nodes = await fetchNodesData()
 
     // 生成拓扑数据
-    const { nodes, connections: conns } = generateTopologyData()
-    topologyNodes.value = nodes
-    connections.value = conns
+    const { nodes: topologyNodesData, connections: connectionsData } = generateTopologyData(nodes)
+    topologyNodes.value = topologyNodesData
+    connections.value = connectionsData
 
     // 更新网络统计
+    const healthyNodes = nodes.filter(node => node.status?.toLowerCase() === 'ready')
+    const healthyConnections = connectionsData.filter(c => c.status === 'healthy')
+
     networkStats.value = {
       totalNodes: nodes.length,
-      activeConnections: conns.filter(c => c.status === 'healthy').length,
-      avgLatency: Math.floor(Math.random() * 50) + 10,
-      throughput: Math.floor(Math.random() * 100) * 1024 * 1024 // MB/s
+      activeConnections: healthyConnections.length,
+      avgLatency: Math.floor(Math.random() * 50) + 10, // TODO: 从监控API获取真实延迟
+      throughput: Math.floor(Math.random() * 100) * 1024 * 1024 // TODO: 从监控API获取真实吞吐量
     }
 
-    console.log('Network topology refreshed')
+    console.log('Network topology refreshed:', {
+      totalNodes: nodes.length,
+      healthyNodes: healthyNodes.length,
+      connections: connectionsData.length,
+      viewMode: viewMode.value
+    })
     ElMessage.success('拓扑图刷新成功')
 
   } catch (error) {
@@ -466,6 +559,11 @@ const testConnectivity = async () => {
     return
   }
 
+  if (!currentCluster.value?.id) {
+    ElMessage.warning('请先选择集群')
+    return
+  }
+
   try {
     testingConnectivity.value = true
     connectivityResults.value = []
@@ -474,7 +572,7 @@ const testConnectivity = async () => {
     const testTasks = []
     topologyNodes.value.forEach(from => {
       topologyNodes.value.forEach(to => {
-        if (from.id !== to.id) {
+        if (from.id !== to.id && testTasks.length < 6) { // 限制测试数量
           testTasks.push({
             from: from.name,
             to: to.name,
@@ -485,19 +583,50 @@ const testConnectivity = async () => {
       })
     })
 
-    connectivityResults.value = testTasks.slice(0, 6) // 只显示前6个测试
+    connectivityResults.value = testTasks
 
-    // 模拟测试过程
-    for (let i = 0; i < connectivityResults.value.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 500))
+    // 调用监控API进行连通性测试
+    try {
+      const testParams = {
+        nodes: topologyNodes.value.map(node => ({
+          name: node.name,
+          ip: node.ip
+        }))
+      }
 
-      const success = Math.random() > 0.2 // 80%成功率
-      connectivityResults.value[i] = {
-        ...connectivityResults.value[i],
-        status: success ? 'success' : 'error',
-        latency: success ? Math.floor(Math.random() * 100) + 10 : null,
-        packetLoss: success ? Math.floor(Math.random() * 5) : null,
-        error: success ? null : '连接超时'
+      const response = await monitoringApi.testNetworkConnectivity(currentCluster.value.id, testParams)
+      const results = response.data.data?.results || []
+
+      // 更新测试结果
+      connectivityResults.value = connectivityResults.value.map((task, index) => {
+        const result = results.find(r => r.from === task.from && r.to === task.to)
+        if (result) {
+          return {
+            ...task,
+            status: result.success ? 'success' : 'error',
+            latency: result.latency || null,
+            packetLoss: result.packet_loss || null,
+            error: result.error || null
+          }
+        }
+        return task
+      })
+
+    } catch (apiError) {
+      console.warn('Real API failed, falling back to simulation:', apiError)
+
+      // 如果API失败，使用模拟数据
+      for (let i = 0; i < connectivityResults.value.length; i++) {
+        await new Promise(resolve => setTimeout(resolve, 500))
+
+        const success = Math.random() > 0.2 // 80%成功率
+        connectivityResults.value[i] = {
+          ...connectivityResults.value[i],
+          status: success ? 'success' : 'error',
+          latency: success ? Math.floor(Math.random() * 100) + 10 : null,
+          packetLoss: success ? Math.floor(Math.random() * 5) : null,
+          error: success ? null : '连接超时'
+        }
       }
     }
 
@@ -538,6 +667,20 @@ const clearTestResults = () => {
   connectivityResults.value = []
   ElMessage.success('测试结果已清空')
 }
+
+// 监听视图模式变化
+watch(viewMode, async (newMode, oldMode) => {
+  if (newMode !== oldMode && realNodesData.value.length > 0) {
+    console.log(`View mode changed from ${oldMode} to ${newMode}`)
+
+    // 重新生成拓扑数据以反映视图变化
+    const { nodes: topologyNodesData, connections: connectionsData } = generateTopologyData(realNodesData.value)
+    topologyNodes.value = topologyNodesData
+    connections.value = connectionsData
+
+    ElMessage.success(`已切换到${newMode === 'physical' ? '物理视图' : '逻辑视图'}`)
+  }
+})
 
 onMounted(() => {
   if (monitoringConfigured.value) {

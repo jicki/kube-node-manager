@@ -66,6 +66,33 @@ const monitoringApi = {
         ...params
       }
     })
+  },
+
+  // 获取监控日志
+  getMonitoringLogs(clusterId, params = {}) {
+    return request({
+      url: `/api/v1/clusters/${clusterId}/monitoring/logs`,
+      method: 'get',
+      params
+    })
+  },
+
+  // 获取节点监控日志
+  getNodeMonitoringLogs(clusterId, nodeName, params = {}) {
+    return request({
+      url: `/api/v1/clusters/${clusterId}/monitoring/nodes/${nodeName}/logs`,
+      method: 'get',
+      params
+    })
+  },
+
+  // 获取网络监控日志
+  getNetworkMonitoringLogs(clusterId, params = {}) {
+    return request({
+      url: `/api/v1/clusters/${clusterId}/monitoring/network/logs`,
+      method: 'get',
+      params
+    })
   }
 }
 
