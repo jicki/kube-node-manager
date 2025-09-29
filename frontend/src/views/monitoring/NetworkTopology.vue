@@ -337,15 +337,21 @@ const monitoringConfigured = computed(() => {
 
 // 获取实际节点数据
 const fetchNodesData = async () => {
+  if (!currentCluster.value?.name) {
+    console.error('No current cluster name available')
+    ElMessage.error('请先选择集群')
+    return []
+  }
+
   try {
-    const response = await nodeApi.getNodes()
+    const response = await nodeApi.getNodes({ cluster_name: currentCluster.value.name })
     const nodes = response.data.data?.nodes || []
     realNodesData.value = nodes
     console.log('Fetched nodes data:', nodes)
     return nodes
   } catch (error) {
     console.error('Failed to fetch nodes:', error)
-    ElMessage.error('获取节点数据失败')
+    ElMessage.error(`获取节点数据失败: ${error.message}`)
     return []
   }
 }
