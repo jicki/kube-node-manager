@@ -60,24 +60,6 @@ const router = createRouter({
           meta: { title: '审计日志', icon: 'Document', requiresAuth: true }
         },
         {
-          path: 'monitoring/overview',
-          name: 'MonitoringOverview',
-          component: () => import('@/views/monitoring/MonitoringOverview.vue'),
-          meta: { title: '监控概览', icon: 'Monitor', requiresAuth: true }
-        },
-        {
-          path: 'monitoring/nodes',
-          name: 'NodeMonitoring',
-          component: () => import('@/views/monitoring/NodeMonitoring.vue'),
-          meta: { title: '节点监控', icon: 'Monitor', requiresAuth: true }
-        },
-        {
-          path: 'monitoring/network',
-          name: 'NetworkDetection',
-          component: () => import('@/views/monitoring/NetworkTopology.vue'),
-          meta: { title: '网络检测', icon: 'Connection', requiresAuth: true }
-        },
-        {
           path: 'profile',
           name: 'UserProfile',
           component: () => import('@/views/profile/UserProfile.vue'),

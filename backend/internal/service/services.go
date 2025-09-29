@@ -8,7 +8,6 @@ import (
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/internal/service/label"
 	"kube-node-manager/internal/service/ldap"
-	"kube-node-manager/internal/service/monitoring"
 	"kube-node-manager/internal/service/node"
 	"kube-node-manager/internal/service/progress"
 	"kube-node-manager/internal/service/taint"
@@ -19,17 +18,16 @@ import (
 )
 
 type Services struct {
-	Auth       *auth.Service
-	User       *user.Service
-	Cluster    *cluster.Service
-	Node       *node.Service
-	Label      *label.Service
-	Taint      *taint.Service
-	Audit      *audit.Service
-	LDAP       *ldap.Service
-	K8s        *k8s.Service
-	Progress   *progress.Service
-	Monitoring *monitoring.Service
+	Auth     *auth.Service
+	User     *user.Service
+	Cluster  *cluster.Service
+	Node     *node.Service
+	Label    *label.Service
+	Taint    *taint.Service
+	Audit    *audit.Service
+	LDAP     *ldap.Service
+	K8s      *k8s.Service
+	Progress *progress.Service
 }
 
 func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Services {
@@ -57,16 +55,15 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	nodeSvc.SetProgressService(progressSvc)
 
 	return &Services{
-		Auth:       authSvc,
-		User:       user.NewService(db, logger, auditSvc),
-		Cluster:    cluster.NewService(db, logger, auditSvc, k8sSvc),
-		Node:       nodeSvc,
-		Label:      labelSvc,
-		Taint:      taintSvc,
-		Audit:      auditSvc,
-		LDAP:       ldapSvc,
-		K8s:        k8sSvc,
-		Progress:   progressSvc,
-		Monitoring: monitoring.NewService(db, logger),
+		Auth:     authSvc,
+		User:     user.NewService(db, logger, auditSvc),
+		Cluster:  cluster.NewService(db, logger, auditSvc, k8sSvc),
+		Node:     nodeSvc,
+		Label:    labelSvc,
+		Taint:    taintSvc,
+		Audit:    auditSvc,
+		LDAP:     ldapSvc,
+		K8s:      k8sSvc,
+		Progress: progressSvc,
 	}
 }
