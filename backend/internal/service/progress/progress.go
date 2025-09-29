@@ -192,6 +192,14 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 	// 检查是否有正在进行或刚完成的任务，发送状态更新
 	s.sendCurrentTaskStatus(userID)
 
+	// 如果启用了数据库模式，也检查数据库中的未处理消息
+	if s.useDatabase && s.dbProgressService != nil {
+		go func() {
+			time.Sleep(100 * time.Millisecond) // 稍等一下确保连接稳定
+			s.dbProgressService.processUnsentMessages()
+		}()
+	}
+
 	// 等待连接关闭
 	select {}
 }

@@ -97,6 +97,7 @@ const progressData = ref({
 const isCompleted = ref(false)
 const isError = ref(false)
 const websocket = ref(null)
+const completionTimer = ref(null)
 
 // 计算进度状态
 const progressStatus = computed(() => {
@@ -167,16 +168,21 @@ const connectWebSocket = () => {
 
     websocket.value.onclose = (event) => {
       console.log('WebSocket连接已关闭', { code: event.code, reason: event.reason, wasClean: event.wasClean })
-      
-      // 只在非正常关闭且任务未完成时才重连
-      if (!event.wasClean && !isCompleted.value && !isError.value && visible.value && props.taskId) {
-        console.log('检测到异常关闭，2秒后尝试重连')
+
+      // 如果任务未完成（包括进度100%但未收到完成消息的情况），都要重连
+      const shouldReconnect = !isCompleted.value && !isError.value && visible.value && props.taskId
+      const isNearCompletion = progressData.value.progress >= 100 && !isCompleted.value
+
+      if (shouldReconnect || isNearCompletion) {
+        console.log('检测到连接关闭，任务未完成，1秒后尝试重连')
         setTimeout(() => {
-          // 重连前再次检查状态，避免不必要的重连
-          if (!isCompleted.value && !isError.value && visible.value && props.taskId) {
+          // 重连前再次检查状态
+          if ((!isCompleted.value && !isError.value && visible.value && props.taskId) ||
+              (progressData.value.progress >= 100 && !isCompleted.value)) {
+            console.log('重连WebSocket以接收可能的完成消息')
             connectWebSocket()
           }
-        }, 2000)
+        }, 1000) // 缩短重连间隔到1秒
       }
     }
 
@@ -205,17 +211,38 @@ const handleProgressUpdate = (data) => {
     case 'connected':
       console.log('WebSocket连接确认:', data.message)
       break
-      
+
     case 'progress':
       progressData.value = { ...data }
+
+      // 如果进度达到100%，启动完成检查定时器
+      if (data.progress >= 100 && !isCompleted.value && !isError.value) {
+        console.log('进度达到100%，启动完成检查定时器')
+        if (completionTimer.value) {
+          clearTimeout(completionTimer.value)
+        }
+        completionTimer.value = setTimeout(() => {
+          if (!isCompleted.value && !isError.value) {
+            console.log('进度100%后未收到完成消息，尝试重连获取状态')
+            connectWebSocket()
+          }
+        }, 3000) // 3秒后检查
+      }
       break
-      
+
     case 'complete':
       progressData.value = { ...data }
       isCompleted.value = true
+
+      // 清理完成检查定时器
+      if (completionTimer.value) {
+        clearTimeout(completionTimer.value)
+        completionTimer.value = null
+      }
+
       ElMessage.success(data.message || '批量操作完成')
       emit('completed', data)
-      
+
       // 3秒后自动关闭弹窗
       setTimeout(() => {
         if (isCompleted.value) {
@@ -223,14 +250,21 @@ const handleProgressUpdate = (data) => {
         }
       }, 3000)
       break
-      
+
     case 'error':
       progressData.value = { ...data }
       isError.value = true
+
+      // 清理完成检查定时器
+      if (completionTimer.value) {
+        clearTimeout(completionTimer.value)
+        completionTimer.value = null
+      }
+
       ElMessage.error(data.message || '批量操作失败')
       emit('error', data)
       break
-      
+
     default:
       console.log('收到未知类型的进度消息:', data)
   }
@@ -297,6 +331,12 @@ const resetState = () => {
   }
   isCompleted.value = false
   isError.value = false
+
+  // 清理完成检查定时器
+  if (completionTimer.value) {
+    clearTimeout(completionTimer.value)
+    completionTimer.value = null
+  }
 }
 
 // 监听taskId变化

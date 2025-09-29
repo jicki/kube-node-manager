@@ -108,6 +108,30 @@ func (dps *DatabaseProgressService) CompleteTask(taskID string, userID uint) err
 
 	dps.logger.Infof("Task %s completed successfully in database", taskID)
 
+	// 立即尝试推送完成消息，不等待轮询
+	go func() {
+		for i := 0; i < 5; i++ { // 重试5次
+			time.Sleep(200 * time.Millisecond * time.Duration(i)) // 递增延迟
+
+			// 检查是否有WebSocket连接
+			dps.wsService.connMutex.RLock()
+			hasConnection := false
+			if _, exists := dps.wsService.connections[userID]; exists {
+				hasConnection = true
+			}
+			dps.wsService.connMutex.RUnlock()
+
+			if hasConnection {
+				// 立即处理未发送的消息
+				dps.processUnsentMessages()
+				dps.logger.Infof("Force pushed completion message for task %s, user %d", taskID, userID)
+				break
+			} else {
+				dps.logger.Infof("Waiting for WebSocket connection to push completion message (attempt %d/5)", i+1)
+			}
+		}
+	}()
+
 	// 设置延时清理
 	go func() {
 		time.Sleep(60 * time.Second)
@@ -166,7 +190,8 @@ func (dps *DatabaseProgressService) startMessagePolling() {
 	dps.pollingWg.Add(1)
 	defer dps.pollingWg.Done()
 
-	ticker := time.NewTicker(dps.pollInterval)
+	// 对于完成消息使用更短的轮询间隔
+	ticker := time.NewTicker(500 * time.Millisecond) // 缩短到500ms
 	defer ticker.Stop()
 
 	for {
@@ -184,9 +209,9 @@ func (dps *DatabaseProgressService) startMessagePolling() {
 func (dps *DatabaseProgressService) processUnsentMessages() {
 	var messages []model.ProgressMessage
 
-	// 查询未处理的消息，按创建时间排序
+	// 优先处理完成和错误消息，然后处理普通进度消息
 	query := dps.db.Where("processed = ? AND created_at > ?", false, dps.lastProcessedTime).
-		Order("created_at ASC").
+		Order("CASE WHEN type IN ('complete', 'error') THEN 0 ELSE 1 END, created_at ASC").
 		Limit(100) // 限制批次大小
 
 	if err := query.Find(&messages).Error; err != nil {
@@ -200,6 +225,7 @@ func (dps *DatabaseProgressService) processUnsentMessages() {
 
 	dps.logger.Infof("Processing %d unsent messages", len(messages))
 
+	completedCount := 0
 	for _, msg := range messages {
 		// 转换为WebSocket消息格式
 		wsMessage := ProgressMessage{
@@ -215,15 +241,43 @@ func (dps *DatabaseProgressService) processUnsentMessages() {
 			Timestamp:   msg.CreatedAt,
 		}
 
-		// 尝试发送到WebSocket
-		dps.wsService.sendToUser(msg.UserID, wsMessage)
+		// 检查WebSocket连接状态
+		dps.wsService.connMutex.RLock()
+		hasConnection := false
+		if _, exists := dps.wsService.connections[msg.UserID]; exists {
+			hasConnection = true
+		}
+		dps.wsService.connMutex.RUnlock()
+
+		if hasConnection {
+			// 有连接时直接发送
+			dps.wsService.sendToUser(msg.UserID, wsMessage)
+			dps.logger.Infof("Sent %s message to connected user %d for task %s", msg.Type, msg.UserID, msg.TaskID)
+		} else if msg.Type == "complete" || msg.Type == "error" {
+			// 没有连接但是重要消息，等待一下再重试
+			dps.logger.Warningf("No connection for important message type %s, will retry", msg.Type)
+			time.Sleep(100 * time.Millisecond)
+			// 再次检查连接
+			dps.wsService.sendToUser(msg.UserID, wsMessage)
+		} else {
+			// 普通进度消息，没有连接就跳过
+			dps.logger.Infof("Skipping progress message for disconnected user %d", msg.UserID)
+		}
 
 		// 标记为已处理
 		if err := dps.db.Model(&msg).Update("processed", true).Error; err != nil {
 			dps.logger.Errorf("Failed to mark message %d as processed: %v", msg.ID, err)
 		} else {
-			dps.logger.Infof("Sent and marked message %d as processed for user %d", msg.ID, msg.UserID)
+			dps.logger.Infof("Marked message %d (%s) as processed for user %d", msg.ID, msg.Type, msg.UserID)
+			if msg.Type == "complete" {
+				completedCount++
+			}
 		}
+	}
+
+	// 特别记录完成消息的处理
+	if completedCount > 0 {
+		dps.logger.Infof("Processed %d completion messages", completedCount)
 	}
 
 	// 更新最后处理时间
