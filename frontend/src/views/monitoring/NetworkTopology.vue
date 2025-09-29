@@ -676,11 +676,9 @@ const testConnectivity = async () => {
 
     // 调用监控API进行连通性测试
     try {
+      // Backend expects nodes as a comma-separated string, not an array
       const testParams = {
-        nodes: topologyNodes.value.map(node => ({
-          name: node.name,
-          ip: node.ip
-        }))
+        nodes: topologyNodes.value.map(node => node.name).join(',')
       }
 
       const response = await monitoringApi.testNetworkConnectivity(currentCluster.value.id, testParams)

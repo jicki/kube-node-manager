@@ -323,24 +323,12 @@ const testNetworkConnectivity = async () => {
 
 // 获取监控日志
 const fetchMonitoringLogs = async () => {
-  if (!currentCluster.value?.id) return
+  // Backend monitoring logs endpoint not implemented yet
+  // Using local logs system instead
+  console.log('Using local monitoring logs system, current logs:', monitoringLogs.value.length)
 
-  try {
-    const response = await monitoringApi.getMonitoringLogs(currentCluster.value.id, {
-      limit: 50,
-      sort: 'timestamp',
-      order: 'desc'
-    })
-
-    if (response.data.data?.logs) {
-      monitoringLogs.value = response.data.data.logs
-    }
-    console.log('Fetched monitoring logs:', monitoringLogs.value.length)
-
-  } catch (error) {
-    console.warn('Failed to fetch monitoring logs, using local logs:', error)
-    // 如果API失败，保持现有日志
-  }
+  // TODO: Implement server-side monitoring logs API
+  // For now, the local logging system provides sufficient functionality
 }
 
 // 添加监控日志（本地记录）
