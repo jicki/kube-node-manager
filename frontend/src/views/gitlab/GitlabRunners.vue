@@ -115,7 +115,7 @@
 
         <el-table-column prop="id" label="ID" width="100" sortable align="center" />
 
-        <el-table-column prop="description" label="描述" min-width="200" sortable>
+        <el-table-column prop="description" label="描述" min-width="200">
           <template #default="{ row }">
             <div>
               <div class="runner-description">
@@ -129,7 +129,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="标签" min-width="180" :sort-method="sortByTagList" sortable>
+        <el-table-column label="标签" min-width="180">
           <template #default="{ row }">
             <div v-if="row.tag_list && row.tag_list.length > 0" class="tag-list">
               <el-tag
@@ -145,7 +145,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="runner_type" label="类型" width="110" sortable align="center">
+        <el-table-column prop="runner_type" label="类型" width="110" align="center">
           <template #default="{ row }">
             <el-tag
               :type="getRunnerTypeColor(row.runner_type)"
@@ -156,7 +156,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="所有者" min-width="220" :sort-method="sortByOwner" sortable>
+        <el-table-column label="所有者" min-width="220">
           <template #default="{ row }">
             <div v-if="getOwnerInfo(row)" class="owner-info">
               {{ getOwnerInfo(row) }}
@@ -165,7 +165,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="online" label="在线状态" width="110" sortable align="center">
+        <el-table-column prop="online" label="在线状态" width="110" align="center">
           <template #default="{ row }">
             <el-tag
               :type="row.online ? 'success' : 'danger'"
@@ -176,7 +176,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="active" label="激活状态" width="110" sortable align="center">
+        <el-table-column prop="active" label="激活状态" width="110" align="center">
           <template #default="{ row }">
             <el-tag
               :type="row.active ? 'success' : 'info'"
@@ -187,7 +187,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="paused" label="暂停状态" width="110" sortable align="center">
+        <el-table-column prop="paused" label="暂停状态" width="110" align="center">
           <template #default="{ row }">
             <el-tag
               :type="row.paused ? 'warning' : 'success'"
@@ -198,10 +198,10 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="配置" width="220" sortable>
+        <el-table-column label="配置" width="250" sortable :sort-method="sortByConfig">
           <template #default="{ row }">
             <div style="font-size: 12px; color: #606266; line-height: 1.8;">
-              <div v-if="row.version" style="margin-bottom: 2px;">
+              <div v-if="row.version" style="margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis;">
                 <span style="font-weight: 500;">版本:</span> {{ row.version }}
               </div>
               <div v-if="row.architecture" style="margin-bottom: 2px;">
@@ -514,6 +514,16 @@ const fetchRunners = async (forceRefresh = false) => {
     const data = await gitlabStore.fetchRunners(params)
     runners.value = data || []
 
+    // Debug: Log first runner's configuration data
+    if (data && data.length > 0) {
+      console.log('Sample runner data:', {
+        id: data[0].id,
+        version: data[0].version,
+        architecture: data[0].architecture,
+        platform: data[0].platform
+      })
+    }
+
     // Update cache
     runnersCache.value = {
       data: data || [],
@@ -673,6 +683,13 @@ const sortByContactedAt = (a, b) => {
   const timeA = a.contacted_at ? new Date(a.contacted_at).getTime() : 0
   const timeB = b.contacted_at ? new Date(b.contacted_at).getTime() : 0
   return timeA - timeB
+}
+
+// Sort by configuration (version primarily)
+const sortByConfig = (a, b) => {
+  const versionA = a.version || ''
+  const versionB = b.version || ''
+  return versionA.localeCompare(versionB)
 }
 
 // Handle sort change
