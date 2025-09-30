@@ -122,6 +122,7 @@ type RunnerInfo struct {
 	ID           int        `json:"id"`
 	Description  string     `json:"description"`
 	Active       bool       `json:"active"`
+	Paused       bool       `json:"paused"`
 	IsShared     bool       `json:"is_shared"`
 	IPAddress    string     `json:"ip_address"`
 	RunnerType   string     `json:"runner_type"`
@@ -129,6 +130,7 @@ type RunnerInfo struct {
 	Online       bool       `json:"online"`
 	Status       string     `json:"status"`
 	ContactedAt  *time.Time `json:"contacted_at"`
+	CreatedAt    *time.Time `json:"created_at"`
 	TagList      []string   `json:"tag_list"`
 	Version      string     `json:"version"`
 	Architecture string     `json:"architecture"`
@@ -216,30 +218,27 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([
 		return nil, err
 	}
 
-	// Log first runner for debugging
-	var debugData []map[string]interface{}
-	if err := json.Unmarshal(body, &debugData); err == nil && len(debugData) > 0 {
-		s.logger.Infof("Sample GitLab runner data from list API: %+v", debugData[0])
-	}
-
 	var runners []RunnerInfo
 	if err := json.Unmarshal(body, &runners); err != nil {
 		return nil, err
 	}
 
-	// The /runners/all endpoint returns limited information
-	// For each runner, we need to fetch detailed info from /runners/{id}
-	// However, this is expensive for large number of runners
-	// Let's fetch details for the first runner to check what's available
-	if len(runners) > 0 {
-		detailedRunner, err := s.GetRunner(runners[0].ID)
-		if err == nil {
-			s.logger.Infof("Sample detailed runner data: ID=%d, TagList=%v, ContactedAt=%v, Locked=%v, Version=%s",
-				detailedRunner.ID, detailedRunner.TagList, detailedRunner.ContactedAt, detailedRunner.Locked, detailedRunner.Version)
+	// The /runners/all endpoint returns limited information (no tag_list, contacted_at, etc.)
+	// Fetch detailed info for each runner to get complete data
+	// This adds overhead but provides all necessary information for the UI
+	detailedRunners := make([]RunnerInfo, 0, len(runners))
+	for _, runner := range runners {
+		detailed, err := s.GetRunner(runner.ID)
+		if err != nil {
+			// If we can't get detailed info, use basic info from list
+			s.logger.Warning("Failed to get detailed info for runner " + fmt.Sprintf("%d", runner.ID) + ": " + err.Error())
+			detailedRunners = append(detailedRunners, runner)
+			continue
 		}
+		detailedRunners = append(detailedRunners, *detailed)
 	}
 
-	return runners, nil
+	return detailedRunners, nil
 }
 
 // PipelineInfo represents GitLab pipeline information

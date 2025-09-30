@@ -65,7 +65,7 @@
 
         <el-table-column prop="id" label="ID" width="80" />
 
-        <el-table-column prop="description" label="描述" min-width="200">
+        <el-table-column prop="description" label="描述" min-width="180">
           <template #default="{ row }">
             <div>
               <div class="runner-description">
@@ -76,6 +76,22 @@
                 {{ row.ip_address }}
               </div>
             </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="标签" min-width="150">
+          <template #default="{ row }">
+            <div v-if="row.tag_list && row.tag_list.length > 0" class="tag-list">
+              <el-tag
+                v-for="tag in row.tag_list"
+                :key="tag"
+                size="small"
+                style="margin-right: 4px; margin-bottom: 4px"
+              >
+                {{ tag }}
+              </el-tag>
+            </div>
+            <span v-else style="color: #909399">-</span>
           </template>
         </el-table-column>
 
@@ -109,6 +125,18 @@
             >
               {{ row.paused ? '已暂停' : '运行中' }}
             </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="created_at" label="创建时间" width="160">
+          <template #default="{ row }">
+            {{ formatTime(row.created_at) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="contacted_at" label="最后联系" width="160">
+          <template #default="{ row }">
+            {{ formatTime(row.contacted_at) }}
           </template>
         </el-table-column>
 
@@ -278,28 +306,37 @@ const getRunnerTypeColor = (type) => {
   return colors[type] || ''
 }
 
-// Handle edit
-const handleEdit = async (runner) => {
-  try {
-    // Fetch detailed runner information
-    loading.value = true
-    const response = await gitlabApi.getGitlabRunner(runner.id)
-    const detailedRunner = response.data
+// Format time
+const formatTime = (time) => {
+  if (!time) return '-'
 
-    editForm.value = {
-      id: detailedRunner.id,
-      description: detailedRunner.description || '',
-      active: detailedRunner.active,
-      locked: detailedRunner.locked || false,
-      tag_list: detailedRunner.tag_list || [],
-      access_level: detailedRunner.access_level || ''
-    }
-    editDialogVisible.value = true
-  } catch (error) {
-    ElMessage.error('获取 Runner 详细信息失败')
-  } finally {
-    loading.value = false
+  const date = new Date(time)
+  if (isNaN(date.getTime())) return '-'
+
+  // Check if it's a valid date (not zero value)
+  const year = date.getFullYear()
+  if (year < 1900) return '-'
+
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+// Handle edit
+const handleEdit = (runner) => {
+  editForm.value = {
+    id: runner.id,
+    description: runner.description || '',
+    active: runner.active,
+    locked: runner.locked || false,
+    tag_list: runner.tag_list || [],
+    access_level: runner.access_level || ''
   }
+  editDialogVisible.value = true
 }
 
 // Handle edit submit
@@ -473,5 +510,6 @@ onMounted(async () => {
 .tag-list {
   display: flex;
   flex-wrap: wrap;
+  gap: 4px;
 }
 </style>
