@@ -198,19 +198,18 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="配置" width="250">
+        <el-table-column label="配置" width="200">
           <template #default="{ row }">
             <div style="font-size: 12px; color: #606266; line-height: 1.8;">
-              <div v-if="row.version" style="margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis;">
-                <span style="font-weight: 500;">版本:</span> {{ row.version }}
+              <div style="margin-bottom: 2px;">
+                {{ getAccessLevelLabel(row.access_level) }}
               </div>
-              <div v-if="row.architecture" style="margin-bottom: 2px;">
-                <span style="font-weight: 500;">架构:</span> {{ row.architecture }}
+              <div v-if="row.tag_list && row.tag_list.length > 0">
+                运行已打标签的作业
               </div>
-              <div v-if="row.platform">
-                <span style="font-weight: 500;">平台:</span> {{ row.platform }}
+              <div v-else>
+                运行未打标签的作业
               </div>
-              <span v-if="!row.version && !row.architecture && !row.platform" style="color: #909399;">-</span>
             </div>
           </template>
         </el-table-column>
@@ -255,12 +254,12 @@
         <el-empty :description="searchKeyword ? '没有找到匹配的 Runners' : '暂无 Runners'" />
       </div>
 
-      <div v-if="filteredRunners.length > 0" class="pagination-container">
+      <div v-if="sortedRunners.length > 0" class="pagination-container">
         <el-pagination
           v-model:current-page="pagination.currentPage"
           v-model:page-size="pagination.pageSize"
           :page-sizes="[10, 20, 50, 100]"
-          :total="filteredRunners.length"
+          :total="sortedRunners.length"
           layout="total, sizes, prev, pager, next, jumper"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
@@ -647,11 +646,44 @@ const handleFilterChange = () => {
   pagination.value.currentPage = 1
 }
 
+// Sorted and filtered runners
+const sortedRunners = computed(() => {
+  let result = [...filteredRunners.value]
+
+  if (currentSort.value.prop) {
+    const { prop, order } = currentSort.value
+
+    result.sort((a, b) => {
+      let compareResult = 0
+
+      // Use custom sort methods
+      if (prop === 'contacted_at') {
+        compareResult = sortByContactedAt(a, b)
+      } else {
+        // Default sorting for other props (like ID)
+        const aVal = a[prop]
+        const bVal = b[prop]
+
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          compareResult = aVal - bVal
+        } else {
+          compareResult = String(aVal || '').localeCompare(String(bVal || ''))
+        }
+      }
+
+      // Apply sort order (ascending or descending)
+      return order === 'ascending' ? compareResult : -compareResult
+    })
+  }
+
+  return result
+})
+
 // Paginated runners
 const paginatedRunners = computed(() => {
   const start = (pagination.value.currentPage - 1) * pagination.value.pageSize
   const end = start + pagination.value.pageSize
-  return filteredRunners.value.slice(start, end)
+  return sortedRunners.value.slice(start, end)
 })
 
 // Pagination handlers
@@ -702,6 +734,7 @@ const restoreSort = () => {
   if (tableRef.value && currentSort.value.prop) {
     // Use nextTick to ensure DOM is updated
     nextTick(() => {
+      // Set the table's visual sort indicator
       tableRef.value.sort(currentSort.value.prop, currentSort.value.order)
     })
   }
