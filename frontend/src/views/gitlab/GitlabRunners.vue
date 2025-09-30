@@ -87,9 +87,9 @@
 
         <el-table-column label="标签" min-width="150">
           <template #default="{ row }">
-            <div v-if="row.tag_list && row.tag_list.length > 0" class="tag-list">
+            <div v-if="getTagList(row) && getTagList(row).length > 0" class="tag-list">
               <el-tag
-                v-for="tag in row.tag_list"
+                v-for="tag in getTagList(row)"
                 :key="tag"
                 size="small"
                 style="margin-right: 4px; margin-bottom: 4px"
@@ -285,12 +285,23 @@ const fetchRunners = async () => {
 
     const data = await gitlabStore.fetchRunners(params)
     runners.value = data || []
+
+    // Debug: Log first runner to check data structure
+    if (runners.value.length > 0) {
+      console.log('Sample runner data:', runners.value[0])
+    }
   } catch (error) {
     ElMessage.error(gitlabStore.error || '获取 Runners 失败')
     runners.value = []
   } finally {
     loading.value = false
   }
+}
+
+// Get tag list (handle both snake_case and camelCase)
+const getTagList = (row) => {
+  // Try different possible field names
+  return row.tag_list || row.tagList || row.tags || []
 }
 
 // Get runner type label
@@ -316,25 +327,34 @@ const getRunnerTypeColor = (type) => {
 // Format time
 const formatTime = (time) => {
   if (!time) return '-'
+
+  // Check if the time is a zero value or invalid date
   const date = new Date(time)
+  const year = date.getFullYear()
+
+  // If year is less than 1900 or invalid, treat as empty
+  if (isNaN(date.getTime()) || year < 1900) {
+    return '-'
+  }
+
   return date.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
+    minute: '2-digit'
   })
 }
 
 // Handle edit
 const handleEdit = async (runner) => {
+  const tagList = getTagList(runner)
   editForm.value = {
     id: runner.id,
     description: runner.description || '',
     active: runner.active,
     locked: runner.locked || false,
-    tag_list: runner.tag_list ? [...runner.tag_list] : [],
+    tag_list: tagList.length > 0 ? [...tagList] : [],
     access_level: runner.access_level || ''
   }
   editDialogVisible.value = true
