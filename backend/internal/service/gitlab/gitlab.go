@@ -119,22 +119,22 @@ func (s *Service) TestConnection(domain, token string) error {
 
 // RunnerInfo represents GitLab runner information
 type RunnerInfo struct {
-	ID          int       `json:"id"`
-	Description string    `json:"description"`
-	Active      bool      `json:"active"`
-	IsShared    bool      `json:"is_shared"`
-	IPAddress   string    `json:"ip_address"`
-	RunnerType  string    `json:"runner_type"`
-	Name        string    `json:"name"`
-	Online      bool      `json:"online"`
-	Status      string    `json:"status"`
-	ContactedAt time.Time `json:"contacted_at"`
-	TagList     []string  `json:"tag_list"`
-	Version     string    `json:"version"`
-	Architecture string   `json:"architecture"`
-	Platform    string    `json:"platform"`
-	Locked      bool      `json:"locked"`
-	AccessLevel string    `json:"access_level"`
+	ID           int        `json:"id"`
+	Description  string     `json:"description"`
+	Active       bool       `json:"active"`
+	IsShared     bool       `json:"is_shared"`
+	IPAddress    string     `json:"ip_address"`
+	RunnerType   string     `json:"runner_type"`
+	Name         string     `json:"name"`
+	Online       bool       `json:"online"`
+	Status       string     `json:"status"`
+	ContactedAt  *time.Time `json:"contacted_at"`
+	TagList      []string   `json:"tag_list"`
+	Version      string     `json:"version"`
+	Architecture string     `json:"architecture"`
+	Platform     string     `json:"platform"`
+	Locked       bool       `json:"locked"`
+	AccessLevel  string     `json:"access_level"`
 }
 
 // UpdateRunnerRequest represents the request to update a runner
@@ -207,8 +207,20 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([
 		return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
+	// Read body for debugging
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Log first runner for debugging
+	var debugData []map[string]interface{}
+	if err := json.Unmarshal(body, &debugData); err == nil && len(debugData) > 0 {
+		s.logger.Infof("Sample GitLab runner data: %+v", debugData[0])
+	}
+
 	var runners []RunnerInfo
-	if err := json.NewDecoder(resp.Body).Decode(&runners); err != nil {
+	if err := json.Unmarshal(body, &runners); err != nil {
 		return nil, err
 	}
 
