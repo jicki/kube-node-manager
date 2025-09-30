@@ -1,28 +1,26 @@
-import axios from 'axios'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+import request from '@/utils/request'
 
 // Get GitLab settings
 export const getGitlabSettings = () => {
-  return axios.get(`${API_BASE_URL}/gitlab/settings`)
+  return request.get('/api/v1/gitlab/settings')
 }
 
 // Update GitLab settings
 export const updateGitlabSettings = (data) => {
-  return axios.put(`${API_BASE_URL}/gitlab/settings`, data)
+  return request.put('/api/v1/gitlab/settings', data)
 }
 
 // Test GitLab connection
 export const testGitlabConnection = (data) => {
-  return axios.post(`${API_BASE_URL}/gitlab/test`, data)
+  return request.post('/api/v1/gitlab/test', data)
 }
 
 // List GitLab runners
 export const listGitlabRunners = (params) => {
-  return axios.get(`${API_BASE_URL}/gitlab/runners`, { params })
+  return request.get('/api/v1/gitlab/runners', { params })
 }
 
 // List GitLab pipelines
 export const listGitlabPipelines = (params) => {
-  return axios.get(`${API_BASE_URL}/gitlab/pipelines`, { params })
+  return request.get('/api/v1/gitlab/pipelines', { params })
 }
