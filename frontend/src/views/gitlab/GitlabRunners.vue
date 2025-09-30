@@ -63,12 +63,14 @@
       </div>
 
       <el-table
+        ref="tableRef"
         :data="filteredRunners"
         v-loading="loading"
         style="width: 100%"
         stripe
         :default-sort="{ prop: 'id', order: 'descending' }"
         @selection-change="handleSelectionChange"
+        @sort-change="handleSortChange"
       >
         <el-table-column
           type="selection"
@@ -150,7 +152,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="contacted_at" label="最后联系" width="160" sortable>
+        <el-table-column label="最后联系" width="160" sortable :sort-method="sortByContactedAt">
           <template #default="{ row }">
             {{ formatTime(row.contacted_at) }}
           </template>
@@ -252,7 +254,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Location, Search } from '@element-plus/icons-vue'
 import { useGitlabStore } from '@/store/modules/gitlab'
@@ -265,6 +267,11 @@ const runners = ref([])
 const submitting = ref(false)
 const selectedRunners = ref([])
 const searchKeyword = ref('')
+const tableRef = ref(null)
+const currentSort = ref({
+  prop: 'id',
+  order: 'descending'
+})
 
 const filters = ref({
   type: '',
@@ -295,6 +302,9 @@ const fetchRunners = async () => {
 
     const data = await gitlabStore.fetchRunners(params)
     runners.value = data || []
+
+    // Restore sort after data is loaded
+    restoreSort()
   } catch (error) {
     ElMessage.error(gitlabStore.error || '获取 Runners 失败')
     runners.value = []
@@ -389,6 +399,28 @@ const sortByOwner = (a, b) => {
   const ownerA = getOwnerInfo(a) || ''
   const ownerB = getOwnerInfo(b) || ''
   return ownerA.localeCompare(ownerB)
+}
+
+// Sort by contacted_at (handle null values)
+const sortByContactedAt = (a, b) => {
+  const timeA = a.contacted_at ? new Date(a.contacted_at).getTime() : 0
+  const timeB = b.contacted_at ? new Date(b.contacted_at).getTime() : 0
+  return timeA - timeB
+}
+
+// Handle sort change
+const handleSortChange = ({ prop, order }) => {
+  currentSort.value = { prop, order }
+}
+
+// Restore sort after data update
+const restoreSort = () => {
+  if (tableRef.value && currentSort.value.prop) {
+    // Use nextTick to ensure DOM is updated
+    nextTick(() => {
+      tableRef.value.sort(currentSort.value.prop, currentSort.value.order)
+    })
+  }
 }
 
 // Format time

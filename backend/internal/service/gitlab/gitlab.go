@@ -246,7 +246,8 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([
 	detailedRunners := make([]RunnerInfo, len(runners))
 
 	// Use goroutines with a semaphore to limit concurrent requests
-	maxConcurrent := 10
+	// Increase concurrency to 20 for better performance
+	maxConcurrent := 20
 	sem := make(chan struct{}, maxConcurrent)
 	errChan := make(chan error, len(runners))
 
