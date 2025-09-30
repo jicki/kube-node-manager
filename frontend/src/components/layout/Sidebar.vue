@@ -87,6 +87,24 @@
         </el-menu-item>
       </el-sub-menu>
 
+      <!-- GitLab (只在启用时显示) -->
+      <el-sub-menu v-if="isGitlabEnabled" index="gitlab">
+        <template #title>
+          <el-icon><Connection /></el-icon>
+          <span>GitLab</span>
+        </template>
+
+        <el-menu-item index="/gitlab-runners">
+          <el-icon><Monitor /></el-icon>
+          <template #title>Runners</template>
+        </el-menu-item>
+
+        <el-menu-item index="/gitlab-pipelines">
+          <el-icon><List /></el-icon>
+          <template #title>Pipelines</template>
+        </el-menu-item>
+      </el-sub-menu>
+
       <!-- 系统配置 -->
       <el-sub-menu index="system-config">
         <template #title>
@@ -118,24 +136,6 @@
         >
           <el-icon><Setting /></el-icon>
           <template #title>GitLab 配置</template>
-        </el-menu-item>
-      </el-sub-menu>
-
-      <!-- GitLab (只在启用时显示) -->
-      <el-sub-menu v-if="isGitlabEnabled" index="gitlab">
-        <template #title>
-          <el-icon><Connection /></el-icon>
-          <span>GitLab</span>
-        </template>
-
-        <el-menu-item index="/gitlab-runners">
-          <el-icon><Monitor /></el-icon>
-          <template #title>Runners</template>
-        </el-menu-item>
-
-        <el-menu-item index="/gitlab-pipelines">
-          <el-icon><List /></el-icon>
-          <template #title>Pipelines</template>
         </el-menu-item>
       </el-sub-menu>
     </el-menu>
