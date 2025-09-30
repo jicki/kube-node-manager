@@ -92,7 +92,7 @@
             <el-option label="未激活" value="false" />
           </el-select>
 
-          <el-button :icon="Refresh" @click="fetchRunners" :loading="loading">
+          <el-button :icon="Refresh" @click="() => fetchRunners(true)" :loading="loading">
             刷新
           </el-button>
         </div>
@@ -198,14 +198,32 @@
           </template>
         </el-table-column>
 
+        <el-table-column label="配置" width="200" sortable>
+          <template #default="{ row }">
+            <div style="font-size: 12px; color: #606266;">
+              <div v-if="row.version">版本: {{ row.version }}</div>
+              <div v-if="row.architecture">架构: {{ row.architecture }}</div>
+              <div v-if="row.platform">平台: {{ row.platform }}</div>
+            </div>
+          </template>
+        </el-table-column>
+
         <el-table-column label="最后联系" width="160" sortable :sort-method="sortByContactedAt">
           <template #default="{ row }">
             {{ formatTime(row.contacted_at) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
+            <el-button
+              link
+              type="info"
+              size="small"
+              @click="handleViewDetails(row)"
+            >
+              详情
+            </el-button>
             <el-button
               link
               type="primary"
@@ -301,6 +319,104 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 详情 Runner 对话框 -->
+    <el-dialog
+      v-model="detailsDialogVisible"
+      title="Runner 详情"
+      width="700px"
+    >
+      <el-descriptions :column="2" border v-if="selectedRunner">
+        <el-descriptions-item label="ID">{{ selectedRunner.id }}</el-descriptions-item>
+        <el-descriptions-item label="描述">{{ selectedRunner.description || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="名称">{{ selectedRunner.name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="IP地址">{{ selectedRunner.ip_address || '-' }}</el-descriptions-item>
+
+        <el-descriptions-item label="在线状态">
+          <el-tag :type="selectedRunner.online ? 'success' : 'danger'" size="small">
+            {{ selectedRunner.online ? '在线' : '离线' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="激活状态">
+          <el-tag :type="selectedRunner.active ? 'success' : 'info'" size="small">
+            {{ selectedRunner.active ? '激活' : '未激活' }}
+          </el-tag>
+        </el-descriptions-item>
+
+        <el-descriptions-item label="暂停状态">
+          <el-tag :type="selectedRunner.paused ? 'warning' : 'success'" size="small">
+            {{ selectedRunner.paused ? '已暂停' : '运行中' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="Runner类型">
+          <el-tag :type="getRunnerTypeColor(selectedRunner.runner_type)" size="small">
+            {{ getRunnerTypeLabel(selectedRunner.runner_type) }}
+          </el-tag>
+        </el-descriptions-item>
+
+        <el-descriptions-item label="是否共享">
+          {{ selectedRunner.is_shared ? '是' : '否' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="访问级别">
+          {{ selectedRunner.access_level || '-' }}
+        </el-descriptions-item>
+
+        <el-descriptions-item label="版本" :span="2">
+          {{ selectedRunner.version || '-' }}
+        </el-descriptions-item>
+
+        <el-descriptions-item label="架构">
+          {{ selectedRunner.architecture || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="平台">
+          {{ selectedRunner.platform || '-' }}
+        </el-descriptions-item>
+
+        <el-descriptions-item label="创建时间" :span="2">
+          {{ formatTime(selectedRunner.created_at) }}
+        </el-descriptions-item>
+
+        <el-descriptions-item label="最后联系" :span="2">
+          {{ formatTime(selectedRunner.contacted_at) }}
+        </el-descriptions-item>
+
+        <el-descriptions-item label="标签" :span="2">
+          <div v-if="selectedRunner.tag_list && selectedRunner.tag_list.length > 0">
+            <el-tag
+              v-for="tag in selectedRunner.tag_list"
+              :key="tag"
+              size="small"
+              style="margin-right: 4px; margin-bottom: 4px"
+            >
+              {{ tag }}
+            </el-tag>
+          </div>
+          <span v-else style="color: #909399">-</span>
+        </el-descriptions-item>
+
+        <el-descriptions-item label="所属项目" :span="2" v-if="selectedRunner.projects && selectedRunner.projects.length > 0">
+          <div style="max-height: 150px; overflow-y: auto;">
+            <div v-for="project in selectedRunner.projects" :key="project.id" style="margin: 4px 0;">
+              {{ project.name_with_namespace || project.name }}
+            </div>
+          </div>
+        </el-descriptions-item>
+
+        <el-descriptions-item label="所属组" :span="2" v-if="selectedRunner.groups && selectedRunner.groups.length > 0">
+          <div style="max-height: 150px; overflow-y: auto;">
+            <div v-for="group in selectedRunner.groups" :key="group.id" style="margin: 4px 0;">
+              {{ group.full_path || group.name }}
+            </div>
+          </div>
+        </el-descriptions-item>
+      </el-descriptions>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="detailsDialogVisible = false">关闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -323,6 +439,14 @@ const currentSort = ref({
   prop: 'id',
   order: 'descending'
 })
+
+// Cache for runners data with timestamp
+const runnersCache = ref({
+  data: [],
+  timestamp: 0,
+  filters: {}
+})
+const CACHE_DURATION = 30 * 1000 // 30 seconds cache
 
 const filters = ref({
   type: '',
@@ -349,17 +473,45 @@ const editForm = ref({
   access_level: ''
 })
 
-// Fetch runners
-const fetchRunners = async () => {
+// Details dialog
+const detailsDialogVisible = ref(false)
+const selectedRunner = ref(null)
+
+// Fetch runners with caching
+const fetchRunners = async (forceRefresh = false) => {
+  const params = {}
+  if (filters.value.type) params.type = filters.value.type
+  if (filters.value.status) params.status = filters.value.status
+  if (filters.value.paused !== null) params.paused = filters.value.paused
+
+  // Create cache key from filters
+  const cacheKey = JSON.stringify(params)
+  const now = Date.now()
+
+  // Check if we can use cached data
+  if (
+    !forceRefresh &&
+    runnersCache.value.data.length > 0 &&
+    runnersCache.value.filters === cacheKey &&
+    (now - runnersCache.value.timestamp) < CACHE_DURATION
+  ) {
+    // Use cached data
+    runners.value = runnersCache.value.data
+    restoreSort()
+    return
+  }
+
   loading.value = true
   try {
-    const params = {}
-    if (filters.value.type) params.type = filters.value.type
-    if (filters.value.status) params.status = filters.value.status
-    if (filters.value.paused !== null) params.paused = filters.value.paused
-
     const data = await gitlabStore.fetchRunners(params)
     runners.value = data || []
+
+    // Update cache
+    runnersCache.value = {
+      data: data || [],
+      timestamp: now,
+      filters: cacheKey
+    }
 
     // Restore sort after data is loaded
     restoreSort()
@@ -541,6 +693,12 @@ const formatTime = (time) => {
   })
 }
 
+// Handle view details
+const handleViewDetails = (runner) => {
+  selectedRunner.value = runner
+  detailsDialogVisible.value = true
+}
+
 // Handle edit
 const handleEdit = (runner) => {
   editForm.value = {
@@ -570,7 +728,7 @@ const handleEditSubmit = async () => {
     await gitlabApi.updateGitlabRunner(editForm.value.id, updateData)
     ElMessage.success('Runner 更新成功')
     editDialogVisible.value = false
-    fetchRunners()
+    fetchRunners(true)
   } catch (error) {
     ElMessage.error(error.response?.data?.error || 'Runner 更新失败')
   } finally {
@@ -594,7 +752,7 @@ const handleDelete = async (runner) => {
     loading.value = true
     await gitlabApi.deleteGitlabRunner(runner.id)
     ElMessage.success('Runner 删除成功')
-    fetchRunners()
+    fetchRunners(true)
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || 'Runner 删除失败')
@@ -677,7 +835,7 @@ const handleBatchDelete = async () => {
     }
 
     selectedRunners.value = []
-    fetchRunners()
+    fetchRunners(true)
   } catch (error) {
     if (error !== 'cancel') {
       loading.value = false
@@ -721,7 +879,7 @@ const handleBatchActivate = async () => {
     }
 
     selectedRunners.value = []
-    fetchRunners()
+    fetchRunners(true)
   } catch (error) {
     if (error !== 'cancel') {
       loading.value = false
@@ -765,7 +923,7 @@ const handleBatchDeactivate = async () => {
     }
 
     selectedRunners.value = []
-    fetchRunners()
+    fetchRunners(true)
   } catch (error) {
     if (error !== 'cancel') {
       loading.value = false
