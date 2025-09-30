@@ -4,6 +4,18 @@
       <div class="toolbar">
         <div class="toolbar-left">
           <h2>GitLab Runners</h2>
+          <el-button
+            v-if="selectedRunners.length > 0"
+            type="danger"
+            :disabled="!canBatchDelete"
+            @click="handleBatchDelete"
+            style="margin-left: 16px"
+          >
+            批量删除 ({{ selectedOfflineCount }}/{{ selectedRunners.length }})
+          </el-button>
+          <span v-if="selectedRunners.length > 0 && !canBatchDelete" style="margin-left: 8px; color: #f56c6c; font-size: 12px">
+            只能删除离线状态的 Runner
+          </span>
         </div>
         <div class="toolbar-right">
           <el-select
@@ -43,7 +55,14 @@
         v-loading="loading"
         style="width: 100%"
         stripe
+        @selection-change="handleSelectionChange"
       >
+        <el-table-column
+          type="selection"
+          width="55"
+          :selectable="isRowSelectable"
+        />
+
         <el-table-column prop="id" label="ID" width="80" />
 
         <el-table-column prop="description" label="描述" min-width="200">
@@ -224,7 +243,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Location, InfoFilled, Lock } from '@element-plus/icons-vue'
 import { useGitlabStore } from '@/store/modules/gitlab'
@@ -235,6 +254,7 @@ const gitlabStore = useGitlabStore()
 const loading = ref(false)
 const runners = ref([])
 const submitting = ref(false)
+const selectedRunners = ref([])
 
 const filters = ref({
   type: '',
@@ -366,6 +386,88 @@ const handleDelete = async (runner) => {
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || 'Runner 删除失败')
+      loading.value = false
+    }
+  }
+}
+
+// Handle selection change
+const handleSelectionChange = (selection) => {
+  selectedRunners.value = selection
+}
+
+// Check if row is selectable (only offline runners can be selected)
+const isRowSelectable = (row) => {
+  return !row.online
+}
+
+// Computed: selected offline count
+const selectedOfflineCount = computed(() => {
+  return selectedRunners.value.filter(r => !r.online).length
+})
+
+// Computed: can batch delete (all selected are offline)
+const canBatchDelete = computed(() => {
+  return selectedRunners.value.length > 0 &&
+         selectedRunners.value.every(r => !r.online)
+})
+
+// Handle batch delete
+const handleBatchDelete = async () => {
+  const offlineRunners = selectedRunners.value.filter(r => !r.online)
+
+  if (offlineRunners.length === 0) {
+    ElMessage.warning('请选择离线状态的 Runner')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${offlineRunners.length} 个离线 Runner 吗？此操作不可撤销。`,
+      '确认批量删除',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        dangerouslyUseHTMLString: true,
+        message: `
+          <div style="margin-top: 10px;">
+            <p style="margin-bottom: 8px; font-weight: bold;">将删除以下 Runner：</p>
+            <ul style="margin: 0; padding-left: 20px; max-height: 200px; overflow-y: auto;">
+              ${offlineRunners.map(r => `<li>${r.description || r.name || 'ID: ' + r.id}</li>`).join('')}
+            </ul>
+          </div>
+        `
+      }
+    )
+
+    loading.value = true
+    let successCount = 0
+    let failCount = 0
+    const errors = []
+
+    for (const runner of offlineRunners) {
+      try {
+        await gitlabApi.deleteGitlabRunner(runner.id)
+        successCount++
+      } catch (error) {
+        failCount++
+        errors.push(`${runner.description || runner.id}: ${error.response?.data?.error || '删除失败'}`)
+      }
+    }
+
+    if (successCount > 0) {
+      ElMessage.success(`成功删除 ${successCount} 个 Runner${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
+    }
+
+    if (failCount > 0 && errors.length > 0) {
+      console.error('批量删除错误：', errors)
+    }
+
+    selectedRunners.value = []
+    fetchRunners()
+  } catch (error) {
+    if (error !== 'cancel') {
       loading.value = false
     }
   }
