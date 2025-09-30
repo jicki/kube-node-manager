@@ -113,9 +113,9 @@
           width="55"
         />
 
-        <el-table-column prop="id" label="ID" width="80" sortable />
+        <el-table-column prop="id" label="ID" width="100" sortable align="center" />
 
-        <el-table-column prop="description" label="描述" min-width="180" sortable>
+        <el-table-column prop="description" label="描述" min-width="200" sortable>
           <template #default="{ row }">
             <div>
               <div class="runner-description">
@@ -129,7 +129,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="标签" min-width="150" :sort-method="sortByTagList" sortable>
+        <el-table-column label="标签" min-width="180" :sort-method="sortByTagList" sortable>
           <template #default="{ row }">
             <div v-if="row.tag_list && row.tag_list.length > 0" class="tag-list">
               <el-tag
@@ -145,7 +145,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="runner_type" label="类型" width="100" sortable>
+        <el-table-column prop="runner_type" label="类型" width="110" sortable align="center">
           <template #default="{ row }">
             <el-tag
               :type="getRunnerTypeColor(row.runner_type)"
@@ -156,7 +156,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="所有者" min-width="200" :sort-method="sortByOwner" sortable>
+        <el-table-column label="所有者" min-width="220" :sort-method="sortByOwner" sortable>
           <template #default="{ row }">
             <div v-if="getOwnerInfo(row)" class="owner-info">
               {{ getOwnerInfo(row) }}
@@ -165,7 +165,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="online" label="在线状态" width="100" sortable>
+        <el-table-column prop="online" label="在线状态" width="110" sortable align="center">
           <template #default="{ row }">
             <el-tag
               :type="row.online ? 'success' : 'danger'"
@@ -176,7 +176,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="active" label="激活状态" width="100" sortable>
+        <el-table-column prop="active" label="激活状态" width="110" sortable align="center">
           <template #default="{ row }">
             <el-tag
               :type="row.active ? 'success' : 'info'"
@@ -187,7 +187,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="paused" label="暂停状态" width="100" sortable>
+        <el-table-column prop="paused" label="暂停状态" width="110" sortable align="center">
           <template #default="{ row }">
             <el-tag
               :type="row.paused ? 'warning' : 'success'"
@@ -198,23 +198,30 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="配置" width="200" sortable>
+        <el-table-column label="配置" width="220" sortable>
           <template #default="{ row }">
-            <div style="font-size: 12px; color: #606266;">
-              <div v-if="row.version">版本: {{ row.version }}</div>
-              <div v-if="row.architecture">架构: {{ row.architecture }}</div>
-              <div v-if="row.platform">平台: {{ row.platform }}</div>
+            <div style="font-size: 12px; color: #606266; line-height: 1.8;">
+              <div v-if="row.version" style="margin-bottom: 2px;">
+                <span style="font-weight: 500;">版本:</span> {{ row.version }}
+              </div>
+              <div v-if="row.architecture" style="margin-bottom: 2px;">
+                <span style="font-weight: 500;">架构:</span> {{ row.architecture }}
+              </div>
+              <div v-if="row.platform">
+                <span style="font-weight: 500;">平台:</span> {{ row.platform }}
+              </div>
+              <span v-if="!row.version && !row.architecture && !row.platform" style="color: #909399;">-</span>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column label="最后联系" width="160" sortable :sort-method="sortByContactedAt">
+        <el-table-column label="最后联系" width="170" sortable :sort-method="sortByContactedAt" align="center">
           <template #default="{ row }">
             {{ formatTime(row.contacted_at) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right" align="center">
           <template #default="{ row }">
             <el-button
               link
@@ -304,8 +311,8 @@
 
         <el-form-item label="访问级别">
           <el-select v-model="editForm.access_level" placeholder="选择访问级别">
-            <el-option label="不受保护 (not_protected)" value="not_protected" />
-            <el-option label="受保护的 (ref_protected)" value="ref_protected" />
+            <el-option label="不受保护" value="not_protected" />
+            <el-option label="受保护" value="ref_protected" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -359,7 +366,7 @@
           {{ selectedRunner.is_shared ? '是' : '否' }}
         </el-descriptions-item>
         <el-descriptions-item label="访问级别">
-          {{ selectedRunner.access_level || '-' }}
+          {{ getAccessLevelLabel(selectedRunner.access_level) }}
         </el-descriptions-item>
 
         <el-descriptions-item label="版本" :span="2">
@@ -542,6 +549,15 @@ const getRunnerTypeColor = (type) => {
     project_type: 'primary'
   }
   return colors[type] || ''
+}
+
+// Get access level label
+const getAccessLevelLabel = (accessLevel) => {
+  const labels = {
+    not_protected: '不受保护',
+    ref_protected: '受保护'
+  }
+  return labels[accessLevel] || accessLevel || '-'
 }
 
 // Get owner information
@@ -983,6 +999,35 @@ onMounted(async () => {
 .owner-info {
   color: #606266;
   font-size: 14px;
+}
+
+/* Table header improvements */
+:deep(.el-table th) {
+  white-space: nowrap;
+  padding: 12px 0;
+}
+
+:deep(.el-table th .cell) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+:deep(.el-table th.is-sortable .cell) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+:deep(.el-table .caret-wrapper) {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  height: 14px;
+  width: 14px;
+  margin-left: 4px;
 }
 </style>
 
