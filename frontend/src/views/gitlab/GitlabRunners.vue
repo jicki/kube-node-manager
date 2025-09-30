@@ -18,18 +18,6 @@
               批量停用 ({{ selectedRunners.length }})
             </el-button>
             <el-button
-              type="warning"
-              @click="handleBatchLock"
-            >
-              批量锁定 ({{ selectedRunners.length }})
-            </el-button>
-            <el-button
-              type="info"
-              @click="handleBatchUnlock"
-            >
-              批量解锁 ({{ selectedRunners.length }})
-            </el-button>
-            <el-button
               type="danger"
               :disabled="!canBatchDelete"
               @click="handleBatchDelete"
@@ -102,18 +90,6 @@
             <el-option label="全部" value="" />
             <el-option label="激活" value="true" />
             <el-option label="未激活" value="false" />
-          </el-select>
-
-          <el-select
-            v-model="filters.locked"
-            placeholder="锁定状态"
-            clearable
-            style="width: 120px; margin-right: 8px"
-            @change="handleFilterChange"
-          >
-            <el-option label="全部" value="" />
-            <el-option label="已锁定" value="true" />
-            <el-option label="未锁定" value="false" />
           </el-select>
 
           <el-button :icon="Refresh" @click="fetchRunners" :loading="loading">
@@ -222,17 +198,6 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="locked" label="锁定状态" width="100" sortable>
-          <template #default="{ row }">
-            <el-tag
-              :type="row.locked ? 'danger' : 'success'"
-              size="small"
-            >
-              {{ row.locked ? '已锁定' : '未锁定' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-
         <el-table-column label="最后联系" width="160" sortable :sort-method="sortByContactedAt">
           <template #default="{ row }">
             {{ formatTime(row.contacted_at) }}
@@ -300,13 +265,6 @@
           </span>
         </el-form-item>
 
-        <el-form-item label="锁定">
-          <el-switch v-model="editForm.locked" />
-          <span style="margin-left: 10px; color: #909399">
-            {{ editForm.locked ? '已锁定' : '未锁定' }}
-          </span>
-        </el-form-item>
-
         <el-form-item label="标签">
           <el-select
             v-model="editForm.tag_list"
@@ -371,8 +329,7 @@ const filters = ref({
   status: '',
   paused: null,
   neverContacted: '',
-  active: '',
-  locked: ''
+  active: ''
 })
 
 // Pagination
@@ -388,7 +345,6 @@ const editForm = ref({
   id: null,
   description: '',
   active: true,
-  locked: false,
   tag_list: [],
   access_level: ''
 })
@@ -472,13 +428,6 @@ const filteredRunners = computed(() => {
     result = result.filter(runner => runner.active)
   } else if (filters.value.active === 'false') {
     result = result.filter(runner => !runner.active)
-  }
-
-  // Filter by locked status
-  if (filters.value.locked === 'true') {
-    result = result.filter(runner => runner.locked)
-  } else if (filters.value.locked === 'false') {
-    result = result.filter(runner => !runner.locked)
   }
 
   // Filter by search keyword
@@ -598,7 +547,6 @@ const handleEdit = (runner) => {
     id: runner.id,
     description: runner.description || '',
     active: runner.active,
-    locked: runner.locked || false,
     tag_list: runner.tag_list || [],
     access_level: runner.access_level || ''
   }
@@ -612,7 +560,6 @@ const handleEditSubmit = async () => {
     const updateData = {
       description: editForm.value.description,
       active: editForm.value.active,
-      locked: editForm.value.locked,
       tag_list: editForm.value.tag_list
     }
 
@@ -815,94 +762,6 @@ const handleBatchDeactivate = async () => {
 
     if (successCount > 0) {
       ElMessage.success(`成功停用 ${successCount} 个 Runner${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
-    }
-
-    selectedRunners.value = []
-    fetchRunners()
-  } catch (error) {
-    if (error !== 'cancel') {
-      loading.value = false
-    }
-  }
-}
-
-// Handle batch lock
-const handleBatchLock = async () => {
-  if (selectedRunners.value.length === 0) {
-    ElMessage.warning('请选择要锁定的 Runner')
-    return
-  }
-
-  try {
-    await ElMessageBox.confirm(
-      `确定要锁定选中的 ${selectedRunners.value.length} 个 Runner 吗？`,
-      '确认批量锁定',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
-
-    loading.value = true
-    let successCount = 0
-    let failCount = 0
-
-    for (const runner of selectedRunners.value) {
-      try {
-        await gitlabApi.updateGitlabRunner(runner.id, { locked: true })
-        successCount++
-      } catch (error) {
-        failCount++
-      }
-    }
-
-    if (successCount > 0) {
-      ElMessage.success(`成功锁定 ${successCount} 个 Runner${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
-    }
-
-    selectedRunners.value = []
-    fetchRunners()
-  } catch (error) {
-    if (error !== 'cancel') {
-      loading.value = false
-    }
-  }
-}
-
-// Handle batch unlock
-const handleBatchUnlock = async () => {
-  if (selectedRunners.value.length === 0) {
-    ElMessage.warning('请选择要解锁的 Runner')
-    return
-  }
-
-  try {
-    await ElMessageBox.confirm(
-      `确定要解锁选中的 ${selectedRunners.value.length} 个 Runner 吗？`,
-      '确认批量解锁',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'info',
-      }
-    )
-
-    loading.value = true
-    let successCount = 0
-    let failCount = 0
-
-    for (const runner of selectedRunners.value) {
-      try {
-        await gitlabApi.updateGitlabRunner(runner.id, { locked: false })
-        successCount++
-      } catch (error) {
-        failCount++
-      }
-    }
-
-    if (successCount > 0) {
-      ElMessage.success(`成功解锁 ${successCount} 个 Runner${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
     }
 
     selectedRunners.value = []
