@@ -224,18 +224,35 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([
 	}
 
 	// The /runners/all endpoint returns limited information (no tag_list, contacted_at, etc.)
-	// Fetch detailed info for each runner to get complete data
-	// This adds overhead but provides all necessary information for the UI
-	detailedRunners := make([]RunnerInfo, 0, len(runners))
-	for _, runner := range runners {
-		detailed, err := s.GetRunner(runner.ID)
-		if err != nil {
-			// If we can't get detailed info, use basic info from list
-			s.logger.Warning("Failed to get detailed info for runner " + fmt.Sprintf("%d", runner.ID) + ": " + err.Error())
-			detailedRunners = append(detailedRunners, runner)
-			continue
-		}
-		detailedRunners = append(detailedRunners, *detailed)
+	// Fetch detailed info for each runner concurrently to improve performance
+	detailedRunners := make([]RunnerInfo, len(runners))
+
+	// Use goroutines with a semaphore to limit concurrent requests
+	maxConcurrent := 10
+	sem := make(chan struct{}, maxConcurrent)
+	errChan := make(chan error, len(runners))
+
+	for i, runner := range runners {
+		sem <- struct{}{} // Acquire semaphore
+		go func(index int, r RunnerInfo) {
+			defer func() { <-sem }() // Release semaphore
+
+			detailed, err := s.GetRunner(r.ID)
+			if err != nil {
+				// If we can't get detailed info, use basic info from list
+				s.logger.Warning("Failed to get detailed info for runner " + fmt.Sprintf("%d", r.ID) + ": " + err.Error())
+				detailedRunners[index] = r
+				errChan <- err
+				return
+			}
+			detailedRunners[index] = *detailed
+			errChan <- nil
+		}(i, runner)
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < len(runners); i++ {
+		<-errChan
 	}
 
 	return detailedRunners, nil
