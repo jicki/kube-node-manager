@@ -231,6 +231,16 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		audit.GET("/logs", handlers.Audit.List)
 		audit.GET("/logs/:id", handlers.Audit.GetByID)
 	}
+
+	// GitLab routes (admin only)
+	gitlab := protected.Group("/gitlab")
+	{
+		gitlab.GET("/settings", handlers.Gitlab.GetSettings)
+		gitlab.PUT("/settings", handlers.Gitlab.UpdateSettings)
+		gitlab.POST("/test", handlers.Gitlab.TestConnection)
+		gitlab.GET("/runners", handlers.Gitlab.ListRunners)
+		gitlab.GET("/pipelines", handlers.Gitlab.ListPipelines)
+	}
 }
 
 // gracefulShutdown 优雅关闭服务器

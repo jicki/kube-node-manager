@@ -4,6 +4,7 @@ import (
 	"kube-node-manager/internal/handler/audit"
 	"kube-node-manager/internal/handler/auth"
 	"kube-node-manager/internal/handler/cluster"
+	"kube-node-manager/internal/handler/gitlab"
 	"kube-node-manager/internal/handler/label"
 	"kube-node-manager/internal/handler/node"
 	"kube-node-manager/internal/handler/progress"
@@ -22,6 +23,7 @@ type Handlers struct {
 	Taint    *taint.Handler
 	Audit    *audit.Handler
 	Progress *progress.Handler
+	Gitlab   *gitlab.Handler
 }
 
 func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
@@ -34,5 +36,6 @@ func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
 		Taint:    taint.NewHandler(services.Taint, logger),
 		Audit:    audit.NewHandler(services.Audit, logger),
 		Progress: progress.NewHandler(services.Progress, logger),
+		Gitlab:   gitlab.NewHandler(services.Gitlab, logger),
 	}
 }

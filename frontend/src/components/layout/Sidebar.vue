@@ -111,6 +111,32 @@
           <el-icon><User /></el-icon>
           <template #title>用户管理</template>
         </el-menu-item>
+
+        <el-menu-item
+          v-if="hasPermission('admin')"
+          index="/gitlab-settings"
+        >
+          <el-icon><Setting /></el-icon>
+          <template #title>GitLab 配置</template>
+        </el-menu-item>
+      </el-sub-menu>
+
+      <!-- GitLab (只在启用时显示) -->
+      <el-sub-menu v-if="isGitlabEnabled" index="gitlab">
+        <template #title>
+          <el-icon><Connection /></el-icon>
+          <span>GitLab</span>
+        </template>
+
+        <el-menu-item index="/gitlab-runners">
+          <el-icon><Monitor /></el-icon>
+          <template #title>Runners</template>
+        </el-menu-item>
+
+        <el-menu-item index="/gitlab-pipelines">
+          <el-icon><List /></el-icon>
+          <template #title>Pipelines</template>
+        </el-menu-item>
       </el-sub-menu>
     </el-menu>
     
@@ -129,6 +155,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
 import { useClusterStore } from '@/store/modules/cluster'
+import { useGitlabStore } from '@/store/modules/gitlab'
 import {
   Monitor,
   CollectionTag,
@@ -138,7 +165,8 @@ import {
   ArrowRight,
   Connection,
   DocumentCopy,
-  Setting
+  Setting,
+  List
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -150,6 +178,7 @@ const emit = defineEmits(['toggle-collapse'])
 const route = useRoute()
 const authStore = useAuthStore()
 const clusterStore = useClusterStore()
+const gitlabStore = useGitlabStore()
 
 // 当前选中的菜单
 const activeMenu = computed(() => route.path)
@@ -164,12 +193,19 @@ const defaultOpeneds = computed(() => {
     openedMenus.push('node-management')
   }
 
-  if (['/clusters', '/audit', '/users'].includes(path)) {
+  if (['/clusters', '/audit', '/users', '/gitlab-settings'].includes(path)) {
     openedMenus.push('system-config')
+  }
+
+  if (['/gitlab-runners', '/gitlab-pipelines'].includes(path)) {
+    openedMenus.push('gitlab')
   }
 
   return openedMenus
 })
+
+// GitLab enabled status
+const isGitlabEnabled = computed(() => gitlabStore.isEnabled)
 
 // 集群列表和当前集群
 const clusters = computed(() => clusterStore.clusters)
@@ -255,6 +291,11 @@ watch(
 onMounted(() => {
   // 加载集群列表
   clusterStore.fetchClusters()
+
+  // 加载 GitLab 设置
+  gitlabStore.fetchSettings().catch(() => {
+    // 忽略错误，只是为了获取是否启用状态
+  })
 })
 </script>
 

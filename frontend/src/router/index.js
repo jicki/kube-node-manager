@@ -64,6 +64,24 @@ const router = createRouter({
           name: 'UserProfile',
           component: () => import('@/views/profile/UserProfile.vue'),
           meta: { title: '个人信息', icon: 'User', requiresAuth: true }
+        },
+        {
+          path: 'gitlab-settings',
+          name: 'GitlabSettings',
+          component: () => import('@/views/gitlab/GitlabSettings.vue'),
+          meta: { title: 'GitLab 配置', icon: 'Setting', requiresAuth: true, permission: 'admin' }
+        },
+        {
+          path: 'gitlab-runners',
+          name: 'GitlabRunners',
+          component: () => import('@/views/gitlab/GitlabRunners.vue'),
+          meta: { title: 'GitLab Runners', icon: 'Connection', requiresAuth: true }
+        },
+        {
+          path: 'gitlab-pipelines',
+          name: 'GitlabPipelines',
+          component: () => import('@/views/gitlab/GitlabPipelines.vue'),
+          meta: { title: 'GitLab Pipelines', icon: 'List', requiresAuth: true }
         }
       ]
     },
