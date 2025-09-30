@@ -1,6 +1,28 @@
 <template>
   <div class="page-container">
     <div class="card-container">
+      <!-- Statistics Cards -->
+      <div class="stats-container">
+        <div class="stat-card">
+          <div class="stat-label">总数</div>
+          <div class="stat-value">{{ runners.length }}</div>
+        </div>
+        <div class="stat-card stat-online">
+          <div class="stat-label">在线</div>
+          <div class="stat-value">
+            {{ onlineCount }}
+            <span class="stat-icon">●</span>
+          </div>
+        </div>
+        <div class="stat-card stat-offline">
+          <div class="stat-label">离线</div>
+          <div class="stat-value">
+            {{ offlineCount }}
+            <span class="stat-icon">●</span>
+          </div>
+        </div>
+      </div>
+
       <div class="toolbar">
         <div class="toolbar-left">
           <h2>GitLab Runners</h2>
@@ -844,6 +866,16 @@ const canBatchDelete = computed(() => {
          selectedRunners.value.every(r => !r.online)
 })
 
+// Computed: online count
+const onlineCount = computed(() => {
+  return runners.value.filter(r => r.online).length
+})
+
+// Computed: offline count
+const offlineCount = computed(() => {
+  return runners.value.filter(r => !r.online).length
+})
+
 // Handle batch delete
 const handleBatchDelete = async () => {
   const offlineRunners = selectedRunners.value.filter(r => !r.online)
@@ -1011,6 +1043,63 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.stats-container {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  flex: 1;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: all 0.3s;
+}
+
+.stat-card:hover {
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #909399;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 600;
+  color: #303133;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-icon {
+  font-size: 16px;
+}
+
+.stat-online .stat-value {
+  color: #67c23a;
+}
+
+.stat-online .stat-icon {
+  color: #67c23a;
+}
+
+.stat-offline .stat-value {
+  color: #f56c6c;
+}
+
+.stat-offline .stat-icon {
+  color: #f56c6c;
+}
+
 .empty-state {
   padding: 40px 0;
   text-align: center;
