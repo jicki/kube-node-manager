@@ -324,9 +324,10 @@
     <el-dialog
       v-model="detailsDialogVisible"
       title="Runner 详情"
-      width="700px"
+      width="900px"
+      class="runner-details-dialog"
     >
-      <el-descriptions :column="2" border v-if="selectedRunner">
+      <el-descriptions :column="2" border size="default" v-if="selectedRunner">
         <el-descriptions-item label="ID">{{ selectedRunner.id }}</el-descriptions-item>
         <el-descriptions-item label="描述">{{ selectedRunner.description || '-' }}</el-descriptions-item>
         <el-descriptions-item label="名称">{{ selectedRunner.name || '-' }}</el-descriptions-item>
@@ -998,5 +999,41 @@ onMounted(async () => {
 
 .batch-delete-dialog .el-message-box__message {
   padding: 0 !important;
+}
+
+/* Runner details dialog - not scoped */
+.runner-details-dialog {
+  max-width: 95vw !important;
+}
+
+.runner-details-dialog .el-dialog__body {
+  padding: 20px !important;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.runner-details-dialog .el-descriptions__label {
+  width: 120px !important;
+  min-width: 120px !important;
+  white-space: nowrap;
+  font-weight: 600;
+  background-color: #fafafa;
+}
+
+.runner-details-dialog .el-descriptions__content {
+  word-break: break-all;
+}
+
+.runner-details-dialog .el-descriptions {
+  width: 100%;
+}
+
+.runner-details-dialog .el-descriptions__table {
+  width: 100% !important;
+  table-layout: fixed;
+}
+
+.runner-details-dialog .el-descriptions__cell {
+  padding: 12px 16px !important;
 }
 </style>
