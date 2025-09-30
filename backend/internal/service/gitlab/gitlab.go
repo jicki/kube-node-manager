@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -246,33 +247,35 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([
 	detailedRunners := make([]RunnerInfo, len(runners))
 
 	// Use goroutines with a semaphore to limit concurrent requests
-	// Increase concurrency to 20 for better performance
-	maxConcurrent := 20
+	// Increase concurrency to 50 for better performance
+	maxConcurrent := 50
 	sem := make(chan struct{}, maxConcurrent)
-	errChan := make(chan error, len(runners))
+
+	// Use sync.WaitGroup for better synchronization
+	var wg sync.WaitGroup
+	wg.Add(len(runners))
 
 	for i, runner := range runners {
 		sem <- struct{}{} // Acquire semaphore
 		go func(index int, r RunnerInfo) {
-			defer func() { <-sem }() // Release semaphore
+			defer func() {
+				<-sem // Release semaphore
+				wg.Done()
+			}()
 
 			detailed, err := s.GetRunner(r.ID)
 			if err != nil {
 				// If we can't get detailed info, use basic info from list
 				s.logger.Warning("Failed to get detailed info for runner " + fmt.Sprintf("%d", r.ID) + ": " + err.Error())
 				detailedRunners[index] = r
-				errChan <- err
 				return
 			}
 			detailedRunners[index] = *detailed
-			errChan <- nil
 		}(i, runner)
 	}
 
 	// Wait for all goroutines to complete
-	for i := 0; i < len(runners); i++ {
-		<-errChan
-	}
+	wg.Wait()
 
 	return detailedRunners, nil
 }
@@ -378,7 +381,7 @@ func (s *Service) GetRunner(runnerID int) (*RunnerInfo, error) {
 	req.Header.Set("PRIVATE-TOKEN", settings.Token)
 
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 10 * time.Second,
 	}
 
 	resp, err := client.Do(req)
