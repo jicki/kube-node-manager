@@ -75,29 +75,7 @@
                 <el-icon><Location /></el-icon>
                 {{ row.ip_address }}
               </div>
-              <div v-if="row.version" class="runner-meta">
-                <el-icon><InfoFilled /></el-icon>
-                v{{ row.version }}
-                <span v-if="row.platform"> · {{ row.platform }}</span>
-                <span v-if="row.architecture"> · {{ row.architecture }}</span>
-              </div>
             </div>
-          </template>
-        </el-table-column>
-
-        <el-table-column label="标签" min-width="150">
-          <template #default="{ row }">
-            <div v-if="getTagList(row) && getTagList(row).length > 0" class="tag-list">
-              <el-tag
-                v-for="tag in getTagList(row)"
-                :key="tag"
-                size="small"
-                style="margin-right: 4px; margin-bottom: 4px"
-              >
-                {{ tag }}
-              </el-tag>
-            </div>
-            <span v-else style="color: #909399">-</span>
           </template>
         </el-table-column>
 
@@ -123,28 +101,14 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="激活" width="80" align="center">
+        <el-table-column label="暂停" width="80" align="center">
           <template #default="{ row }">
             <el-tag
-              :type="row.active ? 'success' : 'info'"
+              :type="row.paused ? 'warning' : 'success'"
               size="small"
             >
-              {{ row.active ? '是' : '否' }}
+              {{ row.paused ? '已暂停' : '运行中' }}
             </el-tag>
-          </template>
-        </el-table-column>
-
-        <el-table-column label="锁定" width="80" align="center">
-          <template #default="{ row }">
-            <el-icon v-if="row.locked === true" style="color: #f56c6c"><Lock /></el-icon>
-            <el-icon v-else-if="row.locked === false" style="color: #67c23a"><Unlock /></el-icon>
-            <span v-else style="color: #909399">-</span>
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="contacted_at" label="最后联系" width="160">
-          <template #default="{ row }">
-            {{ formatTime(row.contacted_at) }}
           </template>
         </el-table-column>
 
@@ -246,7 +210,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Location, InfoFilled, Lock, Unlock } from '@element-plus/icons-vue'
+import { Refresh, Location } from '@element-plus/icons-vue'
 import { useGitlabStore } from '@/store/modules/gitlab'
 import * as gitlabApi from '@/api/gitlab'
 
@@ -286,40 +250,12 @@ const fetchRunners = async () => {
 
     const data = await gitlabStore.fetchRunners(params)
     runners.value = data || []
-
-    // Debug: Log first runner to check data structure
-    if (runners.value.length > 0) {
-      console.log('Sample runner data:', runners.value[0])
-      console.log('tag_list:', runners.value[0].tag_list)
-      console.log('contacted_at:', runners.value[0].contacted_at)
-      console.log('locked:', runners.value[0].locked)
-      console.log('version:', runners.value[0].version)
-    }
   } catch (error) {
     ElMessage.error(gitlabStore.error || '获取 Runners 失败')
     runners.value = []
   } finally {
     loading.value = false
   }
-}
-
-// Get tag list (handle both snake_case and camelCase)
-const getTagList = (row) => {
-  // Try different possible field names
-  const tagList = row.tag_list || row.tagList || row.tags
-
-  // Handle null or undefined
-  if (!tagList) {
-    return []
-  }
-
-  // Handle if it's not an array
-  if (!Array.isArray(tagList)) {
-    console.warn('tag_list is not an array:', tagList)
-    return []
-  }
-
-  return tagList
 }
 
 // Get runner type label
@@ -342,43 +278,28 @@ const getRunnerTypeColor = (type) => {
   return colors[type] || ''
 }
 
-// Format time
-const formatTime = (time) => {
-  // Handle null, undefined, empty string
-  if (!time || time === null || time === undefined || time === '') {
-    return '-'
-  }
-
-  // Check if the time is a zero value or invalid date
-  const date = new Date(time)
-  const year = date.getFullYear()
-
-  // If year is less than 1900 or invalid, treat as empty
-  if (isNaN(date.getTime()) || year < 1900) {
-    return '-'
-  }
-
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
 // Handle edit
 const handleEdit = async (runner) => {
-  const tagList = getTagList(runner)
-  editForm.value = {
-    id: runner.id,
-    description: runner.description || '',
-    active: runner.active,
-    locked: runner.locked || false,
-    tag_list: tagList.length > 0 ? [...tagList] : [],
-    access_level: runner.access_level || ''
+  try {
+    // Fetch detailed runner information
+    loading.value = true
+    const response = await gitlabApi.getGitlabRunner(runner.id)
+    const detailedRunner = response.data
+
+    editForm.value = {
+      id: detailedRunner.id,
+      description: detailedRunner.description || '',
+      active: detailedRunner.active,
+      locked: detailedRunner.locked || false,
+      tag_list: detailedRunner.tag_list || [],
+      access_level: detailedRunner.access_level || ''
+    }
+    editDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('获取 Runner 详细信息失败')
+  } finally {
+    loading.value = false
   }
-  editDialogVisible.value = true
 }
 
 // Handle edit submit

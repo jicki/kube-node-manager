@@ -162,18 +162,16 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([
 	}
 
 	// Build URL with query parameters
-	// Note: /api/v4/runners (without /all) requires admin or owner privileges
-	// but returns more detailed information including tag_list
-	apiURL := fmt.Sprintf("%s/api/v4/runners", settings.Domain)
+	// Note: /api/v4/runners/all returns basic runner info only
+	// Fields like tag_list, contacted_at, version, locked are NOT included
+	// To get these fields, use GetRunner(id) for individual runners
+	apiURL := fmt.Sprintf("%s/api/v4/runners/all", settings.Domain)
 	u, err := url.Parse(apiURL)
 	if err != nil {
 		return nil, err
 	}
 
 	q := u.Query()
-	// Add scope=all to get all runners (requires admin)
-	q.Set("scope", "all")
-
 	if runnerType != "" {
 		q.Set("type", runnerType)
 	}
