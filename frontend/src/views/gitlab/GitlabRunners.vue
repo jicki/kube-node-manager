@@ -4,18 +4,42 @@
       <div class="toolbar">
         <div class="toolbar-left">
           <h2>GitLab Runners</h2>
-          <el-button
-            v-if="selectedRunners.length > 0"
-            type="danger"
-            :disabled="!canBatchDelete"
-            @click="handleBatchDelete"
-            style="margin-left: 16px"
-          >
-            批量删除 ({{ selectedOfflineCount }}/{{ selectedRunners.length }})
-          </el-button>
-          <span v-if="selectedRunners.length > 0 && !canBatchDelete" style="margin-left: 8px; color: #f56c6c; font-size: 12px">
-            只能删除离线状态的 Runner
-          </span>
+          <div v-if="selectedRunners.length > 0" style="display: flex; align-items: center; gap: 8px; margin-left: 16px;">
+            <el-button
+              type="success"
+              @click="handleBatchActivate"
+            >
+              批量激活 ({{ selectedRunners.length }})
+            </el-button>
+            <el-button
+              type="warning"
+              @click="handleBatchDeactivate"
+            >
+              批量停用 ({{ selectedRunners.length }})
+            </el-button>
+            <el-button
+              type="warning"
+              @click="handleBatchLock"
+            >
+              批量锁定 ({{ selectedRunners.length }})
+            </el-button>
+            <el-button
+              type="info"
+              @click="handleBatchUnlock"
+            >
+              批量解锁 ({{ selectedRunners.length }})
+            </el-button>
+            <el-button
+              type="danger"
+              :disabled="!canBatchDelete"
+              @click="handleBatchDelete"
+            >
+              批量删除 ({{ selectedOfflineCount }}/{{ selectedRunners.length }})
+            </el-button>
+            <span v-if="!canBatchDelete" style="color: #f56c6c; font-size: 12px">
+              只能删除离线状态的 Runner
+            </span>
+          </div>
         </div>
         <div class="toolbar-right">
           <el-input
@@ -111,7 +135,6 @@
         <el-table-column
           type="selection"
           width="55"
-          :selectable="isRowSelectable"
         />
 
         <el-table-column prop="id" label="ID" width="80" sortable />
@@ -638,11 +661,6 @@ const handleSelectionChange = (selection) => {
   selectedRunners.value = selection
 }
 
-// Check if row is selectable (only offline runners can be selected)
-const isRowSelectable = (row) => {
-  return !row.online
-}
-
 // Computed: selected offline count
 const selectedOfflineCount = computed(() => {
   return selectedRunners.value.filter(r => !r.online).length
@@ -709,6 +727,182 @@ const handleBatchDelete = async () => {
 
     if (failCount > 0 && errors.length > 0) {
       console.error('批量删除错误：', errors)
+    }
+
+    selectedRunners.value = []
+    fetchRunners()
+  } catch (error) {
+    if (error !== 'cancel') {
+      loading.value = false
+    }
+  }
+}
+
+// Handle batch activate
+const handleBatchActivate = async () => {
+  if (selectedRunners.value.length === 0) {
+    ElMessage.warning('请选择要激活的 Runner')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要激活选中的 ${selectedRunners.value.length} 个 Runner 吗？`,
+      '确认批量激活',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'info',
+      }
+    )
+
+    loading.value = true
+    let successCount = 0
+    let failCount = 0
+
+    for (const runner of selectedRunners.value) {
+      try {
+        await gitlabApi.updateGitlabRunner(runner.id, { active: true })
+        successCount++
+      } catch (error) {
+        failCount++
+      }
+    }
+
+    if (successCount > 0) {
+      ElMessage.success(`成功激活 ${successCount} 个 Runner${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
+    }
+
+    selectedRunners.value = []
+    fetchRunners()
+  } catch (error) {
+    if (error !== 'cancel') {
+      loading.value = false
+    }
+  }
+}
+
+// Handle batch deactivate
+const handleBatchDeactivate = async () => {
+  if (selectedRunners.value.length === 0) {
+    ElMessage.warning('请选择要停用的 Runner')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要停用选中的 ${selectedRunners.value.length} 个 Runner 吗？`,
+      '确认批量停用',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+
+    loading.value = true
+    let successCount = 0
+    let failCount = 0
+
+    for (const runner of selectedRunners.value) {
+      try {
+        await gitlabApi.updateGitlabRunner(runner.id, { active: false })
+        successCount++
+      } catch (error) {
+        failCount++
+      }
+    }
+
+    if (successCount > 0) {
+      ElMessage.success(`成功停用 ${successCount} 个 Runner${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
+    }
+
+    selectedRunners.value = []
+    fetchRunners()
+  } catch (error) {
+    if (error !== 'cancel') {
+      loading.value = false
+    }
+  }
+}
+
+// Handle batch lock
+const handleBatchLock = async () => {
+  if (selectedRunners.value.length === 0) {
+    ElMessage.warning('请选择要锁定的 Runner')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要锁定选中的 ${selectedRunners.value.length} 个 Runner 吗？`,
+      '确认批量锁定',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+
+    loading.value = true
+    let successCount = 0
+    let failCount = 0
+
+    for (const runner of selectedRunners.value) {
+      try {
+        await gitlabApi.updateGitlabRunner(runner.id, { locked: true })
+        successCount++
+      } catch (error) {
+        failCount++
+      }
+    }
+
+    if (successCount > 0) {
+      ElMessage.success(`成功锁定 ${successCount} 个 Runner${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
+    }
+
+    selectedRunners.value = []
+    fetchRunners()
+  } catch (error) {
+    if (error !== 'cancel') {
+      loading.value = false
+    }
+  }
+}
+
+// Handle batch unlock
+const handleBatchUnlock = async () => {
+  if (selectedRunners.value.length === 0) {
+    ElMessage.warning('请选择要解锁的 Runner')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要解锁选中的 ${selectedRunners.value.length} 个 Runner 吗？`,
+      '确认批量解锁',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'info',
+      }
+    )
+
+    loading.value = true
+    let successCount = 0
+    let failCount = 0
+
+    for (const runner of selectedRunners.value) {
+      try {
+        await gitlabApi.updateGitlabRunner(runner.id, { locked: false })
+        successCount++
+      } catch (error) {
+        failCount++
+      }
+    }
+
+    if (successCount > 0) {
+      ElMessage.success(`成功解锁 ${successCount} 个 Runner${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
     }
 
     selectedRunners.value = []
