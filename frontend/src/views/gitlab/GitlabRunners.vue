@@ -198,7 +198,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="配置" width="250" sortable :sort-method="sortByConfig">
+        <el-table-column label="配置" width="250">
           <template #default="{ row }">
             <div style="font-size: 12px; color: #606266; line-height: 1.8;">
               <div v-if="row.version" style="margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis;">
