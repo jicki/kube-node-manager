@@ -56,6 +56,18 @@
             <el-option label="过时" value="stale" />
           </el-select>
 
+          <el-select
+            v-model="filters.neverContacted"
+            placeholder="联系状态"
+            clearable
+            style="width: 150px; margin-right: 8px"
+            @change="handleFilterChange"
+          >
+            <el-option label="全部" value="" />
+            <el-option label="从未联系" value="true" />
+            <el-option label="已有联系" value="false" />
+          </el-select>
+
           <el-button :icon="Refresh" @click="fetchRunners" :loading="loading">
             刷新
           </el-button>
@@ -64,7 +76,7 @@
 
       <el-table
         ref="tableRef"
-        :data="filteredRunners"
+        :data="paginatedRunners"
         v-loading="loading"
         style="width: 100%"
         stripe
@@ -183,6 +195,18 @@
       <div v-if="!loading && filteredRunners.length === 0" class="empty-state">
         <el-empty :description="searchKeyword ? '没有找到匹配的 Runners' : '暂无 Runners'" />
       </div>
+
+      <div v-if="filteredRunners.length > 0" class="pagination-container">
+        <el-pagination
+          v-model:current-page="pagination.currentPage"
+          v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="filteredRunners.length"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </div>
 
     <!-- 编辑 Runner 对话框 -->
@@ -276,7 +300,14 @@ const currentSort = ref({
 const filters = ref({
   type: '',
   status: '',
-  paused: null
+  paused: null,
+  neverContacted: ''
+})
+
+// Pagination
+const pagination = ref({
+  currentPage: 1,
+  pageSize: 20
 })
 
 // Edit dialog
@@ -354,37 +385,70 @@ const getOwnerInfo = (row) => {
   return null
 }
 
-// Filtered runners based on search keyword
+// Filtered runners based on search keyword and filters
 const filteredRunners = computed(() => {
-  if (!searchKeyword.value) {
-    return runners.value
+  let result = runners.value
+
+  // Filter by never contacted
+  if (filters.value.neverContacted === 'true') {
+    result = result.filter(runner => !runner.contacted_at)
+  } else if (filters.value.neverContacted === 'false') {
+    result = result.filter(runner => runner.contacted_at)
   }
 
-  const keyword = searchKeyword.value.toLowerCase()
-  return runners.value.filter(runner => {
-    // Search in tags
-    if (runner.tag_list && runner.tag_list.some(tag => tag.toLowerCase().includes(keyword))) {
-      return true
-    }
+  // Filter by search keyword
+  if (searchKeyword.value) {
+    const keyword = searchKeyword.value.toLowerCase()
+    result = result.filter(runner => {
+      // Search in tags
+      if (runner.tag_list && runner.tag_list.some(tag => tag.toLowerCase().includes(keyword))) {
+        return true
+      }
 
-    // Search in owner info
-    const ownerInfo = getOwnerInfo(runner)
-    if (ownerInfo && ownerInfo.toLowerCase().includes(keyword)) {
-      return true
-    }
+      // Search in owner info
+      const ownerInfo = getOwnerInfo(runner)
+      if (ownerInfo && ownerInfo.toLowerCase().includes(keyword)) {
+        return true
+      }
 
-    // Search in description
-    if (runner.description && runner.description.toLowerCase().includes(keyword)) {
-      return true
-    }
+      // Search in description
+      if (runner.description && runner.description.toLowerCase().includes(keyword)) {
+        return true
+      }
 
-    return false
-  })
+      return false
+    })
+  }
+
+  return result
 })
 
 // Handle search input
 const handleSearch = () => {
   // The computed property will automatically update
+}
+
+// Handle filter change
+const handleFilterChange = () => {
+  // Reset to first page when filter changes
+  pagination.value.currentPage = 1
+}
+
+// Paginated runners
+const paginatedRunners = computed(() => {
+  const start = (pagination.value.currentPage - 1) * pagination.value.pageSize
+  const end = start + pagination.value.pageSize
+  return filteredRunners.value.slice(start, end)
+})
+
+// Pagination handlers
+const handleSizeChange = (newSize) => {
+  pagination.value.pageSize = newSize
+  pagination.value.currentPage = 1
+}
+
+const handleCurrentChange = (newPage) => {
+  pagination.value.currentPage = newPage
 }
 
 // Sort by tag list
@@ -605,6 +669,13 @@ onMounted(async () => {
 .empty-state {
   padding: 40px 0;
   text-align: center;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 0;
+  margin-top: 16px;
 }
 
 .runner-description {
