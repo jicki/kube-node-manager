@@ -239,6 +239,9 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		gitlab.PUT("/settings", handlers.Gitlab.UpdateSettings)
 		gitlab.POST("/test", handlers.Gitlab.TestConnection)
 		gitlab.GET("/runners", handlers.Gitlab.ListRunners)
+		gitlab.GET("/runners/:id", handlers.Gitlab.GetRunner)
+		gitlab.PUT("/runners/:id", handlers.Gitlab.UpdateRunner)
+		gitlab.DELETE("/runners/:id", handlers.Gitlab.DeleteRunner)
 		gitlab.GET("/pipelines", handlers.Gitlab.ListPipelines)
 	}
 }

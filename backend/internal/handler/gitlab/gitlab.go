@@ -138,3 +138,70 @@ func (h *Handler) ListPipelines(c *gin.Context) {
 
 	c.JSON(http.StatusOK, pipelines)
 }
+
+// GetRunner gets details of a specific runner
+// GET /api/v1/gitlab/runners/:id
+func (h *Handler) GetRunner(c *gin.Context) {
+	runnerIDStr := c.Param("id")
+	runnerID, err := strconv.Atoi(runnerIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid runner ID"})
+		return
+	}
+
+	runner, err := h.service.GetRunner(runnerID)
+	if err != nil {
+		h.logger.Error("Failed to get runner: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, runner)
+}
+
+// UpdateRunner updates a runner's configuration
+// PUT /api/v1/gitlab/runners/:id
+func (h *Handler) UpdateRunner(c *gin.Context) {
+	runnerIDStr := c.Param("id")
+	runnerID, err := strconv.Atoi(runnerIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid runner ID"})
+		return
+	}
+
+	var req gitlab.UpdateRunnerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	runner, err := h.service.UpdateRunner(runnerID, req)
+	if err != nil {
+		h.logger.Error("Failed to update runner: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.logger.Info("Runner updated successfully")
+	c.JSON(http.StatusOK, runner)
+}
+
+// DeleteRunner deletes a runner
+// DELETE /api/v1/gitlab/runners/:id
+func (h *Handler) DeleteRunner(c *gin.Context) {
+	runnerIDStr := c.Param("id")
+	runnerID, err := strconv.Atoi(runnerIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid runner ID"})
+		return
+	}
+
+	if err := h.service.DeleteRunner(runnerID); err != nil {
+		h.logger.Error("Failed to delete runner: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.logger.Info("Runner deleted successfully")
+	c.JSON(http.StatusOK, gin.H{"message": "Runner deleted successfully"})
+}

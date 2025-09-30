@@ -129,6 +129,21 @@ type RunnerInfo struct {
 	Online      bool      `json:"online"`
 	Status      string    `json:"status"`
 	ContactedAt time.Time `json:"contacted_at"`
+	TagList     []string  `json:"tag_list"`
+	Version     string    `json:"version"`
+	Architecture string   `json:"architecture"`
+	Platform    string    `json:"platform"`
+	Locked      bool      `json:"locked"`
+	AccessLevel string    `json:"access_level"`
+}
+
+// UpdateRunnerRequest represents the request to update a runner
+type UpdateRunnerRequest struct {
+	Description *string   `json:"description,omitempty"`
+	Active      *bool     `json:"active,omitempty"`
+	TagList     *[]string `json:"tag_list,omitempty"`
+	Locked      *bool     `json:"locked,omitempty"`
+	AccessLevel *string   `json:"access_level,omitempty"`
 }
 
 // ListRunners retrieves all runners from GitLab
@@ -275,4 +290,144 @@ func (s *Service) ListPipelines(projectID int, ref, status string) ([]PipelineIn
 	}
 
 	return pipelines, nil
+}
+
+// GetRunner retrieves a specific runner by ID
+func (s *Service) GetRunner(runnerID int) (*RunnerInfo, error) {
+	settings, err := s.GetSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	if !settings.Enabled {
+		return nil, errors.New("GitLab integration is not enabled")
+	}
+
+	if settings.Domain == "" || settings.Token == "" {
+		return nil, errors.New("GitLab domain or token is not configured")
+	}
+
+	apiURL := fmt.Sprintf("%s/api/v4/runners/%d", settings.Domain, runnerID)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var runner RunnerInfo
+	if err := json.NewDecoder(resp.Body).Decode(&runner); err != nil {
+		return nil, err
+	}
+
+	return &runner, nil
+}
+
+// UpdateRunner updates a runner's configuration
+func (s *Service) UpdateRunner(runnerID int, req UpdateRunnerRequest) (*RunnerInfo, error) {
+	settings, err := s.GetSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	if !settings.Enabled {
+		return nil, errors.New("GitLab integration is not enabled")
+	}
+
+	if settings.Domain == "" || settings.Token == "" {
+		return nil, errors.New("GitLab domain or token is not configured")
+	}
+
+	// Marshal request to JSON
+	jsonData, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	apiURL := fmt.Sprintf("%s/api/v4/runners/%d", settings.Domain, runnerID)
+	httpReq, err := http.NewRequest("PUT", apiURL, strings.NewReader(string(jsonData)))
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Set("PRIVATE-TOKEN", settings.Token)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var runner RunnerInfo
+	if err := json.NewDecoder(resp.Body).Decode(&runner); err != nil {
+		return nil, err
+	}
+
+	return &runner, nil
+}
+
+// DeleteRunner deletes a runner
+func (s *Service) DeleteRunner(runnerID int) error {
+	settings, err := s.GetSettings()
+	if err != nil {
+		return err
+	}
+
+	if !settings.Enabled {
+		return errors.New("GitLab integration is not enabled")
+	}
+
+	if settings.Domain == "" || settings.Token == "" {
+		return errors.New("GitLab domain or token is not configured")
+	}
+
+	apiURL := fmt.Sprintf("%s/api/v4/runners/%d", settings.Domain, runnerID)
+	req, err := http.NewRequest("DELETE", apiURL, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }

@@ -24,3 +24,18 @@ export const listGitlabRunners = (params) => {
 export const listGitlabPipelines = (params) => {
   return request.get('/api/v1/gitlab/pipelines', { params })
 }
+
+// Get runner details
+export const getGitlabRunner = (runnerId) => {
+  return request.get(`/api/v1/gitlab/runners/${runnerId}`)
+}
+
+// Update runner
+export const updateGitlabRunner = (runnerId, data) => {
+  return request.put(`/api/v1/gitlab/runners/${runnerId}`, data)
+}
+
+// Delete runner
+export const deleteGitlabRunner = (runnerId) => {
+  return request.delete(`/api/v1/gitlab/runners/${runnerId}`)
+}
