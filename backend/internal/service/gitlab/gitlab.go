@@ -162,13 +162,18 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([
 	}
 
 	// Build URL with query parameters
-	apiURL := fmt.Sprintf("%s/api/v4/runners/all", settings.Domain)
+	// Note: /api/v4/runners (without /all) requires admin or owner privileges
+	// but returns more detailed information including tag_list
+	apiURL := fmt.Sprintf("%s/api/v4/runners", settings.Domain)
 	u, err := url.Parse(apiURL)
 	if err != nil {
 		return nil, err
 	}
 
 	q := u.Query()
+	// Add scope=all to get all runners (requires admin)
+	q.Set("scope", "all")
+
 	if runnerType != "" {
 		q.Set("type", runnerType)
 	}
@@ -216,12 +221,24 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([
 	// Log first runner for debugging
 	var debugData []map[string]interface{}
 	if err := json.Unmarshal(body, &debugData); err == nil && len(debugData) > 0 {
-		s.logger.Infof("Sample GitLab runner data: %+v", debugData[0])
+		s.logger.Infof("Sample GitLab runner data from list API: %+v", debugData[0])
 	}
 
 	var runners []RunnerInfo
 	if err := json.Unmarshal(body, &runners); err != nil {
 		return nil, err
+	}
+
+	// The /runners/all endpoint returns limited information
+	// For each runner, we need to fetch detailed info from /runners/{id}
+	// However, this is expensive for large number of runners
+	// Let's fetch details for the first runner to check what's available
+	if len(runners) > 0 {
+		detailedRunner, err := s.GetRunner(runners[0].ID)
+		if err == nil {
+			s.logger.Infof("Sample detailed runner data: ID=%d, TagList=%v, ContactedAt=%v, Locked=%v, Version=%s",
+				detailedRunner.ID, detailedRunner.TagList, detailedRunner.ContactedAt, detailedRunner.Locked, detailedRunner.Version)
+		}
 	}
 
 	return runners, nil
