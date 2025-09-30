@@ -68,6 +68,30 @@
             <el-option label="已有联系" value="false" />
           </el-select>
 
+          <el-select
+            v-model="filters.active"
+            placeholder="激活状态"
+            clearable
+            style="width: 120px; margin-right: 8px"
+            @change="handleFilterChange"
+          >
+            <el-option label="全部" value="" />
+            <el-option label="激活" value="true" />
+            <el-option label="未激活" value="false" />
+          </el-select>
+
+          <el-select
+            v-model="filters.locked"
+            placeholder="锁定状态"
+            clearable
+            style="width: 120px; margin-right: 8px"
+            @change="handleFilterChange"
+          >
+            <el-option label="全部" value="" />
+            <el-option label="已锁定" value="true" />
+            <el-option label="未锁定" value="false" />
+          </el-select>
+
           <el-button :icon="Refresh" @click="fetchRunners" :loading="loading">
             刷新
           </el-button>
@@ -142,7 +166,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="online" label="状态" width="100" sortable>
+        <el-table-column prop="online" label="在线状态" width="100" sortable>
           <template #default="{ row }">
             <el-tag
               :type="row.online ? 'success' : 'danger'"
@@ -153,13 +177,35 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="paused" label="暂停" width="80" align="center" sortable>
+        <el-table-column prop="active" label="激活状态" width="100" sortable>
+          <template #default="{ row }">
+            <el-tag
+              :type="row.active ? 'success' : 'info'"
+              size="small"
+            >
+              {{ row.active ? '激活' : '未激活' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="paused" label="暂停状态" width="100" sortable>
           <template #default="{ row }">
             <el-tag
               :type="row.paused ? 'warning' : 'success'"
               size="small"
             >
               {{ row.paused ? '已暂停' : '运行中' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="locked" label="锁定状态" width="100" sortable>
+          <template #default="{ row }">
+            <el-tag
+              :type="row.locked ? 'danger' : 'success'"
+              size="small"
+            >
+              {{ row.locked ? '已锁定' : '未锁定' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -301,7 +347,9 @@ const filters = ref({
   type: '',
   status: '',
   paused: null,
-  neverContacted: ''
+  neverContacted: '',
+  active: '',
+  locked: ''
 })
 
 // Pagination
@@ -394,6 +442,20 @@ const filteredRunners = computed(() => {
     result = result.filter(runner => !runner.contacted_at)
   } else if (filters.value.neverContacted === 'false') {
     result = result.filter(runner => runner.contacted_at)
+  }
+
+  // Filter by active status
+  if (filters.value.active === 'true') {
+    result = result.filter(runner => runner.active)
+  } else if (filters.value.active === 'false') {
+    result = result.filter(runner => !runner.active)
+  }
+
+  // Filter by locked status
+  if (filters.value.locked === 'true') {
+    result = result.filter(runner => runner.locked)
+  } else if (filters.value.locked === 'false') {
+    result = result.filter(runner => !runner.locked)
   }
 
   // Filter by search keyword
@@ -603,19 +665,24 @@ const handleBatchDelete = async () => {
 
   try {
     await ElMessageBox.confirm(
-      `确定要删除选中的 ${offlineRunners.length} 个离线 Runner 吗？此操作不可撤销。`,
+      '',
       '确认批量删除',
       {
         confirmButtonText: '确定删除',
         cancelButtonText: '取消',
         type: 'warning',
         dangerouslyUseHTMLString: true,
+        customClass: 'batch-delete-dialog',
         message: `
-          <div style="margin-top: 10px;">
-            <p style="margin-bottom: 8px; font-weight: bold;">将删除以下 Runner：</p>
-            <ul style="margin: 0; padding-left: 20px; max-height: 200px; overflow-y: auto;">
-              ${offlineRunners.map(r => `<li>${r.description || r.name || 'ID: ' + r.id}</li>`).join('')}
-            </ul>
+          <div style="margin-bottom: 16px;">
+            <p style="margin-bottom: 12px; font-size: 14px; color: #606266;">
+              确定要删除以下 <strong style="color: #f56c6c;">${offlineRunners.length}</strong> 个离线 Runner 吗？此操作不可撤销。
+            </p>
+            <div style="background: #f5f7fa; padding: 12px; border-radius: 4px; max-height: 300px; overflow-y: auto;">
+              <ul style="margin: 0; padding-left: 20px; list-style-type: disc;">
+                ${offlineRunners.map(r => `<li style="margin: 6px 0; color: #606266; font-size: 13px;">${r.description || r.name || 'ID: ' + r.id}</li>`).join('')}
+              </ul>
+            </div>
           </div>
         `
       }
@@ -704,5 +771,21 @@ onMounted(async () => {
 .owner-info {
   color: #606266;
   font-size: 14px;
+}
+</style>
+
+<style>
+/* Global style for batch delete dialog - not scoped */
+.batch-delete-dialog {
+  width: 520px !important;
+  max-width: 90vw !important;
+}
+
+.batch-delete-dialog .el-message-box__content {
+  padding: 20px 20px 0 !important;
+}
+
+.batch-delete-dialog .el-message-box__message {
+  padding: 0 !important;
 }
 </style>
