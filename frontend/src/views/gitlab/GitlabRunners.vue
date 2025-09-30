@@ -106,6 +106,15 @@
           </template>
         </el-table-column>
 
+        <el-table-column label="所有者" min-width="200">
+          <template #default="{ row }">
+            <div v-if="getOwnerInfo(row)" class="owner-info">
+              {{ getOwnerInfo(row) }}
+            </div>
+            <span v-else style="color: #909399">-</span>
+          </template>
+        </el-table-column>
+
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag
@@ -125,12 +134,6 @@
             >
               {{ row.paused ? '已暂停' : '运行中' }}
             </el-tag>
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="created_at" label="创建时间" width="160">
-          <template #default="{ row }">
-            {{ formatTime(row.created_at) }}
           </template>
         </el-table-column>
 
@@ -304,6 +307,27 @@ const getRunnerTypeColor = (type) => {
     project_type: 'primary'
   }
   return colors[type] || ''
+}
+
+// Get owner information
+const getOwnerInfo = (row) => {
+  // For shared/instance runners
+  if (row.is_shared || row.runner_type === 'instance_type') {
+    return '共享 Runner'
+  }
+
+  // For group runners
+  if (row.runner_type === 'group_type' && row.groups && row.groups.length > 0) {
+    return row.groups.map(g => g.full_path || g.name).join(', ')
+  }
+
+  // For project runners
+  if (row.runner_type === 'project_type' && row.projects && row.projects.length > 0) {
+    // Use name_with_namespace for better readability
+    return row.projects.map(p => p.name_with_namespace || p.path_with_namespace || p.name).join(', ')
+  }
+
+  return null
 }
 
 // Format time
@@ -511,5 +535,10 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.owner-info {
+  color: #606266;
+  font-size: 14px;
 }
 </style>

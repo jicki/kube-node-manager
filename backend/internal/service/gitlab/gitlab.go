@@ -117,26 +117,44 @@ func (s *Service) TestConnection(domain, token string) error {
 	return nil
 }
 
+// ProjectInfo represents project information for a runner
+type ProjectInfo struct {
+	ID                int    `json:"id"`
+	Name              string `json:"name"`
+	NameWithNamespace string `json:"name_with_namespace"`
+	Path              string `json:"path"`
+	PathWithNamespace string `json:"path_with_namespace"`
+}
+
+// GroupInfo represents group information for a runner
+type GroupInfo struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	FullPath string `json:"full_path"`
+}
+
 // RunnerInfo represents GitLab runner information
 type RunnerInfo struct {
-	ID           int        `json:"id"`
-	Description  string     `json:"description"`
-	Active       bool       `json:"active"`
-	Paused       bool       `json:"paused"`
-	IsShared     bool       `json:"is_shared"`
-	IPAddress    string     `json:"ip_address"`
-	RunnerType   string     `json:"runner_type"`
-	Name         string     `json:"name"`
-	Online       bool       `json:"online"`
-	Status       string     `json:"status"`
-	ContactedAt  *time.Time `json:"contacted_at"`
-	CreatedAt    *time.Time `json:"created_at"`
-	TagList      []string   `json:"tag_list"`
-	Version      string     `json:"version"`
-	Architecture string     `json:"architecture"`
-	Platform     string     `json:"platform"`
-	Locked       bool       `json:"locked"`
-	AccessLevel  string     `json:"access_level"`
+	ID           int           `json:"id"`
+	Description  string        `json:"description"`
+	Active       bool          `json:"active"`
+	Paused       bool          `json:"paused"`
+	IsShared     bool          `json:"is_shared"`
+	IPAddress    string        `json:"ip_address"`
+	RunnerType   string        `json:"runner_type"`
+	Name         string        `json:"name"`
+	Online       bool          `json:"online"`
+	Status       string        `json:"status"`
+	ContactedAt  *time.Time    `json:"contacted_at"`
+	CreatedAt    *time.Time    `json:"created_at"`
+	TagList      []string      `json:"tag_list"`
+	Version      string        `json:"version"`
+	Architecture string        `json:"architecture"`
+	Platform     string        `json:"platform"`
+	Locked       bool          `json:"locked"`
+	AccessLevel  string        `json:"access_level"`
+	Projects     []ProjectInfo `json:"projects"`
+	Groups       []GroupInfo   `json:"groups"`
 }
 
 // UpdateRunnerRequest represents the request to update a runner
