@@ -18,6 +18,18 @@
           </span>
         </div>
         <div class="toolbar-right">
+          <el-input
+            v-model="searchKeyword"
+            placeholder="搜索标签或所有者"
+            clearable
+            style="width: 200px; margin-right: 8px"
+            @input="handleSearch"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+
           <el-select
             v-model="filters.type"
             placeholder="Runner 类型"
@@ -51,10 +63,11 @@
       </div>
 
       <el-table
-        :data="runners"
+        :data="filteredRunners"
         v-loading="loading"
         style="width: 100%"
         stripe
+        :default-sort="{ prop: 'id', order: 'descending' }"
         @selection-change="handleSelectionChange"
       >
         <el-table-column
@@ -63,9 +76,9 @@
           :selectable="isRowSelectable"
         />
 
-        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="id" label="ID" width="80" sortable />
 
-        <el-table-column prop="description" label="描述" min-width="180">
+        <el-table-column prop="description" label="描述" min-width="180" sortable>
           <template #default="{ row }">
             <div>
               <div class="runner-description">
@@ -79,7 +92,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="标签" min-width="150">
+        <el-table-column label="标签" min-width="150" :sort-method="sortByTagList" sortable>
           <template #default="{ row }">
             <div v-if="row.tag_list && row.tag_list.length > 0" class="tag-list">
               <el-tag
@@ -95,7 +108,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="类型" width="100">
+        <el-table-column prop="runner_type" label="类型" width="100" sortable>
           <template #default="{ row }">
             <el-tag
               :type="getRunnerTypeColor(row.runner_type)"
@@ -106,7 +119,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="所有者" min-width="200">
+        <el-table-column label="所有者" min-width="200" :sort-method="sortByOwner" sortable>
           <template #default="{ row }">
             <div v-if="getOwnerInfo(row)" class="owner-info">
               {{ getOwnerInfo(row) }}
@@ -115,7 +128,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="状态" width="100">
+        <el-table-column prop="online" label="状态" width="100" sortable>
           <template #default="{ row }">
             <el-tag
               :type="row.online ? 'success' : 'danger'"
@@ -126,7 +139,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="暂停" width="80" align="center">
+        <el-table-column prop="paused" label="暂停" width="80" align="center" sortable>
           <template #default="{ row }">
             <el-tag
               :type="row.paused ? 'warning' : 'success'"
@@ -137,7 +150,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="contacted_at" label="最后联系" width="160">
+        <el-table-column prop="contacted_at" label="最后联系" width="160" sortable>
           <template #default="{ row }">
             {{ formatTime(row.contacted_at) }}
           </template>
@@ -165,8 +178,8 @@
         </el-table-column>
       </el-table>
 
-      <div v-if="!loading && runners.length === 0" class="empty-state">
-        <el-empty description="暂无 Runners" />
+      <div v-if="!loading && filteredRunners.length === 0" class="empty-state">
+        <el-empty :description="searchKeyword ? '没有找到匹配的 Runners' : '暂无 Runners'" />
       </div>
     </div>
 
@@ -241,7 +254,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Location } from '@element-plus/icons-vue'
+import { Refresh, Location, Search } from '@element-plus/icons-vue'
 import { useGitlabStore } from '@/store/modules/gitlab'
 import * as gitlabApi from '@/api/gitlab'
 
@@ -251,6 +264,7 @@ const loading = ref(false)
 const runners = ref([])
 const submitting = ref(false)
 const selectedRunners = ref([])
+const searchKeyword = ref('')
 
 const filters = ref({
   type: '',
@@ -328,6 +342,53 @@ const getOwnerInfo = (row) => {
   }
 
   return null
+}
+
+// Filtered runners based on search keyword
+const filteredRunners = computed(() => {
+  if (!searchKeyword.value) {
+    return runners.value
+  }
+
+  const keyword = searchKeyword.value.toLowerCase()
+  return runners.value.filter(runner => {
+    // Search in tags
+    if (runner.tag_list && runner.tag_list.some(tag => tag.toLowerCase().includes(keyword))) {
+      return true
+    }
+
+    // Search in owner info
+    const ownerInfo = getOwnerInfo(runner)
+    if (ownerInfo && ownerInfo.toLowerCase().includes(keyword)) {
+      return true
+    }
+
+    // Search in description
+    if (runner.description && runner.description.toLowerCase().includes(keyword)) {
+      return true
+    }
+
+    return false
+  })
+})
+
+// Handle search input
+const handleSearch = () => {
+  // The computed property will automatically update
+}
+
+// Sort by tag list
+const sortByTagList = (a, b) => {
+  const tagsA = a.tag_list && a.tag_list.length > 0 ? a.tag_list.join(',') : ''
+  const tagsB = b.tag_list && b.tag_list.length > 0 ? b.tag_list.join(',') : ''
+  return tagsA.localeCompare(tagsB)
+}
+
+// Sort by owner
+const sortByOwner = (a, b) => {
+  const ownerA = getOwnerInfo(a) || ''
+  const ownerB = getOwnerInfo(b) || ''
+  return ownerA.localeCompare(ownerB)
 }
 
 // Format time
