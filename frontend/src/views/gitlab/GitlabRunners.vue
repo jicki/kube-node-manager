@@ -671,12 +671,50 @@
                 {{ currentRunner.active ? '在线' : '离线' }}
               </el-tag>
             </span>
+            <span style="margin-left: 20px">
+              共 <strong>{{ runnerJobs.length }}</strong> 条记录
+              <span v-if="filteredRunnerJobs.length !== runnerJobs.length">
+                (筛选后: <strong>{{ filteredRunnerJobs.length }}</strong> 条)
+              </span>
+            </span>
           </template>
         </el-alert>
 
-        <el-table :data="runnerJobs" border style="width: 100%" size="small">
-          <el-table-column prop="id" label="Job ID" min-width="90" />
-          <el-table-column label="Pipeline" min-width="100">
+        <!-- 筛选条件 -->
+        <div style="margin-bottom: 16px; display: flex; gap: 12px; align-items: center;">
+          <el-input
+            v-model="jobsFilters.project"
+            placeholder="按项目名称搜索"
+            clearable
+            style="width: 250px"
+            prefix-icon="Search"
+          />
+          <el-select
+            v-model="jobsFilters.status"
+            placeholder="按状态筛选"
+            clearable
+            style="width: 150px"
+          >
+            <el-option label="运行中" value="running" />
+            <el-option label="待处理" value="pending" />
+            <el-option label="成功" value="success" />
+            <el-option label="失败" value="failed" />
+            <el-option label="已取消" value="canceled" />
+            <el-option label="已跳过" value="skipped" />
+            <el-option label="手动" value="manual" />
+            <el-option label="已创建" value="created" />
+          </el-select>
+        </div>
+
+        <el-table 
+          :data="filteredRunnerJobs" 
+          border 
+          style="width: 100%" 
+          size="small"
+          :max-height="500"
+        >
+          <el-table-column prop="id" label="Job ID" width="100" />
+          <el-table-column label="Pipeline" width="110">
             <template #default="{ row }">
               <el-link v-if="row.pipeline" type="primary" :href="row.pipeline.web_url" target="_blank">
                 #{{ row.pipeline.id }}
@@ -684,42 +722,42 @@
               <span v-else>-</span>
             </template>
           </el-table-column>
-          <el-table-column label="项目" min-width="180" show-overflow-tooltip>
+          <el-table-column label="项目" min-width="160" show-overflow-tooltip>
             <template #default="{ row }">
               <span v-if="row.project">{{ row.project.name }}</span>
               <span v-else>-</span>
             </template>
           </el-table-column>
-          <el-table-column prop="name" label="作业名称" min-width="150" show-overflow-tooltip />
-          <el-table-column prop="stage" label="阶段" min-width="100" />
-          <el-table-column label="分支/标签" min-width="120" show-overflow-tooltip>
+          <el-table-column prop="name" label="作业名称" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="stage" label="阶段" width="120" show-overflow-tooltip />
+          <el-table-column label="分支/标签" min-width="110" show-overflow-tooltip>
             <template #default="{ row }">
               <el-tag size="small">{{ row.ref }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="状态" min-width="90" align="center">
+          <el-table-column label="状态" width="90" align="center">
             <template #default="{ row }">
               <el-tag :type="getJobStatusColor(row.status)" size="small">
                 {{ getJobStatusLabel(row.status) }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="耗时" min-width="100" align="right">
+          <el-table-column label="耗时" width="90" align="right">
             <template #default="{ row }">
               {{ formatJobDuration(row.duration) }}
             </template>
           </el-table-column>
-          <el-table-column label="排队时间" min-width="100" align="right">
+          <el-table-column label="排队" width="80" align="right">
             <template #default="{ row }">
               {{ formatJobDuration(row.queued_duration) }}
             </template>
           </el-table-column>
-          <el-table-column label="创建时间" min-width="180">
+          <el-table-column label="创建时间" width="170">
             <template #default="{ row }">
               {{ row.created_at ? new Date(row.created_at).toLocaleString('zh-CN') : '-' }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" min-width="100" align="center" fixed="right">
+          <el-table-column label="操作" width="100" align="center" fixed="right">
             <template #default="{ row }">
               <el-button
                 v-if="row.web_url"
@@ -748,6 +786,7 @@
           />
         </div>
 
+        <el-empty v-if="!jobsLoading && filteredRunnerJobs.length === 0 && runnerJobs.length > 0" description="没有符合筛选条件的记录" />
         <el-empty v-if="!jobsLoading && runnerJobs.length === 0" description="暂无运行记录" />
       </div>
     </el-dialog>
@@ -867,6 +906,10 @@ const jobsPagination = ref({
   currentPage: 1,
   pageSize: 20,
   total: 0
+})
+const jobsFilters = ref({
+  project: '',
+  status: ''
 })
 
 // Fetch runners with caching
@@ -1571,11 +1614,34 @@ const handleResetToken = async (runner) => {
   }
 }
 
+// Filtered runner jobs based on search criteria
+const filteredRunnerJobs = computed(() => {
+  let jobs = runnerJobs.value
+
+  // Filter by project name
+  if (jobsFilters.value.project) {
+    const projectSearch = jobsFilters.value.project.toLowerCase()
+    jobs = jobs.filter(job => {
+      const projectName = job.project?.name || ''
+      return projectName.toLowerCase().includes(projectSearch)
+    })
+  }
+
+  // Filter by status
+  if (jobsFilters.value.status) {
+    jobs = jobs.filter(job => job.status === jobsFilters.value.status)
+  }
+
+  return jobs
+})
+
 // Handle view runner jobs
 const handleViewJobs = async (runner) => {
   currentRunner.value = runner
   jobsDialogVisible.value = true
   jobsPagination.value.currentPage = 1
+  jobsFilters.value.project = ''
+  jobsFilters.value.status = ''
   await fetchRunnerJobs()
 }
 
