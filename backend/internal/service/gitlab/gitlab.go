@@ -811,7 +811,13 @@ func (s *Service) ResetRunnerToken(runnerID int, username string) (*CreateRunner
 		return nil, err
 	}
 
-	s.logger.Info(fmt.Sprintf("Reset token for runner: ID=%d", resetResp.ID))
+	// GitLab API may not return ID in reset response, use the parameter instead
+	if resetResp.ID == 0 {
+		resetResp.ID = runnerID
+		s.logger.Info(fmt.Sprintf("Reset token response ID is 0, using parameter runner ID=%d", runnerID))
+	}
+
+	s.logger.Info(fmt.Sprintf("Reset token for runner: ID=%d, Token length=%d", resetResp.ID, len(resetResp.Token)))
 
 	// Update runner token in database
 	if err := s.UpdateRunnerToken(resetResp.ID, resetResp.Token); err != nil {
