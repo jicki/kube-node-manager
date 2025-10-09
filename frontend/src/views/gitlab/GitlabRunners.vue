@@ -362,7 +362,7 @@
         ref="createFormRef"
         :model="createForm"
         :rules="createFormRules"
-        label-width="120px"
+        label-width="auto"
       >
         <el-alert
           title="创建 Instance Runner"
