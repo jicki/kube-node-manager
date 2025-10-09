@@ -182,69 +182,92 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([
 		return nil, errors.New("GitLab domain or token is not configured")
 	}
 
-	// Build URL with query parameters
-	// Note: /api/v4/runners/all returns basic runner info only
-	// Fields like tag_list, contacted_at, version, locked are NOT included
-	// To get these fields, use GetRunner(id) for individual runners
-	apiURL := fmt.Sprintf("%s/api/v4/runners/all", settings.Domain)
-	u, err := url.Parse(apiURL)
-	if err != nil {
-		return nil, err
-	}
-
-	q := u.Query()
-	if runnerType != "" {
-		q.Set("type", runnerType)
-	}
-	if status != "" {
-		q.Set("status", status)
-	}
-	if paused != nil {
-		if *paused {
-			q.Set("paused", "true")
-		} else {
-			q.Set("paused", "false")
-		}
-	}
-	q.Set("per_page", "100")
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("PRIVATE-TOKEN", settings.Token)
+	// Fetch all runners with pagination
+	var allRunners []RunnerInfo
+	page := 1
+	perPage := 100 // GitLab default max per page
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	for {
+		// Build URL with query parameters
+		// Note: /api/v4/runners/all returns basic runner info only
+		// Fields like tag_list, contacted_at, version, locked are NOT included
+		// To get these fields, use GetRunner(id) for individual runners
+		apiURL := fmt.Sprintf("%s/api/v4/runners/all", settings.Domain)
+		u, err := url.Parse(apiURL)
+		if err != nil {
+			return nil, err
+		}
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+		q := u.Query()
+		if runnerType != "" {
+			q.Set("type", runnerType)
+		}
+		if status != "" {
+			q.Set("status", status)
+		}
+		if paused != nil {
+			if *paused {
+				q.Set("paused", "true")
+			} else {
+				q.Set("paused", "false")
+			}
+		}
+		q.Set("per_page", fmt.Sprintf("%d", perPage))
+		q.Set("page", fmt.Sprintf("%d", page))
+		u.RawQuery = q.Encode()
+
+		req, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		// Read body for current page
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		var runners []RunnerInfo
+		if err := json.Unmarshal(body, &runners); err != nil {
+			return nil, err
+		}
+
+		// Append runners from current page
+		allRunners = append(allRunners, runners...)
+
+		// Check if there are more pages
+		// If the current page has fewer runners than per_page, we've reached the last page
+		if len(runners) < perPage {
+			break
+		}
+
+		// Move to next page
+		page++
 	}
 
-	// Read body for debugging
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var runners []RunnerInfo
-	if err := json.Unmarshal(body, &runners); err != nil {
-		return nil, err
-	}
+	s.logger.Info(fmt.Sprintf("Fetched total %d runners from GitLab", len(allRunners)))
 
 	// The /runners/all endpoint returns limited information (no tag_list, contacted_at, etc.)
 	// Fetch detailed info for each runner concurrently to improve performance
-	detailedRunners := make([]RunnerInfo, len(runners))
+	detailedRunners := make([]RunnerInfo, len(allRunners))
 
 	// Use goroutines with a semaphore to limit concurrent requests
 	// Increase concurrency to 50 for better performance
@@ -253,9 +276,9 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([
 
 	// Use sync.WaitGroup for better synchronization
 	var wg sync.WaitGroup
-	wg.Add(len(runners))
+	wg.Add(len(allRunners))
 
-	for i, runner := range runners {
+	for i, runner := range allRunners {
 		sem <- struct{}{} // Acquire semaphore
 		go func(index int, r RunnerInfo) {
 			defer func() {
@@ -310,51 +333,78 @@ func (s *Service) ListPipelines(projectID int, ref, status string) ([]PipelineIn
 		return nil, errors.New("GitLab domain or token is not configured")
 	}
 
-	// Build URL
-	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/pipelines", settings.Domain, projectID)
-	u, err := url.Parse(apiURL)
-	if err != nil {
-		return nil, err
-	}
-
-	q := u.Query()
-	if ref != "" {
-		q.Set("ref", ref)
-	}
-	if status != "" {
-		q.Set("status", status)
-	}
-	q.Set("per_page", "100")
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("PRIVATE-TOKEN", settings.Token)
+	// Fetch all pipelines with pagination
+	var allPipelines []PipelineInfo
+	page := 1
+	perPage := 100 // GitLab default max per page
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	for {
+		// Build URL
+		apiURL := fmt.Sprintf("%s/api/v4/projects/%d/pipelines", settings.Domain, projectID)
+		u, err := url.Parse(apiURL)
+		if err != nil {
+			return nil, err
+		}
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+		q := u.Query()
+		if ref != "" {
+			q.Set("ref", ref)
+		}
+		if status != "" {
+			q.Set("status", status)
+		}
+		q.Set("per_page", fmt.Sprintf("%d", perPage))
+		q.Set("page", fmt.Sprintf("%d", page))
+		u.RawQuery = q.Encode()
+
+		req, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var pipelines []PipelineInfo
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal(body, &pipelines); err != nil {
+			return nil, err
+		}
+
+		// Append pipelines from current page
+		allPipelines = append(allPipelines, pipelines...)
+
+		// Check if there are more pages
+		if len(pipelines) < perPage {
+			break
+		}
+
+		// Move to next page
+		page++
 	}
 
-	var pipelines []PipelineInfo
-	if err := json.NewDecoder(resp.Body).Decode(&pipelines); err != nil {
-		return nil, err
-	}
+	s.logger.Info(fmt.Sprintf("Fetched total %d pipelines from GitLab for project %d", len(allPipelines), projectID))
 
-	return pipelines, nil
+	return allPipelines, nil
 }
 
 // GetRunner retrieves a specific runner by ID
