@@ -107,16 +107,24 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button
-              v-if="row.web_url"
               link
               type="primary"
               size="small"
-              @click="openPipelineUrl(row.web_url)"
+              @click="handleShowDetail(row)"
             >
               查看详情
+            </el-button>
+            <el-button
+              v-if="row.web_url"
+              link
+              type="info"
+              size="small"
+              @click="openPipelineUrl(row.web_url)"
+            >
+              GitLab
             </el-button>
           </template>
         </el-table-column>
@@ -159,6 +167,94 @@
         </p>
       </el-alert>
     </div>
+
+    <!-- Pipeline 详情对话框 -->
+    <el-dialog
+      v-model="detailDialogVisible"
+      title="Pipeline 详情"
+      width="900px"
+      destroy-on-close
+    >
+      <div v-loading="detailLoading">
+        <el-descriptions v-if="pipelineDetail" :column="2" border>
+          <el-descriptions-item label="Pipeline ID">
+            {{ pipelineDetail.id }}
+          </el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="getPipelineStatusColor(pipelineDetail.status)" size="small">
+              {{ getPipelineStatusLabel(pipelineDetail.status) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="分支/标签">
+            <el-tag size="small">{{ pipelineDetail.ref }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="Commit SHA">
+            <code>{{ pipelineDetail.sha ? pipelineDetail.sha.substring(0, 8) : '-' }}</code>
+          </el-descriptions-item>
+          <el-descriptions-item label="耗时">
+            {{ formatDuration(pipelineDetail.duration) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="排队时间">
+            {{ formatQueuedDuration(pipelineDetail.queued_duration) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="创建时间">
+            {{ formatTime(pipelineDetail.created_at) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="完成时间">
+            {{ formatTime(pipelineDetail.finished_at) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="作业数量">
+            <el-tag type="info" size="small">{{ pipelineJobs.length }} 个作业</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="Web URL">
+            <el-link :href="pipelineDetail.web_url" target="_blank" type="primary">
+              在 GitLab 中打开
+            </el-link>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <!-- 作业列表 -->
+        <el-divider content-position="left">
+          <span style="font-weight: bold">作业列表 ({{ pipelineJobs.length }})</span>
+        </el-divider>
+
+        <el-table :data="pipelineJobs" border style="width: 100%">
+          <el-table-column prop="id" label="Job ID" width="80" />
+          <el-table-column prop="name" label="作业名称" width="180" />
+          <el-table-column prop="stage" label="阶段" width="100" />
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="getPipelineStatusColor(row.status)" size="small">
+                {{ getPipelineStatusLabel(row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="耗时" width="100">
+            <template #default="{ row }">
+              {{ formatDuration(row.duration) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="排队时间" width="100">
+            <template #default="{ row }">
+              {{ formatQueuedDuration(row.queued_duration) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.web_url"
+                link
+                type="primary"
+                size="small"
+                @click="openJobUrl(row.web_url)"
+              >
+                查看日志
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -184,6 +280,13 @@ const pagination = ref({
   pageSize: 20,
   total: 0
 })
+
+// Pipeline detail dialog
+const detailDialogVisible = ref(false)
+const detailLoading = ref(false)
+const pipelineDetail = ref(null)
+const pipelineJobs = ref([])
+const currentPipeline = ref(null)
 
 // Fetch pipelines
 const fetchPipelines = async () => {
@@ -315,8 +418,42 @@ const formatTime = (time) => {
   })
 }
 
+// Handle show pipeline detail
+const handleShowDetail = async (pipeline) => {
+  currentPipeline.value = pipeline
+  detailDialogVisible.value = true
+  detailLoading.value = true
+
+  try {
+    // Import API functions
+    const { getPipelineDetail, getPipelineJobs } = await import('@/api/gitlab')
+    
+    // Fetch pipeline detail and jobs in parallel
+    const [detail, jobs] = await Promise.all([
+      getPipelineDetail(pipeline.project_id, pipeline.id),
+      getPipelineJobs(pipeline.project_id, pipeline.id)
+    ])
+
+    pipelineDetail.value = detail.data
+    pipelineJobs.value = jobs.data || []
+
+    console.log('Pipeline detail:', pipelineDetail.value)
+    console.log('Pipeline jobs:', pipelineJobs.value)
+  } catch (error) {
+    ElMessage.error('获取 Pipeline 详情失败')
+    console.error('Failed to fetch pipeline detail:', error)
+  } finally {
+    detailLoading.value = false
+  }
+}
+
 // Open pipeline URL in new tab
 const openPipelineUrl = (url) => {
+  window.open(url, '_blank')
+}
+
+// Open job URL in new tab
+const openJobUrl = (url) => {
   window.open(url, '_blank')
 }
 

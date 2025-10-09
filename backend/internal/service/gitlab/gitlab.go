@@ -545,6 +545,158 @@ func (s *Service) ListPipelines(projectID int, ref, status string, page, perPage
 	return pipelines, nil
 }
 
+// PipelineDetailInfo represents detailed GitLab pipeline information
+type PipelineDetailInfo struct {
+	ID             int                    `json:"id"`
+	ProjectID      int                    `json:"project_id"`
+	Status         string                 `json:"status"`
+	Ref            string                 `json:"ref"`
+	SHA            string                 `json:"sha"`
+	WebURL         string                 `json:"web_url"`
+	CreatedAt      time.Time              `json:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at"`
+	StartedAt      *time.Time             `json:"started_at"`
+	FinishedAt     *time.Time             `json:"finished_at"`
+	Duration       int                    `json:"duration"`
+	QueuedDuration int                    `json:"queued_duration"`
+	Coverage       *float64               `json:"coverage"`
+	User           map[string]interface{} `json:"user"`
+}
+
+// PipelineJobInfo represents a job in a pipeline
+type PipelineJobInfo struct {
+	ID             int                    `json:"id"`
+	Status         string                 `json:"status"`
+	Stage          string                 `json:"stage"`
+	Name           string                 `json:"name"`
+	Ref            string                 `json:"ref"`
+	CreatedAt      time.Time              `json:"created_at"`
+	StartedAt      *time.Time             `json:"started_at"`
+	FinishedAt     *time.Time             `json:"finished_at"`
+	Duration       float64                `json:"duration"`
+	QueuedDuration float64                `json:"queued_duration"`
+	WebURL         string                 `json:"web_url"`
+	User           map[string]interface{} `json:"user"`
+}
+
+// GetPipelineDetail retrieves detailed information for a specific pipeline
+func (s *Service) GetPipelineDetail(projectID, pipelineID int) (*PipelineDetailInfo, error) {
+	settings, err := s.GetSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	if !settings.Enabled {
+		return nil, errors.New("GitLab integration is not enabled")
+	}
+
+	if settings.Domain == "" || settings.Token == "" {
+		return nil, errors.New("GitLab domain or token is not configured")
+	}
+
+	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/pipelines/%d", settings.Domain, projectID, pipelineID)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitLab API returned status code %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var pipelineDetail PipelineDetailInfo
+	if err := json.Unmarshal(body, &pipelineDetail); err != nil {
+		return nil, err
+	}
+
+	// Calculate queued_duration if not provided and we have valid timestamps
+	if pipelineDetail.QueuedDuration == 0 && pipelineDetail.StartedAt != nil && !pipelineDetail.CreatedAt.IsZero() {
+		queuedDuration := pipelineDetail.StartedAt.Sub(pipelineDetail.CreatedAt)
+		if queuedDuration > 0 {
+			pipelineDetail.QueuedDuration = int(queuedDuration.Seconds())
+		}
+	}
+
+	s.logger.Info(fmt.Sprintf("Fetched pipeline detail: ID=%d, Duration=%d, QueuedDuration=%d",
+		pipelineDetail.ID, pipelineDetail.Duration, pipelineDetail.QueuedDuration))
+
+	return &pipelineDetail, nil
+}
+
+// GetPipelineJobs retrieves jobs for a specific pipeline
+func (s *Service) GetPipelineJobs(projectID, pipelineID int) ([]PipelineJobInfo, error) {
+	settings, err := s.GetSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	if !settings.Enabled {
+		return nil, errors.New("GitLab integration is not enabled")
+	}
+
+	if settings.Domain == "" || settings.Token == "" {
+		return nil, errors.New("GitLab domain or token is not configured")
+	}
+
+	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/pipelines/%d/jobs", settings.Domain, projectID, pipelineID)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+	// Set per_page to get all jobs (max 100)
+	q := req.URL.Query()
+	q.Set("per_page", "100")
+	req.URL.RawQuery = q.Encode()
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitLab API returned status code %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var jobs []PipelineJobInfo
+	if err := json.Unmarshal(body, &jobs); err != nil {
+		return nil, err
+	}
+
+	s.logger.Info(fmt.Sprintf("Fetched %d jobs for pipeline %d", len(jobs), pipelineID))
+
+	return jobs, nil
+}
+
 // GetRunner retrieves a specific runner by ID
 func (s *Service) GetRunner(runnerID int) (*RunnerInfo, error) {
 	settings, err := s.GetSettings()

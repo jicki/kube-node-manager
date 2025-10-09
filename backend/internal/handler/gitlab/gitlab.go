@@ -111,6 +111,62 @@ func (h *Handler) ListRunners(c *gin.Context) {
 	c.JSON(http.StatusOK, runners)
 }
 
+// GetPipelineDetail retrieves detailed information for a specific pipeline
+// GET /api/v1/gitlab/pipelines/:project_id/:pipeline_id
+func (h *Handler) GetPipelineDetail(c *gin.Context) {
+	projectIDStr := c.Param("project_id")
+	pipelineIDStr := c.Param("pipeline_id")
+
+	projectID, err := strconv.Atoi(projectIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project_id"})
+		return
+	}
+
+	pipelineID, err := strconv.Atoi(pipelineIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid pipeline_id"})
+		return
+	}
+
+	pipelineDetail, err := h.service.GetPipelineDetail(projectID, pipelineID)
+	if err != nil {
+		h.logger.Error("Failed to get pipeline detail: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, pipelineDetail)
+}
+
+// GetPipelineJobs retrieves jobs for a specific pipeline
+// GET /api/v1/gitlab/pipelines/:project_id/:pipeline_id/jobs
+func (h *Handler) GetPipelineJobs(c *gin.Context) {
+	projectIDStr := c.Param("project_id")
+	pipelineIDStr := c.Param("pipeline_id")
+
+	projectID, err := strconv.Atoi(projectIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project_id"})
+		return
+	}
+
+	pipelineID, err := strconv.Atoi(pipelineIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid pipeline_id"})
+		return
+	}
+
+	jobs, err := h.service.GetPipelineJobs(projectID, pipelineID)
+	if err != nil {
+		h.logger.Error("Failed to get pipeline jobs: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, jobs)
+}
+
 // ListPipelines lists pipelines for a project
 // GET /api/v1/gitlab/pipelines
 func (h *Handler) ListPipelines(c *gin.Context) {

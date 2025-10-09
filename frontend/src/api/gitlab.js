@@ -54,3 +54,13 @@ export const getGitlabRunnerToken = (runnerId) => {
 export const resetGitlabRunnerToken = (runnerId) => {
   return request.post(`/api/v1/gitlab/runners/${runnerId}/reset-token`)
 }
+
+// Get pipeline detail
+export const getPipelineDetail = (projectId, pipelineId) => {
+  return request.get(`/api/v1/gitlab/pipelines/${projectId}/${pipelineId}`)
+}
+
+// Get pipeline jobs
+export const getPipelineJobs = (projectId, pipelineId) => {
+  return request.get(`/api/v1/gitlab/pipelines/${projectId}/${pipelineId}/jobs`)
+}
