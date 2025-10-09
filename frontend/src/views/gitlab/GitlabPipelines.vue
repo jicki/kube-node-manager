@@ -157,41 +157,42 @@
     <el-dialog
       v-model="detailDialogVisible"
       title="Pipeline 详情"
-      width="900px"
+      width="85%"
       destroy-on-close
+      top="5vh"
     >
       <div v-loading="detailLoading">
-        <el-descriptions v-if="pipelineDetail" :column="2" border>
-          <el-descriptions-item label="Pipeline ID">
+        <el-descriptions v-if="pipelineDetail" :column="2" border size="small">
+          <el-descriptions-item label="Pipeline ID" label-align="right">
             {{ pipelineDetail.id }}
           </el-descriptions-item>
-          <el-descriptions-item label="状态">
+          <el-descriptions-item label="状态" label-align="right">
             <el-tag :type="getPipelineStatusColor(pipelineDetail.status)" size="small">
               {{ getPipelineStatusLabel(pipelineDetail.status) }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="分支/标签">
+          <el-descriptions-item label="分支/标签" label-align="right">
             <el-tag size="small">{{ pipelineDetail.ref }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="Commit SHA">
+          <el-descriptions-item label="Commit SHA" label-align="right">
             <code>{{ pipelineDetail.sha ? pipelineDetail.sha.substring(0, 8) : '-' }}</code>
           </el-descriptions-item>
-          <el-descriptions-item label="耗时">
+          <el-descriptions-item label="耗时" label-align="right">
             {{ formatDuration(pipelineDetail.duration) }}
           </el-descriptions-item>
-          <el-descriptions-item label="排队时间">
+          <el-descriptions-item label="排队时间" label-align="right">
             {{ formatQueuedDuration(pipelineDetail.queued_duration) }}
           </el-descriptions-item>
-          <el-descriptions-item label="创建时间">
+          <el-descriptions-item label="创建时间" label-align="right">
             {{ formatTime(pipelineDetail.created_at) }}
           </el-descriptions-item>
-          <el-descriptions-item label="完成时间">
+          <el-descriptions-item label="完成时间" label-align="right">
             {{ formatTime(pipelineDetail.finished_at) }}
           </el-descriptions-item>
-          <el-descriptions-item label="作业数量">
+          <el-descriptions-item label="作业数量" label-align="right">
             <el-tag type="info" size="small">{{ pipelineJobs.length }} 个作业</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="Web URL">
+          <el-descriptions-item label="Web URL" label-align="right">
             <el-link :href="pipelineDetail.web_url" target="_blank" type="primary">
               在 GitLab 中打开
             </el-link>
@@ -203,28 +204,28 @@
           <span style="font-weight: bold">作业列表 ({{ pipelineJobs.length }})</span>
         </el-divider>
 
-        <el-table :data="pipelineJobs" border style="width: 100%">
-          <el-table-column prop="id" label="Job ID" width="80" />
-          <el-table-column prop="name" label="作业名称" width="180" />
-          <el-table-column prop="stage" label="阶段" width="100" />
-          <el-table-column label="状态" width="100">
+        <el-table :data="pipelineJobs" border style="width: 100%" size="small">
+          <el-table-column prop="id" label="Job ID" min-width="90" />
+          <el-table-column prop="name" label="作业名称" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="stage" label="阶段" min-width="120" show-overflow-tooltip />
+          <el-table-column label="状态" min-width="90" align="center">
             <template #default="{ row }">
               <el-tag :type="getPipelineStatusColor(row.status)" size="small">
                 {{ getPipelineStatusLabel(row.status) }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="耗时" width="100">
+          <el-table-column label="耗时" min-width="100" align="right">
             <template #default="{ row }">
-              {{ formatDuration(row.duration) }}
+              {{ formatJobDuration(row.duration) }}
             </template>
           </el-table-column>
-          <el-table-column label="排队时间" width="100">
+          <el-table-column label="排队时间" min-width="100" align="right">
             <template #default="{ row }">
-              {{ formatQueuedDuration(row.queued_duration) }}
+              {{ formatJobDuration(row.queued_duration) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
+          <el-table-column label="操作" min-width="100" align="center" fixed="right">
             <template #default="{ row }">
               <el-button
                 v-if="row.web_url"
@@ -387,6 +388,34 @@ const formatQueuedDuration = (seconds) => {
   
   // Use the same formatting as duration
   return formatDuration(seconds)
+}
+
+// Format job duration (for float values in seconds)
+const formatJobDuration = (seconds) => {
+  // Check for null, undefined, or 0
+  if (seconds === null || seconds === undefined || seconds === 0) return '-'
+  
+  // Ensure it's a number
+  const duration = Number(seconds)
+  if (isNaN(duration) || duration < 0) return '-'
+
+  // Round to 2 decimal places for more readable display
+  const roundedDuration = Math.round(duration * 100) / 100
+
+  const hours = Math.floor(roundedDuration / 3600)
+  const minutes = Math.floor((roundedDuration % 3600) / 60)
+  const secs = Math.round(roundedDuration % 60)
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${secs}s`
+  } else if (minutes > 0) {
+    return `${minutes}m ${secs}s`
+  } else if (roundedDuration >= 1) {
+    return `${secs}s`
+  } else {
+    // For sub-second durations, show with decimal
+    return `${roundedDuration.toFixed(2)}s`
+  }
 }
 
 // Format time
