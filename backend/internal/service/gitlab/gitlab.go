@@ -508,11 +508,19 @@ func (s *Service) ListPipelines(projectID int, ref, status string, page, perPage
 	}
 
 	// Calculate duration if not provided by GitLab API
+	// Note: GitLab list API doesn't return started_at/finished_at, so we use updated_at - created_at
 	for i := range pipelines {
-		// If duration is 0 or not set, calculate from timestamps
-		if pipelines[i].Duration == 0 && !pipelines[i].FinishedAt.IsZero() && !pipelines[i].StartedAt.IsZero() {
-			duration := pipelines[i].FinishedAt.Sub(pipelines[i].StartedAt)
-			pipelines[i].Duration = int(duration.Seconds())
+		if pipelines[i].Duration == 0 {
+			// Check if we have valid timestamps
+			if !pipelines[i].FinishedAt.IsZero() && !pipelines[i].StartedAt.IsZero() {
+				// If we have finished_at and started_at, use them (most accurate)
+				duration := pipelines[i].FinishedAt.Sub(pipelines[i].StartedAt)
+				pipelines[i].Duration = int(duration.Seconds())
+			} else if !pipelines[i].UpdatedAt.IsZero() && !pipelines[i].CreatedAt.IsZero() {
+				// Otherwise, use updated_at - created_at (approximate)
+				duration := pipelines[i].UpdatedAt.Sub(pipelines[i].CreatedAt)
+				pipelines[i].Duration = int(duration.Seconds())
+			}
 		}
 	}
 
