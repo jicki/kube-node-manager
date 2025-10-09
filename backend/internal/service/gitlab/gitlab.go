@@ -418,17 +418,18 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) (i
 
 // PipelineInfo represents GitLab pipeline information
 type PipelineInfo struct {
-	ID         int       `json:"id"`
-	ProjectID  int       `json:"project_id"`
-	Status     string    `json:"status"`
-	Ref        string    `json:"ref"`
-	SHA        string    `json:"sha"`
-	WebURL     string    `json:"web_url"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-	StartedAt  time.Time `json:"started_at"`
-	FinishedAt time.Time `json:"finished_at"`
-	Duration   int       `json:"duration"`
+	ID             int       `json:"id"`
+	ProjectID      int       `json:"project_id"`
+	Status         string    `json:"status"`
+	Ref            string    `json:"ref"`
+	SHA            string    `json:"sha"`
+	WebURL         string    `json:"web_url"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	StartedAt      time.Time `json:"started_at"`
+	FinishedAt     time.Time `json:"finished_at"`
+	Duration       int       `json:"duration"`
+	QueuedDuration int       `json:"queued_duration"` // Time spent in queue before execution
 }
 
 // ListPipelines retrieves pipelines for a project with pagination support
@@ -525,6 +526,12 @@ func (s *Service) ListPipelines(projectID int, ref, status string, page, perPage
 	}
 
 	s.logger.Info(fmt.Sprintf("Fetched %d pipelines from GitLab for project %d (page=%d, per_page=%d)", len(pipelines), projectID, page, perPage))
+
+	// Debug: Log first pipeline to check queued_duration field
+	if len(pipelines) > 0 {
+		s.logger.Info(fmt.Sprintf("Sample pipeline: ID=%d, Duration=%d, QueuedDuration=%d",
+			pipelines[0].ID, pipelines[0].Duration, pipelines[0].QueuedDuration))
+	}
 
 	return pipelines, nil
 }

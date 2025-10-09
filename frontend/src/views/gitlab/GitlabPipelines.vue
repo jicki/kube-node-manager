@@ -95,6 +95,12 @@
           </template>
         </el-table-column>
 
+        <el-table-column prop="queued_duration" label="排队时间" width="100">
+          <template #default="{ row }">
+            {{ formatDuration(row.queued_duration) }}
+          </template>
+        </el-table-column>
+
         <el-table-column prop="created_at" label="创建时间" width="180">
           <template #default="{ row }">
             {{ formatTime(row.created_at) }}
