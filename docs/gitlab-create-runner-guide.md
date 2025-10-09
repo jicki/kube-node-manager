@@ -11,9 +11,14 @@
   - 简单易用，配置快速
 
 - ✅ 配置选项：
-  - Runner 描述（必填）
-  - 标签列表（可选）
-  - 运行未打标签作业（默认：是）
+  - **Runner 描述**（必填）- 简短描述此 Runner 的用途
+  - **标签列表**（可选）- 指定 Runner 可执行的作业类型
+  - **运行未打标签作业**（可选，默认：否）- 是否允许执行没有标签的作业
+  - **Runner 额外描述**（可选）- 添加更多关于 Runner 的详细信息
+  - **受保护**（可选，默认：否）- 是否仅用于受保护的分支
+  - **锁定到当前项目**（可选，默认：否）- 是否锁定 Runner
+  - **最大作业超时**（可选）- Runner 可运行作业的最大时间（最少 600 秒）
+  - **已暂停**（可选，默认：否）- 创建后是否暂停 Runner
 
 - ✅ 安全的 Token 管理：
   - 创建成功后显示 Token（仅一次）
@@ -37,8 +42,16 @@
 
 #### 可选字段
 
-- **标签**：用于匹配 CI/CD 作业的标签（可添加多个）
-- **运行未打标签作业**：是否运行没有标签的作业（默认：是）
+**基础配置**:
+- **标签**：用于匹配 CI/CD 作业的标签，可添加多个（如：docker、linux、production）
+- **运行未打标签作业**：是否运行没有标签的作业（默认：否）
+- **Runner 额外描述**：添加关于此 Runner 的详细描述信息（最多 200 字符）
+
+**高级配置**:
+- **受保护**：是否仅用于受保护的分支（默认：否）
+- **锁定到当前项目**：是否锁定 Runner（默认：否）
+- **最大作业超时**：Runner 在结束作业前可以运行的最大时间，单位为秒（最少 600 秒，留空使用默认值）
+- **已暂停**：创建后 Runner 是否处于暂停状态（默认：否）
 
 ### 3. 创建并获取 Token
 
@@ -93,9 +106,13 @@ gitlab-runner register \
 ```json
 {
   "runner_type": "instance_type",
-  "description": "My Docker Runner",
-  "tag_list": ["docker", "production"],
-  "run_untagged": true
+  "description": "Production Docker Runner - Build and Deploy",
+  "tag_list": ["docker", "production", "linux"],
+  "run_untagged": false,
+  "locked": false,
+  "access_level": "not_protected",
+  "maximum_timeout": 3600,
+  "paused": false
 }
 ```
 

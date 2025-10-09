@@ -385,6 +385,10 @@
           />
         </el-form-item>
 
+        <el-divider content-position="left">
+          <span style="font-size: 14px; color: #606266;">配置（可选）</span>
+        </el-divider>
+
         <el-form-item label="标签">
           <el-select
             v-model="createForm.tag_list"
@@ -392,7 +396,7 @@
             filterable
             allow-create
             default-first-option
-            placeholder="输入标签后按回车添加"
+            placeholder="输入标签后按回车添加，例如：docker, linux"
             style="width: 100%"
           >
             <el-option
@@ -403,14 +407,60 @@
             />
           </el-select>
           <div style="color: #909399; font-size: 12px; margin-top: 4px;">
-            标签用于匹配 CI/CD 作业
+            添加标签以指定 Runner 可执行的作业类型
           </div>
         </el-form-item>
 
         <el-form-item label="运行未打标签作业">
           <el-switch v-model="createForm.run_untagged" />
           <span style="margin-left: 10px; color: #909399; font-size: 12px;">
-            {{ createForm.run_untagged ? '允许运行没有标签的作业' : '只运行有标签的作业' }}
+            {{ createForm.run_untagged ? '允许执行没有标签的作业' : '仅执行带标签的作业' }}
+          </span>
+        </el-form-item>
+
+        <el-form-item label="Runner 描述">
+          <el-input
+            v-model="createForm.runner_description"
+            type="textarea"
+            :rows="2"
+            placeholder="可选：添加关于此 Runner 的额外描述信息"
+            maxlength="200"
+            show-word-limit
+          />
+        </el-form-item>
+
+        <el-form-item label="受保护">
+          <el-switch v-model="createForm.protected" />
+          <span style="margin-left: 10px; color: #909399; font-size: 12px;">
+            {{ createForm.protected ? '仅用于受保护的分支' : '可用于所有分支' }}
+          </span>
+        </el-form-item>
+
+        <el-form-item label="锁定到当前项目">
+          <el-switch v-model="createForm.locked" />
+          <span style="margin-left: 10px; color: #909399; font-size: 12px;">
+            {{ createForm.locked ? '已锁定' : '未锁定' }}
+          </span>
+        </el-form-item>
+
+        <el-form-item label="最大作业超时">
+          <el-input
+            v-model.number="createForm.maximum_timeout"
+            type="number"
+            placeholder="留空使用默认值（最少 600 秒）"
+            :min="600"
+          >
+            <template #append>秒</template>
+          </el-input>
+          <div style="color: #909399; font-size: 12px; margin-top: 4px;">
+            Runner 在结束作业前可以运行的最大时间
+          </div>
+        </el-form-item>
+
+        <el-form-item label="已暂停">
+          <el-switch v-model="createForm.paused" />
+          <span style="margin-left: 10px; color: #909399; font-size: 12px;">
+            {{ createForm.paused ? 'Runner 已暂停，不接收新作业' : 'Runner 运行中' }}
           </span>
         </el-form-item>
       </el-form>
@@ -656,7 +706,12 @@ const createFormRef = ref(null)
 const createForm = ref({
   description: '',
   tag_list: [],
-  run_untagged: true
+  run_untagged: false,           // 运行未打标签作业 - 默认不开启
+  runner_description: '',        // Runner 额外描述
+  protected: false,              // 受保护 - 默认不开启
+  locked: false,                 // 锁定到当前项目 - 默认不开启
+  maximum_timeout: null,         // 最大作业超时（秒）
+  paused: false                  // 已暂停 - 默认不开启
 })
 
 // Form validation rules
@@ -1217,7 +1272,12 @@ const handleCreate = () => {
   createForm.value = {
     description: '',
     tag_list: [],
-    run_untagged: true
+    run_untagged: false,
+    runner_description: '',
+    protected: false,
+    locked: false,
+    maximum_timeout: null,
+    paused: false
   }
   createDialogVisible.value = true
 }
@@ -1239,7 +1299,24 @@ const handleCreateSubmit = async () => {
       runner_type: 'instance_type',
       description: createForm.value.description,
       tag_list: createForm.value.tag_list,
-      run_untagged: createForm.value.run_untagged
+      run_untagged: createForm.value.run_untagged,
+      locked: createForm.value.locked,
+      paused: createForm.value.paused
+    }
+
+    // Add optional fields if provided
+    if (createForm.value.runner_description) {
+      data.description = createForm.value.description + ' - ' + createForm.value.runner_description
+    }
+
+    if (createForm.value.protected) {
+      data.access_level = 'ref_protected'
+    } else {
+      data.access_level = 'not_protected'
+    }
+
+    if (createForm.value.maximum_timeout) {
+      data.maximum_timeout = createForm.value.maximum_timeout
     }
 
     const response = await gitlabApi.createGitlabRunner(data)
