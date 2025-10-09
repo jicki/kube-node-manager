@@ -97,7 +97,7 @@
 
         <el-table-column prop="queued_duration" label="排队时间" width="100">
           <template #default="{ row }">
-            {{ formatDuration(row.queued_duration) }}
+            {{ formatQueuedDuration(row.queued_duration) }}
           </template>
         </el-table-column>
 
@@ -290,6 +290,15 @@ const formatDuration = (seconds) => {
   } else {
     return `${secs}s`
   }
+}
+
+// Format queued duration with special handling for 0 (unknown data)
+const formatQueuedDuration = (seconds) => {
+  // If 0, it means data is not available from GitLab API
+  if (seconds === 0 || seconds === null || seconds === undefined) return '-'
+  
+  // Use the same formatting as duration
+  return formatDuration(seconds)
 }
 
 // Format time

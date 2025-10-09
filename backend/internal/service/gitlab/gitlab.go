@@ -508,9 +508,10 @@ func (s *Service) ListPipelines(projectID int, ref, status string, page, perPage
 		return nil, err
 	}
 
-	// Calculate duration if not provided by GitLab API
-	// Note: GitLab list API doesn't return started_at/finished_at, so we use updated_at - created_at
+	// Calculate duration and queued_duration if not provided by GitLab API
+	// Note: GitLab list API doesn't return started_at/finished_at, so we use calculated values
 	for i := range pipelines {
+		// Calculate duration if not provided
 		if pipelines[i].Duration == 0 {
 			// Check if we have valid timestamps
 			if !pipelines[i].FinishedAt.IsZero() && !pipelines[i].StartedAt.IsZero() {
@@ -523,15 +524,23 @@ func (s *Service) ListPipelines(projectID int, ref, status string, page, perPage
 				pipelines[i].Duration = int(duration.Seconds())
 			}
 		}
+
+		// Calculate queued_duration if not provided
+		// Queued duration is typically: started_at - created_at
+		if pipelines[i].QueuedDuration == 0 && !pipelines[i].CreatedAt.IsZero() {
+			// If we have started_at, calculate the queued time
+			if !pipelines[i].StartedAt.IsZero() {
+				queuedDuration := pipelines[i].StartedAt.Sub(pipelines[i].CreatedAt)
+				if queuedDuration > 0 {
+					pipelines[i].QueuedDuration = int(queuedDuration.Seconds())
+				}
+			}
+			// Note: If started_at is not available (zero value), we cannot calculate queued_duration
+			// In this case, queued_duration will remain 0 or show as "-" in the UI
+		}
 	}
 
 	s.logger.Info(fmt.Sprintf("Fetched %d pipelines from GitLab for project %d (page=%d, per_page=%d)", len(pipelines), projectID, page, perPage))
-
-	// Debug: Log first pipeline to check queued_duration field
-	if len(pipelines) > 0 {
-		s.logger.Info(fmt.Sprintf("Sample pipeline: ID=%d, Duration=%d, QueuedDuration=%d",
-			pipelines[0].ID, pipelines[0].Duration, pipelines[0].QueuedDuration))
-	}
 
 	return pipelines, nil
 }
