@@ -241,6 +241,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		gitlab.GET("/runners", handlers.Gitlab.ListRunners)
 		gitlab.POST("/runners", handlers.Gitlab.CreateRunner)
 		gitlab.GET("/runners/:id", handlers.Gitlab.GetRunner)
+		gitlab.GET("/runners/:id/jobs", handlers.Gitlab.GetRunnerJobs)
 		gitlab.GET("/runners/:id/token", handlers.Gitlab.GetRunnerToken)
 		gitlab.POST("/runners/:id/reset-token", handlers.Gitlab.ResetRunnerToken)
 		gitlab.PUT("/runners/:id", handlers.Gitlab.UpdateRunner)

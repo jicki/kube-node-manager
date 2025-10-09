@@ -697,6 +697,96 @@ func (s *Service) GetPipelineJobs(projectID, pipelineID int) ([]PipelineJobInfo,
 	return jobs, nil
 }
 
+// RunnerJobInfo represents a job run by a specific runner
+type RunnerJobInfo struct {
+	ID             int                    `json:"id"`
+	Status         string                 `json:"status"`
+	Stage          string                 `json:"stage"`
+	Name           string                 `json:"name"`
+	Ref            string                 `json:"ref"`
+	CreatedAt      time.Time              `json:"created_at"`
+	StartedAt      *time.Time             `json:"started_at"`
+	FinishedAt     *time.Time             `json:"finished_at"`
+	Duration       float64                `json:"duration"`
+	QueuedDuration float64                `json:"queued_duration"`
+	WebURL         string                 `json:"web_url"`
+	Pipeline       map[string]interface{} `json:"pipeline"`
+	Project        map[string]interface{} `json:"project"`
+	User           map[string]interface{} `json:"user"`
+}
+
+// GetRunnerJobs retrieves jobs run by a specific runner
+func (s *Service) GetRunnerJobs(runnerID int, status string, page, perPage int) ([]RunnerJobInfo, error) {
+	settings, err := s.GetSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	if !settings.Enabled {
+		return nil, errors.New("GitLab integration is not enabled")
+	}
+
+	if settings.Domain == "" || settings.Token == "" {
+		return nil, errors.New("GitLab domain or token is not configured")
+	}
+
+	// Set default pagination values
+	if page <= 0 {
+		page = 1
+	}
+	if perPage <= 0 {
+		perPage = 20
+	}
+	if perPage > 100 {
+		perPage = 100 // GitLab API max per_page
+	}
+
+	apiURL := fmt.Sprintf("%s/api/v4/runners/%d/jobs", settings.Domain, runnerID)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+	// Set query parameters
+	q := req.URL.Query()
+	if status != "" {
+		q.Set("status", status)
+	}
+	q.Set("per_page", fmt.Sprintf("%d", perPage))
+	q.Set("page", fmt.Sprintf("%d", page))
+	req.URL.RawQuery = q.Encode()
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitLab API returned status code %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var jobs []RunnerJobInfo
+	if err := json.Unmarshal(body, &jobs); err != nil {
+		return nil, err
+	}
+
+	s.logger.Info(fmt.Sprintf("Fetched %d jobs for runner %d (page=%d, per_page=%d)", len(jobs), runnerID, page, perPage))
+
+	return jobs, nil
+}
+
 // GetRunner retrieves a specific runner by ID
 func (s *Service) GetRunner(runnerID int) (*RunnerInfo, error) {
 	settings, err := s.GetSettings()

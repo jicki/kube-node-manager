@@ -111,6 +111,44 @@ func (h *Handler) ListRunners(c *gin.Context) {
 	c.JSON(http.StatusOK, runners)
 }
 
+// GetRunnerJobs retrieves jobs run by a specific runner
+// GET /api/v1/gitlab/runners/:id/jobs
+func (h *Handler) GetRunnerJobs(c *gin.Context) {
+	runnerIDStr := c.Param("id")
+	runnerID, err := strconv.Atoi(runnerIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid runner ID"})
+		return
+	}
+
+	status := c.Query("status")
+
+	// Parse pagination parameters
+	page := 1
+	perPage := 20
+
+	if pageStr := c.Query("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	if perPageStr := c.Query("per_page"); perPageStr != "" {
+		if pp, err := strconv.Atoi(perPageStr); err == nil && pp > 0 {
+			perPage = pp
+		}
+	}
+
+	jobs, err := h.service.GetRunnerJobs(runnerID, status, page, perPage)
+	if err != nil {
+		h.logger.Error("Failed to get runner jobs: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, jobs)
+}
+
 // GetPipelineDetail retrieves detailed information for a specific pipeline
 // GET /api/v1/gitlab/pipelines/:project_id/:pipeline_id
 func (h *Handler) GetPipelineDetail(c *gin.Context) {

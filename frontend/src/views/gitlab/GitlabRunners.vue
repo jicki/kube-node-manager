@@ -263,6 +263,10 @@
                     <el-icon><Edit /></el-icon>
                     编辑
                   </el-dropdown-item>
+                  <el-dropdown-item command="viewJobs" divided>
+                    <el-icon><List /></el-icon>
+                    查看运行记录
+                  </el-dropdown-item>
                   <el-dropdown-item v-if="row.is_platform_created" command="viewToken" divided>
                     <el-icon><Key /></el-icon>
                     查看 Token
@@ -644,6 +648,109 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- Runner 运行记录对话框 -->
+    <el-dialog
+      v-model="jobsDialogVisible"
+      :title="`Runner 运行记录 - ${currentRunner?.description || currentRunner?.id || ''}`"
+      width="90%"
+      destroy-on-close
+      top="5vh"
+    >
+      <div v-loading="jobsLoading">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px"
+        >
+          <template #title>
+            <span>Runner: <strong>{{ currentRunner?.description || currentRunner?.id }}</strong></span>
+            <span style="margin-left: 20px">状态: 
+              <el-tag v-if="currentRunner" :type="currentRunner.active ? 'success' : 'danger'" size="small">
+                {{ currentRunner.active ? '在线' : '离线' }}
+              </el-tag>
+            </span>
+          </template>
+        </el-alert>
+
+        <el-table :data="runnerJobs" border style="width: 100%" size="small">
+          <el-table-column prop="id" label="Job ID" min-width="90" />
+          <el-table-column label="Pipeline" min-width="100">
+            <template #default="{ row }">
+              <el-link v-if="row.pipeline" type="primary" :href="row.pipeline.web_url" target="_blank">
+                #{{ row.pipeline.id }}
+              </el-link>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="项目" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span v-if="row.project">{{ row.project.name }}</span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="name" label="作业名称" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="stage" label="阶段" min-width="100" />
+          <el-table-column label="分支/标签" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">
+              <el-tag size="small">{{ row.ref }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" min-width="90" align="center">
+            <template #default="{ row }">
+              <el-tag :type="getJobStatusColor(row.status)" size="small">
+                {{ getJobStatusLabel(row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="耗时" min-width="100" align="right">
+            <template #default="{ row }">
+              {{ formatJobDuration(row.duration) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="排队时间" min-width="100" align="right">
+            <template #default="{ row }">
+              {{ formatJobDuration(row.queued_duration) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="创建时间" min-width="180">
+            <template #default="{ row }">
+              {{ row.created_at ? new Date(row.created_at).toLocaleString('zh-CN') : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" min-width="100" align="center" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.web_url"
+                link
+                type="primary"
+                size="small"
+                @click="openJobUrl(row.web_url)"
+              >
+                查看日志
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <!-- 分页 -->
+        <div v-if="runnerJobs.length > 0" style="margin-top: 16px; display: flex; justify-content: center;">
+          <el-pagination
+            v-model:current-page="jobsPagination.currentPage"
+            v-model:page-size="jobsPagination.pageSize"
+            :total="jobsPagination.total"
+            :page-sizes="[10, 20, 50, 100]"
+            background
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="handleJobsSizeChange"
+            @current-change="handleJobsPageChange"
+          />
+        </div>
+
+        <el-empty v-if="!jobsLoading && runnerJobs.length === 0" description="暂无运行记录" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -658,6 +765,7 @@ import {
   ArrowDown, 
   InfoFilled, 
   Edit, 
+  List,
   Key, 
   RefreshRight, 
   Delete 
@@ -748,6 +856,17 @@ const createdRunner = ref({
   runner_type: '',
   created_by: '',
   created_at: ''
+})
+
+// Runner jobs dialog
+const jobsDialogVisible = ref(false)
+const jobsLoading = ref(false)
+const currentRunner = ref(null)
+const runnerJobs = ref([])
+const jobsPagination = ref({
+  currentPage: 1,
+  pageSize: 20,
+  total: 0
 })
 
 // Fetch runners with caching
@@ -1452,6 +1571,114 @@ const handleResetToken = async (runner) => {
   }
 }
 
+// Handle view runner jobs
+const handleViewJobs = async (runner) => {
+  currentRunner.value = runner
+  jobsDialogVisible.value = true
+  jobsPagination.value.currentPage = 1
+  await fetchRunnerJobs()
+}
+
+// Fetch runner jobs
+const fetchRunnerJobs = async () => {
+  if (!currentRunner.value) return
+
+  jobsLoading.value = true
+  try {
+    const params = {
+      page: jobsPagination.value.currentPage,
+      per_page: jobsPagination.value.pageSize
+    }
+
+    const response = await gitlabApi.getRunnerJobs(currentRunner.value.id, params)
+    runnerJobs.value = response.data || []
+
+    // Estimate total (GitLab API doesn't return total count)
+    if (runnerJobs.value.length === jobsPagination.value.pageSize) {
+      jobsPagination.value.total = jobsPagination.value.currentPage * jobsPagination.value.pageSize + jobsPagination.value.pageSize
+    } else {
+      jobsPagination.value.total = (jobsPagination.value.currentPage - 1) * jobsPagination.value.pageSize + runnerJobs.value.length
+    }
+  } catch (error) {
+    ElMessage.error('获取 Runner 运行记录失败')
+    console.error('Failed to fetch runner jobs:', error)
+    runnerJobs.value = []
+    jobsPagination.value.total = 0
+  } finally {
+    jobsLoading.value = false
+  }
+}
+
+// Handle jobs page size change
+const handleJobsSizeChange = () => {
+  jobsPagination.value.currentPage = 1
+  fetchRunnerJobs()
+}
+
+// Handle jobs page change
+const handleJobsPageChange = () => {
+  fetchRunnerJobs()
+}
+
+// Open job URL in new tab
+const openJobUrl = (url) => {
+  window.open(url, '_blank')
+}
+
+// Format job duration
+const formatJobDuration = (seconds) => {
+  if (seconds === null || seconds === undefined || seconds === 0) return '-'
+  
+  const duration = Number(seconds)
+  if (isNaN(duration) || duration < 0) return '-'
+
+  const roundedDuration = Math.round(duration * 100) / 100
+
+  const hours = Math.floor(roundedDuration / 3600)
+  const minutes = Math.floor((roundedDuration % 3600) / 60)
+  const secs = Math.round(roundedDuration % 60)
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${secs}s`
+  } else if (minutes > 0) {
+    return `${minutes}m ${secs}s`
+  } else if (roundedDuration >= 1) {
+    return `${secs}s`
+  } else {
+    return `${roundedDuration.toFixed(2)}s`
+  }
+}
+
+// Get job status label
+const getJobStatusLabel = (status) => {
+  const labels = {
+    running: '运行中',
+    pending: '待处理',
+    success: '成功',
+    failed: '失败',
+    canceled: '已取消',
+    skipped: '已跳过',
+    manual: '手动',
+    created: '已创建'
+  }
+  return labels[status] || status
+}
+
+// Get job status color
+const getJobStatusColor = (status) => {
+  const colors = {
+    running: 'primary',
+    pending: 'warning',
+    success: 'success',
+    failed: 'danger',
+    canceled: 'info',
+    skipped: 'info',
+    manual: 'warning',
+    created: 'info'
+  }
+  return colors[status] || ''
+}
+
 // Handle dropdown menu command
 const handleCommand = (command, runner) => {
   switch (command) {
@@ -1460,6 +1687,9 @@ const handleCommand = (command, runner) => {
       break
     case 'edit':
       handleEdit(runner)
+      break
+    case 'viewJobs':
+      handleViewJobs(runner)
       break
     case 'viewToken':
       handleViewToken(runner)
