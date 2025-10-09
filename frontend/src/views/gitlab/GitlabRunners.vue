@@ -1426,13 +1426,17 @@ const handleResetToken = async (runner) => {
     )
 
     const response = await gitlabApi.resetGitlabRunnerToken(runner.id)
+    const resetData = response.data || response
+    
+    console.log('Reset Token Response:', resetData) // 调试信息
+    
     createdRunner.value = {
-      id: response.data.id,
-      token: response.data.token,
-      description: response.data.description,
-      runner_type: response.data.runner_type,
-      created_by: '',
-      created_at: ''
+      id: resetData.id || runner.id,
+      token: resetData.token || '',
+      description: resetData.description || runner.description || '',
+      runner_type: resetData.runner_type || runner.runner_type || '',
+      created_by: runner.created_by || '',
+      created_at: runner.created_at || ''
     }
     tokenDialogMode.value = 'create'
     tokenDialogTitle.value = 'Token 重置成功'
