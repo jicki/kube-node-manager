@@ -509,11 +509,6 @@ func (s *Service) ListPipelines(projectID int, ref, status string, page, perPage
 
 	s.logger.Info(fmt.Sprintf("Fetched %d pipelines from GitLab for project %d (page=%d, per_page=%d)", len(pipelines), projectID, page, perPage))
 
-	// Debug: Log first pipeline to check duration field
-	if len(pipelines) > 0 {
-		s.logger.Info(fmt.Sprintf("Sample pipeline: ID=%d, Duration=%d, Status=%s", pipelines[0].ID, pipelines[0].Duration, pipelines[0].Status))
-	}
-
 	return pipelines, nil
 }
 

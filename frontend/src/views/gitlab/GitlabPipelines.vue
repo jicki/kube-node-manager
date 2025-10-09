@@ -129,6 +129,7 @@
         <el-pagination
           v-model:current-page="pagination.currentPage"
           v-model:page-size="pagination.pageSize"
+          :total="pagination.total"
           :page-sizes="[10, 20, 50, 100]"
           :small="false"
           background
@@ -198,13 +199,6 @@ const fetchPipelines = async () => {
     const data = await gitlabStore.fetchPipelines(params)
     pipelines.value = data || []
     
-    // Debug: 检查返回的数据
-    console.log('Pipelines data:', data)
-    if (data && data.length > 0) {
-      console.log('First pipeline:', data[0])
-      console.log('Duration field:', data[0].duration)
-    }
-    
     // Note: GitLab API doesn't return total count in basic response
     // We dynamically calculate total to allow unlimited pagination
     if (data && data.length > 0) {
@@ -272,12 +266,12 @@ const getPipelineStatusColor = (status) => {
 
 // Format duration (seconds to readable format)
 const formatDuration = (seconds) => {
-  // Check for null, undefined, or 0
-  if (seconds === null || seconds === undefined || seconds === 0) return '-'
+  // Check for null or undefined (but allow 0, which means < 1 second)
+  if (seconds === null || seconds === undefined) return '-'
   
   // Ensure it's a number
   const duration = Number(seconds)
-  if (isNaN(duration) || duration <= 0) return '-'
+  if (isNaN(duration) || duration < 0) return '-'
 
   const hours = Math.floor(duration / 3600)
   const minutes = Math.floor((duration % 3600) / 60)
