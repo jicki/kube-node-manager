@@ -30,6 +30,39 @@ func NewService(db *gorm.DB, logger *logger.Logger) *Service {
 	}
 }
 
+// SaveRunnerToken saves the runner token to database
+func (s *Service) SaveRunnerToken(runnerID int, token, description, runnerType, createdBy string) error {
+	gitlabRunner := model.GitlabRunner{
+		RunnerID:    runnerID,
+		Token:       token, // In production, this should be encrypted
+		Description: description,
+		RunnerType:  runnerType,
+		CreatedBy:   createdBy,
+	}
+
+	return s.db.Create(&gitlabRunner).Error
+}
+
+// GetRunnerToken retrieves the runner token from database
+func (s *Service) GetRunnerToken(runnerID int) (*model.GitlabRunner, error) {
+	var runner model.GitlabRunner
+	err := s.db.Where("runner_id = ?", runnerID).First(&runner).Error
+	if err != nil {
+		return nil, err
+	}
+	return &runner, nil
+}
+
+// DeleteRunnerToken deletes the runner token from database
+func (s *Service) DeleteRunnerToken(runnerID int) error {
+	return s.db.Where("runner_id = ?", runnerID).Delete(&model.GitlabRunner{}).Error
+}
+
+// UpdateRunnerToken updates the runner token in database
+func (s *Service) UpdateRunnerToken(runnerID int, newToken string) error {
+	return s.db.Model(&model.GitlabRunner{}).Where("runner_id = ?", runnerID).Update("token", newToken).Error
+}
+
 // GetSettings retrieves GitLab settings
 func (s *Service) GetSettings() (*model.GitlabSettings, error) {
 	var settings model.GitlabSettings
@@ -194,7 +227,7 @@ type CreateRunnerResponse struct {
 }
 
 // ListRunners retrieves all runners from GitLab
-func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([]RunnerInfo, error) {
+func (s *Service) ListRunners(runnerType string, status string, paused *bool) (interface{}, error) {
 	settings, err := s.GetSettings()
 	if err != nil {
 		return nil, err
@@ -326,7 +359,34 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([
 	// Wait for all goroutines to complete
 	wg.Wait()
 
-	return detailedRunners, nil
+	// Mark which runners are created by platform
+	// Get all platform-created runner IDs from database
+	var platformRunnerIDs []int
+	err = s.db.Model(&model.GitlabRunner{}).Pluck("runner_id", &platformRunnerIDs).Error
+	if err != nil {
+		s.logger.Warning(fmt.Sprintf("Failed to get platform runner IDs: %v", err))
+	}
+
+	// Create a map for quick lookup
+	platformRunnerMap := make(map[int]bool)
+	for _, id := range platformRunnerIDs {
+		platformRunnerMap[id] = true
+	}
+
+	// Convert detailedRunners to map[string]interface{} to add is_platform_created field
+	result := make([]map[string]interface{}, len(detailedRunners))
+	for i, runner := range detailedRunners {
+		// Convert runner to map
+		data, _ := json.Marshal(runner)
+		var runnerMap map[string]interface{}
+		json.Unmarshal(data, &runnerMap)
+
+		// Add is_platform_created field
+		runnerMap["is_platform_created"] = platformRunnerMap[runner.ID]
+		result[i] = runnerMap
+	}
+
+	return result, nil
 }
 
 // PipelineInfo represents GitLab pipeline information
@@ -570,11 +630,17 @@ func (s *Service) DeleteRunner(runnerID int) error {
 		return fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
+	// Delete runner token from database
+	if err := s.DeleteRunnerToken(runnerID); err != nil {
+		s.logger.Warning(fmt.Sprintf("Failed to delete runner token from database: %v", err))
+		// Don't fail the entire operation
+	}
+
 	return nil
 }
 
 // CreateRunner creates a new runner in GitLab
-func (s *Service) CreateRunner(req CreateRunnerRequest) (*CreateRunnerResponse, error) {
+func (s *Service) CreateRunner(req CreateRunnerRequest, username string) (*CreateRunnerResponse, error) {
 	settings, err := s.GetSettings()
 	if err != nil {
 		return nil, err
@@ -666,5 +732,64 @@ func (s *Service) CreateRunner(req CreateRunnerRequest) (*CreateRunnerResponse, 
 
 	s.logger.Info(fmt.Sprintf("Created new runner: ID=%d, Type=%s, Description=%s", createResp.ID, createResp.RunnerType, createResp.Description))
 
+	// Save runner token to database
+	if err := s.SaveRunnerToken(createResp.ID, createResp.Token, createResp.Description, createResp.RunnerType, username); err != nil {
+		s.logger.Warning(fmt.Sprintf("Failed to save runner token to database: %v", err))
+		// Don't fail the entire operation if we can't save the token
+	}
+
 	return &createResp, nil
+}
+
+// ResetRunnerToken resets a runner's authentication token in GitLab
+func (s *Service) ResetRunnerToken(runnerID int, username string) (*CreateRunnerResponse, error) {
+	settings, err := s.GetSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	if !settings.Enabled {
+		return nil, errors.New("GitLab integration is not enabled")
+	}
+
+	if settings.Domain == "" || settings.Token == "" {
+		return nil, errors.New("GitLab domain or token is not configured")
+	}
+
+	apiURL := fmt.Sprintf("%s/api/v4/runners/%d/reset_authentication_token", settings.Domain, runnerID)
+	httpReq, err := http.NewRequest("POST", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var resetResp CreateRunnerResponse
+	if err := json.NewDecoder(resp.Body).Decode(&resetResp); err != nil {
+		return nil, err
+	}
+
+	s.logger.Info(fmt.Sprintf("Reset token for runner: ID=%d", resetResp.ID))
+
+	// Update runner token in database
+	if err := s.UpdateRunnerToken(resetResp.ID, resetResp.Token); err != nil {
+		s.logger.Warning(fmt.Sprintf("Failed to update runner token in database: %v", err))
+	}
+
+	return &resetResp, nil
 }

@@ -44,3 +44,13 @@ export const deleteGitlabRunner = (runnerId) => {
 export const createGitlabRunner = (data) => {
   return request.post('/api/v1/gitlab/runners', data)
 }
+
+// Get runner token
+export const getGitlabRunnerToken = (runnerId) => {
+  return request.get(`/api/v1/gitlab/runners/${runnerId}/token`)
+}
+
+// Reset runner token
+export const resetGitlabRunnerToken = (runnerId) => {
+  return request.post(`/api/v1/gitlab/runners/${runnerId}/reset-token`)
+}

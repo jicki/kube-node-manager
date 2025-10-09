@@ -39,3 +39,21 @@ func (g *GitlabSettings) ToResponse() *GitlabSettingsResponse {
 		UpdatedAt: g.UpdatedAt,
 	}
 }
+
+// GitlabRunner stores GitLab runner information created by the platform
+type GitlabRunner struct {
+	ID          uint           `json:"id" gorm:"primaryKey"`
+	RunnerID    int            `json:"runner_id" gorm:"uniqueIndex;not null"` // GitLab Runner ID
+	Token       string         `json:"-" gorm:"type:text;not null"`           // Runner registration token (encrypted)
+	Description string         `json:"description" gorm:"type:varchar(255)"`
+	RunnerType  string         `json:"runner_type" gorm:"type:varchar(50)"`
+	CreatedBy   string         `json:"created_by" gorm:"type:varchar(100)"` // Username who created this runner
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+}
+
+// TableName specifies the table name for GitlabRunner
+func (GitlabRunner) TableName() string {
+	return "gitlab_runners"
+}

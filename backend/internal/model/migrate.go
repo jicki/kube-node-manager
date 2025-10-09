@@ -14,6 +14,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&ProgressTask{},
 		&ProgressMessage{},
 		&GitlabSettings{},
+		&GitlabRunner{},
 	)
 }
 
@@ -34,6 +35,6 @@ func SeedDefaultData(db *gorm.DB) error {
 			return err
 		}
 	}
-	
+
 	return nil
 }

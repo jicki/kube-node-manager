@@ -215,7 +215,13 @@ func (h *Handler) CreateRunner(c *gin.Context) {
 		return
 	}
 
-	runner, err := h.service.CreateRunner(req)
+	// Get username from context (set by auth middleware)
+	username, exists := c.Get("username")
+	if !exists {
+		username = "unknown"
+	}
+
+	runner, err := h.service.CreateRunner(req, username.(string))
 	if err != nil {
 		h.logger.Error("Failed to create runner: " + err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -224,4 +230,58 @@ func (h *Handler) CreateRunner(c *gin.Context) {
 
 	h.logger.Info("Runner created successfully")
 	c.JSON(http.StatusCreated, runner)
+}
+
+// GetRunnerToken gets the saved runner token
+// GET /api/v1/gitlab/runners/:id/token
+func (h *Handler) GetRunnerToken(c *gin.Context) {
+	runnerIDStr := c.Param("id")
+	runnerID, err := strconv.Atoi(runnerIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid runner ID"})
+		return
+	}
+
+	runner, err := h.service.GetRunnerToken(runnerID)
+	if err != nil {
+		h.logger.Error("Failed to get runner token: " + err.Error())
+		c.JSON(http.StatusNotFound, gin.H{"error": "Runner token not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"runner_id":   runner.RunnerID,
+		"token":       runner.Token,
+		"description": runner.Description,
+		"runner_type": runner.RunnerType,
+		"created_by":  runner.CreatedBy,
+		"created_at":  runner.CreatedAt,
+	})
+}
+
+// ResetRunnerToken resets a runner's authentication token
+// POST /api/v1/gitlab/runners/:id/reset-token
+func (h *Handler) ResetRunnerToken(c *gin.Context) {
+	runnerIDStr := c.Param("id")
+	runnerID, err := strconv.Atoi(runnerIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid runner ID"})
+		return
+	}
+
+	// Get username from context
+	username, exists := c.Get("username")
+	if !exists {
+		username = "unknown"
+	}
+
+	runner, err := h.service.ResetRunnerToken(runnerID, username.(string))
+	if err != nil {
+		h.logger.Error("Failed to reset runner token: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.logger.Info("Runner token reset successfully")
+	c.JSON(http.StatusOK, runner)
 }

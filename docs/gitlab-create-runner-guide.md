@@ -21,10 +21,11 @@
   - **已暂停**（可选，默认：否）- 创建后是否暂停 Runner
 
 - ✅ 安全的 Token 管理：
-  - 创建成功后显示 Token（仅一次）
+  - 创建成功后显示 Token
+  - Token 自动保存到数据库
+  - 随时查看已保存的 Token
+  - 一键重置 Token
   - 一键复制 Token
-  - 自动生成注册命令
-  - 一键复制注册命令
 
 ## 使用步骤
 
@@ -65,14 +66,33 @@
    - **Runner Token**（仅显示一次！）
    - 自动生成的注册命令
 
-### 4. 保存 Token
+### 4. 保存和管理 Token
 
-⚠️ **重要提示**：Token 只会显示一次，请务必保存！
+✅ **好消息**：系统会自动保存 Token 到数据库，您可以随时查看！
 
-有两种方式保存：
+对话框显示 Token 后，您可以：
 
 1. **复制 Token**：点击 Token 输入框后的"复制"按钮
-2. **复制注册命令**：点击注册命令后的"复制"按钮
+2. **关闭对话框**：Token 已安全保存
+3. **重新查看**：在刷新页面前，点击工具栏的"查看最近创建的 Token"按钮
+
+#### 查看已保存的 Token
+
+对于平台创建的 Runner，您可以随时查看其 Token：
+
+1. 在 Runner 列表中找到目标 Runner
+2. 确认"创建方式"列显示"平台创建"
+3. 点击操作列的"查看Token"按钮
+4. 在弹出的对话框中查看和复制 Token
+
+#### 重置 Token
+
+当 Token 泄露或需要重新注册时：
+
+1. 点击操作列的"重置Token"按钮
+2. 确认重置操作（会有警告）
+3. 查看和保存新的 Token
+4. ⚠️ 注意：旧 Token 立即失效，需要重新注册 Runner
 
 ### 5. 在目标机器上注册 Runner
 
@@ -134,9 +154,13 @@ gitlab-runner register \
 
 ### 1. Token 丢失了怎么办？
 
-Token 只显示一次，无法再次查看。如果丢失：
-- 删除该 Runner
-- 重新创建一个新的 Runner
+如果是平台创建的 Runner：
+- 点击"查看Token"按钮即可查看已保存的 Token
+- 或者使用"重置Token"功能获取新的 Token
+
+如果是非平台创建的 Runner：
+- 系统没有保存 Token，无法查看
+- 需要手动到 GitLab 后台重置 Token
 
 ### 2. Runner 创建成功但显示离线？
 
@@ -176,15 +200,24 @@ Token 只显示一次，无法再次查看。如果丢失：
 2. **UI 层** (`GitlabRunners.vue`):
    - 新增"新建 Runner"按钮
    - 新增创建 Runner 对话框
-   - 新增 Token 显示对话框
-   - 新增复制 Token 和注册命令功能
+   - 新增 Token 显示/查看对话框
+   - 新增"查看Token"按钮（操作列）
+   - 新增"重置Token"按钮（操作列）
+   - 新增"创建方式"标识列
+   - 新增复制 Token 功能
+
+3. **数据库** (`gitlab.go`):
+   - 新增 `GitlabRunner` 模型
+   - 新增 `gitlab_runners` 表
+   - 自动保存创建的 Runner Token
 
 ## 安全注意事项
 
 1. **Token 管理**:
-   - Token 只在创建时显示一次
-   - 对话框关闭后，Token 会被清除
-   - 建议立即保存到安全的地方
+   - Token 会自动保存到数据库
+   - 可以随时查看已保存的 Token
+   - 支持重置 Token 功能
+   - 建议定期轮换 Token 以提高安全性
 
 2. **权限控制**:
    - 只有管理员可以创建 Runner
@@ -211,8 +244,45 @@ Token 只显示一次，无法再次查看。如果丢失：
    - 监控 Runner 的使用情况
    - 保持 Runner 版本更新
 
+## Token 管理功能
+
+### 平台创建 vs 非平台创建
+
+在 Runner 列表中，每个 Runner 都会显示其创建方式：
+
+- **平台创建**（绿色标签）：
+  - 通过本平台创建的 Runner
+  - Token 已保存在数据库
+  - 可以查看和重置 Token
+  - 显示创建者和创建时间
+
+- **非平台创建**（灰色标签）：
+  - 在 GitLab 后台或其他地方创建的 Runner
+  - 系统没有保存 Token
+  - 无法查看和重置 Token
+  - 需要到 GitLab 后台管理
+
+### Token 查看对话框
+
+显示信息：
+- Runner ID
+- 描述
+- Runner 类型
+- 创建者（仅平台创建的显示）
+- 创建时间（仅平台创建的显示）
+- Token（可复制）
+
+### Token 重置流程
+
+1. 点击"重置Token"
+2. 确认警告提示
+3. 系统调用 GitLab API 重置 Token
+4. 新 Token 自动保存到数据库
+5. 显示新 Token 供复制
+
 ## 相关文档
 
+- [GitLab Runner Token 管理功能](./gitlab-runner-token-management.md)
 - [GitLab Runner 官方文档](https://docs.gitlab.com/runner/)
 - [GitLab API 文档](https://docs.gitlab.com/ee/api/runners.html)
 - [GitLab Runner 配置指南](./gitlab-runner-configuration.md)

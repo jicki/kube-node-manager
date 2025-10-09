@@ -254,7 +254,18 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="200" fixed="right" align="center">
+        <el-table-column label="创建方式" width="120" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.is_platform_created" type="success" size="small">
+              平台创建
+            </el-tag>
+            <el-tag v-else type="info" size="small">
+              非平台创建
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="280" fixed="right" align="center">
           <template #default="{ row }">
             <el-button
               link
@@ -263,6 +274,24 @@
               @click="handleViewDetails(row)"
             >
               详情
+            </el-button>
+            <el-button
+              v-if="row.is_platform_created"
+              link
+              type="success"
+              size="small"
+              @click="handleViewToken(row)"
+            >
+              查看Token
+            </el-button>
+            <el-button
+              v-if="row.is_platform_created"
+              link
+              type="warning"
+              size="small"
+              @click="handleResetToken(row)"
+            >
+              重置Token
             </el-button>
             <el-button
               link
@@ -486,10 +515,11 @@
     <!-- Runner Token 对话框 -->
     <el-dialog
       v-model="tokenDialogVisible"
-      title="Runner 创建成功"
+      :title="tokenDialogTitle"
       width="700px"
     >
       <el-alert
+        v-if="tokenDialogMode === 'create'"
         title="重要提示"
         type="warning"
         :closable="false"
@@ -501,10 +531,28 @@
         </p>
       </el-alert>
 
+      <el-alert
+        v-if="tokenDialogMode === 'view'"
+        title="Token 信息"
+        type="info"
+        :closable="false"
+        show-icon
+      >
+        <p>您可以复制此 Token 用于 Runner 注册。</p>
+      </el-alert>
+
       <el-descriptions :column="1" border style="margin-top: 20px;">
         <el-descriptions-item label="Runner ID">{{ createdRunner.id }}</el-descriptions-item>
         <el-descriptions-item label="描述">{{ createdRunner.description }}</el-descriptions-item>
-        <el-descriptions-item label="类型">Instance Runner</el-descriptions-item>
+        <el-descriptions-item label="类型">
+          {{ createdRunner.runner_type === 'instance_type' ? 'Instance Runner' : createdRunner.runner_type }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="tokenDialogMode === 'view' && createdRunner.created_by" label="创建者">
+          {{ createdRunner.created_by }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="tokenDialogMode === 'view' && createdRunner.created_at" label="创建时间">
+          {{ formatTime(createdRunner.created_at) }}
+        </el-descriptions-item>
         <el-descriptions-item label="Token">
           <div style="display: flex; align-items: center; gap: 8px;">
             <el-input
@@ -526,7 +574,7 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button type="primary" @click="handleTokenDialogClose">
-            我已保存 Token
+            {{ tokenDialogMode === 'create' ? '我已保存 Token' : '关闭' }}
           </el-button>
         </span>
       </template>
@@ -714,11 +762,15 @@ const createFormRules = {
 
 // Token dialog
 const tokenDialogVisible = ref(false)
+const tokenDialogTitle = ref('Runner Token')
+const tokenDialogMode = ref('view') // 'create' or 'view'
 const createdRunner = ref({
   id: null,
   token: '',
   description: '',
-  runner_type: ''
+  runner_type: '',
+  created_by: '',
+  created_at: ''
 })
 
 // Fetch runners with caching
@@ -748,7 +800,11 @@ const fetchRunners = async (forceRefresh = false) => {
   loading.value = true
   try {
     const data = await gitlabStore.fetchRunners(params)
-    runners.value = data || []
+    // Add is_platform_created flag to each runner
+    runners.value = (data || []).map(runner => ({
+      ...runner,
+      is_platform_created: runner.is_platform_created || false
+    }))
 
     // Debug: Log first runner's configuration data
     if (data && data.length > 0) {
@@ -756,13 +812,14 @@ const fetchRunners = async (forceRefresh = false) => {
         id: data[0].id,
         version: data[0].version,
         architecture: data[0].architecture,
-        platform: data[0].platform
+        platform: data[0].platform,
+        is_platform_created: data[0].is_platform_created
       })
     }
 
     // Update cache
     runnersCache.value = {
-      data: data || [],
+      data: runners.value,
       timestamp: now,
       filters: cacheKey
     }
@@ -1305,21 +1362,25 @@ const handleCreateSubmit = async () => {
     
     console.log('API Response:', runnerData) // 调试信息
     
-    // Store created runner info
-    createdRunner.value = {
-      id: runnerData.id,
-      token: runnerData.token,
-      description: data.description, // 使用我们提交的描述
-      runner_type: runnerData.runner_type || 'instance_type'
-    }
+      // Store created runner info
+      createdRunner.value = {
+        id: runnerData.id,
+        token: runnerData.token,
+        description: data.description, // 使用我们提交的描述
+        runner_type: runnerData.runner_type || 'instance_type',
+        created_by: '',
+        created_at: ''
+      }
 
-    console.log('Created Runner:', createdRunner.value) // 调试信息
+      console.log('Created Runner:', createdRunner.value) // 调试信息
 
-    ElMessage.success('Runner 创建成功')
-    createDialogVisible.value = false
+      ElMessage.success('Runner 创建成功')
+      createDialogVisible.value = false
     
-    // Show token dialog
-    tokenDialogVisible.value = true
+      // Show token dialog
+      tokenDialogMode.value = 'create'
+      tokenDialogTitle.value = 'Runner 创建成功'
+      tokenDialogVisible.value = true
 
     // Refresh runners list
     fetchRunners(true)
@@ -1354,9 +1415,67 @@ const handleTokenDialogClose = () => {
 // Handle view created runner token
 const handleViewCreatedRunner = () => {
   if (createdRunner.value.token) {
+    tokenDialogMode.value = 'create'
+    tokenDialogTitle.value = 'Runner 创建成功'
     tokenDialogVisible.value = true
   } else {
     ElMessage.warning('Token 已过期或不可用，请重新创建 Runner')
+  }
+}
+
+// Handle view token
+const handleViewToken = async (runner) => {
+  try {
+    const response = await gitlabApi.getGitlabRunnerToken(runner.id)
+    createdRunner.value = {
+      id: response.data.runner_id,
+      token: response.data.token,
+      description: response.data.description,
+      runner_type: response.data.runner_type,
+      created_by: response.data.created_by,
+      created_at: response.data.created_at
+    }
+    tokenDialogMode.value = 'view'
+    tokenDialogTitle.value = 'Runner Token'
+    tokenDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error(error.response?.data?.error || '获取 Token 失败')
+  }
+}
+
+// Handle reset token
+const handleResetToken = async (runner) => {
+  try {
+    await ElMessageBox.confirm(
+      '重置 Token 后，原有 Token 将立即失效，已注册的 Runner 需要重新注册。确定要继续吗？',
+      '确认重置 Token',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+
+    const response = await gitlabApi.resetGitlabRunnerToken(runner.id)
+    createdRunner.value = {
+      id: response.data.id,
+      token: response.data.token,
+      description: response.data.description,
+      runner_type: response.data.runner_type,
+      created_by: '',
+      created_at: ''
+    }
+    tokenDialogMode.value = 'create'
+    tokenDialogTitle.value = 'Token 重置成功'
+    tokenDialogVisible.value = true
+    ElMessage.success('Token 重置成功')
+    
+    // Refresh list
+    fetchRunners(true)
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || 'Token 重置失败')
+    }
   }
 }
 
