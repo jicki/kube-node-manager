@@ -95,19 +95,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="queued_duration" label="排队时间" width="100">
-          <template #default="{ row }">
-            {{ formatQueuedDuration(row.queued_duration) }}
-          </template>
-        </el-table-column>
-
         <el-table-column prop="created_at" label="创建时间" width="180">
           <template #default="{ row }">
             {{ formatTime(row.created_at) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
             <el-button
               link
@@ -116,15 +110,6 @@
               @click="handleShowDetail(row)"
             >
               查看详情
-            </el-button>
-            <el-button
-              v-if="row.web_url"
-              link
-              type="info"
-              size="small"
-              @click="openPipelineUrl(row.web_url)"
-            >
-              GitLab
             </el-button>
           </template>
         </el-table-column>
