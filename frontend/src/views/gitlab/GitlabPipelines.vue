@@ -123,6 +123,20 @@
           </el-button>
         </el-empty>
       </div>
+
+      <!-- 分页组件 -->
+      <div v-if="pipelines.length > 0" class="pagination-container">
+        <el-pagination
+          v-model:current-page="pagination.currentPage"
+          v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :small="false"
+          background
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handlePageChange"
+        />
+      </div>
     </div>
 
     <!-- 使用提示 -->
@@ -158,6 +172,12 @@ const filters = ref({
   status: ''
 })
 
+const pagination = ref({
+  currentPage: 1,
+  pageSize: 20,
+  total: 0
+})
+
 // Fetch pipelines
 const fetchPipelines = async () => {
   if (!filters.value.projectId) {
@@ -168,19 +188,44 @@ const fetchPipelines = async () => {
   loading.value = true
   try {
     const params = {
-      project_id: filters.value.projectId
+      project_id: filters.value.projectId,
+      page: pagination.value.currentPage,
+      per_page: pagination.value.pageSize
     }
     if (filters.value.ref) params.ref = filters.value.ref
     if (filters.value.status) params.status = filters.value.status
 
     const data = await gitlabStore.fetchPipelines(params)
     pipelines.value = data || []
+    
+    // Note: GitLab API doesn't return total count in basic response
+    // We estimate total based on returned items
+    // If we get full page, there might be more pages
+    if (data && data.length === pagination.value.pageSize) {
+      // Estimate there might be more pages
+      pagination.value.total = pagination.value.currentPage * pagination.value.pageSize + 1
+    } else {
+      // This is the last page
+      pagination.value.total = (pagination.value.currentPage - 1) * pagination.value.pageSize + (data ? data.length : 0)
+    }
   } catch (error) {
     ElMessage.error(gitlabStore.error || '获取 Pipelines 失败')
     pipelines.value = []
+    pagination.value.total = 0
   } finally {
     loading.value = false
   }
+}
+
+// Handle page size change
+const handleSizeChange = () => {
+  pagination.value.currentPage = 1
+  fetchPipelines()
+}
+
+// Handle page change
+const handlePageChange = () => {
+  fetchPipelines()
 }
 
 // Get pipeline status label
@@ -215,11 +260,16 @@ const getPipelineStatusColor = (status) => {
 
 // Format duration (seconds to readable format)
 const formatDuration = (seconds) => {
-  if (!seconds) return '-'
+  // Check for null, undefined, or 0
+  if (seconds === null || seconds === undefined || seconds === 0) return '-'
+  
+  // Ensure it's a number
+  const duration = Number(seconds)
+  if (isNaN(duration) || duration <= 0) return '-'
 
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = seconds % 60
+  const hours = Math.floor(duration / 3600)
+  const minutes = Math.floor((duration % 3600) / 60)
+  const secs = duration % 60
 
   if (hours > 0) {
     return `${hours}h ${minutes}m ${secs}s`
@@ -263,5 +313,11 @@ onMounted(async () => {
 .empty-state {
   padding: 40px 0;
   text-align: center;
+}
+
+.pagination-container {
+  padding: 20px 0;
+  display: flex;
+  justify-content: center;
 }
 </style>

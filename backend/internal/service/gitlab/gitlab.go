@@ -431,8 +431,8 @@ type PipelineInfo struct {
 	Duration   int       `json:"duration"`
 }
 
-// ListPipelines retrieves pipelines for a project
-func (s *Service) ListPipelines(projectID int, ref, status string) ([]PipelineInfo, error) {
+// ListPipelines retrieves pipelines for a project with pagination support
+func (s *Service) ListPipelines(projectID int, ref, status string, page, perPage int) ([]PipelineInfo, error) {
 	settings, err := s.GetSettings()
 	if err != nil {
 		return nil, err
@@ -446,78 +446,70 @@ func (s *Service) ListPipelines(projectID int, ref, status string) ([]PipelineIn
 		return nil, errors.New("GitLab domain or token is not configured")
 	}
 
-	// Fetch all pipelines with pagination
-	var allPipelines []PipelineInfo
-	page := 1
-	perPage := 100 // GitLab default max per page
+	// Set default pagination values
+	if page <= 0 {
+		page = 1
+	}
+	if perPage <= 0 {
+		perPage = 20
+	}
+	if perPage > 100 {
+		perPage = 100 // GitLab API max per_page
+	}
+
+	// Build URL
+	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/pipelines", settings.Domain, projectID)
+	u, err := url.Parse(apiURL)
+	if err != nil {
+		return nil, err
+	}
+
+	q := u.Query()
+	if ref != "" {
+		q.Set("ref", ref)
+	}
+	if status != "" {
+		q.Set("status", status)
+	}
+	q.Set("per_page", fmt.Sprintf("%d", perPage))
+	q.Set("page", fmt.Sprintf("%d", page))
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("PRIVATE-TOKEN", settings.Token)
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	for {
-		// Build URL
-		apiURL := fmt.Sprintf("%s/api/v4/projects/%d/pipelines", settings.Domain, projectID)
-		u, err := url.Parse(apiURL)
-		if err != nil {
-			return nil, err
-		}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-		q := u.Query()
-		if ref != "" {
-			q.Set("ref", ref)
-		}
-		if status != "" {
-			q.Set("status", status)
-		}
-		q.Set("per_page", fmt.Sprintf("%d", perPage))
-		q.Set("page", fmt.Sprintf("%d", page))
-		u.RawQuery = q.Encode()
-
-		req, err := http.NewRequest("GET", u.String(), nil)
-		if err != nil {
-			return nil, err
-		}
-
-		req.Header.Set("PRIVATE-TOKEN", settings.Token)
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
-		}
-
-		var pipelines []PipelineInfo
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal(body, &pipelines); err != nil {
-			return nil, err
-		}
-
-		// Append pipelines from current page
-		allPipelines = append(allPipelines, pipelines...)
-
-		// Check if there are more pages
-		if len(pipelines) < perPage {
-			break
-		}
-
-		// Move to next page
-		page++
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	s.logger.Info(fmt.Sprintf("Fetched total %d pipelines from GitLab for project %d", len(allPipelines), projectID))
+	var pipelines []PipelineInfo
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 
-	return allPipelines, nil
+	if err := json.Unmarshal(body, &pipelines); err != nil {
+		return nil, err
+	}
+
+	s.logger.Info(fmt.Sprintf("Fetched %d pipelines from GitLab for project %d (page=%d, per_page=%d)", len(pipelines), projectID, page, perPage))
+
+	return pipelines, nil
 }
 
 // GetRunner retrieves a specific runner by ID

@@ -129,7 +129,21 @@ func (h *Handler) ListPipelines(c *gin.Context) {
 	ref := c.Query("ref")
 	status := c.Query("status")
 
-	pipelines, err := h.service.ListPipelines(projectID, ref, status)
+	// Parse pagination parameters
+	page := 1
+	perPage := 20
+	if pageStr := c.Query("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+	if perPageStr := c.Query("per_page"); perPageStr != "" {
+		if pp, err := strconv.Atoi(perPageStr); err == nil && pp > 0 {
+			perPage = pp
+		}
+	}
+
+	pipelines, err := h.service.ListPipelines(projectID, ref, status, page, perPage)
 	if err != nil {
 		h.logger.Error("Failed to list pipelines: " + err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
