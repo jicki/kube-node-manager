@@ -114,6 +114,10 @@
             <el-option label="未激活" value="false" />
           </el-select>
 
+          <el-button type="primary" @click="handleCreate">
+            新建 Runner
+          </el-button>
+
           <el-button :icon="Refresh" @click="() => fetchRunners(true)" :loading="loading">
             刷新
           </el-button>
@@ -348,6 +352,146 @@
       </template>
     </el-dialog>
 
+    <!-- 新建 Runner 对话框 -->
+    <el-dialog
+      v-model="createDialogVisible"
+      title="新建 Runner"
+      width="700px"
+    >
+      <el-form
+        ref="createFormRef"
+        :model="createForm"
+        :rules="createFormRules"
+        label-width="120px"
+      >
+        <el-alert
+          title="创建 Instance Runner"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 20px;"
+        >
+          <template #default>
+            Instance Runner 可用于 GitLab 实例中的所有项目和组
+          </template>
+        </el-alert>
+
+        <el-form-item label="描述" prop="description">
+          <el-input
+            v-model="createForm.description"
+            placeholder="请输入 Runner 描述"
+            maxlength="100"
+            show-word-limit
+          />
+        </el-form-item>
+
+        <el-form-item label="标签">
+          <el-select
+            v-model="createForm.tag_list"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            placeholder="输入标签后按回车添加"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="tag in createForm.tag_list"
+              :key="tag"
+              :label="tag"
+              :value="tag"
+            />
+          </el-select>
+          <div style="color: #909399; font-size: 12px; margin-top: 4px;">
+            标签用于匹配 CI/CD 作业
+          </div>
+        </el-form-item>
+
+        <el-form-item label="运行未打标签作业">
+          <el-switch v-model="createForm.run_untagged" />
+          <span style="margin-left: 10px; color: #909399; font-size: 12px;">
+            {{ createForm.run_untagged ? '允许运行没有标签的作业' : '只运行有标签的作业' }}
+          </span>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="createDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleCreateSubmit" :loading="submitting">
+            创建
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- Runner Token 对话框 -->
+    <el-dialog
+      v-model="tokenDialogVisible"
+      title="Runner 创建成功"
+      width="700px"
+    >
+      <el-alert
+        title="重要提示"
+        type="warning"
+        :closable="false"
+        show-icon
+      >
+        此 Token 只会显示一次，请妥善保存！您需要使用此 Token 在目标机器上注册 Runner。
+      </el-alert>
+
+      <el-descriptions :column="1" border style="margin-top: 20px;">
+        <el-descriptions-item label="Runner ID">{{ createdRunner.id }}</el-descriptions-item>
+        <el-descriptions-item label="描述">{{ createdRunner.description }}</el-descriptions-item>
+        <el-descriptions-item label="类型">Instance Runner</el-descriptions-item>
+        <el-descriptions-item label="Token">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <el-input
+              :model-value="createdRunner.token"
+              readonly
+              style="flex: 1;"
+            >
+              <template #append>
+                <el-button @click="copyToken">
+                  <el-icon><DocumentCopy /></el-icon>
+                  复制
+                </el-button>
+              </template>
+            </el-input>
+          </div>
+        </el-descriptions-item>
+      </el-descriptions>
+
+      <el-divider />
+
+      <div style="margin-top: 20px;">
+        <h4 style="margin-bottom: 12px;">下一步：在目标机器上注册 Runner</h4>
+        <p style="color: #606266; margin-bottom: 12px;">在安装了 GitLab Runner 的机器上执行以下命令：</p>
+        <el-input
+          type="textarea"
+          :model-value="registerCommand"
+          readonly
+          :rows="3"
+          style="font-family: monospace;"
+        >
+          <template #append>
+            <el-button @click="copyRegisterCommand">
+              <el-icon><DocumentCopy /></el-icon>
+              复制命令
+            </el-button>
+          </template>
+        </el-input>
+      </div>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button type="primary" @click="handleTokenDialogClose">
+            我已保存 Token
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
     <!-- 详情 Runner 对话框 -->
     <el-dialog
       v-model="detailsDialogVisible"
@@ -452,7 +596,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Location, Search } from '@element-plus/icons-vue'
+import { Refresh, Location, Search, DocumentCopy } from '@element-plus/icons-vue'
 import { useGitlabStore } from '@/store/modules/gitlab'
 import * as gitlabApi from '@/api/gitlab'
 
@@ -505,6 +649,43 @@ const editForm = ref({
 // Details dialog
 const detailsDialogVisible = ref(false)
 const selectedRunner = ref(null)
+
+// Create dialog
+const createDialogVisible = ref(false)
+const createFormRef = ref(null)
+const createForm = ref({
+  description: '',
+  tag_list: [],
+  run_untagged: true
+})
+
+// Form validation rules
+const createFormRules = {
+  description: [
+    { required: true, message: '请输入描述', trigger: 'blur' },
+    { min: 1, max: 100, message: '长度在 1 到 100 个字符', trigger: 'blur' }
+  ]
+}
+
+// Token dialog
+const tokenDialogVisible = ref(false)
+const createdRunner = ref({
+  id: null,
+  token: '',
+  description: '',
+  runner_type: ''
+})
+
+// Computed register command
+const registerCommand = computed(() => {
+  if (!createdRunner.value.token) return ''
+  const gitlabUrl = gitlabStore.settings?.domain || 'https://gitlab.example.com'
+  return `gitlab-runner register \\
+  --url ${gitlabUrl} \\
+  --token ${createdRunner.value.token} \\
+  --executor docker \\
+  --description "${createdRunner.value.description}"`
+})
 
 // Fetch runners with caching
 const fetchRunners = async (forceRefresh = false) => {
@@ -1027,6 +1208,94 @@ const handleBatchDeactivate = async () => {
     if (error !== 'cancel') {
       loading.value = false
     }
+  }
+}
+
+// Handle create runner
+const handleCreate = () => {
+  // Reset form
+  createForm.value = {
+    description: '',
+    tag_list: [],
+    run_untagged: true
+  }
+  createDialogVisible.value = true
+}
+
+// Handle create submit
+const handleCreateSubmit = async () => {
+  if (!createFormRef.value) return
+
+  try {
+    await createFormRef.value.validate()
+  } catch (error) {
+    return
+  }
+
+  submitting.value = true
+  try {
+    // Prepare request data - only for Instance Runner
+    const data = {
+      runner_type: 'instance_type',
+      description: createForm.value.description,
+      tag_list: createForm.value.tag_list,
+      run_untagged: createForm.value.run_untagged
+    }
+
+    const response = await gitlabApi.createGitlabRunner(data)
+    
+    // Store created runner info
+    createdRunner.value = {
+      id: response.id,
+      token: response.token,
+      description: response.description,
+      runner_type: response.runner_type
+    }
+
+    ElMessage.success('Runner 创建成功')
+    createDialogVisible.value = false
+    
+    // Show token dialog
+    tokenDialogVisible.value = true
+
+    // Refresh runners list
+    fetchRunners(true)
+  } catch (error) {
+    ElMessage.error(error.response?.data?.error || 'Runner 创建失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+// Copy token to clipboard
+const copyToken = async () => {
+  try {
+    await navigator.clipboard.writeText(createdRunner.value.token)
+    ElMessage.success('Token 已复制到剪贴板')
+  } catch (error) {
+    ElMessage.error('复制失败，请手动复制')
+  }
+}
+
+// Copy register command to clipboard
+const copyRegisterCommand = async () => {
+  try {
+    await navigator.clipboard.writeText(registerCommand.value)
+    ElMessage.success('注册命令已复制到剪贴板')
+  } catch (error) {
+    ElMessage.error('复制失败，请手动复制')
+  }
+}
+
+// Handle token dialog close
+const handleTokenDialogClose = () => {
+  tokenDialogVisible.value = false
+  // Clear token for security
+  createdRunner.value = {
+    id: null,
+    token: '',
+    description: '',
+    runner_type: ''
   }
 }
 

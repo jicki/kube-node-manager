@@ -39,3 +39,8 @@ export const updateGitlabRunner = (runnerId, data) => {
 export const deleteGitlabRunner = (runnerId) => {
   return request.delete(`/api/v1/gitlab/runners/${runnerId}`)
 }
+
+// Create runner
+export const createGitlabRunner = (data) => {
+  return request.post('/api/v1/gitlab/runners', data)
+}

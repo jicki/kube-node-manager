@@ -167,6 +167,32 @@ type UpdateRunnerRequest struct {
 	AccessLevel *string   `json:"access_level,omitempty"`
 }
 
+// CreateRunnerRequest represents the request to create a new runner
+type CreateRunnerRequest struct {
+	RunnerType     string   `json:"runner_type" binding:"required"` // instance_type, group_type, project_type
+	GroupID        *int     `json:"group_id,omitempty"`             // Required for group_type
+	ProjectID      *int     `json:"project_id,omitempty"`           // Required for project_type
+	Description    string   `json:"description"`
+	TagList        []string `json:"tag_list,omitempty"`
+	RunUntagged    *bool    `json:"run_untagged,omitempty"`
+	Locked         *bool    `json:"locked,omitempty"`
+	AccessLevel    *string  `json:"access_level,omitempty"` // not_protected, ref_protected
+	MaximumTimeout *int     `json:"maximum_timeout,omitempty"`
+	Paused         *bool    `json:"paused,omitempty"`
+}
+
+// CreateRunnerResponse represents the response from creating a runner
+type CreateRunnerResponse struct {
+	ID          int      `json:"id"`
+	Token       string   `json:"token"`
+	Description string   `json:"description"`
+	Active      bool     `json:"active"`
+	Paused      bool     `json:"paused"`
+	IsShared    bool     `json:"is_shared"`
+	RunnerType  string   `json:"runner_type"`
+	TagList     []string `json:"tag_list"`
+}
+
 // ListRunners retrieves all runners from GitLab
 func (s *Service) ListRunners(runnerType string, status string, paused *bool) ([]RunnerInfo, error) {
 	settings, err := s.GetSettings()
@@ -545,4 +571,100 @@ func (s *Service) DeleteRunner(runnerID int) error {
 	}
 
 	return nil
+}
+
+// CreateRunner creates a new runner in GitLab
+func (s *Service) CreateRunner(req CreateRunnerRequest) (*CreateRunnerResponse, error) {
+	settings, err := s.GetSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	if !settings.Enabled {
+		return nil, errors.New("GitLab integration is not enabled")
+	}
+
+	if settings.Domain == "" || settings.Token == "" {
+		return nil, errors.New("GitLab domain or token is not configured")
+	}
+
+	// Validate required fields based on runner type
+	switch req.RunnerType {
+	case "group_type":
+		if req.GroupID == nil {
+			return nil, errors.New("group_id is required for group_type runner")
+		}
+	case "project_type":
+		if req.ProjectID == nil {
+			return nil, errors.New("project_id is required for project_type runner")
+		}
+	case "instance_type":
+		// No additional validation needed
+	default:
+		return nil, errors.New("invalid runner_type, must be one of: instance_type, group_type, project_type")
+	}
+
+	// Build request body
+	data := url.Values{}
+	data.Set("runner_type", req.RunnerType)
+	if req.GroupID != nil {
+		data.Set("group_id", fmt.Sprintf("%d", *req.GroupID))
+	}
+	if req.ProjectID != nil {
+		data.Set("project_id", fmt.Sprintf("%d", *req.ProjectID))
+	}
+	if req.Description != "" {
+		data.Set("description", req.Description)
+	}
+	if len(req.TagList) > 0 {
+		data.Set("tag_list", strings.Join(req.TagList, ","))
+	}
+	if req.RunUntagged != nil {
+		data.Set("run_untagged", fmt.Sprintf("%t", *req.RunUntagged))
+	}
+	if req.Locked != nil {
+		data.Set("locked", fmt.Sprintf("%t", *req.Locked))
+	}
+	if req.AccessLevel != nil {
+		data.Set("access_level", *req.AccessLevel)
+	}
+	if req.MaximumTimeout != nil {
+		data.Set("maximum_timeout", fmt.Sprintf("%d", *req.MaximumTimeout))
+	}
+	if req.Paused != nil {
+		data.Set("paused", fmt.Sprintf("%t", *req.Paused))
+	}
+
+	apiURL := fmt.Sprintf("%s/api/v4/user/runners", settings.Domain)
+	httpReq, err := http.NewRequest("POST", apiURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Set("PRIVATE-TOKEN", settings.Token)
+	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var createResp CreateRunnerResponse
+	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
+		return nil, err
+	}
+
+	s.logger.Info(fmt.Sprintf("Created new runner: ID=%d, Type=%s, Description=%s", createResp.ID, createResp.RunnerType, createResp.Description))
+
+	return &createResp, nil
 }

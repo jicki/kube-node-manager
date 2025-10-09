@@ -205,3 +205,23 @@ func (h *Handler) DeleteRunner(c *gin.Context) {
 	h.logger.Info("Runner deleted successfully")
 	c.JSON(http.StatusOK, gin.H{"message": "Runner deleted successfully"})
 }
+
+// CreateRunner creates a new runner
+// POST /api/v1/gitlab/runners
+func (h *Handler) CreateRunner(c *gin.Context) {
+	var req gitlab.CreateRunnerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		return
+	}
+
+	runner, err := h.service.CreateRunner(req)
+	if err != nil {
+		h.logger.Error("Failed to create runner: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.logger.Info("Runner created successfully")
+	c.JSON(http.StatusCreated, runner)
+}
