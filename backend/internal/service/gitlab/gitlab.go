@@ -507,6 +507,15 @@ func (s *Service) ListPipelines(projectID int, ref, status string, page, perPage
 		return nil, err
 	}
 
+	// Calculate duration if not provided by GitLab API
+	for i := range pipelines {
+		// If duration is 0 or not set, calculate from timestamps
+		if pipelines[i].Duration == 0 && !pipelines[i].FinishedAt.IsZero() && !pipelines[i].StartedAt.IsZero() {
+			duration := pipelines[i].FinishedAt.Sub(pipelines[i].StartedAt)
+			pipelines[i].Duration = int(duration.Seconds())
+		}
+	}
+
 	s.logger.Info(fmt.Sprintf("Fetched %d pipelines from GitLab for project %d (page=%d, per_page=%d)", len(pipelines), projectID, page, perPage))
 
 	return pipelines, nil
