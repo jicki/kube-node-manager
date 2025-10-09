@@ -198,15 +198,27 @@ const fetchPipelines = async () => {
     const data = await gitlabStore.fetchPipelines(params)
     pipelines.value = data || []
     
+    // Debug: 检查返回的数据
+    console.log('Pipelines data:', data)
+    if (data && data.length > 0) {
+      console.log('First pipeline:', data[0])
+      console.log('Duration field:', data[0].duration)
+    }
+    
     // Note: GitLab API doesn't return total count in basic response
-    // We estimate total based on returned items
-    // If we get full page, there might be more pages
-    if (data && data.length === pagination.value.pageSize) {
-      // Estimate there might be more pages
-      pagination.value.total = pagination.value.currentPage * pagination.value.pageSize + 1
+    // We dynamically calculate total to allow unlimited pagination
+    if (data && data.length > 0) {
+      if (data.length === pagination.value.pageSize) {
+        // Current page is full, assume there might be more pages
+        // Set total to allow at least one more page
+        pagination.value.total = pagination.value.currentPage * pagination.value.pageSize + pagination.value.pageSize
+      } else {
+        // Current page is not full, this is the last page
+        pagination.value.total = (pagination.value.currentPage - 1) * pagination.value.pageSize + data.length
+      }
     } else {
-      // This is the last page
-      pagination.value.total = (pagination.value.currentPage - 1) * pagination.value.pageSize + (data ? data.length : 0)
+      // No data returned
+      pagination.value.total = (pagination.value.currentPage - 1) * pagination.value.pageSize
     }
   } catch (error) {
     ElMessage.error(gitlabStore.error || '获取 Pipelines 失败')
