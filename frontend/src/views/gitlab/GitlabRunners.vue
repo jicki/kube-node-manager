@@ -118,6 +118,14 @@
             新建 Runner
           </el-button>
 
+          <el-button
+            v-if="createdRunner.token"
+            type="success"
+            @click="handleViewCreatedRunner"
+          >
+            查看最近创建的 Token
+          </el-button>
+
           <el-button :icon="Refresh" @click="() => fetchRunners(true)" :loading="loading">
             刷新
           </el-button>
@@ -487,7 +495,10 @@
         :closable="false"
         show-icon
       >
-        此 Token 只会显示一次，请妥善保存！您需要使用此 Token 在目标机器上注册 Runner。
+        <p>此 Token 只会显示一次，请妥善保存！</p>
+        <p style="margin-top: 8px; font-size: 12px;">
+          💡 提示：在刷新页面前，您可以随时点击"查看最近创建的 Token"按钮重新查看。
+        </p>
       </el-alert>
 
       <el-descriptions :column="1" border style="margin-top: 20px;">
@@ -511,27 +522,6 @@
           </div>
         </el-descriptions-item>
       </el-descriptions>
-
-      <el-divider />
-
-      <div style="margin-top: 20px;">
-        <h4 style="margin-bottom: 12px;">下一步：在目标机器上注册 Runner</h4>
-        <p style="color: #606266; margin-bottom: 12px;">在安装了 GitLab Runner 的机器上执行以下命令：</p>
-        <el-input
-          type="textarea"
-          :model-value="registerCommand"
-          readonly
-          :rows="3"
-          style="font-family: monospace;"
-        >
-          <template #append>
-            <el-button @click="copyRegisterCommand">
-              <el-icon><DocumentCopy /></el-icon>
-              复制命令
-            </el-button>
-          </template>
-        </el-input>
-      </div>
 
       <template #footer>
         <span class="dialog-footer">
@@ -729,17 +719,6 @@ const createdRunner = ref({
   token: '',
   description: '',
   runner_type: ''
-})
-
-// Computed register command
-const registerCommand = computed(() => {
-  if (!createdRunner.value.token) return ''
-  const gitlabUrl = gitlabStore.settings?.domain || 'https://gitlab.example.com'
-  return `gitlab-runner register \\
-  --url ${gitlabUrl} \\
-  --token ${createdRunner.value.token} \\
-  --executor docker \\
-  --description "${createdRunner.value.description}"`
 })
 
 // Fetch runners with caching
@@ -1321,13 +1300,20 @@ const handleCreateSubmit = async () => {
 
     const response = await gitlabApi.createGitlabRunner(data)
     
+    // API 返回的数据可能在 response 或 response.data 中
+    const runnerData = response.data || response
+    
+    console.log('API Response:', runnerData) // 调试信息
+    
     // Store created runner info
     createdRunner.value = {
-      id: response.id,
-      token: response.token,
-      description: response.description,
-      runner_type: response.runner_type
+      id: runnerData.id,
+      token: runnerData.token,
+      description: data.description, // 使用我们提交的描述
+      runner_type: runnerData.runner_type || 'instance_type'
     }
+
+    console.log('Created Runner:', createdRunner.value) // 调试信息
 
     ElMessage.success('Runner 创建成功')
     createDialogVisible.value = false
@@ -1347,18 +1333,12 @@ const handleCreateSubmit = async () => {
 // Copy token to clipboard
 const copyToken = async () => {
   try {
+    if (!createdRunner.value.token) {
+      ElMessage.warning('Token 为空，无法复制')
+      return
+    }
     await navigator.clipboard.writeText(createdRunner.value.token)
     ElMessage.success('Token 已复制到剪贴板')
-  } catch (error) {
-    ElMessage.error('复制失败，请手动复制')
-  }
-}
-
-// Copy register command to clipboard
-const copyRegisterCommand = async () => {
-  try {
-    await navigator.clipboard.writeText(registerCommand.value)
-    ElMessage.success('注册命令已复制到剪贴板')
   } catch (error) {
     ElMessage.error('复制失败，请手动复制')
   }
@@ -1367,12 +1347,16 @@ const copyRegisterCommand = async () => {
 // Handle token dialog close
 const handleTokenDialogClose = () => {
   tokenDialogVisible.value = false
-  // Clear token for security
-  createdRunner.value = {
-    id: null,
-    token: '',
-    description: '',
-    runner_type: ''
+  // 不清除 token，保留在内存中，方便用户重新查看
+  // 注意：刷新页面后 token 会丢失，这是安全的
+}
+
+// Handle view created runner token
+const handleViewCreatedRunner = () => {
+  if (createdRunner.value.token) {
+    tokenDialogVisible.value = true
+  } else {
+    ElMessage.warning('Token 已过期或不可用，请重新创建 Runner')
   }
 }
 
