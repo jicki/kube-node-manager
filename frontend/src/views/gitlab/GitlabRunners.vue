@@ -118,14 +118,6 @@
             新建 Runner
           </el-button>
 
-          <el-button
-            v-if="createdRunner.token"
-            type="success"
-            @click="handleViewCreatedRunner"
-          >
-            查看最近创建的 Token
-          </el-button>
-
           <el-button :icon="Refresh" @click="() => fetchRunners(true)" :loading="loading">
             刷新
           </el-button>
@@ -258,7 +250,7 @@
           <template #default="{ row }">
             <el-dropdown @command="handleCommand($event, row)">
               <el-button type="primary" size="small">
-                操作
+                更多操作
                 <el-icon class="el-icon--right"><arrow-down /></el-icon>
               </el-button>
               <template #dropdown>
@@ -502,10 +494,7 @@
         :closable="false"
         show-icon
       >
-        <p>此 Token 只会显示一次，请妥善保存！</p>
-        <p style="margin-top: 8px; font-size: 12px;">
-          💡 提示：在刷新页面前，您可以随时点击"查看最近创建的 Token"按钮重新查看。
-        </p>
+        <p>此 Token 已保存到数据库，您可以随时通过"更多操作"菜单查看。</p>
       </el-alert>
 
       <el-alert
@@ -1396,32 +1385,24 @@ const copyToken = async () => {
 // Handle token dialog close
 const handleTokenDialogClose = () => {
   tokenDialogVisible.value = false
-  // 不清除 token，保留在内存中，方便用户重新查看
-  // 注意：刷新页面后 token 会丢失，这是安全的
-}
-
-// Handle view created runner token
-const handleViewCreatedRunner = () => {
-  if (createdRunner.value.token) {
-    tokenDialogMode.value = 'create'
-    tokenDialogTitle.value = 'Runner 创建成功'
-    tokenDialogVisible.value = true
-  } else {
-    ElMessage.warning('Token 已过期或不可用，请重新创建 Runner')
-  }
+  // Token 已保存在数据库，用户可以随时通过"更多操作"菜单查看
 }
 
 // Handle view token
 const handleViewToken = async (runner) => {
   try {
     const response = await gitlabApi.getGitlabRunnerToken(runner.id)
+    const tokenData = response.data || response
+    
+    console.log('Token Response:', tokenData) // 调试信息
+    
     createdRunner.value = {
-      id: response.data.runner_id,
-      token: response.data.token,
-      description: response.data.description,
-      runner_type: response.data.runner_type,
-      created_by: response.data.created_by,
-      created_at: response.data.created_at
+      id: tokenData.runner_id || runner.id,
+      token: tokenData.token || '',
+      description: tokenData.description || runner.description || '',
+      runner_type: tokenData.runner_type || runner.runner_type || '',
+      created_by: tokenData.created_by || '',
+      created_at: tokenData.created_at || ''
     }
     tokenDialogMode.value = 'view'
     tokenDialogTitle.value = 'Runner Token'
