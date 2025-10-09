@@ -32,6 +32,8 @@ func NewService(db *gorm.DB, logger *logger.Logger) *Service {
 
 // SaveRunnerToken saves the runner token to database
 func (s *Service) SaveRunnerToken(runnerID int, token, description, runnerType, createdBy string) error {
+	s.logger.Info(fmt.Sprintf("Saving token to database for runner_id=%d, created_by=%s", runnerID, createdBy))
+
 	gitlabRunner := model.GitlabRunner{
 		RunnerID:    runnerID,
 		Token:       token, // In production, this should be encrypted
@@ -40,16 +42,27 @@ func (s *Service) SaveRunnerToken(runnerID int, token, description, runnerType, 
 		CreatedBy:   createdBy,
 	}
 
-	return s.db.Create(&gitlabRunner).Error
+	if err := s.db.Create(&gitlabRunner).Error; err != nil {
+		s.logger.Error(fmt.Sprintf("Failed to save token for runner_id=%d: %v", runnerID, err))
+		return err
+	}
+
+	s.logger.Info(fmt.Sprintf("Successfully saved token for runner_id=%d", runnerID))
+	return nil
 }
 
 // GetRunnerToken retrieves the runner token from database
 func (s *Service) GetRunnerToken(runnerID int) (*model.GitlabRunner, error) {
+	s.logger.Info(fmt.Sprintf("Querying token from database for runner_id=%d", runnerID))
+
 	var runner model.GitlabRunner
 	err := s.db.Where("runner_id = ?", runnerID).First(&runner).Error
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Failed to query token for runner_id=%d: %v", runnerID, err))
 		return nil, err
 	}
+
+	s.logger.Info(fmt.Sprintf("Successfully retrieved token for runner_id=%d, token_length=%d", runnerID, len(runner.Token)))
 	return &runner, nil
 }
 
@@ -60,7 +73,21 @@ func (s *Service) DeleteRunnerToken(runnerID int) error {
 
 // UpdateRunnerToken updates the runner token in database
 func (s *Service) UpdateRunnerToken(runnerID int, newToken string) error {
-	return s.db.Model(&model.GitlabRunner{}).Where("runner_id = ?", runnerID).Update("token", newToken).Error
+	s.logger.Info(fmt.Sprintf("Updating token in database for runner_id=%d", runnerID))
+
+	result := s.db.Model(&model.GitlabRunner{}).Where("runner_id = ?", runnerID).Update("token", newToken)
+	if result.Error != nil {
+		s.logger.Error(fmt.Sprintf("Database update error for runner_id=%d: %v", runnerID, result.Error))
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		s.logger.Warning(fmt.Sprintf("No rows affected when updating runner_id=%d, record may not exist", runnerID))
+		return fmt.Errorf("no runner found with runner_id=%d", runnerID)
+	}
+
+	s.logger.Info(fmt.Sprintf("Successfully updated token for runner_id=%d, affected rows: %d", runnerID, result.RowsAffected))
+	return nil
 }
 
 // GetSettings retrieves GitLab settings
@@ -788,8 +815,11 @@ func (s *Service) ResetRunnerToken(runnerID int, username string) (*CreateRunner
 
 	// Update runner token in database
 	if err := s.UpdateRunnerToken(resetResp.ID, resetResp.Token); err != nil {
-		s.logger.Warning(fmt.Sprintf("Failed to update runner token in database: %v", err))
+		s.logger.Error(fmt.Sprintf("Failed to update runner token in database: %v", err))
+		return nil, fmt.Errorf("failed to update runner token in database: %w", err)
 	}
+
+	s.logger.Info(fmt.Sprintf("Successfully updated runner token in database for runner ID=%d", resetResp.ID))
 
 	return &resetResp, nil
 }
