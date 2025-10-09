@@ -81,18 +81,19 @@
 对于平台创建的 Runner，您可以随时查看其 Token：
 
 1. 在 Runner 列表中找到目标 Runner
-2. 确认"创建方式"列显示"平台创建"
-3. 点击操作列的"查看Token"按钮
+2. 点击操作列的"操作"下拉按钮
+3. 选择"查看 Token"选项（仅对平台创建的 Runner 显示）
 4. 在弹出的对话框中查看和复制 Token
 
 #### 重置 Token
 
 当 Token 泄露或需要重新注册时：
 
-1. 点击操作列的"重置Token"按钮
-2. 确认重置操作（会有警告）
-3. 查看和保存新的 Token
-4. ⚠️ 注意：旧 Token 立即失效，需要重新注册 Runner
+1. 点击操作列的"操作"下拉按钮
+2. 选择"重置 Token"选项
+3. 确认重置操作（会有警告）
+4. 查看和保存新的 Token
+5. ⚠️ 注意：旧 Token 立即失效，需要重新注册 Runner
 
 ### 5. 在目标机器上注册 Runner
 
@@ -201,10 +202,10 @@ gitlab-runner register \
    - 新增"新建 Runner"按钮
    - 新增创建 Runner 对话框
    - 新增 Token 显示/查看对话框
-   - 新增"查看Token"按钮（操作列）
-   - 新增"重置Token"按钮（操作列）
-   - 新增"创建方式"标识列
+   - 操作列使用下拉菜单整合所有操作
+   - "查看Token"和"重置Token"选项（仅对平台创建的 Runner 显示）
    - 新增复制 Token 功能
+   - 优化表格布局，节省空间
 
 3. **数据库** (`gitlab.go`):
    - 新增 `GitlabRunner` 模型
@@ -248,18 +249,18 @@ gitlab-runner register \
 
 ### 平台创建 vs 非平台创建
 
-在 Runner 列表中，每个 Runner 都会显示其创建方式：
+在 Runner 列表的操作下拉菜单中，系统会自动识别 Runner 的创建方式：
 
-- **平台创建**（绿色标签）：
+- **平台创建的 Runner**：
   - 通过本平台创建的 Runner
   - Token 已保存在数据库
-  - 可以查看和重置 Token
+  - 下拉菜单中显示"查看 Token"和"重置 Token"选项
   - 显示创建者和创建时间
 
-- **非平台创建**（灰色标签）：
+- **非平台创建的 Runner**：
   - 在 GitLab 后台或其他地方创建的 Runner
   - 系统没有保存 Token
-  - 无法查看和重置 Token
+  - 下拉菜单中不显示 Token 相关选项
   - 需要到 GitLab 后台管理
 
 ### Token 查看对话框

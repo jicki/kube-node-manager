@@ -254,61 +254,38 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="创建方式" width="120" align="center">
+        <el-table-column label="操作" width="200" fixed="right" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.is_platform_created" type="success" size="small">
-              平台创建
-            </el-tag>
-            <el-tag v-else type="info" size="small">
-              非平台创建
-            </el-tag>
-          </template>
-        </el-table-column>
-
-        <el-table-column label="操作" width="280" fixed="right" align="center">
-          <template #default="{ row }">
-            <el-button
-              link
-              type="info"
-              size="small"
-              @click="handleViewDetails(row)"
-            >
-              详情
-            </el-button>
-            <el-button
-              v-if="row.is_platform_created"
-              link
-              type="success"
-              size="small"
-              @click="handleViewToken(row)"
-            >
-              查看Token
-            </el-button>
-            <el-button
-              v-if="row.is_platform_created"
-              link
-              type="warning"
-              size="small"
-              @click="handleResetToken(row)"
-            >
-              重置Token
-            </el-button>
-            <el-button
-              link
-              type="primary"
-              size="small"
-              @click="handleEdit(row)"
-            >
-              编辑
-            </el-button>
-            <el-button
-              link
-              type="danger"
-              size="small"
-              @click="handleDelete(row)"
-            >
-              删除
-            </el-button>
+            <el-dropdown @command="handleCommand($event, row)">
+              <el-button type="primary" size="small">
+                操作
+                <el-icon class="el-icon--right"><arrow-down /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="details">
+                    <el-icon><InfoFilled /></el-icon>
+                    详情
+                  </el-dropdown-item>
+                  <el-dropdown-item command="edit">
+                    <el-icon><Edit /></el-icon>
+                    编辑
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.is_platform_created" command="viewToken" divided>
+                    <el-icon><Key /></el-icon>
+                    查看 Token
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="row.is_platform_created" command="resetToken">
+                    <el-icon><RefreshRight /></el-icon>
+                    重置 Token
+                  </el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>
+                    <el-icon><Delete /></el-icon>
+                    删除
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -684,7 +661,18 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Location, Search, DocumentCopy } from '@element-plus/icons-vue'
+import { 
+  Refresh, 
+  Location, 
+  Search, 
+  DocumentCopy, 
+  ArrowDown, 
+  InfoFilled, 
+  Edit, 
+  Key, 
+  RefreshRight, 
+  Delete 
+} from '@element-plus/icons-vue'
 import { useGitlabStore } from '@/store/modules/gitlab'
 import * as gitlabApi from '@/api/gitlab'
 
@@ -1479,6 +1467,27 @@ const handleResetToken = async (runner) => {
   }
 }
 
+// Handle dropdown menu command
+const handleCommand = (command, runner) => {
+  switch (command) {
+    case 'details':
+      handleViewDetails(runner)
+      break
+    case 'edit':
+      handleEdit(runner)
+      break
+    case 'viewToken':
+      handleViewToken(runner)
+      break
+    case 'resetToken':
+      handleResetToken(runner)
+      break
+    case 'delete':
+      handleDelete(runner)
+      break
+  }
+}
+
 onMounted(async () => {
   // Check if GitLab is enabled
   await gitlabStore.fetchSettings()
@@ -1668,5 +1677,16 @@ onMounted(async () => {
 
 .runner-details-dialog .el-descriptions__cell {
   padding: 12px 16px !important;
+}
+
+/* Dropdown menu styles */
+.el-dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.el-dropdown-menu__item .el-icon {
+  font-size: 14px;
 }
 </style>
