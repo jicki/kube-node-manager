@@ -207,6 +207,12 @@ func (s *Service) Get(req GetRequest, userID uint) (*k8s.NodeInfo, error) {
 
 // Cordon 禁止调度节点（标记为不可调度）
 func (s *Service) Cordon(req CordonRequest, userID uint) error {
+	// 获取集群ID
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
+
 	// 执行禁止调度操作（仅设置不可调度，不删除pods），并添加原因注释
 	err := s.k8sSvc.CordonNodeWithReason(req.ClusterName, req.NodeName, req.Reason)
 	if err != nil {
@@ -217,6 +223,7 @@ func (s *Service) Cordon(req CordonRequest, userID uint) error {
 		}
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			ClusterID:    clusterID,
 			NodeName:     req.NodeName,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceNode,
@@ -235,6 +242,7 @@ func (s *Service) Cordon(req CordonRequest, userID uint) error {
 	}
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		NodeName:     req.NodeName,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceNode,
@@ -248,11 +256,18 @@ func (s *Service) Cordon(req CordonRequest, userID uint) error {
 
 // Uncordon 解除调度节点（标记为可调度）
 func (s *Service) Uncordon(req CordonRequest, userID uint) error {
+	// 获取集群ID
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
+
 	err := s.k8sSvc.UncordonNode(req.ClusterName, req.NodeName)
 	if err != nil {
 		s.logger.Errorf("Failed to uncordon node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
+			ClusterID:    clusterID,
 			NodeName:     req.NodeName,
 			Action:       model.ActionUpdate,
 			ResourceType: model.ResourceNode,
@@ -266,6 +281,7 @@ func (s *Service) Uncordon(req CordonRequest, userID uint) error {
 	s.logger.Infof("Successfully uncordoned node %s for cluster %s", req.NodeName, req.ClusterName)
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
+		ClusterID:    clusterID,
 		NodeName:     req.NodeName,
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceNode,
