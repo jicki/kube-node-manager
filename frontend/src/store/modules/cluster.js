@@ -87,6 +87,33 @@ export const useClusterStore = defineStore('cluster', {
       }
     },
 
+    async syncCluster(id) {
+      try {
+        const response = await clusterApi.syncCluster(id)
+        // 同步成功后，重新获取集群信息
+        await this.fetchClusters()
+        return response
+      } catch (error) {
+        throw error
+      }
+    },
+
+    async syncAllClusters() {
+      try {
+        const promises = this.clusters.map(cluster => 
+          clusterApi.syncCluster(cluster.id).catch(err => {
+            console.error(`同步集群 ${cluster.name} 失败:`, err)
+            return null
+          })
+        )
+        await Promise.all(promises)
+        // 同步完成后重新获取集群列表
+        await this.fetchClusters()
+      } catch (error) {
+        throw error
+      }
+    },
+
     setCurrentCluster(cluster) {
       this.currentCluster = cluster
       // 保存到本地存储

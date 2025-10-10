@@ -133,17 +133,17 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="250" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button 
                 type="text" 
-                size="small" 
-                disabled
-                title="测试连接功能暂时不可用"
+                size="small"
+                @click="syncSingleCluster(row)"
+                title="同步集群版本信息"
               >
-                <el-icon><Connection /></el-icon>
-                测试连接
+                <el-icon><Refresh /></el-icon>
+                同步
               </el-button>
               
               <el-button
@@ -326,9 +326,20 @@ const fetchClusters = async () => {
   }
 }
 
-// 刷新数据
-const refreshData = () => {
-  fetchClusters()
+// 刷新数据并同步集群信息
+const refreshData = async () => {
+  try {
+    loading.value = true
+    // 先获取集群列表
+    await clusterStore.fetchClusters()
+    // 然后同步所有集群的版本信息
+    await clusterStore.syncAllClusters()
+    ElMessage.success('集群信息已同步')
+  } catch (error) {
+    ElMessage.error('同步集群信息失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 // 显示添加对话框
@@ -431,6 +442,19 @@ const testConnection = async (cluster) => {
   }
 }
 
+// 同步单个集群
+const syncSingleCluster = async (cluster) => {
+  try {
+    loading.value = true
+    await clusterStore.syncCluster(cluster.id)
+    ElMessage.success(`集群 ${cluster.name} 信息已同步`)
+  } catch (error) {
+    ElMessage.error(`同步集群 ${cluster.name} 失败: ${error.message || '未知错误'}`)
+  } finally {
+    loading.value = false
+  }
+}
+
 // 切换集群
 const switchCluster = async (cluster) => {
   try {
@@ -465,8 +489,20 @@ const handleDelete = (cluster) => {
   })
 }
 
-onMounted(() => {
-  fetchClusters()
+onMounted(async () => {
+  // 首次加载时，获取集群列表并同步版本信息
+  try {
+    loading.value = true
+    await clusterStore.fetchClusters()
+    // 如果有集群，自动同步版本信息
+    if (clusterStore.clusters.length > 0) {
+      await clusterStore.syncAllClusters()
+    }
+  } catch (error) {
+    console.error('加载集群信息失败:', error)
+  } finally {
+    loading.value = false
+  }
 })
 </script>
 

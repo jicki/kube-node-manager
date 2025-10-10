@@ -74,6 +74,14 @@ const clusterApi = {
       url: `/api/v1/clusters/${id}/switch`,
       method: 'post'
     })
+  },
+
+  // 同步集群信息
+  syncCluster(id) {
+    return request({
+      url: `/api/v1/clusters/${id}/sync`,
+      method: 'post'
+    })
   }
 }
 

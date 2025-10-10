@@ -164,6 +164,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		clusters.POST("", handlers.Cluster.Create)
 		clusters.PUT("/:id", handlers.Cluster.Update)
 		clusters.DELETE("/:id", handlers.Cluster.Delete)
+		clusters.POST("/:id/sync", handlers.Cluster.Sync)
 		clusters.POST("/:id/test", handlers.Cluster.TestConnection)
 	}
 
