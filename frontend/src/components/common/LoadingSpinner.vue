@@ -43,11 +43,11 @@
         <!-- 进度条 -->
         <div v-if="showProgress && progress >= 0" class="loading-progress">
           <el-progress
-            :percentage="progress"
+            :percentage="roundedProgress"
             :show-text="false"
             :stroke-width="4"
           />
-          <div class="progress-text">{{ progress }}%</div>
+          <div class="progress-text">{{ roundedProgress }}%</div>
         </div>
       </div>
     </div>
@@ -93,9 +93,10 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
 
-defineProps({
+const props = defineProps({
   // 加载器类型
   type: {
     type: String,
@@ -138,6 +139,11 @@ defineProps({
     type: String,
     default: '#409eff'
   }
+})
+
+// 四舍五入的进度值
+const roundedProgress = computed(() => {
+  return Math.round(props.progress || 0)
 })
 </script>
 

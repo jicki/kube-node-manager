@@ -12,7 +12,7 @@
       <!-- 进度条 -->
       <div class="progress-bar-container">
         <el-progress
-          :percentage="progressData.progress"
+          :percentage="roundedProgress"
           :status="progressStatus"
           :stroke-width="8"
           :show-text="true"
@@ -98,6 +98,11 @@ const isCompleted = ref(false)
 const isError = ref(false)
 const websocket = ref(null)
 const completionTimer = ref(null)
+
+// 计算进度百分比（四舍五入为整数）
+const roundedProgress = computed(() => {
+  return Math.round(progressData.value.progress || 0)
+})
 
 // 计算进度状态
 const progressStatus = computed(() => {
