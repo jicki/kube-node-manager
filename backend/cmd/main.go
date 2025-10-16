@@ -59,6 +59,13 @@ func main() {
 	handlers := handler.NewHandlers(services, logger)
 	healthHandler := health.NewHealthHandler(db)
 
+	// 初始化飞书事件客户端（如果已启用）
+	go func() {
+		if err := services.Feishu.InitializeEventClient(); err != nil {
+			logger.Error("Failed to initialize Feishu event client: " + err.Error())
+		}
+	}()
+
 	router := gin.Default()
 
 	// 在生产模式下不需要CORS，因为前后端在同一域名下
@@ -252,13 +259,16 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		gitlab.GET("/pipelines/:project_id/:pipeline_id/jobs", handlers.Gitlab.GetPipelineJobs)
 	}
 
-	// Feishu routes
+	// Feishu routes (使用长连接模式，无需 webhook)
 	feishu := protected.Group("/feishu")
 	{
 		// 所有用户可访问
 		feishu.GET("/settings", handlers.Feishu.GetSettings)
 		feishu.POST("/groups/query", handlers.Feishu.QueryGroup)
 		feishu.GET("/groups", handlers.Feishu.ListGroups)
+		feishu.GET("/bind", handlers.Feishu.GetBinding)
+		feishu.POST("/bind", handlers.Feishu.BindUser)
+		feishu.DELETE("/bind", handlers.Feishu.UnbindUser)
 		// 仅管理员可访问
 		feishu.PUT("/settings", handlers.Feishu.UpdateSettings)
 		feishu.POST("/test", handlers.Feishu.TestConnection)

@@ -8,8 +8,8 @@
         ref="formRef"
         :model="form"
         :rules="rules"
-        label-width="120px"
-        style="max-width: 600px"
+        label-width="150px"
+        style="max-width: 700px"
       >
         <el-form-item label="启用飞书" prop="enabled">
           <el-switch v-model="form.enabled" />
@@ -50,6 +50,24 @@
           </div>
         </el-form-item>
 
+        <el-divider content-position="left">机器人配置（长连接模式）</el-divider>
+
+        <el-form-item label="启用机器人功能" prop="bot_enabled">
+          <el-switch v-model="form.bot_enabled" :disabled="!form.enabled" />
+          <span style="margin-left: 12px; color: #909399; font-size: 14px">
+            启用后自动建立长连接，接收飞书消息
+          </span>
+        </el-form-item>
+
+        <el-form-item label="连接状态" v-if="form.bot_enabled">
+          <el-tag :type="botConnected ? 'success' : 'info'" :icon="botConnected ? SuccessFilled : Loading">
+            {{ botConnected ? '已连接' : '未连接' }}
+          </el-tag>
+          <span style="margin-left: 12px; color: #909399; font-size: 14px">
+            长连接模式无需配置 Webhook URL
+          </span>
+        </el-form-item>
+
         <el-form-item>
           <el-button type="primary" @click="handleSave" :loading="saving">
             保存配置
@@ -78,22 +96,35 @@
             <ul>
               <li><code>im:chat</code> - 获取群组信息</li>
               <li><code>im:chat:readonly</code> - 查看群组信息</li>
+              <li><code>im:message</code> - 发送消息（机器人功能）</li>
+              <li><code>im:message:receive_v1</code> - 接收消息（机器人功能）</li>
             </ul>
           </li>
           <li>发布应用版本并启用</li>
         </ul>
 
-        <p style="margin-top: 16px"><strong>3. 将机器人添加到群组：</strong></p>
+        <p style="margin-top: 16px"><strong>3. 启用机器人功能：</strong></p>
+        <ul>
+          <li>在本页面启用"机器人功能"开关</li>
+          <li>系统将自动使用<strong>长连接模式</strong>接收消息</li>
+          <li><span style="color: #67c23a">✓ 无需配置公网域名和 Webhook URL</span></li>
+          <li><span style="color: #67c23a">✓ 无需配置加密策略</span></li>
+          <li>保存配置后，连接状态会自动更新</li>
+        </ul>
+
+        <p style="margin-top: 16px"><strong>4. 将机器人添加到群组：</strong></p>
         <ul>
           <li>在飞书群组中，点击群设置</li>
           <li>选择"群机器人" → "添加机器人"</li>
           <li>搜索并添加您的应用</li>
+          <li>在群组中向机器人发送命令（如 <code>/help</code>）</li>
         </ul>
 
-        <p style="margin-top: 16px"><strong>4. 权限说明：</strong></p>
+        <p style="margin-top: 16px"><strong>5. 权限说明：</strong></p>
         <ul>
           <li>仅管理员可以配置飞书集成</li>
           <li>配置后所有用户都可以查询群组信息</li>
+          <li>使用机器人功能需要先绑定飞书账号</li>
         </ul>
       </div>
     </div>
@@ -103,7 +134,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { View } from '@element-plus/icons-vue'
+import { View, SuccessFilled, Loading } from '@element-plus/icons-vue'
 import { useFeishuStore } from '@/store/modules/feishu'
 import { useAuthStore } from '@/store/modules/auth'
 
@@ -117,7 +148,8 @@ const testing = ref(false)
 const form = ref({
   enabled: false,
   app_id: '',
-  app_secret: ''
+  app_secret: '',
+  bot_enabled: false
 })
 
 const rules = {
@@ -131,6 +163,8 @@ const rules = {
 }
 
 const hasAppSecret = computed(() => feishuStore.hasAppSecret)
+const botConnected = computed(() => feishuStore.settings?.bot_connected || false)
+
 const canTest = computed(() => {
   return form.value.enabled && form.value.app_id && (form.value.app_secret || hasAppSecret.value)
 })
@@ -143,6 +177,7 @@ const loadSettings = async () => {
       form.value.enabled = feishuStore.settings.enabled
       form.value.app_id = feishuStore.settings.app_id || ''
       form.value.app_secret = ''
+      form.value.bot_enabled = feishuStore.settings.bot_enabled || false
     }
   } catch (error) {
     ElMessage.error('加载配置失败')
@@ -187,7 +222,8 @@ const handleSave = async () => {
       await feishuStore.updateSettings({
         enabled: form.value.enabled,
         app_id: form.value.app_id,
-        app_secret: form.value.app_secret
+        app_secret: form.value.app_secret,
+        bot_enabled: form.value.bot_enabled
       })
       ElMessage.success('配置保存成功')
       form.value.app_secret = ''

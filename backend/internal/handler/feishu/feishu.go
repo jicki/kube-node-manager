@@ -29,23 +29,24 @@ func NewHandler(service *feishu.Service, auditService *audit.Service, logger *lo
 // GetSettings retrieves Feishu settings
 // GET /api/v1/feishu/settings
 func (h *Handler) GetSettings(c *gin.Context) {
-	settings, err := h.service.GetSettings()
+	settings, err := h.service.GetSettingsWithStatus()
 	if err != nil {
 		h.logger.Error("Failed to get Feishu settings: " + err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Feishu settings"})
 		return
 	}
 
-	c.JSON(http.StatusOK, settings.ToResponse())
+	c.JSON(http.StatusOK, settings)
 }
 
 // UpdateSettings updates Feishu settings
 // PUT /api/v1/feishu/settings
 func (h *Handler) UpdateSettings(c *gin.Context) {
 	var req struct {
-		Enabled   bool   `json:"enabled"`
-		AppID     string `json:"app_id"`
-		AppSecret string `json:"app_secret"`
+		Enabled    bool   `json:"enabled"`
+		AppID      string `json:"app_id"`
+		AppSecret  string `json:"app_secret"`
+		BotEnabled bool   `json:"bot_enabled"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -59,7 +60,7 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	settings, err := h.service.UpdateSettings(req.Enabled, req.AppID, req.AppSecret)
+	settings, err := h.service.UpdateSettings(req.Enabled, req.AppID, req.AppSecret, req.BotEnabled)
 	if err != nil {
 		h.logger.Error("Failed to update Feishu settings: " + err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update Feishu settings"})
@@ -72,13 +73,17 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 		UserID:       userID.(uint),
 		Action:       "update",
 		ResourceType: "feishu_settings",
-		Details:      "更新飞书配置",
+		Details:      "更新飞书配置（长连接模式）",
 		Status:       "success",
 		IPAddress:    c.ClientIP(),
 	})
 
 	h.logger.Info("Feishu settings updated successfully")
-	c.JSON(http.StatusOK, settings.ToResponse())
+
+	// 返回包含连接状态的响应
+	response := settings.ToResponse()
+	response.BotConnected = h.service.IsEventClientConnected()
+	c.JSON(http.StatusOK, response)
 }
 
 // TestConnection tests Feishu API connection
@@ -158,4 +163,97 @@ func (h *Handler) ListGroups(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, chats)
+}
+
+// GetBinding retrieves the current user's Feishu binding
+// GET /api/v1/feishu/bind
+func (h *Handler) GetBinding(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	binding, err := h.service.GetBindingByUserID(userID.(uint))
+	if err != nil {
+		// User not bound, return empty
+		c.JSON(http.StatusOK, gin.H{"bound": false})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"bound":          true,
+		"feishu_user_id": binding.FeishuUserID,
+		"feishu_name":    binding.FeishuName,
+		"created_at":     binding.CreatedAt,
+	})
+}
+
+// BindUser binds a Feishu user to the current system user
+// POST /api/v1/feishu/bind
+func (h *Handler) BindUser(c *gin.Context) {
+	var req struct {
+		FeishuUserID string `json:"feishu_user_id" binding:"required"`
+		FeishuName   string `json:"feishu_name"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	username, _ := c.Get("username")
+
+	_, err := h.service.BindUser(req.FeishuUserID, userID.(uint), username.(string), req.FeishuName)
+	if err != nil {
+		h.logger.Error("Failed to bind Feishu user: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to bind user"})
+		return
+	}
+
+	// Record audit log
+	h.auditService.Log(audit.LogRequest{
+		UserID:       userID.(uint),
+		Action:       "bind",
+		ResourceType: "feishu_user",
+		Details:      fmt.Sprintf("绑定飞书账号: %s", req.FeishuUserID),
+		Status:       "success",
+		IPAddress:    c.ClientIP(),
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "User bound successfully"})
+}
+
+// UnbindUser unbinds the current user's Feishu account
+// DELETE /api/v1/feishu/bind
+func (h *Handler) UnbindUser(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	if err := h.service.UnbindUser(userID.(uint)); err != nil {
+		h.logger.Error("Failed to unbind Feishu user: " + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unbind user"})
+		return
+	}
+
+	// Record audit log
+	h.auditService.Log(audit.LogRequest{
+		UserID:       userID.(uint),
+		Action:       "unbind",
+		ResourceType: "feishu_user",
+		Details:      "解绑飞书账号",
+		Status:       "success",
+		IPAddress:    c.ClientIP(),
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "User unbound successfully"})
 }

@@ -25,3 +25,16 @@ export const listFeishuGroups = () => {
   return request.get('/api/v1/feishu/groups')
 }
 
+// User binding
+export const bindFeishuUser = (data) => {
+  return request.post('/api/v1/feishu/bind', data)
+}
+
+export const unbindFeishuUser = () => {
+  return request.delete('/api/v1/feishu/bind')
+}
+
+export const getFeishuBinding = () => {
+  return request.get('/api/v1/feishu/bind')
+}
+

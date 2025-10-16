@@ -16,16 +16,59 @@ import (
 
 // Service handles Feishu (Lark) related operations
 type Service struct {
-	db     *gorm.DB
-	logger *logger.Logger
+	db            *gorm.DB
+	logger        *logger.Logger
+	commandRouter *CommandRouter
+	eventClient   *EventClient
 }
 
 // NewService creates a new Feishu service
 func NewService(db *gorm.DB, logger *logger.Logger) *Service {
-	return &Service{
+	service := &Service{
 		db:     db,
 		logger: logger,
 	}
+	// Initialize command router
+	service.commandRouter = NewCommandRouter()
+	return service
+}
+
+// InitializeEventClient 初始化或重启事件客户端
+func (s *Service) InitializeEventClient() error {
+	// 停止现有客户端
+	if s.eventClient != nil {
+		s.eventClient.Stop()
+		s.eventClient = nil
+	}
+
+	// 获取配置
+	settings, err := s.GetSettings()
+	if err != nil {
+		return fmt.Errorf("failed to get settings: %w", err)
+	}
+
+	// 检查是否启用机器人
+	if !settings.Enabled || !settings.BotEnabled || settings.AppID == "" || settings.AppSecret == "" {
+		s.logger.Info("Feishu bot is not enabled or not configured")
+		return nil
+	}
+
+	// 创建并启动新客户端
+	s.eventClient = NewEventClient(s, settings.AppID, settings.AppSecret)
+	if err := s.eventClient.Start(); err != nil {
+		return fmt.Errorf("failed to start event client: %w", err)
+	}
+
+	s.logger.Info("Feishu event client initialized successfully")
+	return nil
+}
+
+// IsEventClientConnected 检查事件客户端连接状态
+func (s *Service) IsEventClientConnected() bool {
+	if s.eventClient == nil {
+		return false
+	}
+	return s.eventClient.IsConnected()
 }
 
 // TenantAccessTokenResponse represents the response from Feishu token API
@@ -95,8 +138,20 @@ func (s *Service) GetSettings() (*model.FeishuSettings, error) {
 	return &settings, nil
 }
 
+// GetSettingsWithStatus 获取设置并包含连接状态
+func (s *Service) GetSettingsWithStatus() (*model.FeishuSettingsResponse, error) {
+	settings, err := s.GetSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	response := settings.ToResponse()
+	response.BotConnected = s.IsEventClientConnected()
+	return response, nil
+}
+
 // UpdateSettings updates or creates Feishu settings
-func (s *Service) UpdateSettings(enabled bool, appID, appSecret string) (*model.FeishuSettings, error) {
+func (s *Service) UpdateSettings(enabled bool, appID, appSecret string, botEnabled bool) (*model.FeishuSettings, error) {
 	var settings model.FeishuSettings
 
 	// Try to find existing settings
@@ -109,6 +164,7 @@ func (s *Service) UpdateSettings(enabled bool, appID, appSecret string) (*model.
 	// Update fields
 	settings.Enabled = enabled
 	settings.AppID = appID
+	settings.BotEnabled = botEnabled
 
 	// Only update app_secret if provided (non-empty)
 	if appSecret != "" {
@@ -125,6 +181,19 @@ func (s *Service) UpdateSettings(enabled bool, appID, appSecret string) (*model.
 		if err := s.db.Save(&settings).Error; err != nil {
 			return nil, err
 		}
+	}
+
+	// 如果机器人已启用且配置有效，初始化事件客户端
+	if settings.Enabled && settings.BotEnabled {
+		go func() {
+			if err := s.InitializeEventClient(); err != nil {
+				s.logger.Error("Failed to initialize event client: " + err.Error())
+			}
+		}()
+	} else if s.eventClient != nil {
+		// 如果机器人被禁用，停止事件客户端
+		s.eventClient.Stop()
+		s.eventClient = nil
 	}
 
 	return &settings, nil
@@ -341,4 +410,54 @@ func (s *Service) ListChats() ([]ChatInfo, error) {
 	}
 
 	return allChats, nil
+}
+
+// BindUser binds a Feishu user to a system user
+func (s *Service) BindUser(feishuUserID string, systemUserID uint, username, feishuName string) (*model.FeishuUserMapping, error) {
+	// Check if binding already exists
+	var existing model.FeishuUserMapping
+	result := s.db.Where("feishu_user_id = ?", feishuUserID).First(&existing)
+
+	if result.Error == nil {
+		// Update existing binding
+		existing.SystemUserID = systemUserID
+		existing.Username = username
+		existing.FeishuName = feishuName
+		if err := s.db.Save(&existing).Error; err != nil {
+			return nil, err
+		}
+		return &existing, nil
+	}
+
+	if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return nil, result.Error
+	}
+
+	// Create new binding
+	mapping := &model.FeishuUserMapping{
+		FeishuUserID: feishuUserID,
+		SystemUserID: systemUserID,
+		Username:     username,
+		FeishuName:   feishuName,
+	}
+
+	if err := s.db.Create(mapping).Error; err != nil {
+		return nil, err
+	}
+
+	return mapping, nil
+}
+
+// UnbindUser unbinds a system user from Feishu
+func (s *Service) UnbindUser(systemUserID uint) error {
+	return s.db.Where("system_user_id = ?", systemUserID).Delete(&model.FeishuUserMapping{}).Error
+}
+
+// GetBindingByUserID retrieves the binding for a system user
+func (s *Service) GetBindingByUserID(systemUserID uint) (*model.FeishuUserMapping, error) {
+	var mapping model.FeishuUserMapping
+	if err := s.db.Where("system_user_id = ?", systemUserID).First(&mapping).Error; err != nil {
+		return nil, err
+	}
+	return &mapping, nil
 }
