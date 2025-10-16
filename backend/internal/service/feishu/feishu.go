@@ -258,7 +258,7 @@ func (s *Service) GetChatInfo(chatID string) (*ChatInfo, error) {
 	}
 
 	chatInfo := &ChatInfo{
-		ChatID:      chatResp.Data.ChatID,
+		ChatID:      chatID, // 使用传入的 chatID，因为飞书 API 返回的数据中可能不包含此字段
 		Name:        chatResp.Data.Name,
 		Description: chatResp.Data.Description,
 		Avatar:      chatResp.Data.Avatar,

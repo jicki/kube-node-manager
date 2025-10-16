@@ -84,7 +84,7 @@
       </div>
 
       <el-table
-        :data="filteredGroups"
+        :data="paginatedGroups"
         style="width: 100%; margin-top: 16px"
         v-loading="loading"
         border
@@ -92,8 +92,9 @@
       >
         <el-table-column
           prop="chat_id"
-          label="Chat ID"
-          width="300"
+          label="群组 ID"
+          width="320"
+          show-overflow-tooltip
         >
           <template #default="{ row }">
             <el-tooltip :content="row.chat_id" placement="top">
@@ -147,7 +148,7 @@
       </el-table>
 
       <!-- 分页 -->
-      <div class="pagination-container">
+      <div v-if="filteredGroups.length > 0" class="pagination-container">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
