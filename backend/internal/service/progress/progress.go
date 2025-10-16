@@ -37,15 +37,15 @@ type ProgressMessage struct {
 
 // TaskProgress 任务进度
 type TaskProgress struct {
-	TaskID       string
-	Action       string
-	Current      int
-	Total        int
-	IsRunning    bool
-	Error        error
-	Completed    bool
-	CompletedAt  time.Time
-	UserID       uint
+	TaskID          string
+	Action          string
+	Current         int
+	Total           int
+	IsRunning       bool
+	Error           error
+	Completed       bool
+	CompletedAt     time.Time
+	UserID          uint
 	PendingMessages []ProgressMessage // 待发送的消息队列
 }
 

@@ -105,6 +105,19 @@
         </el-menu-item>
       </el-sub-menu>
 
+      <!-- 飞书 (只在启用时显示) -->
+      <el-sub-menu v-if="isFeishuEnabled" index="feishu">
+        <template #title>
+          <el-icon><ChatDotSquare /></el-icon>
+          <span>飞书</span>
+        </template>
+
+        <el-menu-item index="/feishu-groups">
+          <el-icon><ChatLineSquare /></el-icon>
+          <template #title>飞书群组</template>
+        </el-menu-item>
+      </el-sub-menu>
+
       <!-- 系统配置 -->
       <el-sub-menu index="system-config">
         <template #title>
@@ -137,6 +150,14 @@
           <el-icon><Setting /></el-icon>
           <template #title>GitLab 配置</template>
         </el-menu-item>
+
+        <el-menu-item
+          v-if="hasPermission('admin')"
+          index="/feishu-settings"
+        >
+          <el-icon><Setting /></el-icon>
+          <template #title>飞书配置</template>
+        </el-menu-item>
       </el-sub-menu>
     </el-menu>
     
@@ -156,6 +177,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
 import { useClusterStore } from '@/store/modules/cluster'
 import { useGitlabStore } from '@/store/modules/gitlab'
+import { useFeishuStore } from '@/store/modules/feishu'
 import {
   Monitor,
   CollectionTag,
@@ -166,7 +188,9 @@ import {
   Connection,
   DocumentCopy,
   Setting,
-  List
+  List,
+  ChatDotSquare,
+  ChatLineSquare
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -179,6 +203,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 const clusterStore = useClusterStore()
 const gitlabStore = useGitlabStore()
+const feishuStore = useFeishuStore()
 
 // 当前选中的菜单
 const activeMenu = computed(() => route.path)
@@ -193,7 +218,7 @@ const defaultOpeneds = computed(() => {
     openedMenus.push('node-management')
   }
 
-  if (['/clusters', '/audit', '/users', '/gitlab-settings'].includes(path)) {
+  if (['/clusters', '/audit', '/users', '/gitlab-settings', '/feishu-settings'].includes(path)) {
     openedMenus.push('system-config')
   }
 
@@ -201,11 +226,18 @@ const defaultOpeneds = computed(() => {
     openedMenus.push('gitlab')
   }
 
+  if (['/feishu-groups'].includes(path)) {
+    openedMenus.push('feishu')
+  }
+
   return openedMenus
 })
 
 // GitLab enabled status
 const isGitlabEnabled = computed(() => gitlabStore.isEnabled)
+
+// Feishu enabled status
+const isFeishuEnabled = computed(() => feishuStore.isEnabled)
 
 // 集群列表和当前集群
 const clusters = computed(() => clusterStore.clusters)
@@ -294,6 +326,11 @@ onMounted(() => {
 
   // 加载 GitLab 设置
   gitlabStore.fetchSettings().catch(() => {
+    // 忽略错误，只是为了获取是否启用状态
+  })
+
+  // 加载飞书设置
+  feishuStore.fetchSettings().catch(() => {
     // 忽略错误，只是为了获取是否启用状态
   })
 })

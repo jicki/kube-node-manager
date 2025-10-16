@@ -40,13 +40,13 @@ type ProgressMessage struct {
 	ID        uint           `json:"id" gorm:"primarykey"`
 	UserID    uint           `json:"user_id" gorm:"not null;index"`
 	TaskID    string         `json:"task_id" gorm:"not null;index"`
-	Type      string         `json:"type" gorm:"not null"`      // progress, complete, error
-	Action    string         `json:"action"`                    // batch_label, batch_taint
-	Current   int            `json:"current"`                   // 当前完成数量
-	Total     int            `json:"total"`                     // 总数量
-	Progress  float64        `json:"progress"`                  // 进度百分比
-	Message   string         `json:"message"`                   // 消息内容
-	ErrorMsg  string         `json:"error_msg"`                 // 错误信息
+	Type      string         `json:"type" gorm:"not null"`                 // progress, complete, error
+	Action    string         `json:"action"`                               // batch_label, batch_taint
+	Current   int            `json:"current"`                              // 当前完成数量
+	Total     int            `json:"total"`                                // 总数量
+	Progress  float64        `json:"progress"`                             // 进度百分比
+	Message   string         `json:"message"`                              // 消息内容
+	ErrorMsg  string         `json:"error_msg"`                            // 错误信息
 	Processed bool           `json:"processed" gorm:"default:false;index"` // 是否已处理
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

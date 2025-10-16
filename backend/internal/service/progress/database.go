@@ -42,16 +42,16 @@ func NewDatabaseProgressService(db *gorm.DB, logger *logger.Logger, wsService *S
 // CreateTask 创建任务
 func (dps *DatabaseProgressService) CreateTask(taskID, action string, total int, userID uint) error {
 	task := &model.ProgressTask{
-		TaskID:      taskID,
-		UserID:      userID,
-		Action:      action,
-		Status:      model.TaskStatusRunning,
-		Current:     0,
-		Total:       total,
-		Progress:    0,
-		Message:     "任务已创建，准备开始处理",
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		TaskID:    taskID,
+		UserID:    userID,
+		Action:    action,
+		Status:    model.TaskStatusRunning,
+		Current:   0,
+		Total:     total,
+		Progress:  0,
+		Message:   "任务已创建，准备开始处理",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	if err := dps.db.Create(task).Error; err != nil {

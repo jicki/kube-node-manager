@@ -15,6 +15,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&ProgressMessage{},
 		&GitlabSettings{},
 		&GitlabRunner{},
+		&FeishuSettings{},
 	)
 }
 

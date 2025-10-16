@@ -251,6 +251,18 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		gitlab.GET("/pipelines/:project_id/:pipeline_id", handlers.Gitlab.GetPipelineDetail)
 		gitlab.GET("/pipelines/:project_id/:pipeline_id/jobs", handlers.Gitlab.GetPipelineJobs)
 	}
+
+	// Feishu routes
+	feishu := protected.Group("/feishu")
+	{
+		// 所有用户可访问
+		feishu.GET("/settings", handlers.Feishu.GetSettings)
+		feishu.POST("/groups/query", handlers.Feishu.QueryGroup)
+		feishu.GET("/groups", handlers.Feishu.ListGroups)
+		// 仅管理员可访问
+		feishu.PUT("/settings", handlers.Feishu.UpdateSettings)
+		feishu.POST("/test", handlers.Feishu.TestConnection)
+	}
 }
 
 // gracefulShutdown 优雅关闭服务器

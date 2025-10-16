@@ -82,6 +82,18 @@ const router = createRouter({
           name: 'GitlabPipelines',
           component: () => import('@/views/gitlab/GitlabPipelines.vue'),
           meta: { title: 'GitLab Pipelines', icon: 'List', requiresAuth: true }
+        },
+        {
+          path: 'feishu-settings',
+          name: 'FeishuSettings',
+          component: () => import('@/views/feishu/FeishuSettings.vue'),
+          meta: { title: '飞书配置', icon: 'Setting', requiresAuth: true, permission: 'admin' }
+        },
+        {
+          path: 'feishu-groups',
+          name: 'FeishuGroups',
+          component: () => import('@/views/feishu/FeishuGroups.vue'),
+          meta: { title: '飞书群组', icon: 'ChatDotSquare', requiresAuth: true }
         }
       ]
     },

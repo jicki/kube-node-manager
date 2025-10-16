@@ -8,11 +8,11 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig    `mapstructure:"server"`
-	Database DatabaseConfig  `mapstructure:"database"`
-	JWT      JWTConfig       `mapstructure:"jwt"`
-	LDAP     LDAPConfig      `mapstructure:"ldap"`
-	Progress ProgressConfig  `mapstructure:"progress"`
+	Server   ServerConfig   `mapstructure:"server"`
+	Database DatabaseConfig `mapstructure:"database"`
+	JWT      JWTConfig      `mapstructure:"jwt"`
+	LDAP     LDAPConfig     `mapstructure:"ldap"`
+	Progress ProgressConfig `mapstructure:"progress"`
 }
 
 type ServerConfig struct {

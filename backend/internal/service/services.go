@@ -5,6 +5,7 @@ import (
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/auth"
 	"kube-node-manager/internal/service/cluster"
+	"kube-node-manager/internal/service/feishu"
 	"kube-node-manager/internal/service/gitlab"
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/internal/service/label"
@@ -30,6 +31,7 @@ type Services struct {
 	K8s      *k8s.Service
 	Progress *progress.Service
 	Gitlab   *gitlab.Service
+	Feishu   *feishu.Service
 }
 
 func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Services {
@@ -68,5 +70,6 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 		K8s:      k8sSvc,
 		Progress: progressSvc,
 		Gitlab:   gitlab.NewService(db, logger),
+		Feishu:   feishu.NewService(db, logger),
 	}
 }
