@@ -120,16 +120,26 @@ func (s *Service) GetBindingByFeishuUserID(feishuUserID string) (*model.FeishuUs
 
 // SendMessage sends a message to a chat
 func (s *Service) SendMessage(chatID, msgType, content string) error {
+	s.logger.Info("📨 ========== 开始发送飞书消息 ==========")
+	s.logger.Info(fmt.Sprintf("Chat ID: %s", chatID))
+	s.logger.Info(fmt.Sprintf("消息类型: %s", msgType))
+	s.logger.Info(fmt.Sprintf("消息内容长度: %d 字节", len(content)))
+
 	settings, err := s.GetSettings()
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 获取飞书配置失败: %s", err.Error()))
 		return fmt.Errorf("failed to get settings: %w", err)
 	}
+	s.logger.Info(fmt.Sprintf("✅ 已获取飞书配置，App ID: %s", settings.AppID))
 
 	// Get access token
+	s.logger.Info("🔑 正在获取 Access Token...")
 	token, err := s.getTenantAccessToken(settings.AppID, settings.AppSecret)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 获取 Access Token 失败: %s", err.Error()))
 		return err
 	}
+	s.logger.Info(fmt.Sprintf("✅ Access Token 获取成功，长度: %d", len(token)))
 
 	// Prepare request
 	url := "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id"
@@ -142,51 +152,73 @@ func (s *Service) SendMessage(chatID, msgType, content string) error {
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 序列化请求体失败: %s", err.Error()))
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
+	s.logger.Info(fmt.Sprintf("✅ 请求体已准备，大小: %d 字节", len(jsonData)))
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 创建 HTTP 请求失败: %s", err.Error()))
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
+	s.logger.Info(fmt.Sprintf("🌐 正在发送 HTTP 请求到: %s", url))
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ HTTP 请求失败: %s", err.Error()))
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	s.logger.Info(fmt.Sprintf("✅ 收到 HTTP 响应，状态码: %d", resp.StatusCode))
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 读取响应体失败: %s", err.Error()))
 		return fmt.Errorf("failed to read response: %w", err)
 	}
+	s.logger.Info(fmt.Sprintf("响应体内容: %s", string(body)))
 
 	var sendResp SendMessageResponse
 	if err := json.Unmarshal(body, &sendResp); err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 解析响应失败: %s", err.Error()))
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if sendResp.Code != 0 {
+		s.logger.Error(fmt.Sprintf("❌ 飞书 API 返回错误: code=%d, msg=%s", sendResp.Code, sendResp.Msg))
 		return fmt.Errorf("feishu API error: code=%d, msg=%s", sendResp.Code, sendResp.Msg)
 	}
 
+	s.logger.Info(fmt.Sprintf("✅ 消息发送成功！Message ID: %s", sendResp.Data.MessageID))
+	s.logger.Info("📨 ========== 飞书消息发送完成 ==========")
 	return nil
 }
 
 // executeCommand executes a bot command
 func (s *Service) executeCommand(command string, userMapping *model.FeishuUserMapping, chatID, messageID string) {
+	s.logger.Info(fmt.Sprintf("---------- 开始执行命令 ----------"))
+	s.logger.Info(fmt.Sprintf("命令: %s", command))
+	s.logger.Info(fmt.Sprintf("用户: %s (ID: %d)", userMapping.Username, userMapping.SystemUserID))
+	s.logger.Info(fmt.Sprintf("Chat ID: %s", chatID))
+
 	// Parse command
 	cmd := ParseCommand(command)
 	if cmd == nil {
 		// Invalid command
+		s.logger.Error(fmt.Sprintf("❌ 命令解析失败，无效的命令格式: %s", command))
 		errorMsg := BuildErrorCard("无效的命令格式。输入 /help 查看帮助信息。")
 		s.SendMessage(chatID, "interactive", errorMsg)
 		return
 	}
+
+	s.logger.Info(fmt.Sprintf("✅ 命令解析成功 - 名称: %s, 动作: %s, 参数: %v", cmd.Name, cmd.Action, cmd.Args))
 
 	// Execute command through command router
 	ctx := &CommandContext{
@@ -197,33 +229,56 @@ func (s *Service) executeCommand(command string, userMapping *model.FeishuUserMa
 		Service:     s,
 	}
 
+	s.logger.Info(fmt.Sprintf("🔄 正在通过命令路由器执行命令..."))
 	response, err := s.commandRouter.Route(ctx)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 命令执行失败: %s", err.Error()))
 		errorMsg := BuildErrorCard(fmt.Sprintf("命令执行失败：%s", err.Error()))
 		s.SendMessage(chatID, "interactive", errorMsg)
 		return
 	}
 
+	s.logger.Info(fmt.Sprintf("✅ 命令执行成功"))
+
 	// Send response
 	if response.Card != "" {
-		s.SendMessage(chatID, "interactive", response.Card)
+		s.logger.Info(fmt.Sprintf("📤 准备发送交互卡片响应，长度: %d", len(response.Card)))
+		err := s.SendMessage(chatID, "interactive", response.Card)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("❌ 发送卡片响应失败: %s", err.Error()))
+		} else {
+			s.logger.Info("✅ 卡片响应发送成功")
+		}
 	} else if response.Text != "" {
+		s.logger.Info(fmt.Sprintf("📤 准备发送文本响应: %s", response.Text))
 		content := map[string]interface{}{
 			"text": response.Text,
 		}
 		contentJSON, _ := json.Marshal(content)
-		s.SendMessage(chatID, MessageTypeText, string(contentJSON))
+		err := s.SendMessage(chatID, MessageTypeText, string(contentJSON))
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("❌ 发送文本响应失败: %s", err.Error()))
+		} else {
+			s.logger.Info("✅ 文本响应发送成功")
+		}
+	} else {
+		s.logger.Info("⚠️ 命令执行成功但没有返回任何响应内容")
 	}
+
+	s.logger.Info(fmt.Sprintf("---------- 命令执行完成 ----------"))
 }
 
 // handleMessageReceive 处理从 SDK 长连接接收到的消息
 func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
-	s.logger.Info(fmt.Sprintf("Received message from Feishu SDK: %v", event))
+	s.logger.Info("========== 飞书消息接收开始 ==========")
+	s.logger.Info(fmt.Sprintf("收到飞书 SDK 消息，Event Type: %v", event.Event))
 
 	// 获取消息内容
 	messageType := event.Event.Message.MessageType
+	s.logger.Info(fmt.Sprintf("消息类型: %v", messageType))
+
 	if messageType == nil || *messageType != "text" {
-		s.logger.Info("Ignoring non-text message")
+		s.logger.Info(fmt.Sprintf("忽略非文本消息，消息类型: %v", messageType))
 		return nil
 	}
 
@@ -231,17 +286,19 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 	var textContent struct {
 		Text string `json:"text"`
 	}
+	s.logger.Info(fmt.Sprintf("原始消息内容: %s", *event.Event.Message.Content))
+
 	if err := json.Unmarshal([]byte(*event.Event.Message.Content), &textContent); err != nil {
-		s.logger.Error("Failed to parse message content: " + err.Error())
+		s.logger.Error(fmt.Sprintf("解析消息内容失败: %s", err.Error()))
 		return err
 	}
 
 	messageText := strings.TrimSpace(textContent.Text)
-	s.logger.Info(fmt.Sprintf("Message text: %s", messageText))
+	s.logger.Info(fmt.Sprintf("✅ 解析后的消息文本: '%s'", messageText))
 
 	// 检查是否是命令（以 / 开头）
 	if !strings.HasPrefix(messageText, "/") {
-		s.logger.Info("Message is not a command, ignoring")
+		s.logger.Info(fmt.Sprintf("不是命令消息（不以 / 开头），忽略。消息内容: '%s'", messageText))
 		return nil
 	}
 
@@ -252,9 +309,10 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 			senderID = *event.Event.Sender.SenderId.OpenId
 		}
 	}
+	s.logger.Info(fmt.Sprintf("发送者 Open ID: %s", senderID))
 
 	if senderID == "" {
-		s.logger.Error("Failed to get sender ID")
+		s.logger.Error("❌ 无法获取发送者 ID")
 		return fmt.Errorf("invalid sender ID")
 	}
 
@@ -263,9 +321,10 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 	if event.Event.Message.ChatId != nil {
 		chatID = *event.Event.Message.ChatId
 	}
+	s.logger.Info(fmt.Sprintf("Chat ID: %s", chatID))
 
 	if chatID == "" {
-		s.logger.Error("Failed to get chat ID")
+		s.logger.Error("❌ 无法获取 Chat ID")
 		return fmt.Errorf("invalid chat ID")
 	}
 
@@ -274,20 +333,38 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 	if event.Event.Message.MessageId != nil {
 		messageID = *event.Event.Message.MessageId
 	}
+	s.logger.Info(fmt.Sprintf("Message ID: %s", messageID))
 
 	// 检查用户绑定
+	s.logger.Info(fmt.Sprintf("🔍 检查用户绑定状态，Feishu User ID: %s", senderID))
 	userMapping, err := s.GetBindingByFeishuUserID(senderID)
-	if err != nil || userMapping == nil {
-		errorMsg := BuildErrorCard("您尚未绑定系统账号，请先绑定后再使用机器人功能。")
+	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 查询用户绑定失败: %s", err.Error()))
+		errorMsg := BuildErrorCard(fmt.Sprintf("查询绑定状态失败。您的 Open ID: %s", senderID))
 		s.SendMessage(chatID, "interactive", errorMsg)
-		s.logger.Info(fmt.Sprintf("User %s not bound to system account", senderID))
 		return nil
 	}
 
-	s.logger.Info(fmt.Sprintf("User %s (system user ID: %d) executing command: %s", senderID, userMapping.SystemUserID, messageText))
+	if userMapping == nil {
+		s.logger.Info(fmt.Sprintf("⚠️ 用户未绑定系统账号，Feishu User ID: %s", senderID))
+		errorMsg := BuildErrorCard(fmt.Sprintf("您尚未绑定系统账号。\n\n您的飞书 Open ID: %s\n\n请在系统中完成账号绑定后再使用机器人功能。", senderID))
+		s.logger.Info("📤 准备发送未绑定提示消息...")
+		sendErr := s.SendMessage(chatID, "interactive", errorMsg)
+		if sendErr != nil {
+			s.logger.Error(fmt.Sprintf("❌ 发送未绑定提示消息失败: %s", sendErr.Error()))
+		} else {
+			s.logger.Info("✅ 已成功发送未绑定提示消息")
+		}
+		return nil
+	}
+
+	s.logger.Info(fmt.Sprintf("✅ 用户已绑定，Feishu User ID: %s -> System User ID: %d, Username: %s",
+		senderID, userMapping.SystemUserID, userMapping.Username))
+	s.logger.Info(fmt.Sprintf("🚀 准备执行命令: '%s'", messageText))
 
 	// 异步执行命令
 	go s.executeCommand(messageText, userMapping, chatID, messageID)
 
+	s.logger.Info("========== 飞书消息接收处理完成 ==========")
 	return nil
 }
