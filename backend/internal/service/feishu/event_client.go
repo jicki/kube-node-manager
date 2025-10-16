@@ -45,11 +45,11 @@ func NewEventClient(service *Service, appID, appSecret string) *EventClient {
 // Start 启动长连接
 func (ec *EventClient) Start() error {
 	ec.mu.Lock()
-	defer ec.mu.Unlock()
-
 	if ec.connected {
+		ec.mu.Unlock()
 		return fmt.Errorf("event client already started")
 	}
+	ec.mu.Unlock()
 
 	ec.service.logger.Info("Starting Feishu event client with long connection...")
 
@@ -64,28 +64,44 @@ func (ec *EventClient) Start() error {
 		larkws.WithEventHandler(handler),
 	)
 
+	ec.mu.Lock()
 	ec.wsClient = cli
+	ec.mu.Unlock()
+
+	// 使用 channel 来等待连接建立
+	connectedChan := make(chan bool, 1)
 
 	// 启动长连接（异步）
 	go func() {
+		ec.service.logger.Info("Feishu WebSocket client starting...")
+
+		// 设置连接状态为 true（SDK 会在后台建立连接）
+		ec.mu.Lock()
+		ec.connected = true
+		ec.mu.Unlock()
+		connectedChan <- true
+
+		// Start 是阻塞的，会一直运行直到连接断开
 		err := cli.Start(ec.ctx)
 		if err != nil {
 			ec.service.logger.Error("Feishu event client stopped with error: " + err.Error())
-			ec.mu.Lock()
-			ec.connected = false
-			ec.mu.Unlock()
-			return
+		} else {
+			ec.service.logger.Info("Feishu event client stopped normally")
 		}
-		ec.service.logger.Info("Feishu event client stopped normally")
+
 		ec.mu.Lock()
 		ec.connected = false
 		ec.mu.Unlock()
 	}()
 
-	ec.connected = true
-	ec.service.logger.Info("Feishu event client connection established")
-
-	return nil
+	// 等待连接启动（最多等待 5 秒）
+	select {
+	case <-connectedChan:
+		ec.service.logger.Info("Feishu event client connection initialized")
+		return nil
+	case <-ec.ctx.Done():
+		return fmt.Errorf("context cancelled")
+	}
 }
 
 // Stop 停止长连接
