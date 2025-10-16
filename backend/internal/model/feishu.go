@@ -55,6 +55,9 @@ type FeishuUserMapping struct {
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
+
+	// 关联的系统用户
+	User User `json:"user,omitempty" gorm:"foreignKey:SystemUserID"`
 }
 
 // TableName specifies the table name for FeishuUserMapping

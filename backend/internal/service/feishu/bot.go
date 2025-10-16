@@ -112,7 +112,8 @@ type SendMessageResponse struct {
 // GetBindingByFeishuUserID retrieves the user mapping for a Feishu user ID
 func (s *Service) GetBindingByFeishuUserID(feishuUserID string) (*model.FeishuUserMapping, error) {
 	var mapping model.FeishuUserMapping
-	if err := s.db.Where("feishu_user_id = ?", feishuUserID).First(&mapping).Error; err != nil {
+	// 预加载用户信息以便进行权限检查
+	if err := s.db.Preload("User").Where("feishu_user_id = ?", feishuUserID).First(&mapping).Error; err != nil {
 		return nil, err
 	}
 	return &mapping, nil
@@ -360,6 +361,23 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 
 	s.logger.Info(fmt.Sprintf("✅ 用户已绑定，Feishu User ID: %s -> System User ID: %d, Username: %s",
 		senderID, userMapping.SystemUserID, userMapping.Username))
+
+	// 检查用户权限
+	s.logger.Info(fmt.Sprintf("🔐 检查用户权限，角色: %s", userMapping.User.Role))
+	if userMapping.User.Role != model.RoleAdmin {
+		s.logger.Info(fmt.Sprintf("⚠️ 用户权限不足，需要管理员权限。当前角色: %s", userMapping.User.Role))
+		errorMsg := BuildErrorCard(fmt.Sprintf("❌ 无权操作\n\n机器人命令仅限管理员使用。\n\n您当前的角色: %s\n请联系管理员申请权限。", userMapping.User.Role))
+		s.logger.Info("📤 准备发送权限不足提示消息...")
+		sendErr := s.SendMessage(chatID, "interactive", errorMsg)
+		if sendErr != nil {
+			s.logger.Error(fmt.Sprintf("❌ 发送权限不足提示消息失败: %s", sendErr.Error()))
+		} else {
+			s.logger.Info("✅ 已成功发送权限不足提示消息")
+		}
+		return nil
+	}
+	s.logger.Info("✅ 用户权限验证通过，允许执行命令")
+
 	s.logger.Info(fmt.Sprintf("🚀 准备执行命令: '%s'", messageText))
 
 	// 异步执行命令
