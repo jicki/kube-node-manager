@@ -55,14 +55,9 @@ func NewService(db *gorm.DB, logger *logger.Logger) *Service {
 }
 
 func (s *Service) Log(req LogRequest) {
-	var clusterID uint
-	if req.ClusterID != nil {
-		clusterID = *req.ClusterID
-	}
-
 	auditLog := model.AuditLog{
 		UserID:       req.UserID,
-		ClusterID:    clusterID,
+		ClusterID:    req.ClusterID,
 		NodeName:     req.NodeName,
 		Action:       req.Action,
 		ResourceType: req.ResourceType,
@@ -81,14 +76,9 @@ func (s *Service) Log(req LogRequest) {
 
 // LogWithError 记录审计日志并返回错误
 func (s *Service) LogWithError(req LogRequest) error {
-	var clusterID uint
-	if req.ClusterID != nil {
-		clusterID = *req.ClusterID
-	}
-
 	auditLog := model.AuditLog{
 		UserID:       req.UserID,
-		ClusterID:    clusterID,
+		ClusterID:    req.ClusterID,
 		NodeName:     req.NodeName,
 		Action:       req.Action,
 		ResourceType: req.ResourceType,
@@ -109,14 +99,9 @@ func (s *Service) LogWithError(req LogRequest) error {
 
 // LogWithCustomTime 使用自定义时间记录审计日志
 func (s *Service) LogWithCustomTime(req LogRequest, customTime time.Time) error {
-	var clusterID uint
-	if req.ClusterID != nil {
-		clusterID = *req.ClusterID
-	}
-
 	auditLog := model.AuditLog{
 		UserID:       req.UserID,
-		ClusterID:    clusterID,
+		ClusterID:    req.ClusterID,
 		NodeName:     req.NodeName,
 		Action:       req.Action,
 		ResourceType: req.ResourceType,

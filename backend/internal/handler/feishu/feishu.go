@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"fmt"
+	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/feishu"
 	"kube-node-manager/pkg/logger"
@@ -71,10 +72,10 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	h.auditService.Log(audit.LogRequest{
 		UserID:       userID.(uint),
-		Action:       "update",
-		ResourceType: "feishu_settings",
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceFeishuSettings,
 		Details:      "更新飞书配置（长连接模式）",
-		Status:       "success",
+		Status:       model.AuditStatusSuccess,
 		IPAddress:    c.ClientIP(),
 	})
 
@@ -109,10 +110,10 @@ func (h *Handler) TestConnection(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	h.auditService.Log(audit.LogRequest{
 		UserID:       userID.(uint),
-		Action:       "test",
-		ResourceType: "feishu_settings",
+		Action:       model.ActionTest,
+		ResourceType: model.ResourceFeishuSettings,
 		Details:      "测试飞书连接",
-		Status:       "success",
+		Status:       model.AuditStatusSuccess,
 		IPAddress:    c.ClientIP(),
 	})
 
@@ -142,10 +143,10 @@ func (h *Handler) QueryGroup(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	h.auditService.Log(audit.LogRequest{
 		UserID:       userID.(uint),
-		Action:       "query",
-		ResourceType: "feishu_group",
+		Action:       model.ActionQuery,
+		ResourceType: model.ResourceFeishuGroup,
 		Details:      fmt.Sprintf("查询飞书群组信息: %s", req.ChatID),
-		Status:       "success",
+		Status:       model.AuditStatusSuccess,
 		IPAddress:    c.ClientIP(),
 	})
 
@@ -220,10 +221,10 @@ func (h *Handler) BindUser(c *gin.Context) {
 	// Record audit log
 	h.auditService.Log(audit.LogRequest{
 		UserID:       userID.(uint),
-		Action:       "bind",
-		ResourceType: "feishu_user",
+		Action:       model.ActionBind,
+		ResourceType: model.ResourceFeishuUser,
 		Details:      fmt.Sprintf("绑定飞书账号: %s", req.FeishuUserID),
-		Status:       "success",
+		Status:       model.AuditStatusSuccess,
 		IPAddress:    c.ClientIP(),
 	})
 
@@ -248,10 +249,10 @@ func (h *Handler) UnbindUser(c *gin.Context) {
 	// Record audit log
 	h.auditService.Log(audit.LogRequest{
 		UserID:       userID.(uint),
-		Action:       "unbind",
-		ResourceType: "feishu_user",
+		Action:       model.ActionUnbind,
+		ResourceType: model.ResourceFeishuUser,
 		Details:      "解绑飞书账号",
-		Status:       "success",
+		Status:       model.AuditStatusSuccess,
 		IPAddress:    c.ClientIP(),
 	})
 
