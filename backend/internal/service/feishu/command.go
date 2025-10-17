@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"kube-node-manager/internal/model"
+	"regexp"
 	"strings"
 )
 
@@ -99,7 +100,24 @@ func ParseCommand(cmdStr string) *Command {
 
 	if len(parts) > 2 {
 		cmd.Args = parts[2:]
+		// 清理参数中的 Markdown 超链接格式
+		cmd.Args = cleanMarkdownLinks(cmd.Args)
 	}
 
 	return cmd
+}
+
+// cleanMarkdownLinks 清理参数中的 Markdown 超链接格式
+// 将 [text](url) 格式转换为 text
+func cleanMarkdownLinks(args []string) []string {
+	// Markdown 链接格式的正则表达式: [text](url)
+	linkRegex := regexp.MustCompile(`\[([^\]]+)\]\([^\)]+\)`)
+
+	cleaned := make([]string, len(args))
+	for i, arg := range args {
+		// 替换所有 Markdown 链接为纯文本
+		cleaned[i] = linkRegex.ReplaceAllString(arg, "$1")
+	}
+
+	return cleaned
 }
