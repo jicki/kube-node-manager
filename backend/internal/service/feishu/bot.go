@@ -111,6 +111,98 @@ type SendMessageResponse struct {
 	} `json:"data"`
 }
 
+// FeishuUserInfoResponse 飞书用户信息响应
+type FeishuUserInfoResponse struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data struct {
+		User struct {
+			OpenID          string   `json:"open_id"`
+			UnionID         string   `json:"union_id"`
+			UserID          string   `json:"user_id"`
+			Name            string   `json:"name"`
+			EnName          string   `json:"en_name"`
+			Email           string   `json:"email"`
+			Mobile          string   `json:"mobile"`
+			Gender          int      `json:"gender"`
+			Avatar          Avatar   `json:"avatar"`
+			Status          Status   `json:"status"`
+			DepartmentIDs   []string `json:"department_ids"`
+			LeaderUserID    string   `json:"leader_user_id"`
+			City            string   `json:"city"`
+			Country         string   `json:"country"`
+			WorkStation     string   `json:"work_station"`
+			JoinTime        int64    `json:"join_time"`
+			IsTenantManager bool     `json:"is_tenant_manager"`
+			EmployeeNo      string   `json:"employee_no"`
+			EmployeeType    int      `json:"employee_type"`
+		} `json:"user"`
+	} `json:"data"`
+}
+
+// Avatar 飞书用户头像
+type Avatar struct {
+	Avatar72     string `json:"avatar_72"`
+	Avatar240    string `json:"avatar_240"`
+	Avatar640    string `json:"avatar_640"`
+	AvatarOrigin string `json:"avatar_origin"`
+}
+
+// Status 飞书用户状态
+type Status struct {
+	IsFrozen    bool `json:"is_frozen"`
+	IsResigned  bool `json:"is_resigned"`
+	IsActivated bool `json:"is_activated"`
+}
+
+// GetFeishuUserInfo 从飞书 API 获取用户信息
+func (s *Service) GetFeishuUserInfo(openID string) (*FeishuUserInfoResponse, error) {
+	settings, err := s.GetSettings()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get settings: %w", err)
+	}
+
+	// 获取 access token
+	token, err := s.getTenantAccessToken(settings.AppID, settings.AppSecret)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get access token: %w", err)
+	}
+
+	// 调用飞书 API 获取用户信息
+	url := fmt.Sprintf("https://open.feishu.cn/open-apis/contact/v3/users/%s?user_id_type=open_id", openID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var userInfo FeishuUserInfoResponse
+	if err := json.Unmarshal(body, &userInfo); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if userInfo.Code != 0 {
+		return nil, fmt.Errorf("feishu API error: code=%d, msg=%s", userInfo.Code, userInfo.Msg)
+	}
+
+	return &userInfo, nil
+}
+
 // GetBindingByFeishuUserID retrieves the user mapping for a Feishu user ID
 func (s *Service) GetBindingByFeishuUserID(feishuUserID string) (*model.FeishuUserMapping, error) {
 	var mapping model.FeishuUserMapping
@@ -124,6 +216,92 @@ func (s *Service) GetBindingByFeishuUserID(feishuUserID string) (*model.FeishuUs
 		return nil, err
 	}
 	return &mapping, nil
+}
+
+// AutoMatchAndBindUser 自动匹配并绑定飞书用户到系统用户
+func (s *Service) AutoMatchAndBindUser(openID string) (*model.FeishuUserMapping, error) {
+	s.logger.Info(fmt.Sprintf("🔄 尝试自动匹配用户，Open ID: %s", openID))
+
+	// 1. 获取飞书用户信息
+	feishuUserInfo, err := s.GetFeishuUserInfo(openID)
+	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 获取飞书用户信息失败: %s", err.Error()))
+		return nil, fmt.Errorf("获取飞书用户信息失败: %w", err)
+	}
+
+	email := feishuUserInfo.Data.User.Email
+	name := feishuUserInfo.Data.User.Name
+
+	s.logger.Info(fmt.Sprintf("📧 飞书用户信息 - 姓名: %s, 邮箱: %s", name, email))
+
+	// 2. 尝试通过邮箱匹配系统用户
+	var systemUser model.User
+	if email != "" {
+		err = s.db.Where("email = ?", email).First(&systemUser).Error
+		if err == nil {
+			s.logger.Info(fmt.Sprintf("✅ 通过邮箱匹配到系统用户: %s (ID: %d)", systemUser.Username, systemUser.ID))
+
+			// 3. 创建绑定关系
+			mapping := &model.FeishuUserMapping{
+				FeishuUserID: openID,
+				SystemUserID: systemUser.ID,
+				Username:     systemUser.Username,
+				FeishuName:   name,
+			}
+
+			if err := s.db.Create(mapping).Error; err != nil {
+				s.logger.Error(fmt.Sprintf("❌ 创建绑定关系失败: %s", err.Error()))
+				return nil, fmt.Errorf("创建绑定关系失败: %w", err)
+			}
+
+			// 预加载用户信息
+			if err := s.db.Preload("User").First(mapping, mapping.ID).Error; err != nil {
+				return nil, err
+			}
+
+			s.logger.Info(fmt.Sprintf("✅ 自动绑定成功！Feishu: %s -> System: %s", name, systemUser.Username))
+			return mapping, nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			s.logger.Error(fmt.Sprintf("❌ 查询系统用户失败: %s", err.Error()))
+			return nil, fmt.Errorf("查询系统用户失败: %w", err)
+		}
+	}
+
+	// 4. 如果邮箱匹配失败，尝试通过用户名匹配（如果飞书用户名和系统用户名一致）
+	if name != "" {
+		err = s.db.Where("username = ?", name).First(&systemUser).Error
+		if err == nil {
+			s.logger.Info(fmt.Sprintf("✅ 通过用户名匹配到系统用户: %s (ID: %d)", systemUser.Username, systemUser.ID))
+
+			// 创建绑定关系
+			mapping := &model.FeishuUserMapping{
+				FeishuUserID: openID,
+				SystemUserID: systemUser.ID,
+				Username:     systemUser.Username,
+				FeishuName:   name,
+			}
+
+			if err := s.db.Create(mapping).Error; err != nil {
+				s.logger.Error(fmt.Sprintf("❌ 创建绑定关系失败: %s", err.Error()))
+				return nil, fmt.Errorf("创建绑定关系失败: %w", err)
+			}
+
+			// 预加载用户信息
+			if err := s.db.Preload("User").First(mapping, mapping.ID).Error; err != nil {
+				return nil, err
+			}
+
+			s.logger.Info(fmt.Sprintf("✅ 自动绑定成功！Feishu: %s -> System: %s", name, systemUser.Username))
+			return mapping, nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			s.logger.Error(fmt.Sprintf("❌ 查询系统用户失败: %s", err.Error()))
+			return nil, fmt.Errorf("查询系统用户失败: %w", err)
+		}
+	}
+
+	// 5. 如果都匹配失败，返回 nil
+	s.logger.Info(fmt.Sprintf("⚠️ 无法自动匹配用户 - 飞书姓名: %s, 邮箱: %s", name, email))
+	return nil, nil
 }
 
 // SendMessage sends a message to a chat
@@ -369,22 +547,52 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 	userMapping, err := s.GetBindingByFeishuUserID(senderID)
 	if err != nil {
 		s.logger.Error(fmt.Sprintf("❌ 查询用户绑定失败: %s", err.Error()))
-		errorMsg := BuildErrorCard(fmt.Sprintf("查询绑定状态失败。您的 Open ID: %s", senderID))
+		errorMsg := BuildErrorCard(fmt.Sprintf("查询绑定状态失败，请稍后重试。"))
 		s.SendMessage(chatID, "interactive", errorMsg)
 		return nil
 	}
 
+	// 如果用户未绑定，尝试自动匹配
 	if userMapping == nil {
 		s.logger.Info(fmt.Sprintf("⚠️ 用户未绑定系统账号，Feishu User ID: %s", senderID))
-		errorMsg := BuildErrorCard(fmt.Sprintf("您尚未绑定系统账号。\n\n您的飞书 Open ID: %s\n\n请在系统中完成账号绑定后再使用机器人功能。", senderID))
-		s.logger.Info("📤 准备发送未绑定提示消息...")
-		sendErr := s.SendMessage(chatID, "interactive", errorMsg)
-		if sendErr != nil {
-			s.logger.Error(fmt.Sprintf("❌ 发送未绑定提示消息失败: %s", sendErr.Error()))
-		} else {
-			s.logger.Info("✅ 已成功发送未绑定提示消息")
+		s.logger.Info("🔄 尝试自动匹配并绑定用户...")
+
+		// 尝试自动匹配
+		userMapping, err = s.AutoMatchAndBindUser(senderID)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("❌ 自动匹配用户失败: %s", err.Error()))
+			errorMsg := BuildErrorCard(fmt.Sprintf("自动匹配用户失败，请稍后重试。"))
+			s.SendMessage(chatID, "interactive", errorMsg)
+			return nil
 		}
-		return nil
+
+		// 如果自动匹配也失败，提示用户
+		if userMapping == nil {
+			s.logger.Info(fmt.Sprintf("⚠️ 无法自动匹配用户"))
+			errorMsg := BuildErrorCard("❌ 无法自动匹配您的账号\n\n" +
+				"系统尝试通过您的飞书邮箱或姓名匹配系统用户，但未找到匹配的账号。\n\n" +
+				"请确保：\n" +
+				"1. 您的飞书邮箱与系统账号邮箱一致\n" +
+				"2. 或者飞书姓名与系统用户名一致\n\n" +
+				"如需帮助，请联系管理员。")
+			s.logger.Info("📤 准备发送无法匹配提示消息...")
+			sendErr := s.SendMessage(chatID, "interactive", errorMsg)
+			if sendErr != nil {
+				s.logger.Error(fmt.Sprintf("❌ 发送提示消息失败: %s", sendErr.Error()))
+			} else {
+				s.logger.Info("✅ 已成功发送提示消息")
+			}
+			return nil
+		}
+
+		// 自动匹配成功，发送欢迎消息
+		s.logger.Info(fmt.Sprintf("🎉 自动匹配成功！"))
+		welcomeMsg := BuildSuccessCard(fmt.Sprintf("✅ 账号绑定成功！\n\n"+
+			"欢迎使用 Kube 管理机器人！\n\n"+
+			"系统账号: %s\n"+
+			"角色: %s\n\n"+
+			"输入 /help 查看可用命令。", userMapping.Username, userMapping.User.Role))
+		s.SendMessage(chatID, "interactive", welcomeMsg)
 	}
 
 	s.logger.Info(fmt.Sprintf("✅ 用户已绑定，Feishu User ID: %s -> System User ID: %d, Username: %s",
