@@ -2,6 +2,9 @@ package feishu
 
 import (
 	"fmt"
+	"kube-node-manager/internal/service/cluster"
+	"kube-node-manager/internal/service/k8s"
+	"kube-node-manager/internal/service/node"
 )
 
 // NodeCommandHandler handles node-related commands
@@ -38,19 +41,53 @@ func (h *NodeCommandHandler) Handle(ctx *CommandContext) (*CommandResponse, erro
 
 // handleListClusters 显示所有集群列表
 func (h *NodeCommandHandler) handleListClusters(ctx *CommandContext) (*CommandResponse, error) {
-	// TODO: 调用 cluster service 获取实际的集群列表
-	// 暂时返回示例数据
-	clusters := []map[string]interface{}{
-		{
-			"name":   "default",
-			"status": "健康",
-			"nodes":  2,
-		},
-		{
-			"name":   "test-k8s-cluster",
-			"status": "健康",
-			"nodes":  2,
-		},
+	// 调用实际的集群服务
+	if ctx.Service.clusterService == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard("集群服务未配置"),
+		}, nil
+	}
+
+	// 调用集群服务获取列表
+	result, err := ctx.Service.clusterService.List(cluster.ListRequest{
+		Page:     1,
+		PageSize: 100, // 获取所有集群
+	}, ctx.UserMapping.SystemUserID)
+
+	if err != nil {
+		ctx.Service.logger.Error(fmt.Sprintf("获取集群列表失败: %v", err))
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("获取集群列表失败: %s", err.Error())),
+		}, nil
+	}
+
+	// 类型断言
+	listResp, ok := result.(*cluster.ListResponse)
+	if !ok {
+		return &CommandResponse{
+			Card: BuildErrorCard("数据格式错误"),
+		}, nil
+	}
+
+	// 转换为卡片需要的格式
+	var clusters []map[string]interface{}
+	for _, c := range listResp.Clusters {
+		status := "🟢 健康"
+		if c.Status != "active" {
+			status = "🔴 不可用"
+		}
+
+		clusters = append(clusters, map[string]interface{}{
+			"name":   c.Name,
+			"status": status,
+			"nodes":  c.NodeCount,
+		})
+	}
+
+	if len(clusters) == 0 {
+		return &CommandResponse{
+			Card: BuildErrorCard("系统中没有配置集群\n\n请先在 Web 界面添加集群配置"),
+		}, nil
 	}
 
 	return &CommandResponse{
@@ -99,19 +136,47 @@ func (h *NodeCommandHandler) handleListNodes(ctx *CommandContext) (*CommandRespo
 		}, nil
 	}
 
-	// TODO: Implement actual node listing logic by calling node service
-	// For now, return a placeholder
-	nodes := []map[string]interface{}{
-		{
-			"name":          "node-1",
-			"ready":         true,
-			"unschedulable": false,
-		},
-		{
-			"name":          "node-2",
-			"ready":         true,
-			"unschedulable": true,
-		},
+	// 调用节点服务获取真实数据
+	if ctx.Service.nodeService == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点服务未配置"),
+		}, nil
+	}
+
+	// 创建节点列表请求
+	result, err := ctx.Service.nodeService.List(node.ListRequest{
+		ClusterName: clusterName,
+	}, ctx.UserMapping.SystemUserID)
+
+	if err != nil {
+		ctx.Service.logger.Error(fmt.Sprintf("获取节点列表失败: %v", err))
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("获取节点列表失败: %s\n\n请检查集群连接是否正常", err.Error())),
+		}, nil
+	}
+
+	// 类型断言 - node.List 返回 []k8s.NodeInfo
+	nodeInfos, ok := result.([]k8s.NodeInfo)
+	if !ok {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点数据格式错误"),
+		}, nil
+	}
+
+	// 转换为卡片需要的格式
+	var nodes []map[string]interface{}
+	for _, n := range nodeInfos {
+		nodes = append(nodes, map[string]interface{}{
+			"name":          n.Name,
+			"ready":         n.Status == "Ready",
+			"unschedulable": !n.Schedulable,
+		})
+	}
+
+	if len(nodes) == 0 {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("集群 %s 中没有节点", clusterName)),
+		}, nil
 	}
 
 	return &CommandResponse{
@@ -143,15 +208,57 @@ func (h *NodeCommandHandler) handleNodeInfo(ctx *CommandContext) (*CommandRespon
 
 	nodeName := ctx.Command.Args[0]
 
-	// TODO: Implement actual node info logic
+	// 调用节点服务获取节点详情
+	if ctx.Service.nodeService == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点服务未配置"),
+		}, nil
+	}
+
+	// 获取节点列表，然后找到指定节点
+	result, err := ctx.Service.nodeService.List(node.ListRequest{
+		ClusterName: clusterName,
+	}, ctx.UserMapping.SystemUserID)
+
+	if err != nil {
+		ctx.Service.logger.Error(fmt.Sprintf("获取节点信息失败: %v", err))
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("获取节点信息失败: %s", err.Error())),
+		}, nil
+	}
+
+	// 类型断言
+	nodeInfos, ok := result.([]k8s.NodeInfo)
+	if !ok {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点数据格式错误"),
+		}, nil
+	}
+
+	// 查找指定的节点
+	var foundNode *k8s.NodeInfo
+	for _, n := range nodeInfos {
+		if n.Name == nodeName {
+			foundNode = &n
+			break
+		}
+	}
+
+	if foundNode == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("节点 %s 不存在\n\n集群: %s", nodeName, clusterName)),
+		}, nil
+	}
+
+	// 转换为卡片需要的格式
 	nodeInfo := map[string]interface{}{
-		"name":              nodeName,
-		"ready":             true,
-		"unschedulable":     false,
-		"internal_ip":       "192.168.1.100",
-		"container_runtime": "containerd://1.6.0",
-		"kernel_version":    "5.10.0",
-		"os_image":          "Ubuntu 20.04",
+		"name":              foundNode.Name,
+		"ready":             foundNode.Status == "Ready",
+		"unschedulable":     !foundNode.Schedulable,
+		"internal_ip":       foundNode.InternalIP,
+		"container_runtime": foundNode.ContainerRuntime,
+		"kernel_version":    foundNode.KernelVersion,
+		"os_image":          foundNode.OSImage,
 		"cluster":           clusterName,
 	}
 

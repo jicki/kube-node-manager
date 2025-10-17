@@ -14,12 +14,25 @@ import (
 	"gorm.io/gorm"
 )
 
+// ClusterServiceInterface 集群服务接口
+type ClusterServiceInterface interface {
+	List(req interface{}, userID uint) (interface{}, error)
+}
+
+// NodeServiceInterface 节点服务接口
+type NodeServiceInterface interface {
+	List(req interface{}, userID uint) (interface{}, error)
+	Get(req interface{}, userID uint) (interface{}, error)
+}
+
 // Service handles Feishu (Lark) related operations
 type Service struct {
-	db            *gorm.DB
-	logger        *logger.Logger
-	commandRouter *CommandRouter
-	eventClient   *EventClient
+	db             *gorm.DB
+	logger         *logger.Logger
+	commandRouter  *CommandRouter
+	eventClient    *EventClient
+	clusterService ClusterServiceInterface
+	nodeService    NodeServiceInterface
 }
 
 // NewService creates a new Feishu service
@@ -31,6 +44,16 @@ func NewService(db *gorm.DB, logger *logger.Logger) *Service {
 	// Initialize command router
 	service.commandRouter = NewCommandRouter()
 	return service
+}
+
+// SetClusterService 设置集群服务
+func (s *Service) SetClusterService(clusterSvc ClusterServiceInterface) {
+	s.clusterService = clusterSvc
+}
+
+// SetNodeService 设置节点服务
+func (s *Service) SetNodeService(nodeSvc NodeServiceInterface) {
+	s.nodeService = nodeSvc
 }
 
 // InitializeEventClient 初始化或重启事件客户端

@@ -58,10 +58,18 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	taintSvc.SetProgressService(progressSvc)
 	nodeSvc.SetProgressService(progressSvc)
 
+	// 创建集群和飞书服务
+	clusterSvc := cluster.NewService(db, logger, auditSvc, k8sSvc)
+	feishuSvc := feishu.NewService(db, logger)
+
+	// 设置飞书服务的依赖
+	feishuSvc.SetClusterService(clusterSvc)
+	feishuSvc.SetNodeService(nodeSvc)
+
 	return &Services{
 		Auth:     authSvc,
 		User:     user.NewService(db, logger, auditSvc),
-		Cluster:  cluster.NewService(db, logger, auditSvc, k8sSvc),
+		Cluster:  clusterSvc,
 		Node:     nodeSvc,
 		Label:    labelSvc,
 		Taint:    taintSvc,
@@ -70,6 +78,6 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 		K8s:      k8sSvc,
 		Progress: progressSvc,
 		Gitlab:   gitlab.NewService(db, logger),
-		Feishu:   feishu.NewService(db, logger),
+		Feishu:   feishuSvc,
 	}
 }
