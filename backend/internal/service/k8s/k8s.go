@@ -887,14 +887,14 @@ func (s *Service) nodeToNodeInfo(node *corev1.Node) NodeInfo {
 		KernelVersion:    node.Status.NodeInfo.KernelVersion,
 		ContainerRuntime: node.Status.NodeInfo.ContainerRuntimeVersion,
 		Capacity: ResourceInfo{
-			CPU:    node.Status.Capacity.Cpu().String(),
-			Memory: node.Status.Capacity.Memory().String(),
+			CPU:    s.formatCPU(node.Status.Capacity.Cpu().MilliValue()),
+			Memory: s.formatMemory(node.Status.Capacity.Memory().Value()),
 			Pods:   node.Status.Capacity.Pods().String(),
 			GPU:    s.extractGPUResources(node.Status.Capacity),
 		},
 		Allocatable: ResourceInfo{
-			CPU:    node.Status.Allocatable.Cpu().String(),
-			Memory: node.Status.Allocatable.Memory().String(),
+			CPU:    s.formatCPU(node.Status.Allocatable.Cpu().MilliValue()),
+			Memory: s.formatMemory(node.Status.Allocatable.Memory().Value()),
 			Pods:   node.Status.Allocatable.Pods().String(),
 			GPU:    s.extractGPUResources(node.Status.Allocatable),
 		},
@@ -1078,8 +1078,8 @@ func (s *Service) enrichNodesWithMetrics(clusterName string, nodes []NodeInfo) {
 	for i := range nodes {
 		if metric, exists := metricsMap[nodes[i].Name]; exists {
 			nodes[i].Usage = &ResourceUsageInfo{
-				CPU:    metric.Usage.Cpu().String(),
-				Memory: metric.Usage.Memory().String(),
+				CPU:    s.formatCPU(metric.Usage.Cpu().MilliValue()),
+				Memory: s.formatMemory(metric.Usage.Memory().Value()),
 			}
 		}
 	}
@@ -1107,9 +1107,69 @@ func (s *Service) enrichNodeWithMetrics(clusterName string, node *NodeInfo) {
 
 	// 添加使用情况
 	node.Usage = &ResourceUsageInfo{
-		CPU:    nodeMetrics.Usage.Cpu().String(),
-		Memory: nodeMetrics.Usage.Memory().String(),
+		CPU:    s.formatCPU(nodeMetrics.Usage.Cpu().MilliValue()),
+		Memory: s.formatMemory(nodeMetrics.Usage.Memory().Value()),
 	}
 
 	s.logger.Infof("Successfully enriched node %s with metrics for cluster %s", node.Name, clusterName)
+}
+
+// formatCPU 格式化 CPU 资源，将毫核转换为核心数
+// milliValue: CPU 的毫核数（1核 = 1000毫核）
+func (s *Service) formatCPU(milliValue int64) string {
+	// 将毫核转换为核心数，保留2位小数
+	cores := float64(milliValue) / 1000.0
+
+	// 如果小于0.01核，显示为毫核
+	if cores < 0.01 {
+		return fmt.Sprintf("%dm", milliValue)
+	}
+
+	// 如果是整数核心，不显示小数
+	if cores == float64(int64(cores)) {
+		return fmt.Sprintf("%d", int64(cores))
+	}
+
+	// 保留2位小数
+	return fmt.Sprintf("%.2f", cores)
+}
+
+// formatMemory 格式化内存资源，将字节转换为人类可读格式
+// bytes: 内存字节数
+func (s *Service) formatMemory(bytes int64) string {
+	const (
+		Ki = 1024
+		Mi = 1024 * Ki
+		Gi = 1024 * Mi
+		Ti = 1024 * Gi
+	)
+
+	switch {
+	case bytes >= Ti:
+		value := float64(bytes) / float64(Ti)
+		if value == float64(int64(value)) {
+			return fmt.Sprintf("%dTi", int64(value))
+		}
+		return fmt.Sprintf("%.2fTi", value)
+	case bytes >= Gi:
+		value := float64(bytes) / float64(Gi)
+		if value == float64(int64(value)) {
+			return fmt.Sprintf("%dGi", int64(value))
+		}
+		return fmt.Sprintf("%.2fGi", value)
+	case bytes >= Mi:
+		value := float64(bytes) / float64(Mi)
+		if value == float64(int64(value)) {
+			return fmt.Sprintf("%dMi", int64(value))
+		}
+		return fmt.Sprintf("%.2fMi", value)
+	case bytes >= Ki:
+		value := float64(bytes) / float64(Ki)
+		if value == float64(int64(value)) {
+			return fmt.Sprintf("%dKi", int64(value))
+		}
+		return fmt.Sprintf("%.2fKi", value)
+	default:
+		return fmt.Sprintf("%d", bytes)
+	}
 }
