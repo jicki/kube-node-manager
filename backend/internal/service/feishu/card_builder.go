@@ -77,18 +77,17 @@ func BuildHelpCard() string {
 		"elements": []interface{}{
 			map[string]interface{}{
 				"tag": "markdown",
-				"content": `**节点管理命令**
-/node list - 查看所有集群列表
+				"content": `**集群管理命令**
+/cluster list - 查看所有集群列表
+/cluster status <集群名> - 查看集群状态
+
+**节点管理命令**
 /node set <集群名> - 切换到指定集群
-/node nodes - 查看当前集群的节点列表
+/node list - 查看当前集群的节点列表
 /node info <节点名> - 查看节点详情
 /node cordon <节点名> - 禁止调度
 /node cordon <节点名> <禁止调度说明> - 禁止调度
 /node uncordon <节点名> - 恢复调度节点
-
-**集群管理命令**
-/cluster list - 查询集群列表
-/cluster status <cluster> - 查询集群状态
 
 **审计日志命令**
 /audit logs [user] [limit] - 查询审计日志（最多20条）
@@ -104,7 +103,7 @@ func BuildHelpCard() string {
 				"elements": []interface{}{
 					map[string]interface{}{
 						"tag":     "plain_text",
-						"content": "💡 提示：需要先使用 /node set 选择集群，然后才能进行节点操作",
+						"content": "💡 提示：需要先使用 /cluster list 查看集群，然后使用 /node set 选择集群，最后使用 /node list 查看节点",
 					},
 				},
 			},
@@ -308,7 +307,7 @@ func BuildClusterListCard(clusters []map[string]interface{}) string {
 		"elements": []interface{}{
 			map[string]interface{}{
 				"tag":     "plain_text",
-				"content": "💡 使用 /node set <集群名> 切换到指定集群后，即可进行节点操作",
+				"content": "💡 使用 /node set <集群名> 切换到指定集群后，使用 /node list 查看节点",
 			},
 		},
 	})
@@ -382,6 +381,47 @@ func BuildAuditLogsCard(logs []map[string]interface{}) string {
 			},
 		},
 		"elements": elements,
+	}
+
+	cardJSON, _ := json.Marshal(card)
+	return string(cardJSON)
+}
+
+// BuildClusterStatusCard builds a cluster status card
+func BuildClusterStatusCard(name, statusIcon, statusText string, totalNodes, healthyNodes, unhealthyNodes int) string {
+	content := fmt.Sprintf(`**集群**: %s
+**状态**: %s %s
+**节点数**: %d
+**健康节点**: %d
+**不健康节点**: %d`,
+		name,
+		statusIcon,
+		statusText,
+		totalNodes,
+		healthyNodes,
+		unhealthyNodes,
+	)
+
+	card := map[string]interface{}{
+		"config": map[string]interface{}{
+			"wide_screen_mode": true,
+		},
+		"header": map[string]interface{}{
+			"template": "blue",
+			"title": map[string]interface{}{
+				"content": "🏢 集群状态",
+				"tag":     "plain_text",
+			},
+		},
+		"elements": []interface{}{
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": content,
+					"tag":     "lark_md",
+				},
+			},
+		},
 	}
 
 	cardJSON, _ := json.Marshal(card)

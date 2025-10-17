@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"fmt"
+	"kube-node-manager/internal/service/cluster"
 )
 
 // ClusterCommandHandler handles cluster-related commands
@@ -30,18 +31,53 @@ func (h *ClusterCommandHandler) Handle(ctx *CommandContext) (*CommandResponse, e
 
 // handleListClusters handles the cluster list command
 func (h *ClusterCommandHandler) handleListClusters(ctx *CommandContext) (*CommandResponse, error) {
-	// TODO: Implement actual cluster listing logic by calling cluster service
-	clusters := []map[string]interface{}{
-		{
-			"name":       "production",
-			"status":     "active",
-			"node_count": 10,
-		},
-		{
-			"name":       "staging",
-			"status":     "active",
-			"node_count": 5,
-		},
+	// 调用实际的集群服务
+	if ctx.Service.clusterService == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard("集群服务未配置"),
+		}, nil
+	}
+
+	// 调用集群服务获取列表
+	result, err := ctx.Service.clusterService.List(cluster.ListRequest{
+		Page:     1,
+		PageSize: 100, // 获取所有集群
+	}, ctx.UserMapping.SystemUserID)
+
+	if err != nil {
+		ctx.Service.logger.Error(fmt.Sprintf("获取集群列表失败: %v", err))
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("获取集群列表失败: %s", err.Error())),
+		}, nil
+	}
+
+	// 类型断言
+	listResp, ok := result.(*cluster.ListResponse)
+	if !ok {
+		return &CommandResponse{
+			Card: BuildErrorCard("数据格式错误"),
+		}, nil
+	}
+
+	// 转换为卡片需要的格式
+	var clusters []map[string]interface{}
+	for _, c := range listResp.Clusters {
+		status := "🟢 正常"
+		if c.Status != "active" {
+			status = "🔴 不可用"
+		}
+
+		clusters = append(clusters, map[string]interface{}{
+			"name":   c.Name,
+			"status": status,
+			"nodes":  c.NodeCount,
+		})
+	}
+
+	if len(clusters) == 0 {
+		return &CommandResponse{
+			Card: BuildErrorCard("系统中没有配置集群\n\n请先在 Web 界面添加集群配置"),
+		}, nil
 	}
 
 	return &CommandResponse{
@@ -53,21 +89,67 @@ func (h *ClusterCommandHandler) handleListClusters(ctx *CommandContext) (*Comman
 func (h *ClusterCommandHandler) handleClusterStatus(ctx *CommandContext) (*CommandResponse, error) {
 	if len(ctx.Command.Args) < 1 {
 		return &CommandResponse{
-			Text: "参数不足。用法: /cluster status <cluster_name>",
+			Card: BuildErrorCard("参数不足。用法: /cluster status <cluster_name>"),
 		}, nil
 	}
 
 	clusterName := ctx.Command.Args[0]
 
-	// TODO: Implement actual cluster status logic
-	statusText := fmt.Sprintf(`**集群**: %s
-**状态**: 🟢 正常
-**节点数**: 10
-**健康节点**: 10
-**不健康节点**: 0`, clusterName)
+	// 调用实际的集群服务
+	if ctx.Service.clusterService == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard("集群服务未配置"),
+		}, nil
+	}
+
+	// 获取集群列表以找到指定集群
+	result, err := ctx.Service.clusterService.List(cluster.ListRequest{
+		Page:     1,
+		PageSize: 100,
+		Name:     clusterName,
+	}, ctx.UserMapping.SystemUserID)
+
+	if err != nil {
+		ctx.Service.logger.Error(fmt.Sprintf("获取集群信息失败: %v", err))
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("获取集群信息失败: %s", err.Error())),
+		}, nil
+	}
+
+	// 类型断言
+	listResp, ok := result.(*cluster.ListResponse)
+	if !ok {
+		return &CommandResponse{
+			Card: BuildErrorCard("数据格式错误"),
+		}, nil
+	}
+
+	if len(listResp.Clusters) == 0 {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("未找到集群: %s", clusterName)),
+		}, nil
+	}
+
+	c := listResp.Clusters[0]
+
+	// 构建状态卡片
+	statusIcon := "🟢"
+	statusText := "正常"
+	if c.Status != "active" {
+		statusIcon = "🔴"
+		statusText = "不可用"
+	}
+
+	// 默认假设所有节点都是健康的，如果状态不正常则显示0
+	healthyNodes := c.NodeCount
+	unhealthyNodes := 0
+	if c.Status != "active" {
+		healthyNodes = 0
+		unhealthyNodes = c.NodeCount
+	}
 
 	return &CommandResponse{
-		Text: statusText,
+		Card: BuildClusterStatusCard(c.Name, statusIcon, statusText, c.NodeCount, healthyNodes, unhealthyNodes),
 	}, nil
 }
 

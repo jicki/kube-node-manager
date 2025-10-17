@@ -21,7 +21,7 @@ func (h *NodeCommandHandler) Handle(ctx *CommandContext) (*CommandResponse, erro
 
 	switch ctx.Command.Action {
 	case "list":
-		return h.handleListClusters(ctx)
+		return h.handleListNodes(ctx)
 	case "set":
 		return h.handleSetCluster(ctx)
 	case "info":
@@ -30,16 +30,86 @@ func (h *NodeCommandHandler) Handle(ctx *CommandContext) (*CommandResponse, erro
 		return h.handleCordon(ctx)
 	case "uncordon":
 		return h.handleUncordon(ctx)
-	case "nodes":
-		return h.handleListNodes(ctx)
 	default:
 		return &CommandResponse{
-			Text: fmt.Sprintf("未知操作: %s。支持的操作: list, set, info, cordon, uncordon, nodes", ctx.Command.Action),
+			Text: fmt.Sprintf("未知操作: %s。支持的操作: list, set, info, cordon, uncordon", ctx.Command.Action),
 		}, nil
 	}
 }
 
-// handleListClusters 显示所有集群列表
+// handleListNodes handles the node list command (list nodes in current cluster)
+func (h *NodeCommandHandler) handleListNodes(ctx *CommandContext) (*CommandResponse, error) {
+	// 获取用户当前选择的集群
+	clusterName, err := ctx.Service.GetCurrentCluster(ctx.UserMapping.FeishuUserID)
+	if err != nil {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("获取当前集群失败: %s", err.Error())),
+		}, nil
+	}
+
+	if clusterName == "" {
+		return &CommandResponse{
+			Card: BuildErrorCard("❌ 尚未选择集群\n\n请先使用 /cluster list 查看集群列表\n然后使用 /node set <集群名> 选择集群"),
+		}, nil
+	}
+
+	// 调用节点服务获取真实数据
+	if ctx.Service.nodeService == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点服务未配置"),
+		}, nil
+	}
+
+	// 创建节点列表请求
+	result, err := ctx.Service.nodeService.List(node.ListRequest{
+		ClusterName: clusterName,
+	}, ctx.UserMapping.SystemUserID)
+
+	if err != nil {
+		ctx.Service.logger.Error(fmt.Sprintf("获取节点列表失败: %v", err))
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("获取节点列表失败: %s\n\n请检查集群连接是否正常", err.Error())),
+		}, nil
+	}
+
+	// 类型断言 - node.List 返回 []k8s.NodeInfo
+	nodeInfos, ok := result.([]k8s.NodeInfo)
+	if !ok {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点数据格式错误"),
+		}, nil
+	}
+
+	// 转换为卡片需要的格式
+	var nodes []map[string]interface{}
+	for _, n := range nodeInfos {
+		nodeData := map[string]interface{}{
+			"name":          n.Name,
+			"ready":         n.Status == "Ready",
+			"unschedulable": !n.Schedulable,
+			"roles":         n.Roles, // 添加节点类型
+		}
+
+		// 优先使用 deeproute.cn/user-type 标签
+		if userType, exists := n.Labels["deeproute.cn/user-type"]; exists {
+			nodeData["user_type"] = userType
+		}
+
+		nodes = append(nodes, nodeData)
+	}
+
+	if len(nodes) == 0 {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("集群 %s 中没有节点", clusterName)),
+		}, nil
+	}
+
+	return &CommandResponse{
+		Card: BuildNodeListCard(nodes, clusterName),
+	}, nil
+}
+
+// handleListClusters 显示所有集群列表（已废弃，由 /cluster list 替代）
 func (h *NodeCommandHandler) handleListClusters(ctx *CommandContext) (*CommandResponse, error) {
 	// 调用实际的集群服务
 	if ctx.Service.clusterService == nil {
@@ -116,79 +186,7 @@ func (h *NodeCommandHandler) handleSetCluster(ctx *CommandContext) (*CommandResp
 	}
 
 	return &CommandResponse{
-		Card: BuildSuccessCard(fmt.Sprintf("✅ 已切换到集群: %s\n\n现在可以直接使用以下命令:\n• /node nodes - 查看节点列表\n• /node info <节点名> - 查看节点详情\n• /node cordon <节点名> - 禁止调度\n• /node uncordon <节点名> - 恢复调度", clusterName)),
-	}, nil
-}
-
-// handleListNodes handles the node nodes command (list nodes in current cluster)
-func (h *NodeCommandHandler) handleListNodes(ctx *CommandContext) (*CommandResponse, error) {
-	// 获取用户当前选择的集群
-	clusterName, err := ctx.Service.GetCurrentCluster(ctx.UserMapping.FeishuUserID)
-	if err != nil {
-		return &CommandResponse{
-			Card: BuildErrorCard(fmt.Sprintf("获取当前集群失败: %s", err.Error())),
-		}, nil
-	}
-
-	if clusterName == "" {
-		return &CommandResponse{
-			Card: BuildErrorCard("❌ 尚未选择集群\n\n请先使用 /node list 查看集群列表\n然后使用 /node set <集群名> 选择集群"),
-		}, nil
-	}
-
-	// 调用节点服务获取真实数据
-	if ctx.Service.nodeService == nil {
-		return &CommandResponse{
-			Card: BuildErrorCard("节点服务未配置"),
-		}, nil
-	}
-
-	// 创建节点列表请求
-	result, err := ctx.Service.nodeService.List(node.ListRequest{
-		ClusterName: clusterName,
-	}, ctx.UserMapping.SystemUserID)
-
-	if err != nil {
-		ctx.Service.logger.Error(fmt.Sprintf("获取节点列表失败: %v", err))
-		return &CommandResponse{
-			Card: BuildErrorCard(fmt.Sprintf("获取节点列表失败: %s\n\n请检查集群连接是否正常", err.Error())),
-		}, nil
-	}
-
-	// 类型断言 - node.List 返回 []k8s.NodeInfo
-	nodeInfos, ok := result.([]k8s.NodeInfo)
-	if !ok {
-		return &CommandResponse{
-			Card: BuildErrorCard("节点数据格式错误"),
-		}, nil
-	}
-
-	// 转换为卡片需要的格式
-	var nodes []map[string]interface{}
-	for _, n := range nodeInfos {
-		nodeData := map[string]interface{}{
-			"name":          n.Name,
-			"ready":         n.Status == "Ready",
-			"unschedulable": !n.Schedulable,
-			"roles":         n.Roles, // 添加节点类型
-		}
-
-		// 优先使用 deeproute.cn/user-type 标签
-		if userType, exists := n.Labels["deeproute.cn/user-type"]; exists {
-			nodeData["user_type"] = userType
-		}
-
-		nodes = append(nodes, nodeData)
-	}
-
-	if len(nodes) == 0 {
-		return &CommandResponse{
-			Card: BuildErrorCard(fmt.Sprintf("集群 %s 中没有节点", clusterName)),
-		}, nil
-	}
-
-	return &CommandResponse{
-		Card: BuildNodeListCard(nodes, clusterName),
+		Card: BuildSuccessCard(fmt.Sprintf("✅ 已切换到集群: %s\n\n现在可以直接使用以下命令:\n• /node list - 查看节点列表\n• /node info <节点名> - 查看节点详情\n• /node cordon <节点名> <禁止调度说明> - 禁止调度\n• /node uncordon <节点名> - 恢复调度", clusterName)),
 	}, nil
 }
 
