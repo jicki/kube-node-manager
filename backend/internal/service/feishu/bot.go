@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"kube-node-manager/internal/model"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+	"gorm.io/gorm"
 )
 
 // Event types
@@ -114,6 +116,11 @@ func (s *Service) GetBindingByFeishuUserID(feishuUserID string) (*model.FeishuUs
 	var mapping model.FeishuUserMapping
 	// 预加载用户信息以便进行权限检查
 	if err := s.db.Preload("User").Where("feishu_user_id = ?", feishuUserID).First(&mapping).Error; err != nil {
+		// 如果是记录不存在，返回 nil, nil（表示用户未绑定）
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		// 其他错误才返回错误
 		return nil, err
 	}
 	return &mapping, nil
@@ -274,6 +281,13 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 	s.logger.Info("========== 飞书消息接收开始 ==========")
 	s.logger.Info(fmt.Sprintf("收到飞书 SDK 消息，Event Type: %v", event.Event))
 
+	// 获取并记录 Chat Type
+	chatType := ""
+	if event.Event.Message.ChatType != nil {
+		chatType = *event.Event.Message.ChatType
+	}
+	s.logger.Info(fmt.Sprintf("Chat Type: %s", chatType))
+
 	// 获取消息内容
 	messageType := event.Event.Message.MessageType
 	s.logger.Info(fmt.Sprintf("消息类型: %v", messageType))
@@ -296,6 +310,20 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 
 	messageText := strings.TrimSpace(textContent.Text)
 	s.logger.Info(fmt.Sprintf("✅ 解析后的消息文本: '%s'", messageText))
+
+	// 记录 mentions 信息
+	if len(event.Event.Message.Mentions) > 0 {
+		s.logger.Info(fmt.Sprintf("📢 消息包含 %d 个 @提及", len(event.Event.Message.Mentions)))
+		for i, mention := range event.Event.Message.Mentions {
+			mentionName := ""
+			if mention.Name != nil {
+				mentionName = *mention.Name
+			}
+			s.logger.Info(fmt.Sprintf("  [%d] @%s", i+1, mentionName))
+		}
+	} else {
+		s.logger.Info("消息不包含 @提及")
+	}
 
 	// 检查是否是命令（以 / 开头）
 	if !strings.HasPrefix(messageText, "/") {
