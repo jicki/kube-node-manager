@@ -78,10 +78,12 @@ func BuildHelpCard() string {
 			map[string]interface{}{
 				"tag": "markdown",
 				"content": `**节点管理命令**
-/node list [cluster] - 查询节点列表
-/node info <cluster> <node_name> - 查询节点详情
-/node cordon <cluster> <node_name> [reason] - 禁止调度节点
-/node uncordon <cluster> <node_name> - 恢复调度节点
+/node list - 查看所有集群列表
+/node set <集群名> - 切换到指定集群
+/node nodes - 查看当前集群的节点列表
+/node info <节点名> - 查看节点详情
+/node cordon <节点名> [原因] - 禁止调度节点
+/node uncordon <节点名> - 恢复调度节点
 
 **集群管理命令**
 /cluster list - 查询集群列表
@@ -101,7 +103,7 @@ func BuildHelpCard() string {
 				"elements": []interface{}{
 					map[string]interface{}{
 						"tag":     "plain_text",
-						"content": "💡 提示：<cluster> 参数为必需，[参数] 为可选",
+						"content": "💡 提示：需要先使用 /node set 选择集群，然后才能进行节点操作",
 					},
 				},
 			},
@@ -239,15 +241,15 @@ func BuildClusterListCard(clusters []map[string]interface{}) string {
 
 	// Add clusters
 	for _, cluster := range clusters {
-		status := "🟢 正常"
-		if st, ok := cluster["status"].(string); ok && st != "active" {
-			status = "🔴 异常"
-		}
+		name := cluster["name"].(string)
+		status := cluster["status"].(string)
+		nodes := cluster["nodes"]
 
-		clusterInfo := fmt.Sprintf("**%s**\n状态: %s | 节点数: %v",
-			cluster["name"],
+		clusterInfo := fmt.Sprintf("**📦 %s**\n状态: %s | 节点数: %v\n\n💡 使用命令切换: `/node set %s`",
+			name,
 			status,
-			cluster["node_count"],
+			nodes,
+			name,
 		)
 
 		elements = append(elements, map[string]interface{}{
@@ -258,6 +260,20 @@ func BuildClusterListCard(clusters []map[string]interface{}) string {
 			},
 		})
 	}
+
+	// Add usage note
+	elements = append(elements, map[string]interface{}{
+		"tag": "hr",
+	})
+	elements = append(elements, map[string]interface{}{
+		"tag": "note",
+		"elements": []interface{}{
+			map[string]interface{}{
+				"tag":     "plain_text",
+				"content": "💡 使用 /node set <集群名> 切换到指定集群后，即可进行节点操作",
+			},
+		},
+	})
 
 	card := map[string]interface{}{
 		"config": map[string]interface{}{

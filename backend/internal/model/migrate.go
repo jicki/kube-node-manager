@@ -17,6 +17,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&GitlabRunner{},
 		&FeishuSettings{},
 		&FeishuUserMapping{},
+		&FeishuUserSession{},
 	)
 }
 

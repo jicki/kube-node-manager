@@ -461,3 +461,49 @@ func (s *Service) GetBindingByUserID(systemUserID uint) (*model.FeishuUserMappin
 	}
 	return &mapping, nil
 }
+
+// GetOrCreateUserSession 获取或创建用户会话
+func (s *Service) GetOrCreateUserSession(feishuUserID string) (*model.FeishuUserSession, error) {
+	var session model.FeishuUserSession
+	result := s.db.Where("feishu_user_id = ?", feishuUserID).First(&session)
+
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			// 创建新会话
+			session = model.FeishuUserSession{
+				FeishuUserID:    feishuUserID,
+				LastCommandTime: time.Now(),
+			}
+			if err := s.db.Create(&session).Error; err != nil {
+				return nil, err
+			}
+			return &session, nil
+		}
+		return nil, result.Error
+	}
+
+	return &session, nil
+}
+
+// SetCurrentCluster 设置用户当前选择的集群
+func (s *Service) SetCurrentCluster(feishuUserID, clusterName string) error {
+	session, err := s.GetOrCreateUserSession(feishuUserID)
+	if err != nil {
+		return err
+	}
+
+	session.CurrentCluster = clusterName
+	session.LastCommandTime = time.Now()
+
+	return s.db.Save(session).Error
+}
+
+// GetCurrentCluster 获取用户当前选择的集群
+func (s *Service) GetCurrentCluster(feishuUserID string) (string, error) {
+	session, err := s.GetOrCreateUserSession(feishuUserID)
+	if err != nil {
+		return "", err
+	}
+
+	return session.CurrentCluster, nil
+}

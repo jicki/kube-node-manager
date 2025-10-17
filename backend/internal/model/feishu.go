@@ -64,3 +64,19 @@ type FeishuUserMapping struct {
 func (FeishuUserMapping) TableName() string {
 	return "feishu_user_mappings"
 }
+
+// FeishuUserSession 存储用户的会话状态（如当前选择的集群）
+type FeishuUserSession struct {
+	ID              uint           `json:"id" gorm:"primaryKey"`
+	FeishuUserID    string         `json:"feishu_user_id" gorm:"type:varchar(255);uniqueIndex;not null"` // 飞书用户 open_id
+	CurrentCluster  string         `json:"current_cluster" gorm:"type:varchar(255)"`                     // 当前选择的集群名称
+	LastCommandTime time.Time      `json:"last_command_time"`                                            // 最后一次命令时间
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt `json:"-" gorm:"index"`
+}
+
+// TableName specifies the table name for FeishuUserSession
+func (FeishuUserSession) TableName() string {
+	return "feishu_user_sessions"
+}
