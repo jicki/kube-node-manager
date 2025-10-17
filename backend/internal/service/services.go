@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"kube-node-manager/internal/config"
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/auth"
@@ -34,6 +35,40 @@ type Services struct {
 	Feishu   *feishu.Service
 }
 
+// clusterServiceAdapter 适配器，将 cluster.Service 适配为 feishu.ClusterServiceInterface
+type clusterServiceAdapter struct {
+	svc *cluster.Service
+}
+
+func (a *clusterServiceAdapter) List(req interface{}, userID uint) (interface{}, error) {
+	listReq, ok := req.(cluster.ListRequest)
+	if !ok {
+		return nil, fmt.Errorf("invalid request type")
+	}
+	return a.svc.List(listReq, userID)
+}
+
+// nodeServiceAdapter 适配器，将 node.Service 适配为 feishu.NodeServiceInterface
+type nodeServiceAdapter struct {
+	svc *node.Service
+}
+
+func (a *nodeServiceAdapter) List(req interface{}, userID uint) (interface{}, error) {
+	listReq, ok := req.(node.ListRequest)
+	if !ok {
+		return nil, fmt.Errorf("invalid request type")
+	}
+	return a.svc.List(listReq, userID)
+}
+
+func (a *nodeServiceAdapter) Get(req interface{}, userID uint) (interface{}, error) {
+	getReq, ok := req.(node.GetRequest)
+	if !ok {
+		return nil, fmt.Errorf("invalid request type")
+	}
+	return a.svc.Get(getReq, userID)
+}
+
 func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Services {
 	auditSvc := audit.NewService(db, logger)
 	k8sSvc := k8s.NewService(logger)
@@ -62,9 +97,12 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	clusterSvc := cluster.NewService(db, logger, auditSvc, k8sSvc)
 	feishuSvc := feishu.NewService(db, logger)
 
-	// 设置飞书服务的依赖
-	feishuSvc.SetClusterService(clusterSvc)
-	feishuSvc.SetNodeService(nodeSvc)
+	// 创建适配器并设置飞书服务的依赖
+	clusterAdapter := &clusterServiceAdapter{svc: clusterSvc}
+	nodeAdapter := &nodeServiceAdapter{svc: nodeSvc}
+
+	feishuSvc.SetClusterService(clusterAdapter)
+	feishuSvc.SetNodeService(nodeAdapter)
 
 	return &Services{
 		Auth:     authSvc,
