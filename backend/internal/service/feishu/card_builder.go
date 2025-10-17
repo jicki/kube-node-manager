@@ -235,6 +235,104 @@ func BuildNodeInfoCard(node map[string]interface{}) string {
 		node["os_image"],
 	)
 
+	elements := []interface{}{
+		map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": content,
+				"tag":     "lark_md",
+			},
+		},
+	}
+
+	// 添加资源显示
+	if capacity, ok := node["capacity"].(map[string]interface{}); ok {
+		if allocatable, ok := node["allocatable"].(map[string]interface{}); ok {
+			// 添加分隔线
+			elements = append(elements, map[string]interface{}{
+				"tag": "hr",
+			})
+
+			// 添加资源标题
+			elements = append(elements, map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": "**💾 资源显示**",
+					"tag":     "lark_md",
+				},
+			})
+
+			// 添加资源说明
+			elements = append(elements, map[string]interface{}{
+				"tag": "note",
+				"elements": []interface{}{
+					map[string]interface{}{
+						"tag":     "plain_text",
+						"content": "总量 / 可分配 / 使用量",
+					},
+				},
+			})
+
+			// CPU
+			cpuCapacity := getStringValue(capacity, "cpu")
+			cpuAllocatable := getStringValue(allocatable, "cpu")
+			cpuUsage := getStringValue(node, "cpu_usage")
+			if cpuUsage == "" {
+				cpuUsage = "N/A"
+			}
+
+			// Memory
+			memCapacity := getStringValue(capacity, "memory")
+			memAllocatable := getStringValue(allocatable, "memory")
+			memUsage := getStringValue(node, "memory_usage")
+			if memUsage == "" {
+				memUsage = "N/A"
+			}
+
+			// Pods
+			podsCapacity := getStringValue(capacity, "pods")
+			podsAllocatable := getStringValue(allocatable, "pods")
+
+			// GPU
+			gpuCapacity := "0"
+			gpuAllocatable := "0"
+			if gpuMap, ok := capacity["gpu"].(map[string]interface{}); ok && len(gpuMap) > 0 {
+				for _, v := range gpuMap {
+					if val, ok := v.(string); ok {
+						gpuCapacity = val
+						break
+					}
+				}
+			}
+			if gpuMap, ok := allocatable["gpu"].(map[string]interface{}); ok && len(gpuMap) > 0 {
+				for _, v := range gpuMap {
+					if val, ok := v.(string); ok {
+						gpuAllocatable = val
+						break
+					}
+				}
+			}
+
+			resourceContent := fmt.Sprintf(`🟢 **CPU**: %s / %s / %s
+🔵 **内存**: %s / %s / %s
+🟣 **POD**: %s / %s / N/A
+🔴 **GPU**: %s / %s / N/A`,
+				cpuCapacity, cpuAllocatable, cpuUsage,
+				memCapacity, memAllocatable, memUsage,
+				podsCapacity, podsAllocatable,
+				gpuCapacity, gpuAllocatable,
+			)
+
+			elements = append(elements, map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": resourceContent,
+					"tag":     "lark_md",
+				},
+			})
+		}
+	}
+
 	card := map[string]interface{}{
 		"config": map[string]interface{}{
 			"wide_screen_mode": true,
@@ -246,19 +344,21 @@ func BuildNodeInfoCard(node map[string]interface{}) string {
 				"tag":     "plain_text",
 			},
 		},
-		"elements": []interface{}{
-			map[string]interface{}{
-				"tag": "div",
-				"text": map[string]interface{}{
-					"content": content,
-					"tag":     "lark_md",
-				},
-			},
-		},
+		"elements": elements,
 	}
 
 	cardJSON, _ := json.Marshal(card)
 	return string(cardJSON)
+}
+
+// getStringValue 辅助函数，从 map 中获取字符串值
+func getStringValue(m map[string]interface{}, key string) string {
+	if val, ok := m[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return ""
 }
 
 // BuildClusterListCard builds a cluster list card

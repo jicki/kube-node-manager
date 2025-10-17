@@ -241,6 +241,28 @@ func (h *NodeCommandHandler) handleNodeInfo(ctx *CommandContext) (*CommandRespon
 		"cluster":           clusterName,
 	}
 
+	// 添加资源信息
+	capacity := map[string]interface{}{
+		"cpu":    foundNode.Capacity.CPU,
+		"memory": foundNode.Capacity.Memory,
+		"pods":   foundNode.Capacity.Pods,
+		"gpu":    foundNode.Capacity.GPU,
+	}
+	allocatable := map[string]interface{}{
+		"cpu":    foundNode.Allocatable.CPU,
+		"memory": foundNode.Allocatable.Memory,
+		"pods":   foundNode.Allocatable.Pods,
+		"gpu":    foundNode.Allocatable.GPU,
+	}
+	nodeInfo["capacity"] = capacity
+	nodeInfo["allocatable"] = allocatable
+
+	// 添加使用量信息（如果有）
+	if foundNode.Usage != nil {
+		nodeInfo["cpu_usage"] = foundNode.Usage.CPU
+		nodeInfo["memory_usage"] = foundNode.Usage.Memory
+	}
+
 	return &CommandResponse{
 		Card: BuildNodeInfoCard(nodeInfo),
 	}, nil
