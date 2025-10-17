@@ -141,7 +141,29 @@ func BuildNodeListCard(nodes []map[string]interface{}, clusterName string) strin
 			schedulable = "⛔ 禁止调度"
 		}
 
-		nodeInfo := fmt.Sprintf("**%s**\n状态: %s | 调度: %s", node["name"], status, schedulable)
+		// 处理节点类型
+		roleText := ""
+		if roles, ok := node["roles"].([]string); ok && len(roles) > 0 {
+			roleIcons := map[string]string{
+				"master":        "👑",
+				"control-plane": "👑",
+				"worker":        "⚙️",
+			}
+			for _, role := range roles {
+				icon := roleIcons[role]
+				if icon == "" {
+					icon = "📌"
+				}
+				if roleText != "" {
+					roleText += " "
+				}
+				roleText += fmt.Sprintf("%s %s", icon, role)
+			}
+		} else {
+			roleText = "⚙️ worker"
+		}
+
+		nodeInfo := fmt.Sprintf("**%s**\n类型: %s\n状态: %s | 调度: %s", node["name"], roleText, status, schedulable)
 
 		elements = append(elements, map[string]interface{}{
 			"tag": "div",
@@ -343,6 +365,120 @@ func BuildAuditLogsCard(logs []map[string]interface{}) string {
 				"tag":     "plain_text",
 			},
 		},
+		"elements": elements,
+	}
+
+	cardJSON, _ := json.Marshal(card)
+	return string(cardJSON)
+}
+
+// BuildCordonHelpCard 构建禁止调度帮助卡片
+func BuildCordonHelpCard() string {
+	elements := []interface{}{
+		// 用法说明
+		map[string]interface{}{
+			"tag":     "markdown",
+			"content": "**📋 用法**\n```\n/node cordon <节点名> [原因]\n```",
+		},
+		map[string]interface{}{
+			"tag": "hr",
+		},
+		// 常用原因
+		map[string]interface{}{
+			"tag":     "markdown",
+			"content": "**🔖 常用原因**（可直接复制使用）",
+		},
+		map[string]interface{}{
+			"tag": "div",
+			"fields": []interface{}{
+				map[string]interface{}{
+					"is_short": true,
+					"text": map[string]interface{}{
+						"tag":     "lark_md",
+						"content": "🔧 **维护**\n`/node cordon <节点名> 维护`",
+					},
+				},
+				map[string]interface{}{
+					"is_short": true,
+					"text": map[string]interface{}{
+						"tag":     "lark_md",
+						"content": "⬆️ **升级**\n`/node cordon <节点名> 升级`",
+					},
+				},
+			},
+		},
+		map[string]interface{}{
+			"tag": "div",
+			"fields": []interface{}{
+				map[string]interface{}{
+					"is_short": true,
+					"text": map[string]interface{}{
+						"tag":     "lark_md",
+						"content": "🔍 **故障排查**\n`/node cordon <节点名> 故障排查`",
+					},
+				},
+				map[string]interface{}{
+					"is_short": true,
+					"text": map[string]interface{}{
+						"tag":     "lark_md",
+						"content": "⚠️ **资源不足**\n`/node cordon <节点名> 资源不足`",
+					},
+				},
+			},
+		},
+		map[string]interface{}{
+			"tag": "div",
+			"fields": []interface{}{
+				map[string]interface{}{
+					"is_short": true,
+					"text": map[string]interface{}{
+						"tag":     "lark_md",
+						"content": "🔄 **重启**\n`/node cordon <节点名> 重启`",
+					},
+				},
+				map[string]interface{}{
+					"is_short": true,
+					"text": map[string]interface{}{
+						"tag":     "lark_md",
+						"content": "🧪 **测试**\n`/node cordon <节点名> 测试`",
+					},
+				},
+			},
+		},
+		map[string]interface{}{
+			"tag": "hr",
+		},
+		// 示例
+		map[string]interface{}{
+			"tag":     "markdown",
+			"content": "**📝 示例**\n```\n/node cordon 10-9-9-28.vm.pd.sz.deeproute.ai 维护升级\n```",
+		},
+		map[string]interface{}{
+			"tag": "note",
+			"elements": []interface{}{
+				map[string]interface{}{
+					"tag":     "plain_text",
+					"content": "💡 提示：原因可选，但建议填写以便团队协作",
+				},
+			},
+		},
+	}
+
+	config := map[string]interface{}{
+		"wide_screen_mode": true,
+	}
+
+	header := map[string]interface{}{
+		"template": "blue",
+		"title": map[string]interface{}{
+			"content": "💡 节点禁止调度指南",
+			"tag":     "plain_text",
+		},
+	}
+
+	card := map[string]interface{}{
+		"config":   config,
+		"header":   header,
 		"elements": elements,
 	}
 

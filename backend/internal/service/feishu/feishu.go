@@ -23,6 +23,8 @@ type ClusterServiceInterface interface {
 type NodeServiceInterface interface {
 	List(req interface{}, userID uint) (interface{}, error)
 	Get(req interface{}, userID uint) (interface{}, error)
+	Cordon(req interface{}, userID uint) error
+	Uncordon(req interface{}, userID uint) error
 }
 
 // Service handles Feishu (Lark) related operations

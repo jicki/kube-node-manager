@@ -69,6 +69,22 @@ func (a *nodeServiceAdapter) Get(req interface{}, userID uint) (interface{}, err
 	return a.svc.Get(getReq, userID)
 }
 
+func (a *nodeServiceAdapter) Cordon(req interface{}, userID uint) error {
+	cordonReq, ok := req.(node.CordonRequest)
+	if !ok {
+		return fmt.Errorf("invalid request type")
+	}
+	return a.svc.Cordon(cordonReq, userID)
+}
+
+func (a *nodeServiceAdapter) Uncordon(req interface{}, userID uint) error {
+	uncordonReq, ok := req.(node.CordonRequest)
+	if !ok {
+		return fmt.Errorf("invalid request type")
+	}
+	return a.svc.Uncordon(uncordonReq, userID)
+}
+
 func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Services {
 	auditSvc := audit.NewService(db, logger)
 	k8sSvc := k8s.NewService(logger)

@@ -170,6 +170,7 @@ func (h *NodeCommandHandler) handleListNodes(ctx *CommandContext) (*CommandRespo
 			"name":          n.Name,
 			"ready":         n.Status == "Ready",
 			"unschedulable": !n.Schedulable,
+			"roles":         n.Roles, // 添加节点类型
 		})
 	}
 
@@ -284,28 +285,59 @@ func (h *NodeCommandHandler) handleCordon(ctx *CommandContext) (*CommandResponse
 	}
 
 	if len(ctx.Command.Args) < 1 {
+		// 显示用法和常用原因选项
 		return &CommandResponse{
-			Card: BuildErrorCard("参数不足。用法: /node cordon <节点名> [原因]"),
+			Card: BuildCordonHelpCard(),
 		}, nil
 	}
 
 	nodeName := ctx.Command.Args[0]
 	reason := ""
 	if len(ctx.Command.Args) > 1 {
-		reason = ctx.Command.Args[1]
+		// 合并剩余的参数作为原因
+		reason = joinArgs(ctx.Command.Args[1:])
 	}
 
-	// TODO: Implement actual cordon logic by calling node service
-	// Check user permissions
-	// Execute cordon operation
-	// Log audit
+	// 调用节点服务执行禁止调度
+	if ctx.Service.nodeService == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点服务未配置"),
+		}, nil
+	}
 
-	_ = clusterName
-	_ = reason
+	err = ctx.Service.nodeService.Cordon(node.CordonRequest{
+		ClusterName: clusterName,
+		NodeName:    nodeName,
+		Reason:      reason,
+	}, ctx.UserMapping.SystemUserID)
+
+	if err != nil {
+		ctx.Service.logger.Error(fmt.Sprintf("禁止调度节点失败: %v", err))
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("禁止调度节点失败: %s", err.Error())),
+		}, nil
+	}
+
+	reasonText := ""
+	if reason != "" {
+		reasonText = fmt.Sprintf("\n原因: %s", reason)
+	}
 
 	return &CommandResponse{
-		Card: BuildSuccessCard(fmt.Sprintf("✅ 节点 %s 已成功设置为禁止调度\n\n集群: %s", nodeName, clusterName)),
+		Card: BuildSuccessCard(fmt.Sprintf("✅ 节点已成功设置为禁止调度\n\n节点: %s\n集群: %s%s", nodeName, clusterName, reasonText)),
 	}, nil
+}
+
+// joinArgs 合并参数数组为字符串
+func joinArgs(args []string) string {
+	result := ""
+	for i, arg := range args {
+		if i > 0 {
+			result += " "
+		}
+		result += arg
+	}
+	return result
 }
 
 // handleUncordon handles the node uncordon command
@@ -332,11 +364,27 @@ func (h *NodeCommandHandler) handleUncordon(ctx *CommandContext) (*CommandRespon
 
 	nodeName := ctx.Command.Args[0]
 
-	// TODO: Implement actual uncordon logic by calling node service
-	_ = clusterName
+	// 调用节点服务执行恢复调度
+	if ctx.Service.nodeService == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点服务未配置"),
+		}, nil
+	}
+
+	err = ctx.Service.nodeService.Uncordon(node.CordonRequest{
+		ClusterName: clusterName,
+		NodeName:    nodeName,
+	}, ctx.UserMapping.SystemUserID)
+
+	if err != nil {
+		ctx.Service.logger.Error(fmt.Sprintf("恢复调度节点失败: %v", err))
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("恢复调度节点失败: %s", err.Error())),
+		}, nil
+	}
 
 	return &CommandResponse{
-		Card: BuildSuccessCard(fmt.Sprintf("✅ 节点 %s 已成功恢复调度\n\n集群: %s", nodeName, clusterName)),
+		Card: BuildSuccessCard(fmt.Sprintf("✅ 节点已成功恢复调度\n\n节点: %s\n集群: %s", nodeName, clusterName)),
 	}, nil
 }
 
