@@ -166,12 +166,19 @@ func (h *NodeCommandHandler) handleListNodes(ctx *CommandContext) (*CommandRespo
 	// 转换为卡片需要的格式
 	var nodes []map[string]interface{}
 	for _, n := range nodeInfos {
-		nodes = append(nodes, map[string]interface{}{
+		nodeData := map[string]interface{}{
 			"name":          n.Name,
 			"ready":         n.Status == "Ready",
 			"unschedulable": !n.Schedulable,
 			"roles":         n.Roles, // 添加节点类型
-		})
+		}
+
+		// 优先使用 deeproute.cn/user-type 标签
+		if userType, exists := n.Labels["deeproute.cn/user-type"]; exists {
+			nodeData["user_type"] = userType
+		}
+
+		nodes = append(nodes, nodeData)
 	}
 
 	if len(nodes) == 0 {

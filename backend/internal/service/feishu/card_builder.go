@@ -82,7 +82,8 @@ func BuildHelpCard() string {
 /node set <集群名> - 切换到指定集群
 /node nodes - 查看当前集群的节点列表
 /node info <节点名> - 查看节点详情
-/node cordon <节点名> [原因] - 禁止调度节点
+/node cordon <节点名> - 禁止调度
+/node cordon <节点名> <禁止调度说明> - 禁止调度
 /node uncordon <节点名> - 恢复调度节点
 
 **集群管理命令**
@@ -141,9 +142,24 @@ func BuildNodeListCard(nodes []map[string]interface{}, clusterName string) strin
 			schedulable = "⛔ 禁止调度"
 		}
 
-		// 处理节点类型
+		// 处理节点类型 - 优先使用 deeproute.cn/user-type 标签
 		roleText := ""
-		if roles, ok := node["roles"].([]string); ok && len(roles) > 0 {
+		if userType, ok := node["user_type"].(string); ok && userType != "" {
+			// 使用 deeproute.cn/user-type 标签值
+			roleIcons := map[string]string{
+				"gpu":     "🎮",
+				"cpu":     "💻",
+				"storage": "💾",
+				"network": "🌐",
+				"master":  "👑",
+			}
+			icon := roleIcons[userType]
+			if icon == "" {
+				icon = "📌"
+			}
+			roleText = fmt.Sprintf("%s %s", icon, userType)
+		} else if roles, ok := node["roles"].([]string); ok && len(roles) > 0 {
+			// 回退到使用 roles
 			roleIcons := map[string]string{
 				"master":        "👑",
 				"control-plane": "👑",
