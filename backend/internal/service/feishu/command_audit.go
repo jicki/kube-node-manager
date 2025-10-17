@@ -1,6 +1,8 @@
 package feishu
 
 import (
+	"fmt"
+	"kube-node-manager/internal/service/audit"
 	"strconv"
 )
 
@@ -42,26 +44,61 @@ func (h *AuditCommandHandler) handleAuditLogs(ctx *CommandContext) (*CommandResp
 		}
 	}
 
-	// TODO: Implement actual audit log querying logic
-	logs := []map[string]interface{}{
-		{
-			"username":   "admin",
-			"action":     "cordon",
-			"details":    "禁止调度节点 node-1",
-			"status":     "success",
-			"created_at": "2024-01-01 12:00:00",
-		},
-		{
-			"username":   "operator",
-			"action":     "uncordon",
-			"details":    "恢复调度节点 node-2",
-			"status":     "success",
-			"created_at": "2024-01-01 11:30:00",
-		},
+	// 调用审计服务获取真实数据
+	if ctx.Service.auditService == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard("审计服务未配置"),
+		}, nil
 	}
 
-	_ = username
-	_ = limit
+	result, err := ctx.Service.auditService.List(audit.ListRequest{
+		Page:     1,
+		PageSize: limit,
+		Username: username,
+	})
+
+	if err != nil {
+		ctx.Service.logger.Error(fmt.Sprintf("获取审计日志失败: %v", err))
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("获取审计日志失败: %s", err.Error())),
+		}, nil
+	}
+
+	// 类型断言
+	listResp, ok := result.(*audit.ListResponse)
+	if !ok {
+		return &CommandResponse{
+			Card: BuildErrorCard("数据格式错误"),
+		}, nil
+	}
+
+	// 转换为卡片需要的格式
+	var logs []map[string]interface{}
+	for _, log := range listResp.Logs {
+		username := "未知用户"
+		if log.User.Username != "" {
+			username = log.User.Username
+		}
+
+		action := string(log.Action)
+		details := log.Details
+		status := string(log.Status)
+		createdAt := log.CreatedAt.Format("2006-01-02 15:04:05")
+
+		logs = append(logs, map[string]interface{}{
+			"username":   username,
+			"action":     action,
+			"details":    details,
+			"status":     status,
+			"created_at": createdAt,
+		})
+	}
+
+	if len(logs) == 0 {
+		return &CommandResponse{
+			Card: BuildErrorCard("没有找到审计日志"),
+		}, nil
+	}
 
 	return &CommandResponse{
 		Card: BuildAuditLogsCard(logs),

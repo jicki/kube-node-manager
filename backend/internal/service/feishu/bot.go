@@ -466,22 +466,9 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 	}
 	s.logger.Info(fmt.Sprintf("Chat Type: %s", chatType))
 
-	// 只支持单聊（p2p），不支持群聊
+	// 只支持单聊（p2p），不支持群聊 - 直接忽略，不回复
 	if chatType != "p2p" {
 		s.logger.Info(fmt.Sprintf("⚠️ 机器人只支持单聊，忽略群聊消息。Chat Type: %s", chatType))
-
-		// 如果是群聊，发送提示消息（可选）
-		if chatType == "group" {
-			chatID := ""
-			if event.Event.Message.ChatId != nil {
-				chatID = *event.Event.Message.ChatId
-			}
-			if chatID != "" {
-				errorMsg := BuildErrorCard("❌ 该机器人仅支持单聊使用\n\n请直接与机器人私聊进行交互。")
-				s.SendMessage(chatID, "interactive", errorMsg)
-			}
-		}
-
 		return nil
 	}
 

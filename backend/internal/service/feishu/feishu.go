@@ -27,6 +27,11 @@ type NodeServiceInterface interface {
 	Uncordon(req interface{}, userID uint) error
 }
 
+// AuditServiceInterface 审计服务接口
+type AuditServiceInterface interface {
+	List(req interface{}) (interface{}, error)
+}
+
 // Service handles Feishu (Lark) related operations
 type Service struct {
 	db             *gorm.DB
@@ -35,6 +40,7 @@ type Service struct {
 	eventClient    *EventClient
 	clusterService ClusterServiceInterface
 	nodeService    NodeServiceInterface
+	auditService   AuditServiceInterface
 }
 
 // NewService creates a new Feishu service
@@ -56,6 +62,11 @@ func (s *Service) SetClusterService(clusterSvc ClusterServiceInterface) {
 // SetNodeService 设置节点服务
 func (s *Service) SetNodeService(nodeSvc NodeServiceInterface) {
 	s.nodeService = nodeSvc
+}
+
+// SetAuditService 设置审计服务
+func (s *Service) SetAuditService(auditSvc AuditServiceInterface) {
+	s.auditService = auditSvc
 }
 
 // InitializeEventClient 初始化或重启事件客户端

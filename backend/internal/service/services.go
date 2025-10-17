@@ -85,6 +85,19 @@ func (a *nodeServiceAdapter) Uncordon(req interface{}, userID uint) error {
 	return a.svc.Uncordon(uncordonReq, userID)
 }
 
+// auditServiceAdapter 适配器，将 audit.Service 适配为 feishu.AuditServiceInterface
+type auditServiceAdapter struct {
+	svc *audit.Service
+}
+
+func (a *auditServiceAdapter) List(req interface{}) (interface{}, error) {
+	listReq, ok := req.(audit.ListRequest)
+	if !ok {
+		return nil, fmt.Errorf("invalid request type")
+	}
+	return a.svc.List(listReq)
+}
+
 func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Services {
 	auditSvc := audit.NewService(db, logger)
 	k8sSvc := k8s.NewService(logger)
@@ -116,9 +129,11 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	// 创建适配器并设置飞书服务的依赖
 	clusterAdapter := &clusterServiceAdapter{svc: clusterSvc}
 	nodeAdapter := &nodeServiceAdapter{svc: nodeSvc}
+	auditAdapter := &auditServiceAdapter{svc: auditSvc}
 
 	feishuSvc.SetClusterService(clusterAdapter)
 	feishuSvc.SetNodeService(nodeAdapter)
+	feishuSvc.SetAuditService(auditAdapter)
 
 	return &Services{
 		Auth:     authSvc,

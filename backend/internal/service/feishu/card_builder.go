@@ -79,10 +79,10 @@ func BuildHelpCard() string {
 				"tag": "markdown",
 				"content": `**集群管理命令**
 /cluster list - 查看所有集群列表
+/cluster set <集群名> - 切换到指定集群
 /cluster status <集群名> - 查看集群状态
 
 **节点管理命令**
-/node set <集群名> - 切换到指定集群
 /node list - 查看当前集群的节点列表
 /node info <节点名> - 查看节点详情
 /node cordon <节点名> - 禁止调度
@@ -103,7 +103,7 @@ func BuildHelpCard() string {
 				"elements": []interface{}{
 					map[string]interface{}{
 						"tag":     "plain_text",
-						"content": "💡 提示：需要先使用 /cluster list 查看集群，然后使用 /node set 选择集群，最后使用 /node list 查看节点",
+						"content": "💡 提示：需要先使用 /cluster list 查看集群，然后使用 /cluster set 选择集群，最后使用 /node list 查看节点",
 					},
 				},
 			},
