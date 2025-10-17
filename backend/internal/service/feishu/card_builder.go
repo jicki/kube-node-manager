@@ -178,7 +178,8 @@ func BuildNodeListCard(nodes []map[string]interface{}, clusterName string) strin
 			roleText = "⚙️ worker"
 		}
 
-		nodeInfo := fmt.Sprintf("**%s**\n类型: %s\n状态: %s | 调度: %s", node["name"], roleText, status, schedulable)
+		// 使用代码块格式避免节点名称被识别为超链接
+		nodeInfo := fmt.Sprintf("**`%s`**\n类型: %s\n状态: %s | 调度: %s", node["name"], roleText, status, schedulable)
 
 		elements = append(elements, map[string]interface{}{
 			"tag": "div",
@@ -219,13 +220,8 @@ func BuildNodeInfoCard(node map[string]interface{}) string {
 		schedulable = "⛔ 禁止调度"
 	}
 
-	content := fmt.Sprintf(`**节点名称**: %s
-**状态**: %s
-**调度状态**: %s
-**IP 地址**: %s
-**容器运行时**: %s
-**内核版本**: %s
-**操作系统**: %s`,
+	// 使用代码块格式避免节点名称被识别为超链接
+	content := fmt.Sprintf("**节点名称**: `%s`\n**状态**: %s\n**调度状态**: %s\n**IP 地址**: %s\n**容器运行时**: %s\n**内核版本**: %s\n**操作系统**: %s",
 		node["name"],
 		status,
 		schedulable,

@@ -224,8 +224,9 @@ func (h *NodeCommandHandler) handleNodeInfo(ctx *CommandContext) (*CommandRespon
 	}
 
 	if foundNode == nil {
+		// 使用代码块格式避免节点名称被识别为超链接
 		return &CommandResponse{
-			Card: BuildErrorCard(fmt.Sprintf("节点 %s 不存在\n\n集群: %s", nodeName, clusterName)),
+			Card: BuildErrorCard(fmt.Sprintf("节点 `%s` 不存在\n\n集群: %s", nodeName, clusterName)),
 		}, nil
 	}
 
@@ -323,8 +324,9 @@ func (h *NodeCommandHandler) handleCordon(ctx *CommandContext) (*CommandResponse
 		reasonText = fmt.Sprintf("\n原因: %s", reason)
 	}
 
+	// 使用代码块格式避免节点名称被识别为超链接
 	return &CommandResponse{
-		Card: BuildSuccessCard(fmt.Sprintf("✅ 节点已成功设置为禁止调度\n\n节点: %s\n集群: %s%s", nodeName, clusterName, reasonText)),
+		Card: BuildSuccessCard(fmt.Sprintf("✅ 节点已成功设置为禁止调度\n\n节点: `%s`\n集群: %s%s", nodeName, clusterName, reasonText)),
 	}, nil
 }
 
@@ -383,8 +385,9 @@ func (h *NodeCommandHandler) handleUncordon(ctx *CommandContext) (*CommandRespon
 		}, nil
 	}
 
+	// 使用代码块格式避免节点名称被识别为超链接
 	return &CommandResponse{
-		Card: BuildSuccessCard(fmt.Sprintf("✅ 节点已成功恢复调度\n\n节点: %s\n集群: %s", nodeName, clusterName)),
+		Card: BuildSuccessCard(fmt.Sprintf("✅ 节点已成功恢复调度\n\n节点: `%s`\n集群: %s", nodeName, clusterName)),
 	}, nil
 }
 
