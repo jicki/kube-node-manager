@@ -57,6 +57,8 @@ func (h *CardActionHandler) HandleCardAction(actionValue string, userMapping *mo
 		return h.handleClusterSwitch(action, userMapping)
 	case "cluster_status":
 		return h.handleClusterStatus(action, userMapping)
+	case "page_prev", "page_next":
+		return h.handlePageNavigation(action, userMapping)
 	case "confirm_action":
 		return h.handleConfirmAction(action, userMapping)
 	case "cancel_action":
@@ -163,7 +165,7 @@ func (h *CardActionHandler) handleNodeRefresh(action map[string]interface{}, use
 	}
 
 	// Get fresh node info
-	nodeInfo, err := h.service.nodeService.Get(node.GetRequest{
+	_, err := h.service.nodeService.Get(node.GetRequest{
 		ClusterName: clusterName,
 		NodeName:    nodeName,
 	}, userMapping.SystemUserID)
@@ -173,8 +175,6 @@ func (h *CardActionHandler) handleNodeRefresh(action map[string]interface{}, use
 		}, nil
 	}
 
-	// Build refreshed card (simplified)
-	_ = nodeInfo
 	return &CommandResponse{
 		Text: fmt.Sprintf("✅ 节点 %s 信息已刷新", nodeName),
 	}, nil
@@ -216,6 +216,24 @@ func (h *CardActionHandler) handleClusterStatus(action map[string]interface{}, u
 	// Get cluster status (simplified - actual implementation would use cluster service)
 	return &CommandResponse{
 		Text: fmt.Sprintf("查看集群 %s 的状态", clusterName),
+	}, nil
+}
+
+// handlePageNavigation handles pagination button clicks
+func (h *CardActionHandler) handlePageNavigation(action map[string]interface{}, userMapping *model.FeishuUserMapping) (*CommandResponse, error) {
+	page, _ := action["page"].(float64)
+	clusterName, _ := action["cluster"].(string)
+
+	if clusterName == "" {
+		return &CommandResponse{
+			Card: BuildErrorCard("缺少集群信息"),
+		}, nil
+	}
+
+	// Get node list and build paginated card
+	// This is simplified; actual implementation would fetch nodes and paginate
+	return &CommandResponse{
+		Text: fmt.Sprintf("显示集群 %s 的第 %.0f 页", clusterName, page),
 	}, nil
 }
 
