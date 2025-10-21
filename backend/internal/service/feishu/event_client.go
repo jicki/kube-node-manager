@@ -7,6 +7,7 @@ import (
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 )
@@ -61,8 +62,11 @@ func (ec *EventClient) Start() error {
 	handler := dispatcher.NewEventDispatcher("", "").
 		OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
 			return ec.service.handleMessageReceive(ctx, event)
+		}).
+		OnP2CardActionTrigger(func(ctx context.Context, event *callback.CardActionTriggerEvent) (*callback.CardActionTriggerResponse, error) {
+			return ec.service.handleCardAction(ctx, event)
 		})
-	ec.service.logger.Info("✅ 事件分发器创建成功")
+	ec.service.logger.Info("✅ 事件分发器创建成功（消息接收 + 卡片交互）")
 
 	// 创建 WebSocket 客户端
 	ec.service.logger.Info("🔌 创建 WebSocket 客户端...")

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	"gorm.io/gorm"
 )
@@ -622,4 +623,93 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 
 	s.logger.Info("========== 飞书消息接收处理完成 ==========")
 	return nil
+}
+
+// handleCardAction handles card button click events
+func (s *Service) handleCardAction(ctx context.Context, event *callback.CardActionTriggerEvent) (*callback.CardActionTriggerResponse, error) {
+	s.logger.Info("========== 收到飞书卡片交互事件 ==========")
+
+	// 提取事件数据
+	actionValue := event.Event.Action.Value
+	actionValueJSON, err := json.Marshal(actionValue)
+	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 序列化 action value 失败: %s", err.Error()))
+		return nil, err
+	}
+	actionValueStr := string(actionValueJSON)
+	s.logger.Info(fmt.Sprintf("📋 Action Value: %s", actionValueStr))
+
+	// 获取操作者信息
+	operatorID := event.Event.Operator.OpenID
+	s.logger.Info(fmt.Sprintf("👤 操作者 ID: %s", operatorID))
+
+	if operatorID == "" {
+		s.logger.Error("❌ 无法获取操作者 ID")
+		return nil, fmt.Errorf("operator ID not found")
+	}
+
+	// 获取用户绑定信息
+	s.logger.Info(fmt.Sprintf("🔍 查询用户绑定状态，Feishu User ID: %s", operatorID))
+	userMapping, err := s.GetBindingByFeishuUserID(operatorID)
+	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 查询用户绑定失败: %s", err.Error()))
+		return nil, err
+	}
+
+	if userMapping == nil {
+		s.logger.Info("⚠️ 用户未绑定，尝试自动匹配...")
+		userMapping, err = s.AutoMatchAndBindUser(operatorID)
+		if err != nil || userMapping == nil {
+			s.logger.Error("❌ 用户未绑定且自动匹配失败")
+			return nil, fmt.Errorf("user not bound")
+		}
+	}
+
+	s.logger.Info(fmt.Sprintf("✅ 用户已绑定，System User ID: %d, Username: %s",
+		userMapping.SystemUserID, userMapping.Username))
+
+	// 检查用户权限
+	if userMapping.User.Role != model.RoleAdmin {
+		s.logger.Info(fmt.Sprintf("⚠️ 用户权限不足，角色: %s", userMapping.User.Role))
+		return nil, fmt.Errorf("insufficient permissions")
+	}
+
+	// 创建 CardActionHandler 并处理
+	s.logger.Info("🎯 准备处理卡片交互...")
+	handler := NewCardActionHandler(s)
+	response, err := handler.HandleCardAction(actionValueStr, userMapping)
+	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 处理卡片交互失败: %s", err.Error()))
+		return nil, err
+	}
+
+	// 发送响应消息
+	chatID := event.Event.Context.OpenChatID
+	if chatID == "" {
+		s.logger.Error("❌ 无法获取 chat ID")
+		return nil, fmt.Errorf("chat ID not found")
+	}
+
+	s.logger.Info(fmt.Sprintf("📤 发送响应消息到 Chat ID: %s", chatID))
+
+	if response.Card != "" {
+		err = s.SendMessage(chatID, "interactive", response.Card)
+	} else if response.Text != "" {
+		textContent := map[string]interface{}{
+			"text": response.Text,
+		}
+		textJSON, _ := json.Marshal(textContent)
+		err = s.SendMessage(chatID, "text", string(textJSON))
+	}
+
+	if err != nil {
+		s.logger.Error(fmt.Sprintf("❌ 发送响应消息失败: %s", err.Error()))
+		return nil, err
+	}
+
+	s.logger.Info("✅ 卡片交互处理完成")
+	s.logger.Info("========== 飞书卡片交互处理完成 ==========")
+
+	// 返回空响应表示成功
+	return &callback.CardActionTriggerResponse{}, nil
 }
