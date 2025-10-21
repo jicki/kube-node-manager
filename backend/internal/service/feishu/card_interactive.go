@@ -287,13 +287,19 @@ func BuildClusterListCardWithActions(clusters []map[string]interface{}, currentC
 			status = "⚠️ " + s
 		}
 
+		// 获取节点数量
+		nodeCount := 0
+		if n, ok := cluster["nodes"].(int); ok {
+			nodeCount = n
+		}
+
 		isCurrent := clusterName == currentCluster
 		clusterPrefix := ""
 		if isCurrent {
 			clusterPrefix = "👉 "
 		}
 
-		clusterInfo := fmt.Sprintf("%s**%s**\n状态: %s", clusterPrefix, clusterName, status)
+		clusterInfo := fmt.Sprintf("%s**%s**\n状态: %s | 节点: %d", clusterPrefix, clusterName, status, nodeCount)
 
 		elements = append(elements, map[string]interface{}{
 			"tag": "div",
@@ -350,7 +356,7 @@ func BuildClusterListCardWithActions(clusters []map[string]interface{}, currentC
 		"header": map[string]interface{}{
 			"template": "blue",
 			"title": map[string]interface{}{
-				"content": "🏢 集群列表（交互式）",
+				"content": "🏢 集群列表",
 				"tag":     "plain_text",
 			},
 		},
