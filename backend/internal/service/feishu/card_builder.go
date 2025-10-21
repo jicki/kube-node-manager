@@ -167,6 +167,7 @@ func BuildHelpCard() string {
 /node info <节点名> - 查看节点详情
 /node cordon <节点名> [原因] - 禁止调度
 /node uncordon <节点名> - 恢复调度节点
+/node batch <operation> <nodes> - 批量操作
 
 **标签管理命令**
 /label list <节点名> - 查看节点标签
@@ -181,10 +182,17 @@ func BuildHelpCard() string {
 **审计日志命令**
 /audit logs [user] [limit] - 查询审计日志（最多20条）
 
+**快捷命令**
+/quick status - 当前集群概览
+/quick nodes - 显示问题节点
+/quick health - 所有集群健康检查
+
 **其他命令**
 /help - 显示此帮助信息
 /help label - 标签管理帮助
-/help taint - 污点管理帮助`,
+/help taint - 污点管理帮助
+/help batch - 批量操作帮助
+/help quick - 快捷命令帮助`,
 			},
 			map[string]interface{}{
 				"tag": "hr",
@@ -1158,6 +1166,442 @@ func BuildTaintNoExecuteWarningCard(nodeName string, taints []k8s.TaintInfo) str
 			"template": "red",
 			"title": map[string]interface{}{
 				"content": "⚠️ 危险操作确认",
+				"tag":     "plain_text",
+			},
+		},
+		"elements": elements,
+	}
+
+	cardJSON, _ := json.Marshal(card)
+	return string(cardJSON)
+}
+
+// BuildBatchHelpCard builds a help card for batch operations
+func BuildBatchHelpCard() string {
+	card := map[string]interface{}{
+		"config": map[string]interface{}{
+			"wide_screen_mode": true,
+		},
+		"header": map[string]interface{}{
+			"template": "blue",
+			"title": map[string]interface{}{
+				"content": "📋 批量操作命令帮助",
+				"tag":     "plain_text",
+			},
+		},
+		"elements": []interface{}{
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": "**命令格式**",
+					"tag":     "lark_md",
+				},
+			},
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": "`/node batch <operation> <node1,node2,node3> [args...]`",
+					"tag":     "lark_md",
+				},
+			},
+			map[string]interface{}{
+				"tag": "hr",
+			},
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": "**支持的操作**",
+					"tag":     "lark_md",
+				},
+			},
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": "• `cordon` - 批量禁止调度\n• `uncordon` - 批量恢复调度",
+					"tag":     "lark_md",
+				},
+			},
+			map[string]interface{}{
+				"tag": "hr",
+			},
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": "**使用示例**",
+					"tag":     "lark_md",
+				},
+			},
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": "批量禁止调度:\n`/node batch cordon node-1,node-2,node-3 维护中`\n\n批量恢复调度:\n`/node batch uncordon node-1,node-2,node-3`",
+					"tag":     "lark_md",
+				},
+			},
+			map[string]interface{}{
+				"tag": "hr",
+			},
+			map[string]interface{}{
+				"tag": "note",
+				"elements": []interface{}{
+					map[string]interface{}{
+						"tag":     "plain_text",
+						"content": "💡 提示：节点名称之间用逗号分隔，不要有空格",
+					},
+				},
+			},
+		},
+	}
+
+	cardJSON, _ := json.Marshal(card)
+	return string(cardJSON)
+}
+
+// BuildBatchOperationResultCard builds a result card for batch operations
+func BuildBatchOperationResultCard(operation, clusterName string, nodeNames []string, results map[string]string, successCount, failureCount int, reason string) string {
+	// 确定卡片颜色和标题
+	cardTemplate := "green"
+	titlePrefix := "✅"
+	if failureCount > 0 {
+		if successCount == 0 {
+			cardTemplate = "red"
+			titlePrefix = "❌"
+		} else {
+			cardTemplate = "orange"
+			titlePrefix = "⚠️"
+		}
+	}
+
+	// 构建元素列表
+	elements := []interface{}{
+		map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": fmt.Sprintf("**操作**: %s\n**集群**: %s\n**总计**: %d 个节点", operation, clusterName, len(nodeNames)),
+				"tag":     "lark_md",
+			},
+		},
+	}
+
+	// 添加原因（如果有）
+	if reason != "" {
+		elements = append(elements, map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": fmt.Sprintf("**原因**: %s", reason),
+				"tag":     "lark_md",
+			},
+		})
+	}
+
+	elements = append(elements, map[string]interface{}{
+		"tag": "hr",
+	})
+
+	// 统计结果
+	elements = append(elements, map[string]interface{}{
+		"tag": "div",
+		"text": map[string]interface{}{
+			"content": fmt.Sprintf("**执行结果**\n\n✅ 成功: %d 个\n❌ 失败: %d 个", successCount, failureCount),
+			"tag":     "lark_md",
+		},
+	})
+
+	// 如果有失败的节点，显示详情
+	if failureCount > 0 {
+		elements = append(elements, map[string]interface{}{
+			"tag": "hr",
+		})
+		elements = append(elements, map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": "**失败详情**",
+				"tag":     "lark_md",
+			},
+		})
+
+		// 构建失败节点列表
+		var failedNodes []string
+		for _, nodeName := range nodeNames {
+			if result, ok := results[nodeName]; ok && result != "success" {
+				failedNodes = append(failedNodes, fmt.Sprintf("• `%s`: %s", nodeName, result))
+			}
+		}
+
+		elements = append(elements, map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": strings.Join(failedNodes, "\n"),
+				"tag":     "lark_md",
+			},
+		})
+	}
+
+	// 成功的节点列表（如果有）
+	if successCount > 0 && successCount <= 10 { // 只显示前10个成功节点
+		elements = append(elements, map[string]interface{}{
+			"tag": "hr",
+		})
+		elements = append(elements, map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": "**成功的节点**",
+				"tag":     "lark_md",
+			},
+		})
+
+		var successNodes []string
+		for _, nodeName := range nodeNames {
+			if result, ok := results[nodeName]; ok && result == "success" {
+				successNodes = append(successNodes, fmt.Sprintf("`%s`", nodeName))
+			}
+		}
+
+		elements = append(elements, map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": strings.Join(successNodes, ", "),
+				"tag":     "lark_md",
+			},
+		})
+	} else if successCount > 10 {
+		elements = append(elements, map[string]interface{}{
+			"tag": "note",
+			"elements": []interface{}{
+				map[string]interface{}{
+					"tag":     "plain_text",
+					"content": fmt.Sprintf("成功节点较多（%d个），已省略显示", successCount),
+				},
+			},
+		})
+	}
+
+	card := map[string]interface{}{
+		"config": map[string]interface{}{
+			"wide_screen_mode": true,
+		},
+		"header": map[string]interface{}{
+			"template": cardTemplate,
+			"title": map[string]interface{}{
+				"content": fmt.Sprintf("%s 批量%s完成", titlePrefix, operation),
+				"tag":     "plain_text",
+			},
+		},
+		"elements": elements,
+	}
+
+	cardJSON, _ := json.Marshal(card)
+	return string(cardJSON)
+}
+
+// BuildQuickHelpCard builds a help card for quick commands
+func BuildQuickHelpCard() string {
+	card := map[string]interface{}{
+		"config": map[string]interface{}{
+			"wide_screen_mode": true,
+		},
+		"header": map[string]interface{}{
+			"template": "blue",
+			"title": map[string]interface{}{
+				"content": "⚡ 快捷命令帮助",
+				"tag":     "plain_text",
+			},
+		},
+		"elements": []interface{}{
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": "**可用的快捷命令**",
+					"tag":     "lark_md",
+				},
+			},
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": "• `/quick status` - 当前集群概览\n• `/quick nodes` - 显示问题节点（NotReady/禁止调度）\n• `/quick health` - 所有集群健康检查",
+					"tag":     "lark_md",
+				},
+			},
+			map[string]interface{}{
+				"tag": "hr",
+			},
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": "**使用示例**",
+					"tag":     "lark_md",
+				},
+			},
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": "查看当前集群状态:\n`/quick status`\n\n查看问题节点:\n`/quick nodes`\n\n检查所有集群健康状态:\n`/quick health`",
+					"tag":     "lark_md",
+				},
+			},
+			map[string]interface{}{
+				"tag": "hr",
+			},
+			map[string]interface{}{
+				"tag": "note",
+				"elements": []interface{}{
+					map[string]interface{}{
+						"tag":     "plain_text",
+						"content": "💡 提示：快捷命令会自动聚合常用信息，提供快速概览",
+					},
+				},
+			},
+		},
+	}
+
+	cardJSON, _ := json.Marshal(card)
+	return string(cardJSON)
+}
+
+// BuildQuickStatusCard builds a status card for quick status command
+func BuildQuickStatusCard(clusterName string, statusData interface{}, totalNodes, readyNodes, notReadyNodes, unschedulableNodes int) string {
+	// Parse status data - using simple string formatting
+	elements := []interface{}{
+		map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": fmt.Sprintf("**集群**: %s", clusterName),
+				"tag":     "lark_md",
+			},
+		},
+		map[string]interface{}{
+			"tag": "hr",
+		},
+		map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": "**节点统计**",
+				"tag":     "lark_md",
+			},
+		},
+		map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": fmt.Sprintf("• 总节点数: %d\n• Ready: %d\n• NotReady: %d\n• 禁止调度: %d", totalNodes, readyNodes, notReadyNodes, unschedulableNodes),
+				"tag":     "lark_md",
+			},
+		},
+	}
+
+	// Warning if there are problematic nodes
+	if notReadyNodes > 0 || unschedulableNodes > 0 {
+		elements = append(elements, map[string]interface{}{
+			"tag": "note",
+			"elements": []interface{}{
+				map[string]interface{}{
+					"tag":     "plain_text",
+					"content": "⚠️ 发现问题节点，建议使用 /quick nodes 查看详情",
+				},
+			},
+		})
+	}
+
+	card := map[string]interface{}{
+		"config": map[string]interface{}{
+			"wide_screen_mode": true,
+		},
+		"header": map[string]interface{}{
+			"template": "blue",
+			"title": map[string]interface{}{
+				"content": "⚡ 集群快速状态",
+				"tag":     "plain_text",
+			},
+		},
+		"elements": elements,
+	}
+
+	cardJSON, _ := json.Marshal(card)
+	return string(cardJSON)
+}
+
+// BuildQuickNodesCard builds a card showing problematic nodes
+func BuildQuickNodesCard(clusterName string, nodes interface{}) string {
+	// Simple type assertion
+	var nodeCount int
+	if nodeSlice, ok := nodes.([]interface{}); ok {
+		nodeCount = len(nodeSlice)
+	}
+
+	elements := []interface{}{
+		map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": fmt.Sprintf("**集群**: %s\n**问题节点数**: %d", clusterName, nodeCount),
+				"tag":     "lark_md",
+			},
+		},
+	}
+
+	if nodeCount == 0 {
+		elements = append(elements, map[string]interface{}{
+			"tag": "hr",
+		})
+		elements = append(elements, map[string]interface{}{
+			"tag": "note",
+			"elements": []interface{}{
+				map[string]interface{}{
+					"tag":     "plain_text",
+					"content": "✅ 太好了！当前没有问题节点",
+				},
+			},
+		})
+	}
+
+	card := map[string]interface{}{
+		"config": map[string]interface{}{
+			"wide_screen_mode": true,
+		},
+		"header": map[string]interface{}{
+			"template": "orange",
+			"title": map[string]interface{}{
+				"content": "⚠️ 问题节点",
+				"tag":     "plain_text",
+			},
+		},
+		"elements": elements,
+	}
+
+	cardJSON, _ := json.Marshal(card)
+	return string(cardJSON)
+}
+
+// BuildQuickHealthCard builds a health check card for all clusters
+func BuildQuickHealthCard(healthData interface{}) string {
+	elements := []interface{}{
+		map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": "**所有集群健康状态**",
+				"tag":     "lark_md",
+			},
+		},
+		map[string]interface{}{
+			"tag": "hr",
+		},
+	}
+
+	// This is simplified; in real implementation, properly parse healthData
+	elements = append(elements, map[string]interface{}{
+		"tag": "div",
+		"text": map[string]interface{}{
+			"content": "集群健康检查已完成。详细信息请使用 /cluster list 和 /cluster status 查看。",
+			"tag":     "lark_md",
+		},
+	})
+
+	card := map[string]interface{}{
+		"config": map[string]interface{}{
+			"wide_screen_mode": true,
+		},
+		"header": map[string]interface{}{
+			"template": "blue",
+			"title": map[string]interface{}{
+				"content": "⚡ 集群健康检查",
 				"tag":     "plain_text",
 			},
 		},

@@ -53,6 +53,7 @@ func NewCommandRouter() *CommandRouter {
 	router.Register("audit", &AuditCommandHandler{})
 	router.Register("label", &LabelCommandHandler{})
 	router.Register("taint", &TaintCommandHandler{})
+	router.Register("quick", &QuickCommandHandler{})
 
 	return router
 }

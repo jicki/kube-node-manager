@@ -17,6 +17,14 @@ func (h *HelpCommandHandler) Handle(ctx *CommandContext) (*CommandResponse, erro
 			return &CommandResponse{
 				Card: BuildTaintHelpCard(),
 			}, nil
+		case "batch":
+			return &CommandResponse{
+				Card: BuildBatchHelpCard(),
+			}, nil
+		case "quick":
+			return &CommandResponse{
+				Card: BuildQuickHelpCard(),
+			}, nil
 		default:
 			return &CommandResponse{
 				Card: BuildHelpCard(),

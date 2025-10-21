@@ -5,6 +5,7 @@ import (
 	"kube-node-manager/internal/service/cluster"
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/internal/service/node"
+	"strings"
 )
 
 // NodeCommandHandler handles node-related commands
@@ -15,7 +16,7 @@ func (h *NodeCommandHandler) Handle(ctx *CommandContext) (*CommandResponse, erro
 	// Node commands require action
 	if ctx.Command.Action == "" {
 		return &CommandResponse{
-			Text: "请指定操作。用法: /node <list|info|cordon|uncordon> [参数...]",
+			Text: "请指定操作。用法: /node <list|info|cordon|uncordon|batch> [参数...]",
 		}, nil
 	}
 
@@ -28,9 +29,11 @@ func (h *NodeCommandHandler) Handle(ctx *CommandContext) (*CommandResponse, erro
 		return h.handleCordon(ctx)
 	case "uncordon":
 		return h.handleUncordon(ctx)
+	case "batch":
+		return h.handleBatchOperation(ctx)
 	default:
 		return &CommandResponse{
-			Text: fmt.Sprintf("未知操作: %s。支持的操作: list, info, cordon, uncordon", ctx.Command.Action),
+			Text: fmt.Sprintf("未知操作: %s。支持的操作: list, info, cordon, uncordon, batch", ctx.Command.Action),
 		}, nil
 	}
 }
@@ -389,6 +392,138 @@ func (h *NodeCommandHandler) handleUncordon(ctx *CommandContext) (*CommandRespon
 	return &CommandResponse{
 		Card: BuildSuccessCard(fmt.Sprintf("✅ 节点已成功恢复调度\n\n节点: `%s`\n集群: %s", nodeName, clusterName)),
 	}, nil
+}
+
+// handleBatchOperation handles batch operations on multiple nodes
+func (h *NodeCommandHandler) handleBatchOperation(ctx *CommandContext) (*CommandResponse, error) {
+	// 批量操作格式: /node batch <operation> <node1,node2,node3> [args...]
+	if len(ctx.Command.Args) < 2 {
+		return &CommandResponse{
+			Card: BuildBatchHelpCard(),
+		}, nil
+	}
+
+	operation := ctx.Command.Args[0]
+	nodeList := ctx.Command.Args[1]
+
+	// 解析节点列表（逗号分隔）
+	nodeNames := parseNodeList(nodeList)
+	if len(nodeNames) == 0 {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点列表为空\n\n格式: node1,node2,node3"),
+		}, nil
+	}
+
+	// 获取用户当前选择的集群
+	clusterName, err := ctx.Service.GetCurrentCluster(ctx.UserMapping.FeishuUserID)
+	if err != nil || clusterName == "" {
+		return &CommandResponse{
+			Card: BuildErrorCard("❌ 尚未选择集群\n\n请先使用 /cluster set <集群名> 选择集群"),
+		}, nil
+	}
+
+	switch operation {
+	case "cordon":
+		return h.handleBatchCordon(ctx, clusterName, nodeNames)
+	case "uncordon":
+		return h.handleBatchUncordon(ctx, clusterName, nodeNames)
+	default:
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("未知批量操作: %s\n\n支持的操作: cordon, uncordon", operation)),
+		}, nil
+	}
+}
+
+// handleBatchCordon handles batch cordon operation
+func (h *NodeCommandHandler) handleBatchCordon(ctx *CommandContext, clusterName string, nodeNames []string) (*CommandResponse, error) {
+	// 获取原因（如果有）
+	reason := ""
+	if len(ctx.Command.Args) > 2 {
+		reason = joinArgs(ctx.Command.Args[2:])
+	}
+
+	// 验证节点服务
+	if ctx.Service.nodeService == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点服务未配置"),
+		}, nil
+	}
+
+	// 执行批量操作
+	results := make(map[string]string) // nodeName -> "success" or error message
+	successCount := 0
+	failureCount := 0
+
+	for _, nodeName := range nodeNames {
+		err := ctx.Service.nodeService.Cordon(node.CordonRequest{
+			ClusterName: clusterName,
+			NodeName:    nodeName,
+			Reason:      reason,
+		}, ctx.UserMapping.SystemUserID)
+
+		if err != nil {
+			results[nodeName] = err.Error()
+			failureCount++
+			ctx.Service.logger.Error(fmt.Sprintf("批量禁止调度失败 - 节点: %s, 错误: %v", nodeName, err))
+		} else {
+			results[nodeName] = "success"
+			successCount++
+		}
+	}
+
+	// 构建结果卡片
+	return &CommandResponse{
+		Card: BuildBatchOperationResultCard("禁止调度", clusterName, nodeNames, results, successCount, failureCount, reason),
+	}, nil
+}
+
+// handleBatchUncordon handles batch uncordon operation
+func (h *NodeCommandHandler) handleBatchUncordon(ctx *CommandContext, clusterName string, nodeNames []string) (*CommandResponse, error) {
+	// 验证节点服务
+	if ctx.Service.nodeService == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点服务未配置"),
+		}, nil
+	}
+
+	// 执行批量操作
+	results := make(map[string]string)
+	successCount := 0
+	failureCount := 0
+
+	for _, nodeName := range nodeNames {
+		err := ctx.Service.nodeService.Uncordon(node.CordonRequest{
+			ClusterName: clusterName,
+			NodeName:    nodeName,
+		}, ctx.UserMapping.SystemUserID)
+
+		if err != nil {
+			results[nodeName] = err.Error()
+			failureCount++
+			ctx.Service.logger.Error(fmt.Sprintf("批量恢复调度失败 - 节点: %s, 错误: %v", nodeName, err))
+		} else {
+			results[nodeName] = "success"
+			successCount++
+		}
+	}
+
+	// 构建结果卡片
+	return &CommandResponse{
+		Card: BuildBatchOperationResultCard("恢复调度", clusterName, nodeNames, results, successCount, failureCount, ""),
+	}, nil
+}
+
+// parseNodeList parses comma-separated node list
+func parseNodeList(nodeList string) []string {
+	nodes := strings.Split(nodeList, ",")
+	var result []string
+	for _, node := range nodes {
+		node = strings.TrimSpace(node)
+		if node != "" {
+			result = append(result, node)
+		}
+	}
+	return result
 }
 
 // Description returns the command description
