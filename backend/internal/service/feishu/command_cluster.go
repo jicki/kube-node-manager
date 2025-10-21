@@ -61,12 +61,15 @@ func (h *ClusterCommandHandler) handleListClusters(ctx *CommandContext) (*Comman
 		}, nil
 	}
 
+	// 获取当前选择的集群
+	currentCluster, _ := ctx.Service.GetCurrentCluster(ctx.UserMapping.FeishuUserID)
+
 	// 转换为卡片需要的格式
 	var clusters []map[string]interface{}
 	for _, c := range listResp.Clusters {
-		status := "🟢 正常"
+		status := "Healthy"
 		if c.Status != "active" {
-			status = "🔴 不可用"
+			status = "Unavailable"
 		}
 
 		clusters = append(clusters, map[string]interface{}{
@@ -82,8 +85,9 @@ func (h *ClusterCommandHandler) handleListClusters(ctx *CommandContext) (*Comman
 		}, nil
 	}
 
+	// 使用交互式按钮卡片
 	return &CommandResponse{
-		Card: BuildClusterListCard(clusters),
+		Card: BuildClusterListCardWithActions(clusters, currentCluster),
 	}, nil
 }
 

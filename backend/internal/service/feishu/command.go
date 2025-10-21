@@ -98,7 +98,8 @@ func ParseCommand(cmdStr string) *Command {
 
 	// Parse action and args
 	if len(parts) > 1 {
-		cmd.Action = parts[1]
+		// 应用命令别名解析
+		cmd.Action = ResolveAlias(parts[1])
 	}
 
 	if len(parts) > 2 {

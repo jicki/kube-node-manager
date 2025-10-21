@@ -20,7 +20,7 @@ func (h *QuickCommandHandler) Handle(ctx *CommandContext) (*CommandResponse, err
 	// 检查用户是否已绑定
 	if ctx.UserMapping == nil || ctx.UserMapping.SystemUserID == 0 {
 		return &CommandResponse{
-			Card: BuildErrorCard("❌ 账号未绑定\n\n请先绑定您的系统账号才能使用机器人功能。"),
+			Card: BuildErrorCard("❌ 没有权限操作\n\n请联系管理员。"),
 		}, nil
 	}
 

@@ -81,9 +81,22 @@ func (h *NodeCommandHandler) handleListNodes(ctx *CommandContext) (*CommandRespo
 		}, nil
 	}
 
-	// 转换为卡片需要的格式
+	// 获取搜索关键词和过滤参数
+	var searchKeyword string
+	if len(ctx.Command.Args) > 0 {
+		searchKeyword = ctx.Command.Args[0]
+	}
+
+	// 转换为卡片需要的格式并应用过滤
 	var nodes []map[string]interface{}
 	for _, n := range nodeInfos {
+		// 模糊搜索过滤
+		if searchKeyword != "" {
+			if !strings.Contains(strings.ToLower(n.Name), strings.ToLower(searchKeyword)) {
+				continue
+			}
+		}
+
 		nodeData := map[string]interface{}{
 			"name":          n.Name,
 			"ready":         n.Status == "Ready",
@@ -100,13 +113,19 @@ func (h *NodeCommandHandler) handleListNodes(ctx *CommandContext) (*CommandRespo
 	}
 
 	if len(nodes) == 0 {
+		if searchKeyword != "" {
+			return &CommandResponse{
+				Card: BuildErrorCard(fmt.Sprintf("❌ 未找到匹配的节点\n\n搜索关键词: `%s`\n集群: %s", searchKeyword, clusterName)),
+			}, nil
+		}
 		return &CommandResponse{
 			Card: BuildErrorCard(fmt.Sprintf("集群 %s 中没有节点", clusterName)),
 		}, nil
 	}
 
+	// 使用交互式按钮卡片
 	return &CommandResponse{
-		Card: BuildNodeListCard(nodes, clusterName),
+		Card: BuildNodeListCardWithActions(nodes, clusterName),
 	}, nil
 }
 

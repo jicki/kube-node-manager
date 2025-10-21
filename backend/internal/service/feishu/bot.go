@@ -553,7 +553,7 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 	userMapping, err := s.GetBindingByFeishuUserID(senderID)
 	if err != nil {
 		s.logger.Error(fmt.Sprintf("❌ 查询用户绑定失败: %s", err.Error()))
-		errorMsg := BuildErrorCard(fmt.Sprintf("查询绑定状态失败，请稍后重试。"))
+		errorMsg := BuildErrorCard("❌ 没有权限操作\n\n请联系管理员。")
 		s.SendMessage(chatID, "interactive", errorMsg)
 		return nil
 	}
@@ -567,7 +567,7 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 		userMapping, err = s.AutoMatchAndBindUser(senderID)
 		if err != nil {
 			s.logger.Error(fmt.Sprintf("❌ 自动匹配用户失败: %s", err.Error()))
-			errorMsg := BuildErrorCard(fmt.Sprintf("自动匹配用户失败，请稍后重试。"))
+			errorMsg := BuildErrorCard("❌ 没有权限操作\n\n请联系管理员。")
 			s.SendMessage(chatID, "interactive", errorMsg)
 			return nil
 		}
@@ -575,13 +575,8 @@ func (s *Service) handleMessageReceive(ctx context.Context, event *larkim.P2Mess
 		// 如果自动匹配也失败，提示用户
 		if userMapping == nil {
 			s.logger.Info(fmt.Sprintf("⚠️ 无法自动匹配用户"))
-			errorMsg := BuildErrorCard("❌ 无法自动匹配您的账号\n\n" +
-				"系统尝试通过您的飞书邮箱或姓名匹配系统用户，但未找到匹配的账号。\n\n" +
-				"请确保：\n" +
-				"1. 您的飞书邮箱与系统账号邮箱一致\n" +
-				"2. 或者飞书姓名与系统用户名一致\n\n" +
-				"如需帮助，请联系管理员。")
-			s.logger.Info("📤 准备发送无法匹配提示消息...")
+			errorMsg := BuildErrorCard("❌ 没有权限操作\n\n请联系管理员。")
+			s.logger.Info("📤 准备发送权限错误提示消息...")
 			sendErr := s.SendMessage(chatID, "interactive", errorMsg)
 			if sendErr != nil {
 				s.logger.Error(fmt.Sprintf("❌ 发送提示消息失败: %s", sendErr.Error()))
