@@ -6,8 +6,9 @@ type HelpCommandHandler struct{}
 // Handle executes the help command
 func (h *HelpCommandHandler) Handle(ctx *CommandContext) (*CommandResponse, error) {
 	// 如果指定了具体命令，显示该命令的帮助
-	if len(ctx.Command.Args) > 0 {
-		cmdName := ctx.Command.Args[0]
+	// /help label 会被解析为 Action="label"
+	if ctx.Command.Action != "" {
+		cmdName := ctx.Command.Action
 		switch cmdName {
 		case "label":
 			return &CommandResponse{

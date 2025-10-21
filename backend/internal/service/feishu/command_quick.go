@@ -115,11 +115,11 @@ func (h *QuickCommandHandler) handleQuickNodes(ctx *CommandContext) (*CommandRes
 		}, nil
 	}
 
-	// 过滤问题节点
+	// 过滤问题节点（NotReady 或 禁止调度）
 	var problematicNodes []k8s.NodeInfo
 	for _, n := range nodeList {
-		// Consider NotReady or SchedulingDisabled nodes as problematic
-		if n.Status != "Ready" || n.Status == "SchedulingDisabled" {
+		// NotReady 或 禁止调度的节点视为问题节点
+		if n.Status != "Ready" || !n.Schedulable {
 			problematicNodes = append(problematicNodes, n)
 		}
 	}

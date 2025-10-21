@@ -166,10 +166,11 @@ func (h *CardActionHandler) handleNodeCordon(action map[string]interface{}, user
 	}
 
 	// Execute cordon
+	reason := fmt.Sprintf("管理员禁止调度by(%s)", userMapping.Username)
 	err := h.service.nodeService.Cordon(node.CordonRequest{
 		ClusterName: clusterName,
 		NodeName:    nodeName,
-		Reason:      "通过交互按钮操作",
+		Reason:      reason,
 	}, userMapping.SystemUserID)
 	if err != nil {
 		return &CommandResponse{

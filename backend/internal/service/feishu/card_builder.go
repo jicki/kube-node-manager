@@ -1521,9 +1521,12 @@ func BuildQuickStatusCard(clusterName string, statusData interface{}, totalNodes
 
 // BuildQuickNodesCard builds a card showing problematic nodes
 func BuildQuickNodesCard(clusterName string, nodes interface{}) string {
-	// Simple type assertion
+	// Type assertion for k8s.NodeInfo slice
+	var nodeList []k8s.NodeInfo
 	var nodeCount int
-	if nodeSlice, ok := nodes.([]interface{}); ok {
+
+	if nodeSlice, ok := nodes.([]k8s.NodeInfo); ok {
+		nodeList = nodeSlice
 		nodeCount = len(nodeSlice)
 	}
 
@@ -1535,12 +1538,12 @@ func BuildQuickNodesCard(clusterName string, nodes interface{}) string {
 				"tag":     "lark_md",
 			},
 		},
+		map[string]interface{}{
+			"tag": "hr",
+		},
 	}
 
 	if nodeCount == 0 {
-		elements = append(elements, map[string]interface{}{
-			"tag": "hr",
-		})
 		elements = append(elements, map[string]interface{}{
 			"tag": "note",
 			"elements": []interface{}{
@@ -1550,6 +1553,32 @@ func BuildQuickNodesCard(clusterName string, nodes interface{}) string {
 				},
 			},
 		})
+	} else {
+		// 显示问题节点列表
+		for _, n := range nodeList {
+			status := "🟢 Ready"
+			if n.Status != "Ready" {
+				status = "🔴 NotReady"
+			}
+
+			schedulable := "✅ 可调度"
+			if !n.Schedulable {
+				schedulable = "⛔ 禁止调度"
+			}
+
+			nodeInfo := fmt.Sprintf("**`%s`**\n状态: %s | 调度: %s", n.Name, status, schedulable)
+
+			elements = append(elements, map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": nodeInfo,
+					"tag":     "lark_md",
+				},
+			})
+			elements = append(elements, map[string]interface{}{
+				"tag": "hr",
+			})
+		}
 	}
 
 	card := map[string]interface{}{

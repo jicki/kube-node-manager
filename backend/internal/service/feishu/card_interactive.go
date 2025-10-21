@@ -125,7 +125,7 @@ func BuildNodeListCardWithActions(nodes []map[string]interface{}, clusterName st
 		"header": map[string]interface{}{
 			"template": "blue",
 			"title": map[string]interface{}{
-				"content": "📋 节点列表（交互式）",
+				"content": "📋 节点列表",
 				"tag":     "plain_text",
 			},
 		},
