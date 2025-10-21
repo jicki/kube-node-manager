@@ -98,6 +98,52 @@ func (a *auditServiceAdapter) List(req interface{}) (interface{}, error) {
 	return a.svc.List(listReq)
 }
 
+// labelServiceAdapter 适配器，将 label.Service 适配为 feishu.LabelServiceInterface
+type labelServiceAdapter struct {
+	svc *label.Service
+}
+
+func (a *labelServiceAdapter) UpdateNodeLabels(req interface{}, userID uint) error {
+	updateReq, ok := req.(label.UpdateLabelsRequest)
+	if !ok {
+		return fmt.Errorf("invalid request type")
+	}
+	return a.svc.UpdateNodeLabels(updateReq, userID)
+}
+
+func (a *labelServiceAdapter) BatchUpdateLabels(req interface{}, userID uint) error {
+	batchReq, ok := req.(label.BatchUpdateRequest)
+	if !ok {
+		return fmt.Errorf("invalid request type")
+	}
+	return a.svc.BatchUpdateLabels(batchReq, userID)
+}
+
+// taintServiceAdapter 适配器，将 taint.Service 适配为 feishu.TaintServiceInterface
+type taintServiceAdapter struct {
+	svc *taint.Service
+}
+
+func (a *taintServiceAdapter) UpdateNodeTaints(req interface{}, userID uint) error {
+	updateReq, ok := req.(taint.UpdateTaintsRequest)
+	if !ok {
+		return fmt.Errorf("invalid request type")
+	}
+	return a.svc.UpdateNodeTaints(updateReq, userID)
+}
+
+func (a *taintServiceAdapter) BatchUpdateTaints(req interface{}, userID uint) error {
+	batchReq, ok := req.(taint.BatchUpdateRequest)
+	if !ok {
+		return fmt.Errorf("invalid request type")
+	}
+	return a.svc.BatchUpdateTaints(batchReq, userID)
+}
+
+func (a *taintServiceAdapter) RemoveTaint(clusterName, nodeName, taintKey string, userID uint) error {
+	return a.svc.RemoveTaint(clusterName, nodeName, taintKey, userID)
+}
+
 func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Services {
 	auditSvc := audit.NewService(db, logger)
 	k8sSvc := k8s.NewService(logger)
@@ -130,10 +176,14 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	clusterAdapter := &clusterServiceAdapter{svc: clusterSvc}
 	nodeAdapter := &nodeServiceAdapter{svc: nodeSvc}
 	auditAdapter := &auditServiceAdapter{svc: auditSvc}
+	labelAdapter := &labelServiceAdapter{svc: labelSvc}
+	taintAdapter := &taintServiceAdapter{svc: taintSvc}
 
 	feishuSvc.SetClusterService(clusterAdapter)
 	feishuSvc.SetNodeService(nodeAdapter)
 	feishuSvc.SetAuditService(auditAdapter)
+	feishuSvc.SetLabelService(labelAdapter)
+	feishuSvc.SetTaintService(taintAdapter)
 
 	return &Services{
 		Auth:     authSvc,

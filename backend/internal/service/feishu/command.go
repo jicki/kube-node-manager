@@ -51,6 +51,8 @@ func NewCommandRouter() *CommandRouter {
 	router.Register("node", &NodeCommandHandler{})
 	router.Register("cluster", &ClusterCommandHandler{})
 	router.Register("audit", &AuditCommandHandler{})
+	router.Register("label", &LabelCommandHandler{})
+	router.Register("taint", &TaintCommandHandler{})
 
 	return router
 }

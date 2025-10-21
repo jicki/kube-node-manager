@@ -32,6 +32,19 @@ type AuditServiceInterface interface {
 	List(req interface{}) (interface{}, error)
 }
 
+// LabelServiceInterface 标签服务接口
+type LabelServiceInterface interface {
+	UpdateNodeLabels(req interface{}, userID uint) error
+	BatchUpdateLabels(req interface{}, userID uint) error
+}
+
+// TaintServiceInterface 污点服务接口
+type TaintServiceInterface interface {
+	UpdateNodeTaints(req interface{}, userID uint) error
+	BatchUpdateTaints(req interface{}, userID uint) error
+	RemoveTaint(clusterName, nodeName, taintKey string, userID uint) error
+}
+
 // Service handles Feishu (Lark) related operations
 type Service struct {
 	db             *gorm.DB
@@ -41,6 +54,8 @@ type Service struct {
 	clusterService ClusterServiceInterface
 	nodeService    NodeServiceInterface
 	auditService   AuditServiceInterface
+	labelService   LabelServiceInterface
+	taintService   TaintServiceInterface
 }
 
 // NewService creates a new Feishu service
@@ -67,6 +82,16 @@ func (s *Service) SetNodeService(nodeSvc NodeServiceInterface) {
 // SetAuditService 设置审计服务
 func (s *Service) SetAuditService(auditSvc AuditServiceInterface) {
 	s.auditService = auditSvc
+}
+
+// SetLabelService 设置标签服务
+func (s *Service) SetLabelService(labelSvc LabelServiceInterface) {
+	s.labelService = labelSvc
+}
+
+// SetTaintService 设置污点服务
+func (s *Service) SetTaintService(taintSvc TaintServiceInterface) {
+	s.taintService = taintSvc
 }
 
 // InitializeEventClient 初始化或重启事件客户端
