@@ -166,7 +166,7 @@ func (h *CardActionHandler) handleNodeCordon(action map[string]interface{}, user
 	}
 
 	// Execute cordon
-	reason := fmt.Sprintf("管理员禁止调度by(%s)", userMapping.Username)
+	reason := fmt.Sprintf("系统维护 by %s", userMapping.Username)
 	err := h.service.nodeService.Cordon(node.CordonRequest{
 		ClusterName: clusterName,
 		NodeName:    nodeName,
