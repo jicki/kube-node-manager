@@ -1,0 +1,257 @@
+package feishu
+
+import (
+	"encoding/json"
+	"fmt"
+	"kube-node-manager/internal/model"
+	"kube-node-manager/internal/service/node"
+)
+
+// CardActionHandler handles card button click actions
+type CardActionHandler struct {
+	service *Service
+}
+
+// NewCardActionHandler creates a new card action handler
+func NewCardActionHandler(service *Service) *CardActionHandler {
+	return &CardActionHandler{
+		service: service,
+	}
+}
+
+// HandleCardAction processes card button actions
+func (h *CardActionHandler) HandleCardAction(actionValue string, userMapping *model.FeishuUserMapping) (*CommandResponse, error) {
+	// Parse action value (JSON format)
+	var action map[string]interface{}
+	if err := json.Unmarshal([]byte(actionValue), &action); err != nil {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("解析操作失败: %s", err.Error())),
+		}, nil
+	}
+
+	actionType, ok := action["action"].(string)
+	if !ok {
+		return &CommandResponse{
+			Card: BuildErrorCard("无效的操作类型"),
+		}, nil
+	}
+
+	// 检查用户是否已绑定
+	if userMapping == nil || userMapping.SystemUserID == 0 {
+		return &CommandResponse{
+			Card: BuildErrorCard("❌ 账号未绑定\n\n请先绑定您的系统账号才能使用机器人功能。"),
+		}, nil
+	}
+
+	// Route to specific action handler
+	switch actionType {
+	case "node_info":
+		return h.handleNodeInfo(action, userMapping)
+	case "node_cordon":
+		return h.handleNodeCordon(action, userMapping)
+	case "node_uncordon":
+		return h.handleNodeUncordon(action, userMapping)
+	case "node_refresh":
+		return h.handleNodeRefresh(action, userMapping)
+	case "cluster_switch":
+		return h.handleClusterSwitch(action, userMapping)
+	case "cluster_status":
+		return h.handleClusterStatus(action, userMapping)
+	case "confirm_action":
+		return h.handleConfirmAction(action, userMapping)
+	case "cancel_action":
+		return h.handleCancelAction()
+	default:
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("未知操作: %s", actionType)),
+		}, nil
+	}
+}
+
+// handleNodeInfo handles node info button click
+func (h *CardActionHandler) handleNodeInfo(action map[string]interface{}, userMapping *model.FeishuUserMapping) (*CommandResponse, error) {
+	nodeName, _ := action["node"].(string)
+	clusterName, _ := action["cluster"].(string)
+
+	if nodeName == "" || clusterName == "" {
+		return &CommandResponse{
+			Card: BuildErrorCard("缺少节点或集群信息"),
+		}, nil
+	}
+
+	// Get node info
+	_, err := h.service.nodeService.Get(node.GetRequest{
+		ClusterName: clusterName,
+		NodeName:    nodeName,
+	}, userMapping.SystemUserID)
+	if err != nil {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("获取节点信息失败: %s", err.Error())),
+		}, nil
+	}
+
+	// Build card (simplified, should use proper node info structure)
+	return &CommandResponse{
+		Text: fmt.Sprintf("节点 %s 的详细信息", nodeName),
+	}, nil
+}
+
+// handleNodeCordon handles node cordon button click
+func (h *CardActionHandler) handleNodeCordon(action map[string]interface{}, userMapping *model.FeishuUserMapping) (*CommandResponse, error) {
+	nodeName, _ := action["node"].(string)
+	clusterName, _ := action["cluster"].(string)
+
+	if nodeName == "" || clusterName == "" {
+		return &CommandResponse{
+			Card: BuildErrorCard("缺少节点或集群信息"),
+		}, nil
+	}
+
+	// Execute cordon
+	err := h.service.nodeService.Cordon(node.CordonRequest{
+		ClusterName: clusterName,
+		NodeName:    nodeName,
+		Reason:      "通过交互按钮操作",
+	}, userMapping.SystemUserID)
+	if err != nil {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("禁止调度失败: %s", err.Error())),
+		}, nil
+	}
+
+	return &CommandResponse{
+		Card: BuildSuccessCard(fmt.Sprintf("✅ 节点已成功禁止调度\n\n节点: `%s`\n集群: %s", nodeName, clusterName)),
+	}, nil
+}
+
+// handleNodeUncordon handles node uncordon button click
+func (h *CardActionHandler) handleNodeUncordon(action map[string]interface{}, userMapping *model.FeishuUserMapping) (*CommandResponse, error) {
+	nodeName, _ := action["node"].(string)
+	clusterName, _ := action["cluster"].(string)
+
+	if nodeName == "" || clusterName == "" {
+		return &CommandResponse{
+			Card: BuildErrorCard("缺少节点或集群信息"),
+		}, nil
+	}
+
+	// Execute uncordon
+	err := h.service.nodeService.Uncordon(node.CordonRequest{
+		ClusterName: clusterName,
+		NodeName:    nodeName,
+	}, userMapping.SystemUserID)
+	if err != nil {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("恢复调度失败: %s", err.Error())),
+		}, nil
+	}
+
+	return &CommandResponse{
+		Card: BuildSuccessCard(fmt.Sprintf("✅ 节点已成功恢复调度\n\n节点: `%s`\n集群: %s", nodeName, clusterName)),
+	}, nil
+}
+
+// handleNodeRefresh handles node refresh button click
+func (h *CardActionHandler) handleNodeRefresh(action map[string]interface{}, userMapping *model.FeishuUserMapping) (*CommandResponse, error) {
+	nodeName, _ := action["node"].(string)
+	clusterName, _ := action["cluster"].(string)
+
+	if nodeName == "" || clusterName == "" {
+		return &CommandResponse{
+			Card: BuildErrorCard("缺少节点或集群信息"),
+		}, nil
+	}
+
+	// Get fresh node info
+	nodeInfo, err := h.service.nodeService.Get(node.GetRequest{
+		ClusterName: clusterName,
+		NodeName:    nodeName,
+	}, userMapping.SystemUserID)
+	if err != nil {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("刷新节点信息失败: %s", err.Error())),
+		}, nil
+	}
+
+	// Build refreshed card (simplified)
+	_ = nodeInfo
+	return &CommandResponse{
+		Text: fmt.Sprintf("✅ 节点 %s 信息已刷新", nodeName),
+	}, nil
+}
+
+// handleClusterSwitch handles cluster switch button click
+func (h *CardActionHandler) handleClusterSwitch(action map[string]interface{}, userMapping *model.FeishuUserMapping) (*CommandResponse, error) {
+	clusterName, _ := action["cluster"].(string)
+
+	if clusterName == "" {
+		return &CommandResponse{
+			Card: BuildErrorCard("缺少集群信息"),
+		}, nil
+	}
+
+	// Switch cluster
+	err := h.service.SetCurrentCluster(userMapping.FeishuUserID, clusterName)
+	if err != nil {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("切换集群失败: %s", err.Error())),
+		}, nil
+	}
+
+	return &CommandResponse{
+		Card: BuildSuccessCard(fmt.Sprintf("✅ 已切换到集群: `%s`\n\n您可以使用 /node list 查看节点列表", clusterName)),
+	}, nil
+}
+
+// handleClusterStatus handles cluster status button click
+func (h *CardActionHandler) handleClusterStatus(action map[string]interface{}, userMapping *model.FeishuUserMapping) (*CommandResponse, error) {
+	clusterName, _ := action["cluster"].(string)
+
+	if clusterName == "" {
+		return &CommandResponse{
+			Card: BuildErrorCard("缺少集群信息"),
+		}, nil
+	}
+
+	// Get cluster status (simplified - actual implementation would use cluster service)
+	return &CommandResponse{
+		Text: fmt.Sprintf("查看集群 %s 的状态", clusterName),
+	}, nil
+}
+
+// handleConfirmAction handles confirmed dangerous actions
+func (h *CardActionHandler) handleConfirmAction(action map[string]interface{}, userMapping *model.FeishuUserMapping) (*CommandResponse, error) {
+	command, _ := action["command"].(string)
+
+	if command == "" {
+		return &CommandResponse{
+			Card: BuildErrorCard("缺少确认命令"),
+		}, nil
+	}
+
+	// Parse and execute the confirmed command
+	cmd := ParseCommand(command)
+
+	// Execute command
+	ctx := &CommandContext{
+		Command:     cmd,
+		Service:     h.service,
+		UserMapping: userMapping,
+	}
+
+	handler, exists := h.service.commandRouter.handlers[cmd.Name]
+	if !exists {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("未知命令: %s", cmd.Name)),
+		}, nil
+	}
+
+	return handler.Handle(ctx)
+}
+
+// handleCancelAction handles cancel button click
+func (h *CardActionHandler) handleCancelAction() (*CommandResponse, error) {
+	return &CommandResponse{
+		Card: BuildSuccessCard("❌ 操作已取消"),
+	}, nil
+}
