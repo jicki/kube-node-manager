@@ -35,8 +35,21 @@ func BuildNodeListCardWithActions(nodes []map[string]interface{}, clusterName st
 			unschedulable = true
 		}
 
-		// 节点信息
-		nodeInfo := fmt.Sprintf("**`%s`**\n状态: %s | 调度: %s", nodeName, status, schedulable)
+		// 获取节点类型（优先显示 user_type，其次是 roles）
+		nodeType := ""
+		if userType, ok := node["user_type"].(string); ok && userType != "" {
+			nodeType = userType
+		} else if roles, ok := node["roles"].(string); ok && roles != "" {
+			nodeType = roles
+		}
+
+		// 节点信息 - 添加类型显示
+		var nodeInfo string
+		if nodeType != "" {
+			nodeInfo = fmt.Sprintf("**`%s`**\n状态: %s | 调度: %s | 类型: %s", nodeName, status, schedulable, nodeType)
+		} else {
+			nodeInfo = fmt.Sprintf("**`%s`**\n状态: %s | 调度: %s", nodeName, status, schedulable)
+		}
 
 		elements = append(elements, map[string]interface{}{
 			"tag": "div",

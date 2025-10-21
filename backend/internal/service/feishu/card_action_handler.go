@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"kube-node-manager/internal/model"
+	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/internal/service/node"
 )
 
@@ -81,10 +82,9 @@ func (h *CardActionHandler) handleNodeInfo(action map[string]interface{}, userMa
 		}, nil
 	}
 
-	// Get node info
-	_, err := h.service.nodeService.Get(node.GetRequest{
+	// Get node list to find the specified node
+	result, err := h.service.nodeService.List(node.ListRequest{
 		ClusterName: clusterName,
-		NodeName:    nodeName,
 	}, userMapping.SystemUserID)
 	if err != nil {
 		return &CommandResponse{
@@ -92,9 +92,65 @@ func (h *CardActionHandler) handleNodeInfo(action map[string]interface{}, userMa
 		}, nil
 	}
 
-	// Build card (simplified, should use proper node info structure)
+	// Type assertion
+	nodeInfos, ok := result.([]k8s.NodeInfo)
+	if !ok {
+		return &CommandResponse{
+			Card: BuildErrorCard("节点数据格式错误"),
+		}, nil
+	}
+
+	// Find the specified node
+	var foundNode *k8s.NodeInfo
+	for _, n := range nodeInfos {
+		if n.Name == nodeName {
+			foundNode = &n
+			break
+		}
+	}
+
+	if foundNode == nil {
+		return &CommandResponse{
+			Card: BuildErrorCard(fmt.Sprintf("节点 `%s` 不存在\n\n集群: %s", nodeName, clusterName)),
+		}, nil
+	}
+
+	// Convert to card format
+	nodeInfo := map[string]interface{}{
+		"name":              foundNode.Name,
+		"ready":             foundNode.Status == "Ready",
+		"unschedulable":     !foundNode.Schedulable,
+		"internal_ip":       foundNode.InternalIP,
+		"container_runtime": foundNode.ContainerRuntime,
+		"kernel_version":    foundNode.KernelVersion,
+		"os_image":          foundNode.OSImage,
+		"cluster":           clusterName,
+	}
+
+	// Add resource information
+	capacity := map[string]interface{}{
+		"cpu":    foundNode.Capacity.CPU,
+		"memory": foundNode.Capacity.Memory,
+		"pods":   foundNode.Capacity.Pods,
+		"gpu":    foundNode.Capacity.GPU,
+	}
+	allocatable := map[string]interface{}{
+		"cpu":    foundNode.Allocatable.CPU,
+		"memory": foundNode.Allocatable.Memory,
+		"pods":   foundNode.Allocatable.Pods,
+		"gpu":    foundNode.Allocatable.GPU,
+	}
+	nodeInfo["capacity"] = capacity
+	nodeInfo["allocatable"] = allocatable
+
+	// Add usage information (if available)
+	if foundNode.Usage != nil {
+		nodeInfo["cpu_usage"] = foundNode.Usage.CPU
+		nodeInfo["memory_usage"] = foundNode.Usage.Memory
+	}
+
 	return &CommandResponse{
-		Text: fmt.Sprintf("节点 %s 的详细信息", nodeName),
+		Card: BuildNodeInfoCard(nodeInfo),
 	}, nil
 }
 
