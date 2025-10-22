@@ -100,6 +100,12 @@ const router = createRouter({
           name: 'Analytics',
           component: () => import('@/views/analytics/Analytics.vue'),
           meta: { title: '统计分析', icon: 'DataAnalysis', requiresAuth: true }
+        },
+        {
+          path: 'analytics/detail/:id',
+          name: 'AnomalyDetail',
+          component: () => import('@/views/analytics/AnomalyDetail.vue'),
+          meta: { title: '异常详情', icon: 'Document', requiresAuth: true }
         }
       ]
     },

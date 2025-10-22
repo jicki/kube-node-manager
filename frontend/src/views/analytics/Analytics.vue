@@ -68,9 +68,23 @@
           >
             手动检测
           </el-button>
+          <el-button
+            type="warning"
+            :icon="DataLine"
+            @click="handleOpenCompare"
+          >
+            对比分析
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
+
+    <!-- 对比分析对话框 -->
+    <CompareAnalysis
+      ref="compareAnalysisRef"
+      :clusters="clusters"
+      @close="handleCloseCompare"
+    />
 
     <!-- 统计卡片区 -->
     <el-row :gutter="20" class="stats-row">
@@ -130,6 +144,17 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 趋势图表区 -->
+    <TrendCharts
+      :cluster-id="filterForm.cluster_id"
+      :start-time="computedStartTime"
+      :end-time="computedEndTime"
+      :clusters="clusters"
+      @date-click="handleDateClick"
+      @type-click="handleTypeClick"
+      ref="trendChartsRef"
+    />
 
     <!-- 异常记录列表 -->
     <el-card class="table-card">
@@ -196,6 +221,13 @@
         </el-table-column>
         <el-table-column prop="reason" label="原因" min-width="150" show-overflow-tooltip />
         <el-table-column prop="message" label="详细信息" min-width="200" show-overflow-tooltip />
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" size="small" link @click="handleViewDetail(row.id)">
+              查看详情
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <el-pagination
@@ -219,19 +251,30 @@ import {
   RefreshRight,
   Download,
   DataAnalysis,
+  DataLine,
   Warning,
   CircleCheck,
   Monitor
 } from '@element-plus/icons-vue'
 import { getAnomalies, getActiveAnomalies, triggerCheck } from '@/api/anomaly'
 import clusterApi from '@/api/cluster'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
 import { usePageVisibility } from '@/composables/usePageVisibility'
 import EmptyState from '@/components/common/EmptyState.vue'
+import TrendCharts from '@/components/analytics/TrendCharts.vue'
+import CompareAnalysis from '@/components/analytics/CompareAnalysis.vue'
 import { handleError, showSuccess, showWarning, ErrorLevel } from '@/utils/errorHandler'
 
+const router = useRouter()
 const authStore = useAuthStore()
 const userRole = computed(() => authStore.userInfo?.role || '')
+
+// 趋势图表引用
+const trendChartsRef = ref(null)
+
+// 对比分析引用
+const compareAnalysisRef = ref(null)
 
 // 页面可见性检测
 const { isVisible } = usePageVisibility()
@@ -272,6 +315,25 @@ const pagination = reactive({
 
 // 手动检测加载状态
 const checkLoading = ref(false)
+
+// 计算属性：图表时间范围
+const computedStartTime = computed(() => {
+  if (filterForm.dateRange && filterForm.dateRange.length === 2) {
+    return new Date(filterForm.dateRange[0]).toISOString()
+  }
+  // 默认最近7天
+  const date = new Date()
+  date.setDate(date.getDate() - 7)
+  return date.toISOString()
+})
+
+const computedEndTime = computed(() => {
+  if (filterForm.dateRange && filterForm.dateRange.length === 2) {
+    return new Date(filterForm.dateRange[1]).toISOString()
+  }
+  // 默认今天
+  return new Date().toISOString()
+})
 
 // 加载集群列表
 const loadClusters = async () => {
@@ -387,6 +449,10 @@ const handleTriggerCheck = async () => {
       setTimeout(() => {
         loadAnomalies()
         loadActiveSummary()
+        // 刷新图表
+        if (trendChartsRef.value) {
+          trendChartsRef.value.refresh()
+        }
       }, 5000)
     }
   } catch (error) {
@@ -395,6 +461,45 @@ const handleTriggerCheck = async () => {
   } finally {
     checkLoading.value = false
   }
+}
+
+// 图表日期点击事件
+const handleDateClick = ({ date, dimension }) => {
+  console.log('日期点击:', date, dimension)
+  // 可以根据点击的日期更新筛选条件
+  // 这里作为未来扩展预留
+}
+
+// 图表类型点击事件
+const handleTypeClick = ({ type }) => {
+  console.log('类型点击:', type)
+  // 根据点击的类型更新筛选条件
+  const typeMap = {
+    '节点未就绪': 'NotReady',
+    '内存压力': 'MemoryPressure',
+    '磁盘压力': 'DiskPressure',
+    'PID压力': 'PIDPressure',
+    '网络不可用': 'NetworkUnavailable'
+  }
+  filterForm.anomaly_type = typeMap[type] || type
+  handleFilterChange()
+}
+
+// 查看详情
+const handleViewDetail = (id) => {
+  router.push({ name: 'AnomalyDetail', params: { id } })
+}
+
+// 打开对比分析
+const handleOpenCompare = () => {
+  if (compareAnalysisRef.value) {
+    compareAnalysisRef.value.open()
+  }
+}
+
+// 关闭对比分析
+const handleCloseCompare = () => {
+  // 可以在这里添加关闭后的逻辑
 }
 
 // 导出数据
