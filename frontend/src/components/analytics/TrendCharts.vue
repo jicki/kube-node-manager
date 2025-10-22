@@ -11,7 +11,6 @@
           <el-radio-group v-model="trendDimension" size="small" @change="handleDimensionChange">
             <el-radio-button label="day">按天</el-radio-button>
             <el-radio-button label="week">按周</el-radio-button>
-            <el-radio-button label="month">按月</el-radio-button>
           </el-radio-group>
         </div>
       </template>
@@ -31,7 +30,7 @@
           <template #header>
             <div class="chart-header">
               <span class="chart-title">
-                <el-icon><PieChart /></el-icon>
+                <el-icon><PieChartIcon /></el-icon>
                 异常类型分布
               </span>
             </div>
@@ -58,7 +57,6 @@
             </div>
           </template>
           <v-chart 
-            v-loading="nodeLoading"
             class="chart small-chart" 
             :option="nodeChartOption" 
             :autoresize="true"
@@ -68,7 +66,7 @@
     </el-row>
 
     <!-- 集群对比柱状图 -->
-    <el-card v-if="clusterChartVisible" class="chart-card">
+    <el-card v-if="props.clusterId === null && clusters.length > 1" class="chart-card">
       <template #header>
         <div class="chart-header">
           <span class="chart-title">
@@ -117,6 +115,7 @@ use([
   DataZoomComponent
 ])
 
+// Props
 const props = defineProps({
   clusterId: {
     type: Number,
@@ -133,37 +132,114 @@ const props = defineProps({
   clusters: {
     type: Array,
     default: () => []
+  },
+  anomalies: {
+    type: Array,
+    default: () => []
   }
 })
 
-const emit = defineEmits(['dateClick', 'typeClick'])
-
-// 趋势维度
-const trendDimension = ref('day')
-
-// 加载状态
-const trendLoading = ref(false)
-const typeLoading = ref(false)
-const nodeLoading = ref(false)
-const clusterLoading = ref(false)
+// Emits
+const emit = defineEmits(['date-click', 'type-click'])
 
 // 数据
+const trendDimension = ref('day')
 const trendData = ref([])
 const typeData = ref([])
-const nodeData = ref([])
 const clusterData = ref([])
 
-// 集群对比是否可见（多集群时显示）
-const clusterChartVisible = computed(() => {
-  return !props.clusterId && props.clusters.length > 1
-})
+const trendLoading = ref(false)
+const typeLoading = ref(false)
+const clusterLoading = ref(false)
+
+// 类型名称映射
+const typeNameMap = {
+  'NotReady': '节点未就绪',
+  'MemoryPressure': '内存压力',
+  'DiskPressure': '磁盘压力',
+  'PIDPressure': 'PID压力',
+  'NetworkUnavailable': '网络不可用'
+}
+
+// ==================== 加载数据 ====================
+const loadTrendData = async () => {
+  trendLoading.value = true
+  try {
+    const params = {
+      start_time: props.startTime,
+      end_time: props.endTime,
+      dimension: trendDimension.value
+    }
+    if (props.clusterId) {
+      params.cluster_id = props.clusterId
+    }
+
+    const response = await getStatistics(params)
+    if (response.data && response.data.code === 200) {
+      trendData.value = response.data.data || []
+    }
+  } catch (error) {
+    console.error('Failed to load trend data:', error)
+    handleError(error, ErrorLevel.WARNING)
+  } finally {
+    trendLoading.value = false
+  }
+}
+
+const loadTypeData = async () => {
+  typeLoading.value = true
+  try {
+    const params = {
+      start_time: props.startTime,
+      end_time: props.endTime
+    }
+    if (props.clusterId) {
+      params.cluster_id = props.clusterId
+    }
+
+    const response = await getTypeStatistics(params)
+    if (response.data && response.data.code === 200) {
+      typeData.value = response.data.data || []
+    }
+  } catch (error) {
+    console.error('Failed to load type data:', error)
+    handleError(error, ErrorLevel.WARNING)
+  } finally {
+    typeLoading.value = false
+  }
+}
+
+const loadClusterData = async () => {
+  if (props.clusterId !== null) {
+    return
+  }
+
+  clusterLoading.value = true
+  try {
+    const params = {
+      start_time: props.startTime,
+      end_time: props.endTime,
+      dimension: 'cluster'
+    }
+
+    const response = await getStatistics(params)
+    if (response.data && response.data.code === 200) {
+      clusterData.value = response.data.data || []
+    }
+  } catch (error) {
+    console.error('Failed to load cluster data:', error)
+    handleError(error, ErrorLevel.WARNING)
+  } finally {
+    clusterLoading.value = false
+  }
+}
 
 // ==================== 异常趋势折线图 ====================
 const trendChartOption = computed(() => {
   const dates = trendData.value.map(item => item.date)
-  const activeCount = trendData.value.map(item => item.active_count || 0)
-  const resolvedCount = trendData.value.map(item => item.resolved_count || 0)
-  const totalCount = trendData.value.map(item => item.total_count || 0)
+  const totals = trendData.value.map(item => item.total_count || 0)
+  const actives = trendData.value.map(item => item.active_count || 0)
+  const resolveds = trendData.value.map(item => item.resolved_count || 0)
 
   return {
     tooltip: {
@@ -176,13 +252,14 @@ const trendChartOption = computed(() => {
       }
     },
     legend: {
-      data: ['活跃异常', '已恢复', '总数'],
+      data: ['总异常数', '活跃异常', '已恢复'],
       bottom: 10
     },
     grid: {
       left: '3%',
       right: '4%',
       bottom: '15%',
+      top: '3%',
       containLabel: true
     },
     xAxis: {
@@ -190,73 +267,54 @@ const trendChartOption = computed(() => {
       boundaryGap: false,
       data: dates,
       axisLabel: {
-        rotate: dates.length > 15 ? 45 : 0,
-        interval: dates.length > 30 ? Math.floor(dates.length / 20) : 0
+        rotate: dates.length > 10 ? 45 : 0
       }
     },
     yAxis: {
       type: 'value',
-      name: '异常数量',
+      name: '异常次数',
       minInterval: 1
     },
     series: [
       {
-        name: '活跃异常',
+        name: '总异常数',
         type: 'line',
-        data: activeCount,
+        data: totals,
         smooth: true,
-        itemStyle: { color: '#f56c6c' },
+        itemStyle: { color: '#409eff' },
         areaStyle: {
           color: {
             type: 'linear',
             x: 0, y: 0, x2: 0, y2: 1,
             colorStops: [
-              { offset: 0, color: 'rgba(245, 108, 108, 0.3)' },
-              { offset: 1, color: 'rgba(245, 108, 108, 0.05)' }
+              { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
+              { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
             ]
           }
-        },
-        emphasis: { focus: 'series' }
+        }
+      },
+      {
+        name: '活跃异常',
+        type: 'line',
+        data: actives,
+        smooth: true,
+        itemStyle: { color: '#f56c6c' }
       },
       {
         name: '已恢复',
         type: 'line',
-        data: resolvedCount,
+        data: resolveds,
         smooth: true,
-        itemStyle: { color: '#67c23a' },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(103, 194, 58, 0.3)' },
-              { offset: 1, color: 'rgba(103, 194, 58, 0.05)' }
-            ]
-          }
-        },
-        emphasis: { focus: 'series' }
-      },
-      {
-        name: '总数',
-        type: 'line',
-        data: totalCount,
-        smooth: true,
-        itemStyle: { color: '#409eff' },
-        lineStyle: { width: 2, type: 'dashed' },
-        emphasis: { focus: 'series' }
+        itemStyle: { color: '#67c23a' }
       }
     ],
-    dataZoom: dates.length > 30 ? [
+    dataZoom: dates.length > 10 ? [
       {
-        type: 'inside',
-        start: 70,
-        end: 100
-      },
-      {
-        start: 70,
+        type: 'slider',
+        start: 0,
         end: 100,
         height: 20,
-        bottom: 50
+        bottom: 40
       }
     ] : []
   }
@@ -265,7 +323,7 @@ const trendChartOption = computed(() => {
 // ==================== 异常类型分布饼图 ====================
 const typeChartOption = computed(() => {
   const data = typeData.value.map(item => ({
-    name: formatAnomalyType(item.anomaly_type),
+    name: typeNameMap[item.anomaly_type] || item.anomaly_type,
     value: item.total_count || 0
   }))
 
@@ -276,17 +334,15 @@ const typeChartOption = computed(() => {
     },
     legend: {
       orient: 'vertical',
-      right: 10,
-      top: 'center',
-      textStyle: { fontSize: 12 }
+      left: 'left',
+      data: data.map(item => item.name)
     },
     series: [
       {
         name: '异常类型',
         type: 'pie',
         radius: ['40%', '70%'],
-        center: ['40%', '50%'],
-        avoidLabelOverlap: true,
+        avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 10,
           borderColor: '#fff',
@@ -294,7 +350,7 @@ const typeChartOption = computed(() => {
         },
         label: {
           show: true,
-          formatter: '{b}: {d}%'
+          formatter: '{b}: {c}'
         },
         emphasis: {
           label: {
@@ -302,9 +358,6 @@ const typeChartOption = computed(() => {
             fontSize: 16,
             fontWeight: 'bold'
           }
-        },
-        labelLine: {
-          show: true
         },
         data: data,
         color: ['#f56c6c', '#e6a23c', '#909399', '#67c23a', '#409eff']
@@ -315,21 +368,34 @@ const typeChartOption = computed(() => {
 
 // ==================== 节点异常排行榜 ====================
 const nodeChartOption = computed(() => {
-  // 从 trendData 中提取节点统计（这里简化处理，实际可能需要后端提供专门的节点排行接口）
+  // 从 anomalies prop 中聚合节点统计
   const nodeStats = {}
   
-  // 模拟数据处理（实际应该从后端获取）
-  trendData.value.forEach(item => {
-    if (item.node_stats) {
-      Object.entries(item.node_stats).forEach(([node, count]) => {
-        nodeStats[node] = (nodeStats[node] || 0) + count
-      })
+  props.anomalies.forEach(anomaly => {
+    const nodeName = anomaly.node_name
+    if (nodeName) {
+      nodeStats[nodeName] = (nodeStats[nodeName] || 0) + 1
     }
   })
 
   const sortedNodes = Object.entries(nodeStats)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
+
+  if (sortedNodes.length === 0) {
+    // 空数据处理
+    return {
+      title: {
+        text: '暂无数据',
+        left: 'center',
+        top: 'center',
+        textStyle: {
+          color: '#909399',
+          fontSize: 14
+        }
+      }
+    }
+  }
 
   const nodes = sortedNodes.map(([node]) => node.length > 20 ? node.substring(0, 20) + '...' : node)
   const counts = sortedNodes.map(([, count]) => count)
@@ -398,8 +464,7 @@ const clusterChartOption = computed(() => {
     const cluster = props.clusters.find(c => c.id === item.cluster_id)
     return cluster ? cluster.name : `集群 ${item.cluster_id}`
   })
-  const activeCount = clusterData.value.map(item => item.active_count || 0)
-  const resolvedCount = clusterData.value.map(item => item.resolved_count || 0)
+  const counts = clusterData.value.map(item => item.total_count || 0)
 
   return {
     tooltip: {
@@ -408,14 +473,11 @@ const clusterChartOption = computed(() => {
         type: 'shadow'
       }
     },
-    legend: {
-      data: ['活跃异常', '已恢复'],
-      bottom: 10
-    },
     grid: {
       left: '3%',
       right: '4%',
-      bottom: '15%',
+      bottom: '3%',
+      top: '3%',
       containLabel: true
     },
     xAxis: {
@@ -423,112 +485,44 @@ const clusterChartOption = computed(() => {
       data: clusterNames,
       axisLabel: {
         interval: 0,
-        rotate: clusterNames.length > 5 ? 30 : 0
+        rotate: 30
       }
     },
     yAxis: {
       type: 'value',
-      name: '异常数量',
+      name: '异常总数',
       minInterval: 1
     },
     series: [
       {
-        name: '活跃异常',
+        name: '异常总数',
         type: 'bar',
-        data: activeCount,
-        itemStyle: { color: '#f56c6c' },
+        data: counts,
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 1, x2: 0, y2: 0,
+            colorStops: [
+              { offset: 0, color: '#409eff' },
+              { offset: 1, color: '#67c23a' }
+            ]
+          },
+          borderRadius: [5, 5, 0, 0]
+        },
         label: {
           show: true,
-          position: 'top'
-        }
-      },
-      {
-        name: '已恢复',
-        type: 'bar',
-        data: resolvedCount,
-        itemStyle: { color: '#67c23a' },
-        label: {
-          show: true,
-          position: 'top'
+          position: 'top',
+          formatter: '{c}'
+        },
+        emphasis: {
+          itemStyle: {
+            color: '#f56c6c'
+          }
         }
       }
     ]
   }
 })
-
-// ==================== 数据加载 ====================
-const loadTrendData = async () => {
-  trendLoading.value = true
-  try {
-    const response = await getStatistics({
-      cluster_id: props.clusterId,
-      start_time: props.startTime,
-      end_time: props.endTime,
-      dimension: trendDimension.value
-    })
-    trendData.value = response.data.data || []
-  } catch (error) {
-    handleError(error, ErrorLevel.ERROR, { title: '加载趋势数据失败' })
-    trendData.value = []
-  } finally {
-    trendLoading.value = false
-  }
-}
-
-const loadTypeData = async () => {
-  typeLoading.value = true
-  try {
-    const response = await getTypeStatistics({
-      cluster_id: props.clusterId,
-      start_time: props.startTime,
-      end_time: props.endTime
-    })
-    typeData.value = response.data.data || []
-  } catch (error) {
-    handleError(error, ErrorLevel.ERROR, { title: '加载类型分布数据失败' })
-    typeData.value = []
-  } finally {
-    typeLoading.value = false
-  }
-}
-
-const loadClusterData = async () => {
-  if (!clusterChartVisible.value) return
-  
-  clusterLoading.value = true
-  try {
-    // 为每个集群获取统计数据
-    const promises = props.clusters.map(cluster =>
-      getStatistics({
-        cluster_id: cluster.id,
-        start_time: props.startTime,
-        end_time: props.endTime,
-        dimension: 'total'
-      })
-    )
-    
-    const results = await Promise.all(promises)
-    clusterData.value = results.map((response, index) => {
-      const stats = response.data.data?.[0] || {}
-      return {
-        cluster_id: props.clusters[index].id,
-        active_count: stats.active_count || 0,
-        resolved_count: stats.resolved_count || 0
-      }
-    })
-  } catch (error) {
-    handleError(error, ErrorLevel.ERROR, { title: '加载集群对比数据失败' })
-    clusterData.value = []
-  } finally {
-    clusterLoading.value = false
-  }
-}
-
-const loadAllData = () => {
-  loadTrendData()
-  loadTypeData()
-  loadClusterData()
-}
 
 // ==================== 事件处理 ====================
 const handleDimensionChange = () => {
@@ -537,7 +531,7 @@ const handleDimensionChange = () => {
 
 const handleTrendClick = (params) => {
   if (params.componentType === 'series') {
-    emit('dateClick', {
+    emit('date-click', {
       date: params.name,
       dimension: trendDimension.value
     })
@@ -546,42 +540,42 @@ const handleTrendClick = (params) => {
 
 const handleTypeClick = (params) => {
   if (params.componentType === 'series') {
-    emit('typeClick', {
-      type: params.data.name
+    emit('type-click', {
+      type: params.name
     })
   }
 }
 
-// ==================== 工具函数 ====================
-const formatAnomalyType = (type) => {
-  const typeMap = {
-    'NotReady': '节点未就绪',
-    'MemoryPressure': '内存压力',
-    'DiskPressure': '磁盘压力',
-    'PIDPressure': 'PID压力',
-    'NetworkUnavailable': '网络不可用'
-  }
-  return typeMap[type] || type
+// ==================== 刷新方法 ====================
+const refresh = () => {
+  loadTrendData()
+  loadTypeData()
+  loadClusterData()
 }
 
-// ==================== 监听和生命周期 ====================
-watch(() => [props.clusterId, props.startTime, props.endTime], () => {
-  loadAllData()
-}, { deep: true })
-
-onMounted(() => {
-  loadAllData()
+// 暴露方法给父组件
+defineExpose({
+  refresh
 })
 
-// 暴露刷新方法
-defineExpose({
-  refresh: loadAllData
+// ==================== 监听 props 变化 ====================
+watch(() => [props.clusterId, props.startTime, props.endTime], () => {
+  loadTrendData()
+  loadTypeData()
+  loadClusterData()
+}, { immediate: false })
+
+// ==================== 初始化 ====================
+onMounted(() => {
+  loadTrendData()
+  loadTypeData()
+  loadClusterData()
 })
 </script>
 
 <style scoped>
 .trend-charts {
-  margin-top: 20px;
+  width: 100%;
 }
 
 .chart-card {
@@ -599,7 +593,7 @@ defineExpose({
   align-items: center;
   gap: 8px;
   font-size: 16px;
-  font-weight: bold;
+  font-weight: 600;
 }
 
 .chart {
@@ -610,22 +604,4 @@ defineExpose({
 .small-chart {
   height: 350px;
 }
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .chart {
-    height: 300px;
-  }
-  
-  .small-chart {
-    height: 280px;
-  }
-  
-  .chart-header {
-    flex-direction: column;
-    gap: 10px;
-    align-items: flex-start;
-  }
-}
 </style>
-

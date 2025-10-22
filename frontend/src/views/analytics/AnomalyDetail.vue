@@ -164,42 +164,6 @@
         </el-row>
       </el-card>
 
-      <!-- 处理建议 -->
-      <el-card class="suggestion-card">
-        <template #header>
-          <div class="card-header">
-            <span class="card-title">
-              <el-icon><MagicStick /></el-icon>
-              处理建议
-            </span>
-          </div>
-        </template>
-
-        <el-alert
-          v-for="(suggestion, index) in suggestions"
-          :key="index"
-          :title="suggestion.title"
-          :type="suggestion.type"
-          :description="suggestion.description"
-          show-icon
-          :closable="false"
-          class="suggestion-alert"
-        >
-          <template v-if="suggestion.steps" #default>
-            <div class="suggestion-steps">
-              <p><strong>操作步骤：</strong></p>
-              <ol>
-                <li v-for="(step, stepIndex) in suggestion.steps" :key="stepIndex">
-                  {{ step }}
-                </li>
-              </ol>
-            </div>
-          </template>
-        </el-alert>
-
-        <el-empty v-if="suggestions.length === 0" description="暂无处理建议" />
-      </el-card>
-
       <!-- 历史记录 -->
       <el-card class="history-card">
         <template #header>
@@ -257,7 +221,6 @@ import {
   InfoFilled,
   Clock,
   Monitor,
-  MagicStick,
   Document,
   Warning,
   CircleCheck,
@@ -350,85 +313,6 @@ const timeline = computed(() => {
   }
   
   return events
-})
-
-// 处理建议
-const suggestions = computed(() => {
-  const type = anomaly.value.anomaly_type
-  const suggestionMap = {
-    'NotReady': [
-      {
-        title: '节点未就绪处理建议',
-        type: 'error',
-        description: '节点未就绪通常表示 Kubelet 服务异常或节点与 API Server 通信中断。',
-        steps: [
-          '检查节点网络连接是否正常',
-          '检查 Kubelet 服务状态：systemctl status kubelet',
-          '查看 Kubelet 日志：journalctl -u kubelet -f',
-          '检查节点资源（CPU、内存、磁盘）是否充足',
-          '如节点持续未就绪，考虑重启 Kubelet 或节点'
-        ]
-      }
-    ],
-    'MemoryPressure': [
-      {
-        title: '内存压力处理建议',
-        type: 'warning',
-        description: '节点可用内存不足，可能影响 Pod 调度和运行。',
-        steps: [
-          '检查节点内存使用情况：free -h',
-          '识别高内存消耗的进程：top 或 htop',
-          '检查是否有内存泄漏的容器',
-          '考虑驱逐部分低优先级 Pod',
-          '升级节点内存或添加新节点'
-        ]
-      }
-    ],
-    'DiskPressure': [
-      {
-        title: '磁盘压力处理建议',
-        type: 'warning',
-        description: '节点磁盘空间不足，可能导致镜像拉取失败和容器启动异常。',
-        steps: [
-          '检查磁盘使用情况：df -h',
-          '清理未使用的容器镜像：docker system prune -a',
-          '清理 Kubelet 垃圾：kubectl delete pod --field-selector status.phase=Failed',
-          '检查日志文件占用：du -sh /var/log/*',
-          '扩容磁盘或添加新的存储卷'
-        ]
-      }
-    ],
-    'PIDPressure': [
-      {
-        title: 'PID压力处理建议',
-        type: 'warning',
-        description: '节点进程数接近上限，可能无法创建新进程。',
-        steps: [
-          '检查当前进程数：ps aux | wc -l',
-          '识别异常创建大量进程的应用',
-          '调整节点 PID 限制：sysctl kernel.pid_max',
-          '限制容器进程数：通过 PodSecurityPolicy 或 LimitRange',
-          '重启异常容器或节点'
-        ]
-      }
-    ],
-    'NetworkUnavailable': [
-      {
-        title: '网络不可用处理建议',
-        type: 'error',
-        description: '节点网络配置异常，无法正常通信。',
-        steps: [
-          '检查网络插件状态（如 Calico、Flannel）',
-          '验证节点网络配置：ip addr show',
-          '检查路由表：ip route show',
-          '测试节点间网络连通性：ping <other-node>',
-          '重启网络服务或重新部署网络插件'
-        ]
-      }
-    ]
-  }
-  
-  return suggestionMap[type] || []
 })
 
 // 加载异常详情
@@ -621,25 +505,6 @@ onMounted(() => {
   font-size: 18px;
   font-weight: bold;
   color: #303133;
-}
-
-/* 处理建议样式 */
-.suggestion-alert {
-  margin-bottom: 15px;
-}
-
-.suggestion-steps {
-  margin-top: 10px;
-}
-
-.suggestion-steps ol {
-  margin: 10px 0 0 20px;
-  padding: 0;
-}
-
-.suggestion-steps li {
-  margin: 5px 0;
-  line-height: 1.6;
 }
 
 /* 响应式设计 */

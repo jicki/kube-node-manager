@@ -19,22 +19,6 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="异常类型">
-          <el-select
-            v-model="filterForm.anomaly_type"
-            placeholder="请选择异常类型"
-            clearable
-            style="width: 180px"
-            @change="handleFilterChange"
-          >
-            <el-option label="NotReady" value="NotReady" />
-            <el-option label="MemoryPressure" value="MemoryPressure" />
-            <el-option label="DiskPressure" value="DiskPressure" />
-            <el-option label="PIDPressure" value="PIDPressure" />
-            <el-option label="NetworkUnavailable" value="NetworkUnavailable" />
-          </el-select>
-        </el-form-item>
-
         <el-form-item label="时间范围">
           <el-date-picker
             v-model="filterForm.dateRange"
@@ -45,13 +29,6 @@
             value-format="YYYY-MM-DD"
             @change="handleFilterChange"
           />
-        </el-form-item>
-
-        <el-form-item label="统计维度">
-          <el-radio-group v-model="filterForm.dimension" @change="handleFilterChange">
-            <el-radio-button label="day">按天</el-radio-button>
-            <el-radio-button label="week">按周</el-radio-button>
-          </el-radio-group>
         </el-form-item>
 
         <el-form-item>
@@ -68,178 +45,190 @@
           >
             手动检测
           </el-button>
-          <el-button
-            type="warning"
-            :icon="DataLine"
-            @click="handleOpenCompare"
-          >
-            对比分析
-          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <!-- 对比分析对话框 -->
-    <CompareAnalysis
-      ref="compareAnalysisRef"
-      :clusters="clusters"
-      @close="handleCloseCompare"
-    />
+    <!-- Tab 分栏结构 -->
+    <el-tabs v-model="activeTab" class="analytics-tabs">
+      <!-- 概览面板 -->
+      <el-tab-pane label="数据概览" name="overview">
+        <!-- 统计卡片区 -->
+        <el-row :gutter="20" class="stats-row">
+          <el-col :span="6">
+            <el-card shadow="hover" class="stat-card">
+              <div class="stat-content">
+                <div class="stat-icon total">
+                  <el-icon><DataAnalysis /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-value">{{ summary.totalCount }}</div>
+                  <div class="stat-label">总异常数</div>
+                </div>
+              </div>
+            </el-card>
+          </el-col>
 
-    <!-- 统计卡片区 -->
-    <el-row :gutter="20" class="stats-row">
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon total">
-              <el-icon><DataAnalysis /></el-icon>
+          <el-col :span="6">
+            <el-card shadow="hover" class="stat-card">
+              <div class="stat-content">
+                <div class="stat-icon active">
+                  <el-icon><Warning /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-value">{{ summary.activeCount }}</div>
+                  <div class="stat-label">活跃异常</div>
+                </div>
+              </div>
+            </el-card>
+          </el-col>
+
+          <el-col :span="6">
+            <el-card shadow="hover" class="stat-card">
+              <div class="stat-content">
+                <div class="stat-icon resolved">
+                  <el-icon><CircleCheck /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-value">{{ summary.resolvedCount }}</div>
+                  <div class="stat-label">已恢复异常</div>
+                </div>
+              </div>
+            </el-card>
+          </el-col>
+
+          <el-col :span="6">
+            <el-card shadow="hover" class="stat-card">
+              <div class="stat-content">
+                <div class="stat-icon nodes">
+                  <el-icon><Monitor /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-value">{{ summary.affectedNodes }}</div>
+                  <div class="stat-label">受影响节点</div>
+                </div>
+              </div>
+            </el-card>
+          </el-col>
+        </el-row>
+      </el-tab-pane>
+
+      <!-- 趋势分析面板 -->
+      <el-tab-pane label="趋势分析" name="trend">
+        <TrendCharts
+          :cluster-id="filterForm.cluster_id"
+          :start-time="computedStartTime"
+          :end-time="computedEndTime"
+          :clusters="clusters"
+          :anomalies="tableData"
+          @date-click="handleDateClick"
+          @type-click="handleTypeClick"
+          ref="trendChartsRef"
+        />
+      </el-tab-pane>
+
+      <!-- 异常记录面板 -->
+      <el-tab-pane label="异常记录" name="records">
+        <el-card class="table-card">
+          <template #header>
+            <div class="card-header">
+              <span>异常记录列表</span>
+              <div>
+                <el-select
+                  v-model="filterForm.anomaly_type"
+                  placeholder="异常类型"
+                  clearable
+                  style="width: 180px; margin-right: 10px"
+                  @change="handleFilterChange"
+                >
+                  <el-option label="NotReady" value="NotReady" />
+                  <el-option label="MemoryPressure" value="MemoryPressure" />
+                  <el-option label="DiskPressure" value="DiskPressure" />
+                  <el-option label="PIDPressure" value="PIDPressure" />
+                  <el-option label="NetworkUnavailable" value="NetworkUnavailable" />
+                </el-select>
+                <el-button type="primary" :icon="Download" size="small" @click="handleExport">
+                  导出
+                </el-button>
+              </div>
             </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ summary.totalCount }}</div>
-              <div class="stat-label">总异常次数</div>
-            </div>
-          </div>
+          </template>
+
+          <!-- 空状态 -->
+          <EmptyState
+            v-if="!tableLoading && tableData.length === 0"
+            type="success"
+            title="集群运行健康"
+            description="当前时间范围内暂无异常记录，系统运行正常"
+            :action="{
+              text: '刷新数据',
+              handler: handleSearch
+            }"
+          />
+
+          <el-table
+            v-else
+            v-loading="tableLoading"
+            :data="tableData"
+            stripe
+            border
+            style="width: 100%"
+          >
+            <el-table-column prop="id" label="ID" width="80" />
+            <el-table-column prop="cluster_name" label="集群" width="150" />
+            <el-table-column prop="node_name" label="节点" width="200" />
+            <el-table-column label="异常类型" width="180">
+              <template #default="{ row }">
+                <el-tag :type="getAnomalyTypeColor(row.anomaly_type)">
+                  {{ row.anomaly_type }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'Active' ? 'danger' : 'success'">
+                  {{ row.status === 'Active' ? '进行中' : '已恢复' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="开始时间" width="180">
+              <template #default="{ row }">
+                {{ formatDateTime(row.start_time) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="结束时间" width="180">
+              <template #default="{ row }">
+                {{ row.end_time ? formatDateTime(row.end_time) : '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="持续时长" width="120">
+              <template #default="{ row }">
+                {{ formatDuration(row) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="reason" label="原因" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="message" label="详细信息" min-width="200" show-overflow-tooltip />
+            <el-table-column label="操作" width="120" fixed="right">
+              <template #default="{ row }">
+                <el-button type="primary" size="small" link @click="handleViewDetail(row.id)">
+                  查看详情
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <el-pagination
+            v-model:current-page="pagination.page"
+            v-model:page-size="pagination.pageSize"
+            :total="pagination.total"
+            :page-sizes="[10, 20, 50, 100]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @size-change="handlePageSizeChange"
+            @current-change="handlePageChange"
+          />
         </el-card>
-      </el-col>
-
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon active">
-              <el-icon><Warning /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ summary.activeCount }}</div>
-              <div class="stat-label">活跃异常</div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon resolved">
-              <el-icon><CircleCheck /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ summary.resolvedCount }}</div>
-              <div class="stat-label">已恢复异常</div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-content">
-            <div class="stat-icon nodes">
-              <el-icon><Monitor /></el-icon>
-            </div>
-            <div class="stat-info">
-              <div class="stat-value">{{ summary.affectedNodes }}</div>
-              <div class="stat-label">受影响节点</div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- 趋势图表区 -->
-    <TrendCharts
-      :cluster-id="filterForm.cluster_id"
-      :start-time="computedStartTime"
-      :end-time="computedEndTime"
-      :clusters="clusters"
-      @date-click="handleDateClick"
-      @type-click="handleTypeClick"
-      ref="trendChartsRef"
-    />
-
-    <!-- 异常记录列表 -->
-    <el-card class="table-card">
-      <template #header>
-        <div class="card-header">
-          <span>异常记录列表</span>
-          <el-button type="primary" :icon="Download" size="small" @click="handleExport">
-            导出
-          </el-button>
-        </div>
-      </template>
-
-      <!-- 空状态 -->
-      <EmptyState
-        v-if="!tableLoading && tableData.length === 0"
-        type="success"
-        title="集群运行健康"
-        description="当前时间范围内暂无异常记录，系统运行正常"
-        :action="{
-          text: '刷新数据',
-          handler: handleSearch
-        }"
-      />
-
-      <el-table
-        v-else
-        v-loading="tableLoading"
-        :data="tableData"
-        stripe
-        border
-        style="width: 100%"
-      >
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="cluster_name" label="集群" width="150" />
-        <el-table-column prop="node_name" label="节点" width="200" />
-        <el-table-column label="异常类型" width="180">
-          <template #default="{ row }">
-            <el-tag :type="getAnomalyTypeColor(row.anomaly_type)">
-              {{ row.anomaly_type }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'Active' ? 'danger' : 'success'">
-              {{ row.status === 'Active' ? '进行中' : '已恢复' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="开始时间" width="180">
-          <template #default="{ row }">
-            {{ formatDateTime(row.start_time) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="结束时间" width="180">
-          <template #default="{ row }">
-            {{ row.end_time ? formatDateTime(row.end_time) : '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="持续时长" width="120">
-          <template #default="{ row }">
-            {{ formatDuration(row) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="reason" label="原因" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="message" label="详细信息" min-width="200" show-overflow-tooltip />
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" size="small" link @click="handleViewDetail(row.id)">
-              查看详情
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.pageSize"
-        :total="pagination.total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next, jumper"
-        @size-change="handlePageSizeChange"
-        @current-change="handlePageChange"
-      />
-    </el-card>
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
@@ -251,7 +240,6 @@ import {
   RefreshRight,
   Download,
   DataAnalysis,
-  DataLine,
   Warning,
   CircleCheck,
   Monitor
@@ -263,7 +251,6 @@ import { useAuthStore } from '@/store/modules/auth'
 import { usePageVisibility } from '@/composables/usePageVisibility'
 import EmptyState from '@/components/common/EmptyState.vue'
 import TrendCharts from '@/components/analytics/TrendCharts.vue'
-import CompareAnalysis from '@/components/analytics/CompareAnalysis.vue'
 import { handleError, showSuccess, showWarning, ErrorLevel } from '@/utils/errorHandler'
 
 const router = useRouter()
@@ -273,8 +260,8 @@ const userRole = computed(() => authStore.userInfo?.role || '')
 // 趋势图表引用
 const trendChartsRef = ref(null)
 
-// 对比分析引用
-const compareAnalysisRef = ref(null)
+// 当前激活的Tab
+const activeTab = ref('overview')
 
 // 页面可见性检测
 const { isVisible } = usePageVisibility()
@@ -347,20 +334,19 @@ const loadClusters = async () => {
   }
 }
 
-// 加载活跃异常统计
+// 加载活跃异常摘要
 const loadActiveSummary = async () => {
   try {
     const response = await getActiveAnomalies(filterForm.cluster_id)
     if (response.data && response.data.code === 200) {
-      const activeAnomalies = response.data.data || []
-      summary.activeCount = activeAnomalies.length
-      
-      // 计算受影响节点数
-      const nodeSet = new Set(activeAnomalies.map(a => a.node_name))
-      summary.affectedNodes = nodeSet.size
+      const data = response.data.data || {}
+      summary.totalCount = data.total_count || 0
+      summary.activeCount = data.active_count || 0
+      summary.resolvedCount = data.resolved_count || 0
+      summary.affectedNodes = data.affected_nodes || 0
     }
   } catch (error) {
-    console.error('Failed to load active anomalies:', error)
+    console.error('Failed to load active summary:', error)
   }
 }
 
@@ -380,8 +366,8 @@ const loadAnomalies = async () => {
       params.anomaly_type = filterForm.anomaly_type
     }
     if (filterForm.dateRange && filterForm.dateRange.length === 2) {
-      params.start_time = new Date(filterForm.dateRange[0] + 'T00:00:00Z').toISOString()
-      params.end_time = new Date(filterForm.dateRange[1] + 'T23:59:59Z').toISOString()
+      params.start_time = new Date(filterForm.dateRange[0]).toISOString()
+      params.end_time = new Date(filterForm.dateRange[1]).toISOString()
     }
 
     const response = await getAnomalies(params)
@@ -482,24 +468,13 @@ const handleTypeClick = ({ type }) => {
     '网络不可用': 'NetworkUnavailable'
   }
   filterForm.anomaly_type = typeMap[type] || type
+  activeTab.value = 'records' // 切换到记录Tab
   handleFilterChange()
 }
 
 // 查看详情
 const handleViewDetail = (id) => {
   router.push({ name: 'AnomalyDetail', params: { id } })
-}
-
-// 打开对比分析
-const handleOpenCompare = () => {
-  if (compareAnalysisRef.value) {
-    compareAnalysisRef.value.open()
-  }
-}
-
-// 关闭对比分析
-const handleCloseCompare = () => {
-  // 可以在这里添加关闭后的逻辑
 }
 
 // 导出数据
@@ -520,8 +495,8 @@ const handleExport = () => {
     formatDateTime(row.start_time),
     row.end_time ? formatDateTime(row.end_time) : '-',
     formatDuration(row),
-    row.reason || '-',
-    row.message || '-'
+    row.reason,
+    row.message
   ])
 
   const csvContent = [
@@ -532,18 +507,17 @@ const handleExport = () => {
   const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
-  link.download = `node-anomalies-${new Date().getTime()}.csv`
+  link.download = `anomalies_${new Date().toISOString().split('T')[0]}.csv`
   link.click()
-  URL.revokeObjectURL(link.href)
   
   showSuccess('导出成功')
 }
 
 // 格式化日期时间
-const formatDateTime = (dateString) => {
-  if (!dateString) return '-'
-  const date = new Date(dateString)
-  return date.toLocaleString('zh-CN', { 
+const formatDateTime = (dateTime) => {
+  if (!dateTime) return '-'
+  const date = new Date(dateTime)
+  return date.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -555,28 +529,17 @@ const formatDateTime = (dateString) => {
 
 // 格式化持续时长
 const formatDuration = (row) => {
-  let seconds = row.duration
-  
-  // 如果是活跃状态，计算到当前时间的持续时长
-  if (row.status === 'Active' && row.start_time) {
-    const startTime = new Date(row.start_time)
-    const now = new Date()
-    seconds = Math.floor((now - startTime) / 1000)
-  }
-  
-  if (seconds < 60) {
-    return `${seconds}秒`
-  } else if (seconds < 3600) {
-    const minutes = Math.floor(seconds / 60)
-    return `${minutes}分钟`
-  } else if (seconds < 86400) {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    return `${hours}小时${minutes}分钟`
+  const duration = row.duration || 0
+  if (duration < 60) {
+    return `${duration}秒`
+  } else if (duration < 3600) {
+    const minutes = Math.floor(duration / 60)
+    const seconds = duration % 60
+    return `${minutes}分${seconds}秒`
   } else {
-    const days = Math.floor(seconds / 86400)
-    const hours = Math.floor((seconds % 86400) / 3600)
-    return `${days}天${hours}小时`
+    const hours = Math.floor(duration / 3600)
+    const minutes = Math.floor((duration % 3600) / 60)
+    return `${hours}小时${minutes}分`
   }
 }
 
@@ -649,8 +612,13 @@ onUnmounted(() => {
 }
 
 .filter-form {
-  display: flex;
-  flex-wrap: wrap;
+  margin-bottom: 0;
+}
+
+.analytics-tabs {
+  background: white;
+  padding: 20px;
+  border-radius: 4px;
 }
 
 .stats-row {
@@ -669,18 +637,18 @@ onUnmounted(() => {
 .stat-content {
   display: flex;
   align-items: center;
-  padding: 10px;
+  padding: 10px 0;
 }
 
 .stat-icon {
   width: 60px;
   height: 60px;
-  border-radius: 50%;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 28px;
-  margin-right: 20px;
+  margin-right: 15px;
 }
 
 .stat-icon.total {
@@ -712,7 +680,7 @@ onUnmounted(() => {
   font-weight: bold;
   color: #303133;
   line-height: 1;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .stat-label {
@@ -730,10 +698,8 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.el-pagination {
+:deep(.el-pagination) {
   margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
+  text-align: right;
 }
 </style>
-
