@@ -320,7 +320,18 @@ const trendChartOption = computed(() => {
       axisPointer: {
         type: 'cross',
         label: {
-          backgroundColor: '#6a7985'
+          backgroundColor: '#6a7985',
+          formatter: function(params) {
+            // ✅ axisPointer 的标签也只显示日期
+            if (params.axisDimension === 'x') {
+              const value = params.value
+              if (value && value.includes && value.includes('T')) {
+                return value.split('T')[0]
+              }
+              return value
+            }
+            return params.value
+          }
         }
       },
       formatter: function(params) {

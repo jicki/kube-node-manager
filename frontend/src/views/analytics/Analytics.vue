@@ -325,10 +325,17 @@ const computedEndTime = computed(() => {
 
 // 加载集群列表
 const loadClusters = async () => {
+  console.log('Loading clusters...')
   try {
     const response = await clusterApi.getClusters()
+    console.log('Clusters API response:', response.data)
+    
     if (response.data && response.data.code === 200) {
       clusters.value = response.data.data?.clusters || []
+      console.log('Loaded clusters:', clusters.value)
+      console.log('Clusters count:', clusters.value.length)
+    } else {
+      console.warn('Invalid clusters response:', response)
     }
   } catch (error) {
     console.error('Failed to load clusters:', error)
