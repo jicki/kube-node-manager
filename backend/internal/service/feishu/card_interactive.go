@@ -293,13 +293,19 @@ func BuildClusterListCardWithActions(clusters []map[string]interface{}, currentC
 			nodeCount = n
 		}
 
+		// 获取集群版本
+		version := "未知"
+		if v, ok := cluster["version"].(string); ok && v != "" {
+			version = v
+		}
+
 		isCurrent := clusterName == currentCluster
 		clusterPrefix := ""
 		if isCurrent {
 			clusterPrefix = "👉 "
 		}
 
-		clusterInfo := fmt.Sprintf("%s**%s**\n状态: %s | 节点: %d", clusterPrefix, clusterName, status, nodeCount)
+		clusterInfo := fmt.Sprintf("%s**%s**\n状态: %s | 节点: %d | 版本: %s", clusterPrefix, clusterName, status, nodeCount, version)
 
 		elements = append(elements, map[string]interface{}{
 			"tag": "div",

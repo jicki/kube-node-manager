@@ -73,9 +73,10 @@ func (h *ClusterCommandHandler) handleListClusters(ctx *CommandContext) (*Comman
 		}
 
 		clusters = append(clusters, map[string]interface{}{
-			"name":   c.Name,
-			"status": status,
-			"nodes":  c.NodeCount,
+			"name":    c.Name,
+			"status":  status,
+			"nodes":   c.NodeCount,
+			"version": c.Version,
 		})
 	}
 

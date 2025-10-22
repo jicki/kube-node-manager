@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"kube-node-manager/internal/service/k8s"
 	"strings"
+	"time"
 )
 
 // BuildErrorCard builds an error message card
@@ -164,6 +165,7 @@ func BuildHelpCard() string {
 
 **节点管理命令**
 /node list - 查看当前集群的节点列表
+/node list <关键词> - 模糊搜索节点（如: /node list 10-3）
 /node info <节点名> - 查看节点详情
 /node cordon <节点名> [原因] - 禁止调度
 /node uncordon <节点名> - 恢复调度节点
@@ -1566,7 +1568,34 @@ func BuildQuickNodesCard(clusterName string, nodes interface{}) string {
 				schedulable = "⛔ 禁止调度"
 			}
 
-			nodeInfo := fmt.Sprintf("**`%s`**\n状态: %s | 调度: %s", n.Name, status, schedulable)
+			// 获取异常开始时间
+			var abnormalSince string
+			if n.Status != "Ready" {
+				// 从 Conditions 中查找 Ready 状态的 LastTransitionTime
+				for _, cond := range n.Conditions {
+					if cond.Type == "Ready" && cond.Status != "True" {
+						duration := time.Since(cond.LastTransitionTime)
+						if duration < time.Minute {
+							abnormalSince = fmt.Sprintf("%.0f秒", duration.Seconds())
+						} else if duration < time.Hour {
+							abnormalSince = fmt.Sprintf("%.0f分钟", duration.Minutes())
+						} else if duration < 24*time.Hour {
+							abnormalSince = fmt.Sprintf("%.1f小时", duration.Hours())
+						} else {
+							abnormalSince = fmt.Sprintf("%.1f天", duration.Hours()/24)
+						}
+						break
+					}
+				}
+			}
+
+			// 构建节点信息
+			var nodeInfo string
+			if abnormalSince != "" {
+				nodeInfo = fmt.Sprintf("**`%s`**\n状态: %s | 调度: %s | 异常时长: %s", n.Name, status, schedulable, abnormalSince)
+			} else {
+				nodeInfo = fmt.Sprintf("**`%s`**\n状态: %s | 调度: %s", n.Name, status, schedulable)
+			}
 
 			elements = append(elements, map[string]interface{}{
 				"tag": "div",
