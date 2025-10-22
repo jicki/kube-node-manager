@@ -948,19 +948,30 @@ func (s *Service) getNodeIPs(node *corev1.Node) (internalIP, externalIP string) 
 
 // getNodeStatus 获取节点状态
 func (s *Service) getNodeStatus(node *corev1.Node) string {
-	if node.Spec.Unschedulable {
-		return "SchedulingDisabled"
-	}
-
+	// 首先检查节点的 Ready 状态
+	var readyStatus string
 	for _, condition := range node.Status.Conditions {
 		if condition.Type == corev1.NodeReady {
 			if condition.Status == corev1.ConditionTrue {
-				return "Ready"
+				readyStatus = "Ready"
+			} else {
+				readyStatus = "NotReady"
 			}
-			return "NotReady"
+			break
 		}
 	}
-	return "Unknown"
+
+	// 如果没有找到 Ready condition，默认为 Unknown
+	if readyStatus == "" {
+		readyStatus = "Unknown"
+	}
+
+	// 如果节点被禁止调度，添加 SchedulingDisabled 标记
+	if node.Spec.Unschedulable {
+		return readyStatus + ",SchedulingDisabled"
+	}
+
+	return readyStatus
 }
 
 // getAge 计算年龄
