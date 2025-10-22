@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"kube-node-manager/internal/handler/anomaly"
 	"kube-node-manager/internal/handler/audit"
 	"kube-node-manager/internal/handler/auth"
 	"kube-node-manager/internal/handler/cluster"
@@ -26,6 +27,7 @@ type Handlers struct {
 	Progress *progress.Handler
 	Gitlab   *gitlab.Handler
 	Feishu   *feishu.Handler
+	Anomaly  *anomaly.Handler
 }
 
 func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
@@ -40,5 +42,6 @@ func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
 		Progress: progress.NewHandler(services.Progress, logger),
 		Gitlab:   gitlab.NewHandler(services.Gitlab, logger),
 		Feishu:   feishu.NewHandler(services.Feishu, services.Audit, logger),
+		Anomaly:  anomaly.NewHandler(services.Anomaly, logger),
 	}
 }

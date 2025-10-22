@@ -94,6 +94,12 @@ const router = createRouter({
           name: 'FeishuGroups',
           component: () => import('@/views/feishu/FeishuGroups.vue'),
           meta: { title: '飞书群组', icon: 'ChatDotSquare', requiresAuth: true }
+        },
+        {
+          path: 'analytics',
+          name: 'Analytics',
+          component: () => import('@/views/analytics/Analytics.vue'),
+          meta: { title: '统计分析', icon: 'DataAnalysis', requiresAuth: true }
         }
       ]
     },

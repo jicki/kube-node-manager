@@ -66,6 +66,9 @@ func main() {
 		}
 	}()
 
+	// 启动节点异常监控服务
+	services.Anomaly.StartMonitoring()
+
 	router := gin.Default()
 
 	// 在生产模式下不需要CORS，因为前后端在同一域名下
@@ -104,7 +107,7 @@ func main() {
 	}()
 
 	// 优雅关闭
-	gracefulShutdown(srv, db, logger)
+	gracefulShutdown(srv, db, logger, services)
 }
 
 func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *health.HealthHandler) {
@@ -273,10 +276,20 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		feishu.PUT("/settings", handlers.Feishu.UpdateSettings)
 		feishu.POST("/test", handlers.Feishu.TestConnection)
 	}
+
+	// Anomaly routes (节点异常统计)
+	anomalies := protected.Group("/anomalies")
+	{
+		anomalies.GET("", handlers.Anomaly.List)
+		anomalies.GET("/statistics", handlers.Anomaly.GetStatistics)
+		anomalies.GET("/active", handlers.Anomaly.GetActive)
+		anomalies.GET("/type-statistics", handlers.Anomaly.GetTypeStatistics)
+		anomalies.POST("/check", handlers.Anomaly.TriggerCheck)
+	}
 }
 
 // gracefulShutdown 优雅关闭服务器
-func gracefulShutdown(srv *http.Server, db *gorm.DB, logger *logger.Logger) {
+func gracefulShutdown(srv *http.Server, db *gorm.DB, logger *logger.Logger, services *service.Services) {
 	// 创建一个接收系统信号的channel
 	quit := make(chan os.Signal, 1)
 
@@ -290,6 +303,11 @@ func gracefulShutdown(srv *http.Server, db *gorm.DB, logger *logger.Logger) {
 	// 创建一个带超时的context，给服务器30秒时间来完成正在处理的请求
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// 停止节点异常监控服务
+	if services != nil && services.Anomaly != nil {
+		services.Anomaly.StopMonitoring()
+	}
 
 	// 关闭HTTP服务器
 	if err := srv.Shutdown(ctx); err != nil {

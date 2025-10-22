@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	LDAP     LDAPConfig     `mapstructure:"ldap"`
-	Progress ProgressConfig `mapstructure:"progress"`
+	Server     ServerConfig     `mapstructure:"server"`
+	Database   DatabaseConfig   `mapstructure:"database"`
+	JWT        JWTConfig        `mapstructure:"jwt"`
+	LDAP       LDAPConfig       `mapstructure:"ldap"`
+	Progress   ProgressConfig   `mapstructure:"progress"`
+	Monitoring MonitoringConfig `mapstructure:"monitoring"`
 }
 
 type ServerConfig struct {
@@ -53,6 +54,11 @@ type ProgressConfig struct {
 	EnableDatabase bool `mapstructure:"enable_database"` // 启用数据库模式用于多副本支持
 }
 
+type MonitoringConfig struct {
+	Enabled  bool `mapstructure:"enabled"`  // 启用节点异常监控
+	Interval int  `mapstructure:"interval"` // 监控周期（秒）
+}
+
 func LoadConfig() *Config {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -77,6 +83,8 @@ func LoadConfig() *Config {
 	viper.SetDefault("ldap.enabled", false)
 	viper.SetDefault("ldap.port", 389)
 	viper.SetDefault("progress.enable_database", false)
+	viper.SetDefault("monitoring.enabled", true)
+	viper.SetDefault("monitoring.interval", 60)
 
 	viper.AutomaticEnv()
 

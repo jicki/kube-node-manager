@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"kube-node-manager/internal/config"
+	"kube-node-manager/internal/service/anomaly"
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/auth"
 	"kube-node-manager/internal/service/cluster"
@@ -33,6 +34,7 @@ type Services struct {
 	Progress *progress.Service
 	Gitlab   *gitlab.Service
 	Feishu   *feishu.Service
+	Anomaly  *anomaly.Service
 }
 
 // clusterServiceAdapter 适配器，将 cluster.Service 适配为 feishu.ClusterServiceInterface
@@ -185,6 +187,9 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	feishuSvc.SetLabelService(labelAdapter)
 	feishuSvc.SetTaintService(taintAdapter)
 
+	// 创建异常监控服务
+	anomalySvc := anomaly.NewService(db, logger, k8sSvc, clusterSvc, cfg.Monitoring.Enabled, cfg.Monitoring.Interval)
+
 	return &Services{
 		Auth:     authSvc,
 		User:     user.NewService(db, logger, auditSvc),
@@ -198,5 +203,6 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 		Progress: progressSvc,
 		Gitlab:   gitlab.NewService(db, logger),
 		Feishu:   feishuSvc,
+		Anomaly:  anomalySvc,
 	}
 }

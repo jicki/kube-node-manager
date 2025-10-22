@@ -96,10 +96,10 @@ logging:
   level: "info"       # debug, info, warn, error
   structured: false   # 是否启用结构化日志
 
-# 监控配置
+# 节点异常监控配置
 monitoring:
-  enabled: true       # 是否启用监控指标端点
-  path: "/metrics"    # 监控指标端点路径
+  enabled: true       # 是否启用节点异常监控
+  interval: 60        # 监控周期（秒），建议 60-300 秒，避免对集群造成压力
 
 # 健康检查配置  
 health:

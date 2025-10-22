@@ -18,6 +18,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&FeishuSettings{},
 		&FeishuUserMapping{},
 		&FeishuUserSession{},
+		&NodeAnomaly{},
 	)
 }
 
