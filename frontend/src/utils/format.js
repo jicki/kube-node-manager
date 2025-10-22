@@ -185,6 +185,17 @@ export function formatPercentage(value, total, decimals = 1) {
  * 格式化节点状态
  */
 export function formatNodeStatus(status) {
+  // 处理组合状态（如 "Ready,SchedulingDisabled" 或 "NotReady,SchedulingDisabled"）
+  if (status && status.includes(',')) {
+    // 判断是否为 Ready
+    if (status.startsWith('Ready,')) {
+      return { text: '就绪', type: 'success' }
+    } else if (status.startsWith('NotReady,')) {
+      return { text: '未就绪', type: 'danger' }
+    }
+  }
+  
+  // 处理单一状态
   const statusMap = {
     Ready: { text: '就绪', type: 'success' },
     NotReady: { text: '未就绪', type: 'danger' },

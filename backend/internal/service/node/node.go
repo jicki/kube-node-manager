@@ -304,15 +304,15 @@ func (s *Service) GetSummary(clusterName string, userID uint) (*NodeSummary, err
 	summary.Total = len(nodes)
 
 	for _, node := range nodes {
-		// 统计状态
-		if node.Status == "Ready" {
+		// 统计状态（判断是否为 Ready，状态应该是 "Ready" 或 "Ready,xxx"）
+		if strings.HasPrefix(node.Status, "Ready,") || node.Status == "Ready" {
 			summary.Ready++
 		} else {
 			summary.NotReady++
 		}
 
 		// 统计可调度状态
-		if node.Status != "SchedulingDisabled" {
+		if node.Schedulable {
 			summary.Schedulable++
 		}
 
@@ -351,9 +351,22 @@ func (s *Service) filterNodes(nodes []k8s.NodeInfo, req ListRequest) []k8s.NodeI
 	var filtered []k8s.NodeInfo
 
 	for _, node := range nodes {
-		// 状态过滤
-		if req.Status != "" && !strings.EqualFold(node.Status, req.Status) {
-			continue
+		// 状态过滤（支持 Ready 和 NotReady）
+		if req.Status != "" {
+			reqStatus := strings.ToLower(req.Status)
+			// 判断节点是否为 Ready
+			isNodeReady := strings.HasPrefix(node.Status, "Ready,") || node.Status == "Ready"
+
+			if reqStatus == "ready" && !isNodeReady {
+				continue
+			} else if reqStatus == "notready" && isNodeReady {
+				continue
+			} else if reqStatus != "ready" && reqStatus != "notready" {
+				// 其他状态使用精确匹配（如 Unknown, SchedulingDisabled 等）
+				if !strings.EqualFold(node.Status, req.Status) {
+					continue
+				}
+			}
 		}
 
 		// 角色过滤
