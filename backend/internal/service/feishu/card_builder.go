@@ -1558,8 +1558,8 @@ func BuildQuickNodesCard(clusterName string, nodes interface{}) string {
 	} else {
 		// 显示问题节点列表
 		for _, n := range nodeList {
-			// 判断节点是否 Ready（状态中包含 "Ready" 字符串）
-			isReady := strings.Contains(n.Status, "Ready")
+			// 判断节点是否 Ready（状态应该是 "Ready" 或 "Ready,xxx"，而不是 "NotReady"）
+			isReady := strings.HasPrefix(n.Status, "Ready,") || n.Status == "Ready"
 			status := "🟢 Ready"
 			if !isReady {
 				status = "🔴 NotReady"

@@ -146,9 +146,9 @@ func BuildNodeInfoCardWithActions(nodeInfo map[string]interface{}, clusterName s
 	nodeName, _ := nodeInfo["name"].(string)
 	status, _ := nodeInfo["status"].(string)
 
-	// Status icon - 使用 strings.Contains 检查，因为状态可能是 "Ready,SchedulingDisabled"
+	// Status icon - 判断是否为 Ready（状态应该是 "Ready" 或 "Ready,xxx"，而不是 "NotReady"）
 	statusIcon := "🟢"
-	if !strings.Contains(status, "Ready") {
+	if !(strings.HasPrefix(status, "Ready,") || status == "Ready") {
 		statusIcon = "🔴"
 	}
 

@@ -99,7 +99,7 @@ func (h *NodeCommandHandler) handleListNodes(ctx *CommandContext) (*CommandRespo
 
 		nodeData := map[string]interface{}{
 			"name":          n.Name,
-			"ready":         strings.Contains(n.Status, "Ready"),
+			"ready":         strings.HasPrefix(n.Status, "Ready,") || n.Status == "Ready",
 			"unschedulable": !n.Schedulable,
 			"roles":         n.Roles, // 添加节点类型
 		}

@@ -73,8 +73,8 @@ func (h *QuickCommandHandler) handleQuickStatus(ctx *CommandContext) (*CommandRe
 	notReadyNodes := 0
 
 	for _, n := range nodeList {
-		// 使用 strings.Contains 检查状态，因为状态可能是 "Ready,SchedulingDisabled"
-		if strings.Contains(n.Status, "Ready") {
+		// 判断节点是否 Ready（状态应该是 "Ready" 或 "Ready,xxx"，而不是 "NotReady"）
+		if strings.HasPrefix(n.Status, "Ready,") || n.Status == "Ready" {
 			readyNodes++
 		} else {
 			notReadyNodes++
@@ -121,8 +121,8 @@ func (h *QuickCommandHandler) handleQuickNodes(ctx *CommandContext) (*CommandRes
 	var problematicNodes []k8s.NodeInfo
 	for _, n := range nodeList {
 		// NotReady 或 禁止调度的节点视为问题节点
-		// 使用 strings.Contains 检查状态，因为状态可能是 "Ready,SchedulingDisabled" 这样的组合
-		isReady := strings.Contains(n.Status, "Ready")
+		// 判断节点是否 Ready（状态应该是 "Ready" 或 "Ready,xxx"，而不是 "NotReady"）
+		isReady := strings.HasPrefix(n.Status, "Ready,") || n.Status == "Ready"
 		if !isReady || !n.Schedulable {
 			problematicNodes = append(problematicNodes, n)
 		}
