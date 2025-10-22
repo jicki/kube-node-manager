@@ -633,7 +633,7 @@ func (s *Service) GetTypeStatistics(clusterID *uint, startTime, endTime *time.Ti
 	// 缓存未命中，查询数据库
 
 	query := s.db.Model(&model.NodeAnomaly{}).
-		Select("anomaly_type, COUNT(*) as count")
+		Select("anomaly_type, COUNT(*) as total_count")
 
 	if clusterID != nil {
 		query = query.Where("cluster_id = ?", *clusterID)
@@ -646,7 +646,7 @@ func (s *Service) GetTypeStatistics(clusterID *uint, startTime, endTime *time.Ti
 	}
 
 	var statistics []model.AnomalyTypeStatistics
-	if err := query.Group("anomaly_type").Order("count DESC").Find(&statistics).Error; err != nil {
+	if err := query.Group("anomaly_type").Order("total_count DESC").Find(&statistics).Error; err != nil {
 		return nil, fmt.Errorf("failed to get type statistics: %w", err)
 	}
 

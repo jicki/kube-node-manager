@@ -62,16 +62,16 @@ func (a *NodeAnomaly) CalculateDuration() int64 {
 
 // AnomalyStatistics 异常统计数据
 type AnomalyStatistics struct {
-	Date            string `json:"date"`             // 日期（YYYY-MM-DD 或 YYYY-WW）
-	TotalCount      int64  `json:"total_count"`      // 总异常次数
-	ActiveCount     int64  `json:"active_count"`     // 活跃异常数
-	ResolvedCount   int64  `json:"resolved_count"`   // 已恢复异常数
-	AverageDuration int64  `json:"average_duration"` // 平均持续时长（秒）
-	AffectedNodes   int64  `json:"affected_nodes"`   // 受影响节点数
+	Date            string  `json:"date"`             // 日期（YYYY-MM-DD 或 YYYY-WW）
+	TotalCount      int64   `json:"total_count"`      // 总异常次数
+	ActiveCount     int64   `json:"active_count"`     // 活跃异常数
+	ResolvedCount   int64   `json:"resolved_count"`   // 已恢复异常数
+	AverageDuration float64 `json:"average_duration"` // 平均持续时长（秒）
+	AffectedNodes   int64   `json:"affected_nodes"`   // 受影响节点数
 }
 
 // AnomalyTypeStatistics 按异常类型统计
 type AnomalyTypeStatistics struct {
 	AnomalyType AnomalyType `json:"anomaly_type"`
-	Count       int64       `json:"count"`
+	TotalCount  int64       `json:"total_count"` // 总异常次数
 }
