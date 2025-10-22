@@ -197,37 +197,14 @@ func (h *Handler) GetActive(c *gin.Context) {
 		}
 	}
 
-	anomalies, err := h.anomalySvc.GetActiveAnomalies(clusterID)
+	summary, err := h.anomalySvc.GetAnomalySummary(clusterID)
 	if err != nil {
-		h.logger.Errorf("Failed to get active anomalies: %v", err)
+		h.logger.Errorf("Failed to get anomaly summary: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
 			Code:    http.StatusInternalServerError,
-			Message: "Failed to get active anomalies: " + err.Error(),
+			Message: "Failed to get anomaly summary: " + err.Error(),
 		})
 		return
-	}
-
-	// 计算统计摘要
-	totalCount := int64(len(anomalies))
-	activeCount := int64(0)
-	resolvedCount := int64(0)
-	affectedNodesMap := make(map[string]bool)
-
-	for _, anomaly := range anomalies {
-		if anomaly.Status == model.AnomalyStatusActive {
-			activeCount++
-		} else if anomaly.Status == model.AnomalyStatusResolved {
-			resolvedCount++
-		}
-		affectedNodesMap[anomaly.NodeName] = true
-	}
-
-	summary := map[string]interface{}{
-		"total_count":    totalCount,
-		"active_count":   activeCount,
-		"resolved_count": resolvedCount,
-		"affected_nodes": int64(len(affectedNodesMap)),
-		"anomalies":      anomalies,
 	}
 
 	c.JSON(http.StatusOK, Response{

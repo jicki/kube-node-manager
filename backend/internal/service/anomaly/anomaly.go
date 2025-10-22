@@ -577,6 +577,73 @@ func (s *Service) GetActiveAnomalies(clusterID *uint) ([]model.NodeAnomaly, erro
 	return anomalies, nil
 }
 
+// GetAnomalySummary 获取异常统计摘要（包括所有状态）
+func (s *Service) GetAnomalySummary(clusterID *uint) (map[string]interface{}, error) {
+	// 构建缓存键
+	clusterIDStr := "all"
+	if clusterID != nil {
+		clusterIDStr = fmt.Sprintf("%d", *clusterID)
+	}
+	cacheKey := s.buildCacheKey("anomaly:summary", clusterIDStr)
+
+	// 尝试从缓存获取
+	ctx := context.Background()
+	if cached, err := s.cache.Get(ctx, cacheKey); err == nil {
+		var summary map[string]interface{}
+		if err := json.Unmarshal(cached, &summary); err == nil {
+			// Cache hit
+			return summary, nil
+		}
+	}
+
+	// 缓存未命中，查询数据库
+	// 查询最近的异常（包括所有状态）
+	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
+
+	query := s.db.Model(&model.NodeAnomaly{}).
+		Where("start_time >= ?", thirtyDaysAgo)
+
+	if clusterID != nil {
+		query = query.Where("cluster_id = ?", *clusterID)
+	}
+
+	var anomalies []model.NodeAnomaly
+	if err := query.Order("start_time DESC").Find(&anomalies).Error; err != nil {
+		return nil, fmt.Errorf("failed to get anomalies: %w", err)
+	}
+
+	// 计算统计摘要
+	totalCount := int64(len(anomalies))
+	activeCount := int64(0)
+	resolvedCount := int64(0)
+	affectedNodesMap := make(map[string]bool)
+
+	for _, anomaly := range anomalies {
+		if anomaly.Status == model.AnomalyStatusActive {
+			activeCount++
+		} else if anomaly.Status == model.AnomalyStatusResolved {
+			resolvedCount++
+		}
+		affectedNodesMap[anomaly.NodeName] = true
+	}
+
+	summary := map[string]interface{}{
+		"total_count":    totalCount,
+		"active_count":   activeCount,
+		"resolved_count": resolvedCount,
+		"affected_nodes": int64(len(affectedNodesMap)),
+	}
+
+	// 写入缓存
+	if data, err := json.Marshal(summary); err == nil {
+		if err := s.cache.Set(ctx, cacheKey, data, s.cacheTTL.Active); err != nil {
+			s.logger.Warningf("Failed to cache anomaly summary: %v", err)
+		}
+	}
+
+	return summary, nil
+}
+
 // TriggerCheck 手动触发检测
 func (s *Service) TriggerCheck() error {
 	s.logger.Info("Manual anomaly check triggered")
@@ -587,6 +654,7 @@ func (s *Service) TriggerCheck() error {
 	patterns := []string{
 		"anomaly:statistics:*",
 		"anomaly:active:*",
+		"anomaly:summary:*",
 		"anomaly:type_stats:*",
 	}
 	for _, pattern := range patterns {
