@@ -212,7 +212,7 @@ import {
   Monitor
 } from '@element-plus/icons-vue'
 import { getAnomalies, getActiveAnomalies, triggerCheck } from '@/api/anomaly'
-import { listClusters } from '@/api/cluster'
+import clusterApi from '@/api/cluster'
 import { useAuthStore } from '@/store/modules/auth'
 
 const authStore = useAuthStore()
@@ -254,9 +254,9 @@ const checkLoading = ref(false)
 // 加载集群列表
 const loadClusters = async () => {
   try {
-    const response = await listClusters()
+    const response = await clusterApi.getClusters()
     if (response.data && response.data.code === 200) {
-      clusters.value = response.data.data || []
+      clusters.value = response.data.data?.clusters || []
     }
   } catch (error) {
     console.error('Failed to load clusters:', error)
