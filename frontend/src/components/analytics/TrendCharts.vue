@@ -377,7 +377,13 @@ const trendChartOption = computed(() => {
     yAxis: {
       type: 'value',
       name: '异常次数',
-      minInterval: 1
+      minInterval: 1,
+      axisLabel: {
+        formatter: function(value) {
+          // ✅ 只显示整数
+          return Math.round(value)
+        }
+      }
     },
     series: [
       {
@@ -675,16 +681,32 @@ defineExpose({
 
 // ==================== 监听 props 变化 ====================
 watch(() => [props.clusterId, props.startTime, props.endTime], () => {
+  console.log('Props changed, reloading data...')
   loadTrendData()
   loadTypeData()
   loadClusterData()
 }, { immediate: false })
 
+// ==================== 监听 clusters 数组变化 ====================
+watch(() => props.clusters, (newClusters) => {
+  console.log('Clusters prop changed, count:', newClusters.length)
+  if (newClusters.length > 0) {
+    console.log('Reloading cluster comparison data...')
+    loadClusterData()
+  }
+}, { deep: true })
+
 // ==================== 初始化 ====================
 onMounted(() => {
+  console.log('TrendCharts mounted, clusters count:', props.clusters.length)
   loadTrendData()
   loadTypeData()
-  loadClusterData()
+  // ✅ 只有在 clusters 已经加载时才加载集群对比数据
+  if (props.clusters.length > 0) {
+    loadClusterData()
+  } else {
+    console.log('No clusters on mount, waiting for clusters to load...')
+  }
 })
 </script>
 
