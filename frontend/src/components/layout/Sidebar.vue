@@ -85,6 +85,11 @@
           <el-icon><WarningFilled /></el-icon>
           <template #title>污点管理</template>
         </el-menu-item>
+
+        <el-menu-item index="/analytics">
+          <el-icon><DataAnalysis /></el-icon>
+          <template #title>统计分析</template>
+        </el-menu-item>
       </el-sub-menu>
 
       <!-- GitLab (只在启用时显示) -->
@@ -190,7 +195,8 @@ import {
   Setting,
   List,
   ChatDotSquare,
-  ChatLineSquare
+  ChatLineSquare,
+  DataAnalysis
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -214,7 +220,7 @@ const defaultOpeneds = computed(() => {
   const openedMenus = []
 
   // 根据当前路径确定应该展开的子菜单
-  if (['/dashboard', '/nodes', '/labels', '/taints'].includes(path)) {
+  if (['/dashboard', '/nodes', '/labels', '/taints', '/analytics'].includes(path)) {
     openedMenus.push('node-management')
   }
 
