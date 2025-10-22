@@ -270,17 +270,27 @@ func (h *NodeCommandHandler) handleNodeInfo(ctx *CommandContext) (*CommandRespon
 	}
 
 	// 添加资源信息
+	// 转换 GPU map[string]string 为 map[string]interface{}
+	gpuCapacityMap := make(map[string]interface{})
+	for k, v := range foundNode.Capacity.GPU {
+		gpuCapacityMap[k] = v
+	}
+	gpuAllocatableMap := make(map[string]interface{})
+	for k, v := range foundNode.Allocatable.GPU {
+		gpuAllocatableMap[k] = v
+	}
+
 	capacity := map[string]interface{}{
 		"cpu":    foundNode.Capacity.CPU,
 		"memory": foundNode.Capacity.Memory,
 		"pods":   foundNode.Capacity.Pods,
-		"gpu":    foundNode.Capacity.GPU,
+		"gpu":    gpuCapacityMap,
 	}
 	allocatable := map[string]interface{}{
 		"cpu":    foundNode.Allocatable.CPU,
 		"memory": foundNode.Allocatable.Memory,
 		"pods":   foundNode.Allocatable.Pods,
-		"gpu":    foundNode.Allocatable.GPU,
+		"gpu":    gpuAllocatableMap,
 	}
 	nodeInfo["capacity"] = capacity
 	nodeInfo["allocatable"] = allocatable

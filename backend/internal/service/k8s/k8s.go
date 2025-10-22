@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"kube-node-manager/pkg/logger"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -279,13 +280,32 @@ func (s *Service) ListNodes(clusterName string) ([]NodeInfo, error) {
 	s.logger.Infof("Successfully retrieved %d nodes from cluster %s", len(nodeList.Items), clusterName)
 
 	var nodes []NodeInfo
+	gpuNodeCount := 0
+	totalGPUCount := 0
+
 	for _, node := range nodeList.Items {
 		nodeInfo := s.nodeToNodeInfo(&node)
 		nodes = append(nodes, nodeInfo)
+
+		// 统计 GPU 节点数量和总 GPU 数量
+		if len(nodeInfo.Capacity.GPU) > 0 {
+			gpuNodeCount++
+			for _, gpuCount := range nodeInfo.Capacity.GPU {
+				// 解析 GPU 数量字符串
+				if count, err := strconv.Atoi(gpuCount); err == nil {
+					totalGPUCount += count
+				}
+			}
+		}
 	}
 
 	// 尝试获取资源使用情况
 	s.enrichNodesWithMetrics(clusterName, nodes)
+
+	// 输出 GPU 资源汇总日志
+	if gpuNodeCount > 0 {
+		s.logger.Infof("Cluster %s: Found %d GPU nodes with total %d GPUs", clusterName, gpuNodeCount, totalGPUCount)
+	}
 
 	return nodes, nil
 }
@@ -1066,7 +1086,6 @@ func (s *Service) extractGPUResources(resources corev1.ResourceList) map[string]
 	for _, key := range gpuResourceKeys {
 		if quantity, exists := resources[corev1.ResourceName(key)]; exists && !quantity.IsZero() {
 			gpuResources[key] = quantity.String()
-			s.logger.Infof("Found GPU resource: %s = %s", key, quantity.String())
 		}
 	}
 
@@ -1075,20 +1094,6 @@ func (s *Service) extractGPUResources(resources corev1.ResourceList) map[string]
 		resourceKey := string(resourceName)
 		if strings.HasPrefix(resourceKey, "nvidia.com/mig-") && !quantity.IsZero() {
 			gpuResources[resourceKey] = quantity.String()
-			s.logger.Infof("Found MIG GPU resource: %s = %s", resourceKey, quantity.String())
-		}
-	}
-
-	// 如果没有找到任何GPU资源，记录调试信息
-	if len(gpuResources) == 0 {
-		// 记录所有可用的资源，帮助调试
-		var availableResources []string
-		for resourceName := range resources {
-			availableResources = append(availableResources, string(resourceName))
-		}
-		// 仅在资源列表不为空时记录，避免过多日志
-		if len(availableResources) > 0 {
-			s.logger.Infof("No GPU resources found. Available resources: %v", availableResources)
 		}
 	}
 
