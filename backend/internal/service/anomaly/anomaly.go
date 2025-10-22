@@ -2,7 +2,9 @@ package anomaly
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"kube-node-manager/internal/cache"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/cluster"
 	"kube-node-manager/internal/service/k8s"
@@ -19,6 +21,9 @@ type Service struct {
 	logger     *logger.Logger
 	k8sSvc     *k8s.Service
 	clusterSvc *cluster.Service
+	cache      cache.Cache
+	cacheTTL   *CacheTTL
+	cleanupSvc *CleanupService
 	interval   time.Duration
 	enabled    bool
 	ctx        context.Context
@@ -26,14 +31,25 @@ type Service struct {
 	wg         sync.WaitGroup
 }
 
+// CacheTTL 缓存TTL配置
+type CacheTTL struct {
+	Statistics time.Duration
+	Active     time.Duration
+	Clusters   time.Duration
+	TypeStats  time.Duration
+}
+
 // NewService 创建异常监控服务实例
-func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, clusterSvc *cluster.Service, enabled bool, intervalSeconds int) *Service {
+func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, clusterSvc *cluster.Service, cache cache.Cache, cacheTTL *CacheTTL, cleanupSvc *CleanupService, enabled bool, intervalSeconds int) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Service{
 		db:         db,
 		logger:     logger,
 		k8sSvc:     k8sSvc,
 		clusterSvc: clusterSvc,
+		cache:      cache,
+		cacheTTL:   cacheTTL,
+		cleanupSvc: cleanupSvc,
 		interval:   time.Duration(intervalSeconds) * time.Second,
 		enabled:    enabled,
 		ctx:        ctx,
@@ -49,6 +65,11 @@ func (s *Service) StartMonitoring() {
 	}
 
 	s.logger.Infof("Starting node anomaly monitoring with interval: %v", s.interval)
+
+	// 启动清理服务
+	if s.cleanupSvc != nil {
+		s.cleanupSvc.Start()
+	}
 
 	s.wg.Add(1)
 	go func() {
@@ -79,6 +100,12 @@ func (s *Service) StopMonitoring() {
 	}
 
 	s.logger.Info("Stopping node anomaly monitoring...")
+
+	// 停止清理服务
+	if s.cleanupSvc != nil {
+		s.cleanupSvc.Stop()
+	}
+
 	s.cancel()
 	s.wg.Wait()
 	s.logger.Info("Node anomaly monitoring stopped successfully")
@@ -249,6 +276,10 @@ func (s *Service) recordAnomaly(cluster model.Cluster, nodeName string, anomaly 
 	}
 
 	s.logger.Infof("New anomaly detected: cluster=%s, node=%s, type=%s", cluster.Name, nodeName, anomaly.AnomalyType)
+
+	// 清除相关缓存
+	s.invalidateCache(cluster.ID)
+
 	return nil
 }
 
@@ -265,7 +296,39 @@ func (s *Service) resolveAnomaly(anomaly *model.NodeAnomaly) error {
 
 	s.logger.Infof("Anomaly resolved: cluster=%s, node=%s, type=%s, duration=%ds",
 		anomaly.ClusterName, anomaly.NodeName, anomaly.AnomalyType, anomaly.Duration)
+
+	// 清除相关缓存
+	s.invalidateCache(anomaly.ClusterID)
+
 	return nil
+}
+
+// invalidateCache 使缓存失效
+func (s *Service) invalidateCache(clusterID uint) {
+	ctx := context.Background()
+	// 清除指定集群的缓存
+	patterns := []string{
+		fmt.Sprintf("anomaly:statistics:%d:*", clusterID),
+		fmt.Sprintf("anomaly:active:%d", clusterID),
+		fmt.Sprintf("anomaly:type_stats:%d:*", clusterID),
+		"anomaly:statistics:all:*", // 全局统计缓存
+		"anomaly:active:all",       // 全局活跃异常缓存
+	}
+
+	for _, pattern := range patterns {
+		if err := s.cache.Clear(ctx, pattern); err != nil {
+			s.logger.Warningf("Failed to clear cache pattern %s: %v", pattern, err)
+		}
+	}
+}
+
+// buildCacheKey 构建缓存键
+func (s *Service) buildCacheKey(prefix string, params ...interface{}) string {
+	key := prefix
+	for _, p := range params {
+		key += fmt.Sprintf(":%v", p)
+	}
+	return key
 }
 
 // ListRequest 异常记录查询请求
@@ -378,6 +441,31 @@ func (s *Service) GetStatistics(req StatisticsRequest) ([]model.AnomalyStatistic
 		req.Dimension = "day"
 	}
 
+	// 构建缓存键
+	clusterIDStr := "all"
+	if req.ClusterID != nil {
+		clusterIDStr = fmt.Sprintf("%d", *req.ClusterID)
+	}
+	cacheKey := s.buildCacheKey("anomaly:statistics",
+		clusterIDStr,
+		req.Dimension,
+		req.StartTime.Format("2006-01-02"),
+		req.EndTime.Format("2006-01-02"),
+		req.AnomalyType,
+	)
+
+	// 尝试从缓存获取
+	ctx := context.Background()
+	if cached, err := s.cache.Get(ctx, cacheKey); err == nil {
+		var statistics []model.AnomalyStatistics
+		if err := json.Unmarshal(cached, &statistics); err == nil {
+			// Cache hit
+			return statistics, nil
+		}
+	}
+
+	// 缓存未命中，查询数据库
+
 	// 构建基础查询
 	baseQuery := s.db.Model(&model.NodeAnomaly{}).
 		Where("start_time >= ? AND start_time <= ?", req.StartTime, req.EndTime)
@@ -436,13 +524,38 @@ func (s *Service) GetStatistics(req StatisticsRequest) ([]model.AnomalyStatistic
 		return nil, fmt.Errorf("failed to get statistics: %w", err)
 	}
 
+	// 写入缓存
+	if data, err := json.Marshal(statistics); err == nil {
+		if err := s.cache.Set(ctx, cacheKey, data, s.cacheTTL.Statistics); err != nil {
+			s.logger.Warningf("Failed to cache statistics: %v", err)
+		}
+	}
+
 	return statistics, nil
 }
 
 // GetActiveAnomalies 获取当前活跃的异常
 func (s *Service) GetActiveAnomalies(clusterID *uint) ([]model.NodeAnomaly, error) {
+	// 构建缓存键
+	clusterIDStr := "all"
+	if clusterID != nil {
+		clusterIDStr = fmt.Sprintf("%d", *clusterID)
+	}
+	cacheKey := s.buildCacheKey("anomaly:active", clusterIDStr)
+
+	// 尝试从缓存获取
+	ctx := context.Background()
+	if cached, err := s.cache.Get(ctx, cacheKey); err == nil {
+		var anomalies []model.NodeAnomaly
+		if err := json.Unmarshal(cached, &anomalies); err == nil {
+			// Cache hit
+			return anomalies, nil
+		}
+	}
+
+	// 缓存未命中，查询数据库
+
 	query := s.db.Model(&model.NodeAnomaly{}).
-		Preload("Cluster").
 		Where("status = ?", model.AnomalyStatusActive)
 
 	if clusterID != nil {
@@ -454,6 +567,13 @@ func (s *Service) GetActiveAnomalies(clusterID *uint) ([]model.NodeAnomaly, erro
 		return nil, fmt.Errorf("failed to get active anomalies: %w", err)
 	}
 
+	// 写入缓存
+	if data, err := json.Marshal(anomalies); err == nil {
+		if err := s.cache.Set(ctx, cacheKey, data, s.cacheTTL.Active); err != nil {
+			s.logger.Warningf("Failed to cache active anomalies: %v", err)
+		}
+	}
+
 	return anomalies, nil
 }
 
@@ -461,11 +581,57 @@ func (s *Service) GetActiveAnomalies(clusterID *uint) ([]model.NodeAnomaly, erro
 func (s *Service) TriggerCheck() error {
 	s.logger.Info("Manual anomaly check triggered")
 	s.checkAllClusters()
+
+	// 清除所有缓存
+	ctx := context.Background()
+	patterns := []string{
+		"anomaly:statistics:*",
+		"anomaly:active:*",
+		"anomaly:type_stats:*",
+	}
+	for _, pattern := range patterns {
+		if err := s.cache.Clear(ctx, pattern); err != nil {
+			s.logger.Warningf("Failed to clear cache pattern %s: %v", pattern, err)
+		}
+	}
+
 	return nil
+}
+
+// GetCleanupService 获取清理服务
+func (s *Service) GetCleanupService() *CleanupService {
+	return s.cleanupSvc
 }
 
 // GetTypeStatistics 获取异常类型统计
 func (s *Service) GetTypeStatistics(clusterID *uint, startTime, endTime *time.Time) ([]model.AnomalyTypeStatistics, error) {
+	// 构建缓存键
+	clusterIDStr := "all"
+	if clusterID != nil {
+		clusterIDStr = fmt.Sprintf("%d", *clusterID)
+	}
+	startTimeStr := "all"
+	if startTime != nil {
+		startTimeStr = startTime.Format("2006-01-02")
+	}
+	endTimeStr := "all"
+	if endTime != nil {
+		endTimeStr = endTime.Format("2006-01-02")
+	}
+	cacheKey := s.buildCacheKey("anomaly:type_stats", clusterIDStr, startTimeStr, endTimeStr)
+
+	// 尝试从缓存获取
+	ctx := context.Background()
+	if cached, err := s.cache.Get(ctx, cacheKey); err == nil {
+		var statistics []model.AnomalyTypeStatistics
+		if err := json.Unmarshal(cached, &statistics); err == nil {
+			// Cache hit
+			return statistics, nil
+		}
+	}
+
+	// 缓存未命中，查询数据库
+
 	query := s.db.Model(&model.NodeAnomaly{}).
 		Select("anomaly_type, COUNT(*) as count")
 
@@ -482,6 +648,13 @@ func (s *Service) GetTypeStatistics(clusterID *uint, startTime, endTime *time.Ti
 	var statistics []model.AnomalyTypeStatistics
 	if err := query.Group("anomaly_type").Order("count DESC").Find(&statistics).Error; err != nil {
 		return nil, fmt.Errorf("failed to get type statistics: %w", err)
+	}
+
+	// 写入缓存
+	if data, err := json.Marshal(statistics); err == nil {
+		if err := s.cache.Set(ctx, cacheKey, data, s.cacheTTL.TypeStats); err != nil {
+			s.logger.Warningf("Failed to cache type statistics: %v", err)
+		}
 	}
 
 	return statistics, nil

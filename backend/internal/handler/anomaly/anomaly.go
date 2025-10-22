@@ -15,6 +15,7 @@ import (
 // Handler 异常记录处理器
 type Handler struct {
 	anomalySvc *anomaly.Service
+	cleanupSvc *anomaly.CleanupService
 	logger     *logger.Logger
 }
 
@@ -26,9 +27,10 @@ type Response struct {
 }
 
 // NewHandler 创建新的异常记录处理器实例
-func NewHandler(anomalySvc *anomaly.Service, logger *logger.Logger) *Handler {
+func NewHandler(anomalySvc *anomaly.Service, cleanupSvc *anomaly.CleanupService, logger *logger.Logger) *Handler {
 	return &Handler{
 		anomalySvc: anomalySvc,
+		cleanupSvc: cleanupSvc,
 		logger:     logger,
 	}
 }
@@ -304,5 +306,113 @@ func (h *Handler) GetTypeStatistics(c *gin.Context) {
 		Code:    http.StatusOK,
 		Message: "Success",
 		Data:    statistics,
+	})
+}
+
+// TriggerCleanup 手动触发数据清理
+func (h *Handler) TriggerCleanup(c *gin.Context) {
+	// 检查用户权限：只有 admin 可以手动触发清理
+	userRole, exists := c.Get("user_role")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	if userRole != model.RoleAdmin {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin can trigger cleanup",
+		})
+		return
+	}
+
+	if err := h.cleanupSvc.Cleanup(); err != nil {
+		h.logger.Errorf("Failed to trigger cleanup: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to trigger cleanup: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Cleanup completed successfully",
+	})
+}
+
+// GetCleanupConfig 获取清理配置
+func (h *Handler) GetCleanupConfig(c *gin.Context) {
+	config := h.cleanupSvc.GetConfig()
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Success",
+		Data:    config,
+	})
+}
+
+// UpdateCleanupConfig 更新清理配置
+func (h *Handler) UpdateCleanupConfig(c *gin.Context) {
+	// 检查用户权限：只有 admin 可以更新配置
+	userRole, exists := c.Get("user_role")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+	if userRole != model.RoleAdmin {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Insufficient permissions. Only admin can update cleanup config",
+		})
+		return
+	}
+
+	var config anomaly.CleanupConfig
+	if err := c.ShouldBindJSON(&config); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid request body: " + err.Error(),
+		})
+		return
+	}
+
+	if err := h.cleanupSvc.UpdateConfig(&config); err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid configuration: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Configuration updated successfully",
+		Data:    config,
+	})
+}
+
+// GetCleanupStats 获取清理统计信息
+func (h *Handler) GetCleanupStats(c *gin.Context) {
+	stats, err := h.cleanupSvc.GetCleanupStats()
+	if err != nil {
+		h.logger.Errorf("Failed to get cleanup stats: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to get cleanup stats: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Success",
+		Data:    stats,
 	})
 }

@@ -285,6 +285,12 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		anomalies.GET("/active", handlers.Anomaly.GetActive)
 		anomalies.GET("/type-statistics", handlers.Anomaly.GetTypeStatistics)
 		anomalies.POST("/check", handlers.Anomaly.TriggerCheck)
+
+		// 数据清理相关
+		anomalies.POST("/cleanup", handlers.Anomaly.TriggerCleanup)
+		anomalies.GET("/cleanup/config", handlers.Anomaly.GetCleanupConfig)
+		anomalies.PUT("/cleanup/config", handlers.Anomaly.UpdateCleanupConfig)
+		anomalies.GET("/cleanup/stats", handlers.Anomaly.GetCleanupStats)
 	}
 }
 

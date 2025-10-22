@@ -142,7 +142,20 @@
         </div>
       </template>
 
+      <!-- 空状态 -->
+      <EmptyState
+        v-if="!tableLoading && tableData.length === 0"
+        type="success"
+        title="集群运行健康"
+        description="当前时间范围内暂无异常记录，系统运行正常"
+        :action="{
+          text: '刷新数据',
+          handler: handleSearch
+        }"
+      />
+
       <el-table
+        v-else
         v-loading="tableLoading"
         :data="tableData"
         stripe
@@ -199,8 +212,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import {
   Search,
   Refresh,
@@ -214,9 +226,19 @@ import {
 import { getAnomalies, getActiveAnomalies, triggerCheck } from '@/api/anomaly'
 import clusterApi from '@/api/cluster'
 import { useAuthStore } from '@/store/modules/auth'
+import { usePageVisibility } from '@/composables/usePageVisibility'
+import EmptyState from '@/components/common/EmptyState.vue'
+import { handleError, showSuccess, showWarning, ErrorLevel } from '@/utils/errorHandler'
 
 const authStore = useAuthStore()
 const userRole = computed(() => authStore.userInfo?.role || '')
+
+// 页面可见性检测
+const { isVisible } = usePageVisibility()
+
+// 轮询定时器
+let pollIntervalId = null
+const pollInterval = 30 // 秒
 
 // 集群列表
 const clusters = ref([])
@@ -314,7 +336,7 @@ const loadAnomalies = async () => {
     }
   } catch (error) {
     console.error('Failed to load anomalies:', error)
-    ElMessage.error('加载异常记录失败')
+    handleError(error, ErrorLevel.ERROR, { title: '加载失败' })
   } finally {
     tableLoading.value = false
   }
@@ -360,7 +382,7 @@ const handleTriggerCheck = async () => {
   try {
     const response = await triggerCheck()
     if (response.data && response.data.code === 200) {
-      ElMessage.success('检测任务已触发，请稍后刷新查看结果')
+      showSuccess('检测任务已触发，请稍后刷新查看结果')
       // 延迟5秒后自动刷新
       setTimeout(() => {
         loadAnomalies()
@@ -369,7 +391,7 @@ const handleTriggerCheck = async () => {
     }
   } catch (error) {
     console.error('Failed to trigger check:', error)
-    ElMessage.error('触发检测失败：' + (error.response?.data?.message || error.message))
+    handleError(error, ErrorLevel.ERROR, { title: '触发检测失败' })
   } finally {
     checkLoading.value = false
   }
@@ -378,7 +400,7 @@ const handleTriggerCheck = async () => {
 // 导出数据
 const handleExport = () => {
   if (tableData.value.length === 0) {
-    ElMessage.warning('暂无数据可导出')
+    showWarning('暂无数据可导出')
     return
   }
 
@@ -409,7 +431,7 @@ const handleExport = () => {
   link.click()
   URL.revokeObjectURL(link.href)
   
-  ElMessage.success('导出成功')
+  showSuccess('导出成功')
 }
 
 // 格式化日期时间
@@ -465,16 +487,50 @@ const getAnomalyTypeColor = (type) => {
   return colorMap[type] || 'info'
 }
 
+// 启动智能轮询
+const startPolling = () => {
+  stopPolling()
+  
+  pollIntervalId = setInterval(() => {
+    if (isVisible.value) {
+      loadActiveSummary()
+    }
+  }, pollInterval * 1000)
+}
+
+// 停止轮询
+const stopPolling = () => {
+  if (pollIntervalId) {
+    clearInterval(pollIntervalId)
+    pollIntervalId = null
+  }
+}
+
+// 监听页面可见性变化
+watch(isVisible, (visible) => {
+  if (visible) {
+    // 页面变为可见时，立即刷新一次，然后启动轮询
+    loadActiveSummary()
+    startPolling()
+  } else {
+    // 页面隐藏时停止轮询
+    stopPolling()
+  }
+})
+
 // 初始化
 onMounted(() => {
   loadClusters()
   loadAnomalies()
   loadActiveSummary()
   
-  // 每30秒自动刷新活跃异常统计
-  setInterval(() => {
-    loadActiveSummary()
-  }, 30000)
+  // 启动智能轮询
+  startPolling()
+})
+
+// 清理
+onUnmounted(() => {
+  stopPolling()
 })
 </script>
 

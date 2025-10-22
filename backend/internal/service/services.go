@@ -2,6 +2,9 @@ package service
 
 import (
 	"fmt"
+	"time"
+
+	"kube-node-manager/internal/cache"
 	"kube-node-manager/internal/config"
 	"kube-node-manager/internal/service/anomaly"
 	"kube-node-manager/internal/service/audit"
@@ -187,8 +190,32 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	feishuSvc.SetLabelService(labelAdapter)
 	feishuSvc.SetTaintService(taintAdapter)
 
+	// 初始化缓存
+	cacheInstance, err := cache.NewCache(&cfg.Monitoring.Cache, db, logger)
+	if err != nil {
+		logger.Errorf("Failed to initialize cache: %v", err)
+		panic(fmt.Sprintf("Failed to initialize cache: %v", err))
+	}
+
+	// 创建缓存TTL配置
+	cacheTTL := &anomaly.CacheTTL{
+		Statistics: time.Duration(cfg.Monitoring.Cache.TTL.Statistics) * time.Second,
+		Active:     time.Duration(cfg.Monitoring.Cache.TTL.Active) * time.Second,
+		Clusters:   time.Duration(cfg.Monitoring.Cache.TTL.Clusters) * time.Second,
+		TypeStats:  time.Duration(cfg.Monitoring.Cache.TTL.TypeStats) * time.Second,
+	}
+
+	// 创建数据清理服务
+	cleanupConfig := &anomaly.CleanupConfig{
+		Enabled:       cfg.Monitoring.Cleanup.Enabled,
+		RetentionDays: cfg.Monitoring.Cleanup.RetentionDays,
+		CleanupTime:   cfg.Monitoring.Cleanup.CleanupTime,
+		BatchSize:     cfg.Monitoring.Cleanup.BatchSize,
+	}
+	cleanupSvc := anomaly.NewCleanupService(db, logger, cleanupConfig)
+
 	// 创建异常监控服务
-	anomalySvc := anomaly.NewService(db, logger, k8sSvc, clusterSvc, cfg.Monitoring.Enabled, cfg.Monitoring.Interval)
+	anomalySvc := anomaly.NewService(db, logger, k8sSvc, clusterSvc, cacheInstance, cacheTTL, cleanupSvc, cfg.Monitoring.Enabled, cfg.Monitoring.Interval)
 
 	return &Services{
 		Auth:     authSvc,

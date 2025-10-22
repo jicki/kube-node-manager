@@ -55,8 +55,37 @@ type ProgressConfig struct {
 }
 
 type MonitoringConfig struct {
-	Enabled  bool `mapstructure:"enabled"`  // 启用节点异常监控
-	Interval int  `mapstructure:"interval"` // 监控周期（秒）
+	Enabled  bool          `mapstructure:"enabled"`  // 启用节点异常监控
+	Interval int           `mapstructure:"interval"` // 监控周期（秒）
+	Cache    CacheConfig   `mapstructure:"cache"`    // 缓存配置
+	Cleanup  CleanupConfig `mapstructure:"cleanup"`  // 清理配置
+}
+
+type CleanupConfig struct {
+	Enabled       bool   `mapstructure:"enabled"`        // 是否启用自动清理
+	RetentionDays int    `mapstructure:"retention_days"` // 保留天数
+	CleanupTime   string `mapstructure:"cleanup_time"`   // 清理时间（HH:MM）
+	BatchSize     int    `mapstructure:"batch_size"`     // 批量删除大小
+}
+
+type CacheConfig struct {
+	Enabled  bool                `mapstructure:"enabled"`  // 启用缓存
+	Type     string              `mapstructure:"type"`     // 缓存类型：postgres, memory, none
+	Postgres PostgresCacheConfig `mapstructure:"postgres"` // PostgreSQL 缓存配置
+	TTL      CacheTTLConfig      `mapstructure:"ttl"`      // 缓存 TTL 配置
+}
+
+type PostgresCacheConfig struct {
+	TableName       string `mapstructure:"table_name"`       // 缓存表名
+	CleanupInterval int    `mapstructure:"cleanup_interval"` // 清理周期（秒）
+	UseUnlogged     bool   `mapstructure:"use_unlogged"`     // 使用 UNLOGGED 表
+}
+
+type CacheTTLConfig struct {
+	Statistics int `mapstructure:"statistics"` // 统计数据缓存 TTL（秒）
+	Active     int `mapstructure:"active"`     // 活跃异常缓存 TTL（秒）
+	Clusters   int `mapstructure:"clusters"`   // 集群列表缓存 TTL（秒）
+	TypeStats  int `mapstructure:"type_stats"` // 类型统计缓存 TTL（秒）
 }
 
 func LoadConfig() *Config {
@@ -85,6 +114,19 @@ func LoadConfig() *Config {
 	viper.SetDefault("progress.enable_database", false)
 	viper.SetDefault("monitoring.enabled", true)
 	viper.SetDefault("monitoring.interval", 60)
+	viper.SetDefault("monitoring.cache.enabled", true)
+	viper.SetDefault("monitoring.cache.type", "postgres")
+	viper.SetDefault("monitoring.cache.postgres.table_name", "cache_entries")
+	viper.SetDefault("monitoring.cache.postgres.cleanup_interval", 300)
+	viper.SetDefault("monitoring.cache.postgres.use_unlogged", true)
+	viper.SetDefault("monitoring.cache.ttl.statistics", 300)
+	viper.SetDefault("monitoring.cache.ttl.active", 30)
+	viper.SetDefault("monitoring.cache.ttl.clusters", 600)
+	viper.SetDefault("monitoring.cache.ttl.type_stats", 300)
+	viper.SetDefault("monitoring.cleanup.enabled", true)
+	viper.SetDefault("monitoring.cleanup.retention_days", 90)
+	viper.SetDefault("monitoring.cleanup.cleanup_time", "02:00")
+	viper.SetDefault("monitoring.cleanup.batch_size", 1000)
 
 	viper.AutomaticEnv()
 

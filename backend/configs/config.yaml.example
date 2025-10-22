@@ -100,6 +100,31 @@ logging:
 monitoring:
   enabled: true       # 是否启用节点异常监控
   interval: 60        # 监控周期（秒），建议 60-300 秒，避免对集群造成压力
+  
+  # 缓存配置（多副本部署必须启用，避免缓存不一致问题）
+  cache:
+    enabled: true     # 是否启用缓存
+    type: "postgres"  # 缓存类型: postgres（推荐）, memory（单副本测试）, none（禁用）
+    
+    # PostgreSQL 缓存配置（推荐用于生产环境）
+    postgres:
+      table_name: "cache_entries"     # 缓存表名
+      cleanup_interval: 300           # 清理过期数据周期（秒），建议 300-600
+      use_unlogged: true              # 使用 UNLOGGED 表（性能提升 2-3倍，重启后缓存丢失）
+    
+    # 缓存 TTL 配置（单位：秒）
+    ttl:
+      statistics: 300   # 统计数据缓存: 5分钟
+      active: 30        # 活跃异常缓存: 30秒（频繁更新）
+      clusters: 600     # 集群列表缓存: 10分钟
+      type_stats: 300   # 类型统计缓存: 5分钟
+  
+  # 数据清理配置
+  cleanup:
+    enabled: true         # 是否启用自动清理
+    retention_days: 90    # 数据保留天数，默认90天
+    cleanup_time: "02:00" # 每天清理时间（格式：HH:MM），默认凌晨2点
+    batch_size: 1000      # 批量删除大小，避免长时间锁表
 
 # 健康检查配置  
 health:

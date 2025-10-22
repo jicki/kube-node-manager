@@ -42,6 +42,6 @@ func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
 		Progress: progress.NewHandler(services.Progress, logger),
 		Gitlab:   gitlab.NewHandler(services.Gitlab, logger),
 		Feishu:   feishu.NewHandler(services.Feishu, services.Audit, logger),
-		Anomaly:  anomaly.NewHandler(services.Anomaly, logger),
+		Anomaly:  anomaly.NewHandler(services.Anomaly, services.Anomaly.GetCleanupService(), logger),
 	}
 }
