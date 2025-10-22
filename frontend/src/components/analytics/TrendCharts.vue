@@ -211,26 +211,35 @@ const loadTypeData = async () => {
 
 const loadClusterData = async () => {
   if (props.clusterId !== null || props.clusters.length === 0) {
+    console.log('Skip cluster comparison:', props.clusterId !== null ? 'Single cluster view' : 'No clusters')
     clusterData.value = []
     return
   }
 
+  console.log('Loading cluster comparison data for', props.clusters.length, 'clusters')
+  console.log('Time range:', props.startTime, 'to', props.endTime)
+  
   clusterLoading.value = true
   try {
     // 为每个集群获取统计数据
-    const promises = props.clusters.map(cluster => 
-      getStatistics({
+    const promises = props.clusters.map(cluster => {
+      console.log(`Fetching data for cluster: ${cluster.name} (ID: ${cluster.id})`)
+      return getStatistics({
         cluster_id: cluster.id,
         start_time: props.startTime,
         end_time: props.endTime,
         dimension: 'day'
+      }).then(response => {
+        console.log(`Response for cluster ${cluster.name}:`, response.data)
+        return response
       }).catch(err => {
-        console.error(`Failed to load cluster ${cluster.name} data:`, err)
+        console.error(`Failed to load cluster ${cluster.name} (ID: ${cluster.id}) data:`, err)
         return { data: { code: 500, data: [] } }
       })
-    )
+    })
 
     const responses = await Promise.all(promises)
+    console.log('All responses received:', responses.length)
     
     // 聚合每个集群的总异常数
     const results = props.clusters.map((cluster, index) => {
@@ -239,10 +248,18 @@ const loadClusterData = async () => {
       
       if (response.data && response.data.code === 200) {
         const data = response.data.data || []
+        console.log(`Cluster ${cluster.name} has ${data.length} days of data`)
+        
         // 累加所有天的异常数
         totalCount = data.reduce((sum, item) => {
-          return sum + (item.total_count || 0)
+          const count = item.total_count || 0
+          console.log(`  - ${item.date}: ${count} anomalies`)
+          return sum + count
         }, 0)
+        
+        console.log(`Cluster ${cluster.name} total: ${totalCount}`)
+      } else {
+        console.warn(`Invalid response for cluster ${cluster.name}:`, response)
       }
       
       return {
@@ -252,17 +269,20 @@ const loadClusterData = async () => {
       }
     })
     
+    console.log('All results before filtering:', results)
+    
     // 只保留有数据的集群
     clusterData.value = results.filter(item => item.total_count > 0)
     
     // 如果所有集群都没有数据，保留所有集群但数量为0
     if (clusterData.value.length === 0) {
+      console.warn('No clusters with data, showing all clusters with 0 count')
       clusterData.value = results
     }
     
-    console.log('Cluster comparison data:', clusterData.value)
+    console.log('Final cluster comparison data:', clusterData.value)
   } catch (error) {
-    console.error('Failed to load cluster data:', error)
+    console.error('Failed to load cluster data (outer catch):', error)
     handleError(error, ErrorLevel.WARNING)
     clusterData.value = []
   } finally {
@@ -303,7 +323,14 @@ const trendChartOption = computed(() => {
       boundaryGap: false,
       data: dates,
       axisLabel: {
-        rotate: dates.length > 10 ? 45 : 0
+        rotate: dates.length > 10 ? 45 : 0,
+        formatter: function(value) {
+          // 只显示日期，不显示时间
+          if (value && value.includes('T')) {
+            return value.split('T')[0]
+          }
+          return value
+        }
       }
     },
     yAxis: {
