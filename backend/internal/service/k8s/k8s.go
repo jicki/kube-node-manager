@@ -65,6 +65,7 @@ type ResourceInfo struct {
 type ResourceUsageInfo struct {
 	CPU    string `json:"cpu"`
 	Memory string `json:"memory"`
+	Pods   string `json:"pods"` // 实际运行的 Pod 数量
 }
 
 // TaintInfo 污点信息
@@ -1125,12 +1126,21 @@ func (s *Service) enrichNodesWithMetrics(clusterName string, nodes []NodeInfo) {
 		metricsMap[metric.Name] = metric
 	}
 
+	// 批量获取所有节点的 Pod 数量
+	nodeNames := make([]string, len(nodes))
+	for i := range nodes {
+		nodeNames[i] = nodes[i].Name
+	}
+	podCounts := s.getNodesPodCounts(clusterName, nodeNames)
+
 	// 为每个节点添加使用情况
 	for i := range nodes {
 		if metric, exists := metricsMap[nodes[i].Name]; exists {
+			podCount := podCounts[nodes[i].Name]
 			nodes[i].Usage = &ResourceUsageInfo{
 				CPU:    s.formatCPU(metric.Usage.Cpu().MilliValue()),
 				Memory: s.formatMemory(metric.Usage.Memory().Value()),
+				Pods:   fmt.Sprintf("%d", podCount),
 			}
 		}
 	}
@@ -1156,10 +1166,18 @@ func (s *Service) enrichNodeWithMetrics(clusterName string, node *NodeInfo) {
 		return
 	}
 
+	// 获取节点上的 Pod 数量
+	podCount, err := s.getNodePodCount(clusterName, node.Name)
+	if err != nil {
+		s.logger.Warningf("Failed to get pod count for node %s in cluster %s: %v", node.Name, clusterName, err)
+		podCount = 0 // 如果获取失败，设置为 0
+	}
+
 	// 添加使用情况
 	node.Usage = &ResourceUsageInfo{
 		CPU:    s.formatCPU(nodeMetrics.Usage.Cpu().MilliValue()),
 		Memory: s.formatMemory(nodeMetrics.Usage.Memory().Value()),
+		Pods:   fmt.Sprintf("%d", podCount),
 	}
 
 	s.logger.Infof("Successfully enriched node %s with metrics for cluster %s", node.Name, clusterName)
@@ -1223,4 +1241,71 @@ func (s *Service) formatMemory(bytes int64) string {
 	default:
 		return fmt.Sprintf("%d", bytes)
 	}
+}
+
+// getNodePodCount 获取节点上运行的 Pod 数量（Non-terminated Pods）
+func (s *Service) getNodePodCount(clusterName, nodeName string) (int, error) {
+	client, err := s.getClient(clusterName)
+	if err != nil {
+		return 0, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 使用 FieldSelector 获取指定节点上的 Pods
+	// 排除已终止的 Pod (status.phase != Succeeded && status.phase != Failed)
+	podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+		FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName}).String(),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to list pods on node %s: %w", nodeName, err)
+	}
+
+	// 统计非终止状态的 Pod
+	nonTerminatedCount := 0
+	for _, pod := range podList.Items {
+		// 排除 Succeeded 和 Failed 状态的 Pod
+		if pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
+			nonTerminatedCount++
+		}
+	}
+
+	return nonTerminatedCount, nil
+}
+
+// getNodesPodCounts 批量获取多个节点的 Pod 数量
+func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[string]int {
+	client, err := s.getClient(clusterName)
+	if err != nil {
+		s.logger.Warningf("Failed to get client for cluster %s: %v", clusterName, err)
+		return make(map[string]int)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// 获取所有 Pods
+	podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		s.logger.Warningf("Failed to list pods for cluster %s: %v", clusterName, err)
+		return make(map[string]int)
+	}
+
+	// 统计每个节点的非终止 Pod 数量
+	podCounts := make(map[string]int)
+	for _, node := range nodeNames {
+		podCounts[node] = 0
+	}
+
+	for _, pod := range podList.Items {
+		// 只统计非终止状态的 Pod
+		if pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
+			if _, exists := podCounts[pod.Spec.NodeName]; exists {
+				podCounts[pod.Spec.NodeName]++
+			}
+		}
+	}
+
+	return podCounts
 }

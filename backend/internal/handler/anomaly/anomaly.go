@@ -232,7 +232,7 @@ func (h *Handler) TriggerCheck(c *gin.Context) {
 		return
 	}
 
-	if userRole != "admin" {
+	if userRole != model.RoleAdmin {
 		c.JSON(http.StatusForbidden, Response{
 			Code:    http.StatusForbidden,
 			Message: "Insufficient permissions. Only admin can trigger check",
