@@ -322,7 +322,7 @@ const trendChartOption = computed(() => {
         label: {
           backgroundColor: '#6a7985',
           formatter: function(params) {
-            // ✅ axisPointer 的标签也只显示日期
+            // X轴只显示日期，Y轴显示整数
             if (params.axisDimension === 'x') {
               const value = params.value
               if (value && value.includes && value.includes('T')) {
@@ -330,7 +330,8 @@ const trendChartOption = computed(() => {
               }
               return value
             }
-            return params.value
+            // Y轴显示整数
+            return Math.round(params.value).toString()
           }
         }
       },
@@ -378,10 +379,10 @@ const trendChartOption = computed(() => {
       type: 'value',
       name: '异常次数',
       minInterval: 1,
+      splitNumber: 5,
       axisLabel: {
         formatter: function(value) {
-          // ✅ 只显示整数
-          return Math.round(value)
+          return Math.round(value).toString()
         }
       }
     },
