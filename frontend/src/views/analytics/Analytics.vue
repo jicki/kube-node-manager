@@ -246,7 +246,7 @@ import {
 } from '@element-plus/icons-vue'
 import { getAnomalies, getActiveAnomalies, triggerCheck } from '@/api/anomaly'
 import clusterApi from '@/api/cluster'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
 import { usePageVisibility } from '@/composables/usePageVisibility'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -254,14 +254,15 @@ import TrendCharts from '@/components/analytics/TrendCharts.vue'
 import { handleError, showSuccess, showWarning, ErrorLevel } from '@/utils/errorHandler'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const userRole = computed(() => authStore.userInfo?.role || '')
 
 // 趋势图表引用
 const trendChartsRef = ref(null)
 
-// 当前激活的Tab
-const activeTab = ref('overview')
+// 当前激活的Tab（支持从路由参数初始化）
+const activeTab = ref(route.query.tab || 'overview')
 
 // 页面可见性检测
 const { isVisible } = usePageVisibility()
@@ -337,7 +338,7 @@ const loadClusters = async () => {
 // 加载活跃异常摘要
 const loadActiveSummary = async () => {
   try {
-    const response = await getActiveAnomalies(filterForm.cluster_id)
+    const response = await getActiveAnomalies(filterForm.cluster_id || null)
     if (response.data && response.data.code === 200) {
       const data = response.data.data || {}
       summary.totalCount = data.total_count || 0
@@ -375,12 +376,6 @@ const loadAnomalies = async () => {
       const data = response.data.data
       tableData.value = data.items || []
       pagination.total = data.total || 0
-      
-      // 更新统计摘要
-      summary.totalCount = data.total || 0
-      
-      // 计算已恢复异常数
-      summary.resolvedCount = (data.items || []).filter(item => item.status === 'Resolved').length
     }
   } catch (error) {
     console.error('Failed to load anomalies:', error)

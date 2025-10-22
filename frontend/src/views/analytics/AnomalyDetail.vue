@@ -427,9 +427,9 @@ const getProgressColor = (percentage) => {
   return '#f56c6c'
 }
 
-// 返回上一页
+// 返回到异常记录Tab
 const handleBack = () => {
-  router.back()
+  router.push({ name: 'Analytics', query: { tab: 'records' } })
 }
 
 onMounted(() => {

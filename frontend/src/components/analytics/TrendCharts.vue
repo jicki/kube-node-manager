@@ -210,22 +210,40 @@ const loadTypeData = async () => {
 }
 
 const loadClusterData = async () => {
-  if (props.clusterId !== null) {
+  if (props.clusterId !== null || props.clusters.length === 0) {
     return
   }
 
   clusterLoading.value = true
   try {
-    const params = {
-      start_time: props.startTime,
-      end_time: props.endTime,
-      dimension: 'cluster'
-    }
+    // 为每个集群获取统计数据
+    const promises = props.clusters.map(cluster => 
+      getStatistics({
+        cluster_id: cluster.id,
+        start_time: props.startTime,
+        end_time: props.endTime,
+        dimension: 'day'
+      })
+    )
 
-    const response = await getStatistics(params)
-    if (response.data && response.data.code === 200) {
-      clusterData.value = response.data.data || []
-    }
+    const responses = await Promise.all(promises)
+    
+    // 聚合每个集群的总异常数
+    clusterData.value = props.clusters.map((cluster, index) => {
+      const response = responses[index]
+      let totalCount = 0
+      
+      if (response.data && response.data.code === 200) {
+        const data = response.data.data || []
+        totalCount = data.reduce((sum, item) => sum + (item.total_count || 0), 0)
+      }
+      
+      return {
+        cluster_id: cluster.id,
+        cluster_name: cluster.name,
+        total_count: totalCount
+      }
+    })
   } catch (error) {
     console.error('Failed to load cluster data:', error)
     handleError(error, ErrorLevel.WARNING)
@@ -460,10 +478,21 @@ const nodeChartOption = computed(() => {
 
 // ==================== 集群对比柱状图 ====================
 const clusterChartOption = computed(() => {
-  const clusterNames = clusterData.value.map(item => {
-    const cluster = props.clusters.find(c => c.id === item.cluster_id)
-    return cluster ? cluster.name : `集群 ${item.cluster_id}`
-  })
+  if (clusterData.value.length === 0) {
+    return {
+      title: {
+        text: '暂无数据',
+        left: 'center',
+        top: 'center',
+        textStyle: {
+          color: '#909399',
+          fontSize: 14
+        }
+      }
+    }
+  }
+
+  const clusterNames = clusterData.value.map(item => item.cluster_name || `集群 ${item.cluster_id}`)
   const counts = clusterData.value.map(item => item.total_count || 0)
 
   return {
