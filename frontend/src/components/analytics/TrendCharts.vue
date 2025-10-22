@@ -187,6 +187,13 @@ const loadTrendData = async () => {
 }
 
 const loadTypeData = async () => {
+  console.log('Loading type statistics...')
+  console.log('Params:', {
+    cluster_id: props.clusterId,
+    start_time: props.startTime,
+    end_time: props.endTime
+  })
+  
   typeLoading.value = true
   try {
     const params = {
@@ -198,8 +205,18 @@ const loadTypeData = async () => {
     }
 
     const response = await getTypeStatistics(params)
+    console.log('Type statistics response:', response.data)
+    
     if (response.data && response.data.code === 200) {
       typeData.value = response.data.data || []
+      console.log('Type statistics data:', typeData.value)
+      console.log('Mapped data for chart:', typeData.value.map(item => ({
+        type: item.anomaly_type,
+        mapped_name: typeNameMap[item.anomaly_type] || item.anomaly_type,
+        count: item.total_count
+      })))
+    } else {
+      console.warn('Invalid type statistics response:', response)
     }
   } catch (error) {
     console.error('Failed to load type data:', error)
@@ -305,6 +322,19 @@ const trendChartOption = computed(() => {
         label: {
           backgroundColor: '#6a7985'
         }
+      },
+      formatter: function(params) {
+        // 只显示日期，不显示时间
+        let date = params[0].axisValue
+        if (date && date.includes('T')) {
+          date = date.split('T')[0]
+        }
+        
+        let result = `${date}<br/>`
+        params.forEach(param => {
+          result += `${param.marker} ${param.seriesName}: ${param.value}<br/>`
+        })
+        return result
       }
     },
     legend: {
