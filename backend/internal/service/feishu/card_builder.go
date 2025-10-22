@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"kube-node-manager/internal/service/k8s"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -390,22 +391,26 @@ func BuildNodeInfoCard(node map[string]interface{}) string {
 			podsCapacity := getStringValue(capacity, "pods")
 			podsAllocatable := getStringValue(allocatable, "pods")
 
-			// GPU
-			gpuCapacity := "0"
-			gpuAllocatable := "0"
+			// GPU - 累加所有GPU资源类型
+			gpuCapacity := 0
+			gpuAllocatable := 0
 			if gpuMap, ok := capacity["gpu"].(map[string]interface{}); ok && len(gpuMap) > 0 {
 				for _, v := range gpuMap {
 					if val, ok := v.(string); ok {
-						gpuCapacity = val
-						break
+						// 尝试解析GPU数量并累加
+						if count, err := strconv.Atoi(val); err == nil {
+							gpuCapacity += count
+						}
 					}
 				}
 			}
 			if gpuMap, ok := allocatable["gpu"].(map[string]interface{}); ok && len(gpuMap) > 0 {
 				for _, v := range gpuMap {
 					if val, ok := v.(string); ok {
-						gpuAllocatable = val
-						break
+						// 尝试解析GPU数量并累加
+						if count, err := strconv.Atoi(val); err == nil {
+							gpuAllocatable += count
+						}
 					}
 				}
 			}
@@ -413,7 +418,7 @@ func BuildNodeInfoCard(node map[string]interface{}) string {
 			resourceContent := fmt.Sprintf(`🟢 **CPU**: %s / %s / %s
 🔵 **内存**: %s / %s / %s
 🟣 **POD**: %s / %s / N/A
-🔴 **GPU**: %s / %s / N/A`,
+🔴 **GPU**: %d / %d / N/A`,
 				cpuCapacity, cpuAllocatable, cpuUsage,
 				memCapacity, memAllocatable, memUsage,
 				podsCapacity, podsAllocatable,

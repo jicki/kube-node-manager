@@ -1059,11 +1059,36 @@ func (s *Service) extractGPUResources(resources corev1.ResourceList) map[string]
 		"amd.com/gpu",
 		"intel.com/gpu",
 		"gpu",
+		"kubernetes.io/gpu",
 	}
 
+	// 首先检查常见的GPU资源类型
 	for _, key := range gpuResourceKeys {
-		if quantity, exists := resources[corev1.ResourceName(key)]; exists {
+		if quantity, exists := resources[corev1.ResourceName(key)]; exists && !quantity.IsZero() {
 			gpuResources[key] = quantity.String()
+			s.logger.Infof("Found GPU resource: %s = %s", key, quantity.String())
+		}
+	}
+
+	// 检查所有以 nvidia.com/mig- 开头的资源（Multi-Instance GPU）
+	for resourceName, quantity := range resources {
+		resourceKey := string(resourceName)
+		if strings.HasPrefix(resourceKey, "nvidia.com/mig-") && !quantity.IsZero() {
+			gpuResources[resourceKey] = quantity.String()
+			s.logger.Infof("Found MIG GPU resource: %s = %s", resourceKey, quantity.String())
+		}
+	}
+
+	// 如果没有找到任何GPU资源，记录调试信息
+	if len(gpuResources) == 0 {
+		// 记录所有可用的资源，帮助调试
+		var availableResources []string
+		for resourceName := range resources {
+			availableResources = append(availableResources, string(resourceName))
+		}
+		// 仅在资源列表不为空时记录，避免过多日志
+		if len(availableResources) > 0 {
+			s.logger.Infof("No GPU resources found. Available resources: %v", availableResources)
 		}
 	}
 

@@ -86,6 +86,22 @@
             </div>
           </div>
         </el-descriptions-item>
+        <el-descriptions-item label="GPU" v-if="hasGPUResources(node)">
+          <div class="resource-detail">
+            <div class="resource-line">
+              <span class="resource-type">总量：</span>
+              <span class="resource-value-total">{{ getGPUCount(node.capacity) || '0' }}</span>
+            </div>
+            <div class="resource-line">
+              <span class="resource-type">可分配：</span>
+              <span class="resource-value-allocatable">{{ getGPUCount(node.allocatable) || '0' }}</span>
+            </div>
+            <div class="resource-line" v-if="node.capacity?.gpu">
+              <span class="resource-type">类型：</span>
+              <span class="resource-value-info">{{ getGPUTypes(node.capacity) }}</span>
+            </div>
+          </div>
+        </el-descriptions-item>
       </el-descriptions>
 
       <!-- 地址信息 -->
@@ -228,6 +244,64 @@ const isLabelShort = (key, value) => {
   return fullText.length <= 50 // 50个字符以内认为是短标签
 }
 
+// 检查节点是否有GPU资源
+const hasGPUResources = (node) => {
+  return getGPUCount(node?.capacity) > 0 || getGPUCount(node?.allocatable) > 0
+}
+
+// 获取GPU数量
+const getGPUCount = (resources) => {
+  if (!resources) return 0
+  
+  // 检查直接的GPU字段（新的API格式）
+  if (resources.gpu && typeof resources.gpu === 'object') {
+    let totalGPU = 0
+    for (const [key, value] of Object.entries(resources.gpu)) {
+      const count = parseInt(value)
+      if (!isNaN(count)) {
+        totalGPU += count
+      }
+    }
+    if (totalGPU > 0) return totalGPU
+  }
+  
+  // 支持多种GPU资源类型（旧格式兼容）
+  const gpuKeys = [
+    'nvidia.com/gpu',
+    'amd.com/gpu', 
+    'intel.com/gpu',
+    'gpu'
+  ]
+  
+  for (const key of gpuKeys) {
+    if (resources[key]) {
+      const count = parseInt(resources[key])
+      return isNaN(count) ? 0 : count
+    }
+  }
+  
+  return 0
+}
+
+// 获取GPU类型列表
+const getGPUTypes = (resources) => {
+  if (!resources || !resources.gpu) return 'N/A'
+  
+  if (typeof resources.gpu === 'object') {
+    const types = Object.keys(resources.gpu).map(key => {
+      // 美化GPU类型名称
+      if (key === 'nvidia.com/gpu') return 'NVIDIA GPU'
+      if (key === 'amd.com/gpu') return 'AMD GPU'
+      if (key === 'intel.com/gpu') return 'Intel GPU'
+      if (key.startsWith('nvidia.com/mig-')) return 'NVIDIA MIG'
+      return key
+    })
+    return types.join(', ')
+  }
+  
+  return 'GPU'
+}
+
 // Props
 const props = defineProps({
   modelValue: {
@@ -359,5 +433,11 @@ h4 {
   font-weight: 600;
   font-family: 'Monaco', 'Consolas', monospace;
   font-size: 13px;
+}
+
+.resource-value-info {
+  color: #666;
+  font-weight: 500;
+  font-size: 12px;
 }
 </style>
