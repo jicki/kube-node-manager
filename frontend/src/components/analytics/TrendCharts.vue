@@ -211,6 +211,7 @@ const loadTypeData = async () => {
 
 const loadClusterData = async () => {
   if (props.clusterId !== null || props.clusters.length === 0) {
+    clusterData.value = []
     return
   }
 
@@ -223,19 +224,25 @@ const loadClusterData = async () => {
         start_time: props.startTime,
         end_time: props.endTime,
         dimension: 'day'
+      }).catch(err => {
+        console.error(`Failed to load cluster ${cluster.name} data:`, err)
+        return { data: { code: 500, data: [] } }
       })
     )
 
     const responses = await Promise.all(promises)
     
     // 聚合每个集群的总异常数
-    clusterData.value = props.clusters.map((cluster, index) => {
+    const results = props.clusters.map((cluster, index) => {
       const response = responses[index]
       let totalCount = 0
       
       if (response.data && response.data.code === 200) {
         const data = response.data.data || []
-        totalCount = data.reduce((sum, item) => sum + (item.total_count || 0), 0)
+        // 累加所有天的异常数
+        totalCount = data.reduce((sum, item) => {
+          return sum + (item.total_count || 0)
+        }, 0)
       }
       
       return {
@@ -244,9 +251,20 @@ const loadClusterData = async () => {
         total_count: totalCount
       }
     })
+    
+    // 只保留有数据的集群
+    clusterData.value = results.filter(item => item.total_count > 0)
+    
+    // 如果所有集群都没有数据，保留所有集群但数量为0
+    if (clusterData.value.length === 0) {
+      clusterData.value = results
+    }
+    
+    console.log('Cluster comparison data:', clusterData.value)
   } catch (error) {
     console.error('Failed to load cluster data:', error)
     handleError(error, ErrorLevel.WARNING)
+    clusterData.value = []
   } finally {
     clusterLoading.value = false
   }
