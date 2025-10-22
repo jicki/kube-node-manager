@@ -169,7 +169,7 @@
         <template #header>
           <div class="card-header">
             <span class="card-title">
-              <el-icon><Lightbulb /></el-icon>
+              <el-icon><MagicStick /></el-icon>
               处理建议
             </span>
           </div>
@@ -257,7 +257,7 @@ import {
   InfoFilled,
   Clock,
   Monitor,
-  Lightbulb,
+  MagicStick,
   Document,
   Warning,
   CircleCheck,

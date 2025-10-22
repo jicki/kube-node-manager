@@ -244,7 +244,7 @@ import {
   GridComponent
 } from 'echarts/components'
 import { Search } from '@element-plus/icons-vue'
-import { getAnomalies, getAnomalyStatistics } from '@/api/anomaly'
+import { getAnomalies, getStatistics } from '@/api/anomaly'
 import { handleError, ErrorLevel } from '@/utils/errorHandler'
 
 // 注册 ECharts 组件

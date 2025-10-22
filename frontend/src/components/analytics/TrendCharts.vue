@@ -101,7 +101,7 @@ import {
   DataZoomComponent
 } from 'echarts/components'
 import { TrendCharts, PieChart as PieChartIcon, DataLine, Histogram } from '@element-plus/icons-vue'
-import { getAnomalyStatistics, getAnomalyTypeStatistics } from '@/api/anomaly'
+import { getStatistics, getTypeStatistics } from '@/api/anomaly'
 import { handleError, ErrorLevel } from '@/utils/errorHandler'
 
 // 注册 ECharts 组件
@@ -460,7 +460,7 @@ const clusterChartOption = computed(() => {
 const loadTrendData = async () => {
   trendLoading.value = true
   try {
-    const response = await getAnomalyStatistics({
+    const response = await getStatistics({
       cluster_id: props.clusterId,
       start_time: props.startTime,
       end_time: props.endTime,
@@ -478,7 +478,7 @@ const loadTrendData = async () => {
 const loadTypeData = async () => {
   typeLoading.value = true
   try {
-    const response = await getAnomalyTypeStatistics({
+    const response = await getTypeStatistics({
       cluster_id: props.clusterId,
       start_time: props.startTime,
       end_time: props.endTime
@@ -499,7 +499,7 @@ const loadClusterData = async () => {
   try {
     // 为每个集群获取统计数据
     const promises = props.clusters.map(cluster =>
-      getAnomalyStatistics({
+      getStatistics({
         cluster_id: cluster.id,
         start_time: props.startTime,
         end_time: props.endTime,
