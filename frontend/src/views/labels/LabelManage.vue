@@ -326,8 +326,8 @@
         <el-table-column prop="name" label="节点名称" />
         <el-table-column prop="status" label="状态">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'Ready' ? 'success' : 'danger'" size="small">
-              {{ row.status }}
+            <el-tag :type="(row.status === 'Ready' || row.status?.startsWith('Ready,')) ? 'success' : 'danger'" size="small">
+              {{ formatNodeStatus(row.status).text }}
             </el-tag>
           </template>
         </el-table-column>
@@ -452,6 +452,7 @@ import labelApi from '@/api/label'
 import nodeApi from '@/api/node'
 import { useClusterStore } from '@/store/modules/cluster'
 import { useNodeStore } from '@/store/modules/node'
+import { formatNodeStatus } from '@/utils/format'
 import SearchBox from '@/components/common/SearchBox.vue'
 import NodeSelector from '@/components/common/NodeSelector.vue'
 import ProgressDialog from '@/components/common/ProgressDialog.vue'

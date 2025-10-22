@@ -66,11 +66,18 @@ export const useNodeStore = defineStore('node', {
   }),
 
   getters: {
-    readyNodes: (state) => state.nodes.filter(node => node.status === 'Ready'),
-    notReadyNodes: (state) => state.nodes.filter(node => 
-      node.status === 'NotReady' || node.status === 'SchedulingDisabled'
-    ),
-    unknownNodes: (state) => state.nodes.filter(node => node.status === 'Unknown'),
+    readyNodes: (state) => state.nodes.filter(node => {
+      const status = node.status || ''
+      return status === 'Ready' || status.startsWith('Ready,')
+    }),
+    notReadyNodes: (state) => state.nodes.filter(node => {
+      const status = node.status || ''
+      return status === 'NotReady' || status.startsWith('NotReady,')
+    }),
+    unknownNodes: (state) => state.nodes.filter(node => {
+      const status = node.status || ''
+      return status === 'Unknown' || status.startsWith('Unknown,')
+    }),
     masterNodes: (state) => state.nodes.filter(node => {
       if (!node.roles || !Array.isArray(node.roles)) return false
       return node.roles.some(role => 
@@ -149,7 +156,24 @@ export const useNodeStore = defineStore('node', {
       }
       
       if (state.filters.status) {
-        result = result.filter(node => node.status === state.filters.status)
+        result = result.filter(node => {
+          // 判断节点状态（支持组合状态如 "Ready,SchedulingDisabled"）
+          const filterStatus = state.filters.status
+          const nodeStatus = node.status || ''
+          
+          // 如果过滤 Ready，匹配 "Ready" 或 "Ready,xxx"
+          if (filterStatus === 'Ready') {
+            return nodeStatus === 'Ready' || nodeStatus.startsWith('Ready,')
+          }
+          // 如果过滤 NotReady，匹配 "NotReady" 或 "NotReady,xxx"
+          else if (filterStatus === 'NotReady') {
+            return nodeStatus === 'NotReady' || nodeStatus.startsWith('NotReady,')
+          }
+          // 其他状态精确匹配
+          else {
+            return nodeStatus === filterStatus
+          }
+        })
       }
       
       if (state.filters.role) {
@@ -258,7 +282,24 @@ export const useNodeStore = defineStore('node', {
       }
       
       if (state.filters.status) {
-        filtered = filtered.filter(node => node.status === state.filters.status)
+        filtered = filtered.filter(node => {
+          // 判断节点状态（支持组合状态如 "Ready,SchedulingDisabled"）
+          const filterStatus = state.filters.status
+          const nodeStatus = node.status || ''
+          
+          // 如果过滤 Ready，匹配 "Ready" 或 "Ready,xxx"
+          if (filterStatus === 'Ready') {
+            return nodeStatus === 'Ready' || nodeStatus.startsWith('Ready,')
+          }
+          // 如果过滤 NotReady，匹配 "NotReady" 或 "NotReady,xxx"
+          else if (filterStatus === 'NotReady') {
+            return nodeStatus === 'NotReady' || nodeStatus.startsWith('NotReady,')
+          }
+          // 其他状态精确匹配
+          else {
+            return nodeStatus === filterStatus
+          }
+        })
       }
       
       if (state.filters.role) {
@@ -537,18 +578,18 @@ export const useNodeStore = defineStore('node', {
 
       // 统计各种状态的节点
       this.nodes.forEach(node => {
-        // 状态统计
-        switch (node.status) {
-          case 'Ready':
-            stats.ready++
-            break
-          case 'NotReady':
-          case 'SchedulingDisabled':
-            stats.notReady++
-            break
-          case 'Unknown':
-            stats.unknown++
-            break
+        // 状态统计（支持组合状态如 "Ready,SchedulingDisabled"）
+        const status = node.status || ''
+        
+        if (status === 'Ready' || status.startsWith('Ready,')) {
+          stats.ready++
+        } else if (status === 'NotReady' || status.startsWith('NotReady,')) {
+          stats.notReady++
+        } else if (status === 'Unknown' || status.startsWith('Unknown,')) {
+          stats.unknown++
+        } else if (status === 'SchedulingDisabled') {
+          // 旧的单独状态，也归类为 notReady
+          stats.notReady++
         }
 
         // 调度状态统计
@@ -596,7 +637,24 @@ export const useNodeStore = defineStore('node', {
         }
         
         if (this.filters.status) {
-          filtered = filtered.filter(node => node.status === this.filters.status)
+          filtered = filtered.filter(node => {
+            // 判断节点状态（支持组合状态如 "Ready,SchedulingDisabled"）
+            const filterStatus = this.filters.status
+            const nodeStatus = node.status || ''
+            
+            // 如果过滤 Ready，匹配 "Ready" 或 "Ready,xxx"
+            if (filterStatus === 'Ready') {
+              return nodeStatus === 'Ready' || nodeStatus.startsWith('Ready,')
+            }
+            // 如果过滤 NotReady，匹配 "NotReady" 或 "NotReady,xxx"
+            else if (filterStatus === 'NotReady') {
+              return nodeStatus === 'NotReady' || nodeStatus.startsWith('NotReady,')
+            }
+            // 其他状态精确匹配
+            else {
+              return nodeStatus === filterStatus
+            }
+          })
         }
         
         if (this.filters.role) {
