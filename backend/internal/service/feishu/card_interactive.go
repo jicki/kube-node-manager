@@ -3,6 +3,7 @@ package feishu
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // BuildNodeListCardWithActions builds a node list card with interactive action buttons
@@ -33,6 +34,10 @@ func BuildNodeListCardWithActions(nodes []map[string]interface{}, clusterName st
 		if u, ok := node["unschedulable"].(bool); ok && u {
 			schedulable = "⛔ 禁止调度"
 			unschedulable = true
+			// 如果有禁止调度原因，添加原因
+			if reason, ok := node["unschedulable_reason"].(string); ok && reason != "" {
+				schedulable = fmt.Sprintf("⛔ 禁止调度（%s）", reason)
+			}
 		}
 
 		// 获取节点类型（优先显示 user_type，其次是 roles）
@@ -141,9 +146,9 @@ func BuildNodeInfoCardWithActions(nodeInfo map[string]interface{}, clusterName s
 	nodeName, _ := nodeInfo["name"].(string)
 	status, _ := nodeInfo["status"].(string)
 
-	// Status icon
+	// Status icon - 使用 strings.Contains 检查，因为状态可能是 "Ready,SchedulingDisabled"
 	statusIcon := "🟢"
-	if status != "Ready" {
+	if !strings.Contains(status, "Ready") {
 		statusIcon = "🔴"
 	}
 

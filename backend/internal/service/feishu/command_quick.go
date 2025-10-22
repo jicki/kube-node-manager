@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/internal/service/node"
+	"strings"
 )
 
 // QuickCommandHandler handles quick operation commands
@@ -72,13 +73,14 @@ func (h *QuickCommandHandler) handleQuickStatus(ctx *CommandContext) (*CommandRe
 	notReadyNodes := 0
 
 	for _, n := range nodeList {
-		if n.Status == "Ready" {
+		// 使用 strings.Contains 检查状态，因为状态可能是 "Ready,SchedulingDisabled"
+		if strings.Contains(n.Status, "Ready") {
 			readyNodes++
 		} else {
 			notReadyNodes++
 		}
-		// Check node condition to determine if unschedulable
-		if n.Status == "SchedulingDisabled" || n.Status == "Unschedulable" {
+		// 检查节点是否可调度
+		if !n.Schedulable {
 			unschedulableNodes++
 		}
 	}
@@ -119,7 +121,9 @@ func (h *QuickCommandHandler) handleQuickNodes(ctx *CommandContext) (*CommandRes
 	var problematicNodes []k8s.NodeInfo
 	for _, n := range nodeList {
 		// NotReady 或 禁止调度的节点视为问题节点
-		if n.Status != "Ready" || !n.Schedulable {
+		// 使用 strings.Contains 检查状态，因为状态可能是 "Ready,SchedulingDisabled" 这样的组合
+		isReady := strings.Contains(n.Status, "Ready")
+		if !isReady || !n.Schedulable {
 			problematicNodes = append(problematicNodes, n)
 		}
 	}

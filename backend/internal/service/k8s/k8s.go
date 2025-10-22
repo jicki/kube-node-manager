@@ -30,25 +30,26 @@ type Service struct {
 
 // NodeInfo Kubernetes节点信息
 type NodeInfo struct {
-	Name             string             `json:"name"`
-	Status           string             `json:"status"`
-	Schedulable      bool               `json:"schedulable"`
-	Roles            []string           `json:"roles"`
-	Age              string             `json:"age"`
-	Version          string             `json:"version"`
-	InternalIP       string             `json:"internal_ip"`
-	ExternalIP       string             `json:"external_ip"`
-	OS               string             `json:"os"`
-	OSImage          string             `json:"os_image"`
-	KernelVersion    string             `json:"kernel_version"`
-	ContainerRuntime string             `json:"container_runtime"`
-	Capacity         ResourceInfo       `json:"capacity"`
-	Allocatable      ResourceInfo       `json:"allocatable"`
-	Usage            *ResourceUsageInfo `json:"usage,omitempty"` // 资源使用情况
-	Labels           map[string]string  `json:"labels"`
-	Taints           []TaintInfo        `json:"taints"`
-	Conditions       []NodeCondition    `json:"conditions"`
-	CreatedAt        time.Time          `json:"created_at"`
+	Name                string             `json:"name"`
+	Status              string             `json:"status"`
+	Schedulable         bool               `json:"schedulable"`
+	UnschedulableReason string             `json:"unschedulable_reason,omitempty"` // 禁止调度原因
+	Roles               []string           `json:"roles"`
+	Age                 string             `json:"age"`
+	Version             string             `json:"version"`
+	InternalIP          string             `json:"internal_ip"`
+	ExternalIP          string             `json:"external_ip"`
+	OS                  string             `json:"os"`
+	OSImage             string             `json:"os_image"`
+	KernelVersion       string             `json:"kernel_version"`
+	ContainerRuntime    string             `json:"container_runtime"`
+	Capacity            ResourceInfo       `json:"capacity"`
+	Allocatable         ResourceInfo       `json:"allocatable"`
+	Usage               *ResourceUsageInfo `json:"usage,omitempty"` // 资源使用情况
+	Labels              map[string]string  `json:"labels"`
+	Taints              []TaintInfo        `json:"taints"`
+	Conditions          []NodeCondition    `json:"conditions"`
+	CreatedAt           time.Time          `json:"created_at"`
 }
 
 // ResourceInfo 资源信息
@@ -873,19 +874,28 @@ func (s *Service) nodeToNodeInfo(node *corev1.Node) NodeInfo {
 		})
 	}
 
+	// 获取禁止调度原因（如果节点被禁止调度）
+	var unschedulableReason string
+	if node.Spec.Unschedulable && node.Annotations != nil {
+		if reason, exists := node.Annotations["deeproute.cn/kube-node-mgr"]; exists && reason != "" {
+			unschedulableReason = reason
+		}
+	}
+
 	return NodeInfo{
-		Name:             node.Name,
-		Status:           status,
-		Schedulable:      !node.Spec.Unschedulable,
-		Roles:            roles,
-		Age:              s.getAge(node.CreationTimestamp.Time),
-		Version:          node.Status.NodeInfo.KubeletVersion,
-		InternalIP:       internalIP,
-		ExternalIP:       externalIP,
-		OS:               node.Status.NodeInfo.OperatingSystem,
-		OSImage:          node.Status.NodeInfo.OSImage,
-		KernelVersion:    node.Status.NodeInfo.KernelVersion,
-		ContainerRuntime: node.Status.NodeInfo.ContainerRuntimeVersion,
+		Name:                node.Name,
+		Status:              status,
+		Schedulable:         !node.Spec.Unschedulable,
+		UnschedulableReason: unschedulableReason,
+		Roles:               roles,
+		Age:                 s.getAge(node.CreationTimestamp.Time),
+		Version:             node.Status.NodeInfo.KubeletVersion,
+		InternalIP:          internalIP,
+		ExternalIP:          externalIP,
+		OS:                  node.Status.NodeInfo.OperatingSystem,
+		OSImage:             node.Status.NodeInfo.OSImage,
+		KernelVersion:       node.Status.NodeInfo.KernelVersion,
+		ContainerRuntime:    node.Status.NodeInfo.ContainerRuntimeVersion,
 		Capacity: ResourceInfo{
 			CPU:    s.formatCPU(node.Status.Capacity.Cpu().MilliValue()),
 			Memory: s.formatMemory(node.Status.Capacity.Memory().Value()),

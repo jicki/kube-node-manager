@@ -99,9 +99,14 @@ func (h *NodeCommandHandler) handleListNodes(ctx *CommandContext) (*CommandRespo
 
 		nodeData := map[string]interface{}{
 			"name":          n.Name,
-			"ready":         n.Status == "Ready",
+			"ready":         strings.Contains(n.Status, "Ready"),
 			"unschedulable": !n.Schedulable,
 			"roles":         n.Roles, // 添加节点类型
+		}
+
+		// 添加禁止调度原因
+		if n.UnschedulableReason != "" {
+			nodeData["unschedulable_reason"] = n.UnschedulableReason
 		}
 
 		// 优先使用 deeproute.cn/user-type 标签

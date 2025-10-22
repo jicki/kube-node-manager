@@ -1558,19 +1558,25 @@ func BuildQuickNodesCard(clusterName string, nodes interface{}) string {
 	} else {
 		// 显示问题节点列表
 		for _, n := range nodeList {
+			// 判断节点是否 Ready（状态中包含 "Ready" 字符串）
+			isReady := strings.Contains(n.Status, "Ready")
 			status := "🟢 Ready"
-			if n.Status != "Ready" {
+			if !isReady {
 				status = "🔴 NotReady"
 			}
 
 			schedulable := "✅ 可调度"
 			if !n.Schedulable {
 				schedulable = "⛔ 禁止调度"
+				// 如果有禁止调度原因，添加原因
+				if n.UnschedulableReason != "" {
+					schedulable = fmt.Sprintf("⛔ 禁止调度（%s）", n.UnschedulableReason)
+				}
 			}
 
-			// 获取异常开始时间
+			// 获取异常开始时间（仅针对真正 NotReady 的节点）
 			var abnormalSince string
-			if n.Status != "Ready" {
+			if !isReady {
 				// 从 Conditions 中查找 Ready 状态的 LastTransitionTime
 				for _, cond := range n.Conditions {
 					if cond.Type == "Ready" && cond.Status != "True" {
