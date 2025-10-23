@@ -390,6 +390,10 @@ func BuildNodeInfoCard(node map[string]interface{}) string {
 			// Pods
 			podsCapacity := getStringValue(capacity, "pods")
 			podsAllocatable := getStringValue(allocatable, "pods")
+			podsUsage := getStringValue(node, "pods_usage")
+			if podsUsage == "" {
+				podsUsage = "N/A"
+			}
 
 			// GPU - 累加所有GPU资源类型
 			gpuCapacity := 0
@@ -417,11 +421,11 @@ func BuildNodeInfoCard(node map[string]interface{}) string {
 
 			resourceContent := fmt.Sprintf(`🟢 **CPU**: %s / %s / %s
 🔵 **内存**: %s / %s / %s
-🟣 **POD**: %s / %s / N/A
+🟣 **POD**: %s / %s / %s
 🔴 **GPU**: %d / %d / N/A`,
 				cpuCapacity, cpuAllocatable, cpuUsage,
 				memCapacity, memAllocatable, memUsage,
-				podsCapacity, podsAllocatable,
+				podsCapacity, podsAllocatable, podsUsage,
 				gpuCapacity, gpuAllocatable,
 			)
 

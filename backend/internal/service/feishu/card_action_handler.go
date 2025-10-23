@@ -157,6 +157,7 @@ func (h *CardActionHandler) handleNodeInfo(action map[string]interface{}, userMa
 	if foundNode.Usage != nil {
 		nodeInfo["cpu_usage"] = foundNode.Usage.CPU
 		nodeInfo["memory_usage"] = foundNode.Usage.Memory
+		nodeInfo["pods_usage"] = foundNode.Usage.Pods
 	}
 
 	return &CommandResponse{
