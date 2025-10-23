@@ -51,8 +51,8 @@
 
     <!-- Tab 分栏结构 -->
     <el-tabs v-model="activeTab" class="analytics-tabs">
-      <!-- 概览面板 -->
-      <el-tab-pane label="数据概览" name="overview">
+      <!-- 统计分析面板（合并数据概览和趋势分析） -->
+      <el-tab-pane label="统计分析" name="overview">
         <!-- 统计卡片区 -->
         <el-row :gutter="20" class="stats-row">
           <el-col :span="6">
@@ -111,10 +111,8 @@
             </el-card>
           </el-col>
         </el-row>
-      </el-tab-pane>
 
-      <!-- 趋势分析面板 -->
-      <el-tab-pane label="趋势分析" name="trend">
+        <!-- 趋势分析图表 -->
         <TrendCharts
           :cluster-id="filterForm.cluster_id"
           :start-time="computedStartTime"
@@ -624,7 +622,7 @@ onUnmounted(() => {
 }
 
 .stats-row {
-  margin-bottom: 20px;
+  margin-bottom: 30px;
 }
 
 .stat-card {
