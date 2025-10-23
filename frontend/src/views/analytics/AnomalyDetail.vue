@@ -128,7 +128,7 @@
         <el-divider />
 
         <el-row :gutter="20">
-          <el-col :span="6">
+          <el-col :span="8">
             <div class="snapshot-item">
               <div class="snapshot-label">CPU 使用率</div>
               <el-progress
@@ -137,7 +137,7 @@
               />
             </div>
           </el-col>
-          <el-col :span="6">
+          <el-col :span="8">
             <div class="snapshot-item">
               <div class="snapshot-label">内存使用率</div>
               <el-progress
@@ -146,16 +146,7 @@
               />
             </div>
           </el-col>
-          <el-col :span="6">
-            <div class="snapshot-item">
-              <div class="snapshot-label">磁盘使用率</div>
-              <el-progress
-                :percentage="nodeSnapshot.disk_usage || 0"
-                :color="getProgressColor(nodeSnapshot.disk_usage)"
-              />
-            </div>
-          </el-col>
-          <el-col :span="6">
+          <el-col :span="8">
             <div class="snapshot-item">
               <div class="snapshot-label">Pod 数量</div>
               <div class="snapshot-value">{{ nodeSnapshot.pod_count || 0 }}</div>
@@ -339,7 +330,6 @@ const loadAnomalyDetail = async () => {
           os_image: 'Ubuntu 22.04.3 LTS',
           cpu_usage: Math.floor(Math.random() * 100),
           memory_usage: Math.floor(Math.random() * 100),
-          disk_usage: Math.floor(Math.random() * 100),
           pod_count: Math.floor(Math.random() * 50)
         }
         
