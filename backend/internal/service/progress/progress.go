@@ -293,8 +293,15 @@ func (s *Service) readPump(conn *Connection) {
 	for {
 		messageType, message, err := conn.ws.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure) {
-				s.logger.Errorf("WebSocket error for user %d: %v", conn.userID, err)
+			// 检查是否是正常的关闭
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				s.logger.Infof("WebSocket connection closed normally for user %d: %v", conn.userID, err)
+			} else if websocket.IsCloseError(err, websocket.CloseNoStatusReceived) {
+				// Close 1005: 浏览器切换标签页、刷新等正常行为，不记录为错误
+				s.logger.Infof("WebSocket connection closed without status for user %d (browser tab switch/refresh)", conn.userID)
+			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived) {
+				// 真正的异常关闭才记录为错误
+				s.logger.Errorf("WebSocket unexpected error for user %d: %v", conn.userID, err)
 			} else {
 				s.logger.Infof("WebSocket connection closed for user %d: %v", conn.userID, err)
 			}
