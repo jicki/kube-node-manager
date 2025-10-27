@@ -69,6 +69,9 @@ func main() {
 	// 启动节点异常监控服务
 	services.Anomaly.StartMonitoring()
 
+	// 启动异常报告调度器
+	services.AnomalyReport.StartScheduler()
+
 	router := gin.Default()
 
 	// 在生产模式下不需要CORS，因为前后端在同一域名下
@@ -291,11 +294,35 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		anomalies.GET("/type-statistics", handlers.Anomaly.GetTypeStatistics)
 		anomalies.POST("/check", handlers.Anomaly.TriggerCheck)
 
+		// 高级统计接口
+		anomalies.GET("/role-statistics", handlers.Anomaly.GetRoleStatistics)
+		anomalies.GET("/cluster-aggregate", handlers.Anomaly.GetClusterAggregate)
+		anomalies.GET("/node-trend", handlers.Anomaly.GetNodeTrend)
+		anomalies.GET("/mttr", handlers.Anomaly.GetMTTR)
+		anomalies.GET("/sla", handlers.Anomaly.GetSLA)
+		anomalies.GET("/recovery-metrics", handlers.Anomaly.GetRecoveryMetrics)
+		anomalies.GET("/node-health", handlers.Anomaly.GetNodeHealth)
+		anomalies.GET("/heatmap", handlers.Anomaly.GetHeatmap)
+		anomalies.GET("/calendar", handlers.Anomaly.GetCalendar)
+		anomalies.GET("/top-unhealthy-nodes", handlers.Anomaly.GetTopUnhealthyNodes)
+
 		// 数据清理相关
 		anomalies.POST("/cleanup", handlers.Anomaly.TriggerCleanup)
 		anomalies.GET("/cleanup/config", handlers.Anomaly.GetCleanupConfig)
 		anomalies.PUT("/cleanup/config", handlers.Anomaly.UpdateCleanupConfig)
 		anomalies.GET("/cleanup/stats", handlers.Anomaly.GetCleanupStats)
+	}
+
+	// Anomaly Report routes (异常报告配置管理)
+	anomalyReports := protected.Group("/anomaly-reports")
+	{
+		anomalyReports.GET("/configs", handlers.AnomalyReport.GetReportConfigs)
+		anomalyReports.GET("/configs/:id", handlers.AnomalyReport.GetReportConfig)
+		anomalyReports.POST("/configs", handlers.AnomalyReport.CreateReportConfig)
+		anomalyReports.PUT("/configs/:id", handlers.AnomalyReport.UpdateReportConfig)
+		anomalyReports.DELETE("/configs/:id", handlers.AnomalyReport.DeleteReportConfig)
+		anomalyReports.POST("/configs/:id/test", handlers.AnomalyReport.TestReportSend)
+		anomalyReports.POST("/configs/:id/run", handlers.AnomalyReport.RunReportNow)
 	}
 }
 
@@ -318,6 +345,11 @@ func gracefulShutdown(srv *http.Server, db *gorm.DB, logger *logger.Logger, serv
 	// 停止节点异常监控服务
 	if services != nil && services.Anomaly != nil {
 		services.Anomaly.StopMonitoring()
+	}
+
+	// 停止异常报告调度器
+	if services != nil && services.AnomalyReport != nil {
+		services.AnomalyReport.StopScheduler()
 	}
 
 	// 关闭HTTP服务器

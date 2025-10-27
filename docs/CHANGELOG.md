@@ -7,6 +7,239 @@
 
 ---
 
+## [v2.13.0] - 2025-10-27
+
+### ✨ 新功能
+
+#### 1. 统计分析功能全面升级
+
+**高级统计API** (10+ 新增接口):
+
+- ✅ **按角色聚合统计** - 统计不同节点角色的异常分布
+  - `GET /api/v1/anomalies/role-statistics`
+- ✅ **按集群聚合统计** - 统计各集群的异常情况
+  - `GET /api/v1/anomalies/cluster-aggregate`
+- ✅ **单节点历史趋势** - 查看单个节点的异常变化趋势
+  - `GET /api/v1/anomalies/node-trend`
+- ✅ **MTTR 统计** - 计算平均恢复时间（Mean Time To Recovery）
+  - `GET /api/v1/anomalies/mttr`
+- ✅ **SLA 可用性** - 计算节点/集群的SLA可用性百分比
+  - `GET /api/v1/anomalies/sla`
+- ✅ **恢复率和复发率** - 统计异常恢复率和复发率
+  - `GET /api/v1/anomalies/recovery-metrics`
+- ✅ **节点健康度评分** - 综合评估节点健康状况（0-100分）
+  - `GET /api/v1/anomalies/node-health`
+- ✅ **热力图数据** - 时间 × 节点矩阵的异常分布
+  - `GET /api/v1/anomalies/heatmap`
+- ✅ **日历图数据** - 按日期聚合的异常数量
+  - `GET /api/v1/anomalies/calendar`
+- ✅ **Top 不健康节点** - 健康度最低的节点列表
+  - `GET /api/v1/anomalies/top-unhealthy-nodes`
+
+**关键指标计算**:
+
+- **MTTR**: `AVG(duration) WHERE status='Resolved'`
+- **SLA**: `(总时间 - 异常累计时长) / 总时间 × 100%`
+- **恢复率**: `已恢复数 / 总异常数 × 100%`
+- **复发率**: `重复异常次数 / 总恢复次数 × 100%`
+- **健康度评分**: 综合异常次数、类型、持续时长、恢复速度等指标
+
+#### 2. 定时报告配置管理（数据库驱动）
+
+**核心特性**:
+
+- ✅ **UI 界面管理** - 通过"系统配置 → 分析报告"页面管理报告配置
+- ✅ **数据库存储** - 配置存储在数据库中，无需修改配置文件
+- ✅ **Cron 调度** - 使用 Cron 表达式灵活配置执行时间
+- ✅ **飞书自动推送** - 定时生成报告并推送到飞书群聊
+- ✅ **多报告支持** - 可创建多个报告配置（日报、周报、月报等）
+- ✅ **测试发送** - 配置前可测试推送渠道
+- ✅ **手动执行** - 支持手动触发报告生成
+
+**报告内容**:
+
+- 时间范围内的统计摘要（总异常、活跃、已恢复、受影响节点）
+- 异常趋势数据
+- 异常类型分布
+- Top 10 异常节点
+- MTTR 和 SLA 关键指标
+- 健康度最低的节点列表
+
+**API 接口** (7个新增接口):
+
+```
+GET    /api/v1/anomaly-reports/configs         # 获取报告配置列表
+GET    /api/v1/anomaly-reports/configs/:id     # 获取单个配置
+POST   /api/v1/anomaly-reports/configs         # 创建配置
+PUT    /api/v1/anomaly-reports/configs/:id     # 更新配置
+DELETE /api/v1/anomaly-reports/configs/:id     # 删除配置
+POST   /api/v1/anomaly-reports/configs/:id/test # 测试发送
+POST   /api/v1/anomaly-reports/configs/:id/run  # 手动执行
+```
+
+#### 3. 节点健康度评分系统
+
+**评分体系**:
+
+| 分数范围 | 等级 | 说明 |
+|---------|------|------|
+| 90-100 | 优秀 | 节点运行稳定，极少出现异常 |
+| 75-89 | 良好 | 偶尔出现异常，但恢复迅速 |
+| 60-74 | 一般 | 存在一定数量的异常，需关注 |
+| 40-59 | 较差 | 异常频繁或恢复缓慢，建议检查 |
+| 0-39 | 很差 | 严重问题，需要立即处理 |
+
+**影响因素**:
+
+- 异常频率（权重 30%）
+- 恢复速度（权重 30%）
+- 异常严重性（权重 20%）
+- 稳定性/复发率（权重 20%）
+
+**前端组件**:
+
+- `NodeHealthCard.vue` - 节点健康度评分卡
+- 显示健康度评分、等级、影响因素分解
+- 支持近7天健康度趋势图
+
+#### 4. 新增前端 API 方法
+
+**文件**: `frontend/src/api/anomaly.js`
+
+新增 17 个 API 方法：
+
+- 高级统计相关（10个）
+- 报告配置管理（7个）
+
+#### 5. 新增系统配置页面
+
+**导航路径**: 系统配置 → 分析报告
+
+**功能**:
+
+- 报告配置列表（表格展示）
+- 启用/禁用、编辑、删除、测试、手动执行
+- 新增/编辑报告配置对话框
+- Cron 表达式验证和说明
+
+### 🔧 配置变更
+
+#### 后端配置
+
+**文件**: `backend/configs/config.yaml.example`
+
+新增配置项：
+
+```yaml
+monitoring:
+  enabled: true
+  interval: 60
+  report_scheduler_enabled: true  # 新增：启用报告调度器
+```
+
+#### 数据库迁移
+
+**新增表**: `anomaly_report_configs`
+
+```sql
+CREATE TABLE anomaly_report_configs (
+    id                SERIAL PRIMARY KEY,
+    enabled           BOOLEAN DEFAULT FALSE,
+    report_name       VARCHAR(100) NOT NULL,
+    schedule          VARCHAR(50),
+    frequency         VARCHAR(20),
+    cluster_ids       TEXT,
+    feishu_enabled    BOOLEAN DEFAULT FALSE,
+    feishu_webhook    VARCHAR(500),
+    email_enabled     BOOLEAN DEFAULT FALSE,
+    email_recipients  TEXT,
+    last_run_time     TIMESTAMP,
+    next_run_time     TIMESTAMP,
+    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### 前端路由
+
+新增路由：
+
+- `/analytics-report-settings` - 分析报告配置页面
+
+### 📦 新增依赖
+
+#### 后端
+
+- `github.com/robfig/cron/v3 v3.0.1` - Cron 任务调度
+
+### 📁 新增/修改文件
+
+#### 后端新增
+
+1. `backend/internal/service/anomaly/statistics_extended.go` - 扩展统计方法
+2. `backend/internal/service/anomaly/statistics_visualization.go` - 可视化数据方法
+3. `backend/internal/service/anomaly/report.go` - 报告生成和配置管理
+4. `backend/internal/handler/anomaly/statistics_handler.go` - 统计接口处理器
+5. `backend/internal/handler/anomaly/report_handler.go` - 报告配置处理器
+6. `backend/migrations/002_add_anomaly_analytics.sql` - 数据库迁移
+
+#### 后端修改
+
+1. `backend/internal/model/anomaly.go` - 新增数据结构和报告配置表
+2. `backend/internal/model/migrate.go` - 注册新表迁移
+3. `backend/internal/service/anomaly/anomaly.go` - 新增统计方法
+4. `backend/internal/service/services.go` - 注册 AnomalyReport 服务
+5. `backend/internal/handler/handlers.go` - 注册 AnomalyReport handler
+6. `backend/internal/config/config.go` - 新增配置定义
+7. `backend/configs/config.yaml.example` - 新增配置示例
+8. `backend/cmd/main.go` - 启动/停止报告调度器
+
+#### 前端新增
+
+1. `frontend/src/views/analytics/ReportSettings.vue` - 报告配置管理页面
+2. `frontend/src/components/analytics/NodeHealthCard.vue` - 节点健康度评分卡
+
+#### 前端修改
+
+1. `frontend/src/api/anomaly.js` - 新增 17 个 API 方法
+2. `frontend/src/router/index.js` - 新增路由
+3. `frontend/src/components/layout/Sidebar.vue` - 新增菜单项
+
+#### 文档新增
+
+1. `docs/analytics-advanced-features.md` - 高级功能文档
+2. `docs/CHANGELOG.md` - 更新变更日志（本文件）
+
+### 🎯 功能亮点
+
+1. **数据库驱动配置** - 报告配置通过 UI 管理，无需修改配置文件
+2. **灵活的调度机制** - 支持 Cron 表达式，可配置日/周/月报告
+3. **全面的统计分析** - 覆盖角色、集群、节点多维度分析
+4. **健康度评分系统** - 综合多指标评估节点健康状况
+5. **可扩展的报告系统** - 支持飞书、邮件等多渠道推送（邮件预留）
+
+### 📊 性能优化
+
+1. **数据库索引优化** - 为常用查询字段添加索引
+2. **缓存策略** - 使用 PostgreSQL 缓存表或内存缓存
+3. **异步处理** - 报告生成使用后台任务
+
+### 📚 文档更新
+
+- ✅ 新增《统计分析高级功能文档》
+- ✅ Cron 表达式说明和示例
+- ✅ API 接口详细说明
+- ✅ 使用指南和常见问题
+
+### ⚠️ 注意事项
+
+1. 升级后需要执行数据库迁移（GORM 自动迁移）
+2. 如需启用报告调度器，请确保配置 `monitoring.report_scheduler_enabled: true`
+3. 飞书推送需要在群聊中添加自定义机器人并配置 Webhook URL
+4. 邮件推送功能预留，将在下一版本实现
+
+---
+
 ## [v2.12.8] - 2025-10-27
 
 ### 🐛 Bug 修复

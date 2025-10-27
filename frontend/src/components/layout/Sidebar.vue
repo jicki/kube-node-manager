@@ -163,6 +163,14 @@
           <el-icon><Setting /></el-icon>
           <template #title>飞书配置</template>
         </el-menu-item>
+
+        <el-menu-item
+          v-if="hasPermission('admin')"
+          index="/analytics-report-settings"
+        >
+          <el-icon><DataAnalysis /></el-icon>
+          <template #title>分析报告</template>
+        </el-menu-item>
       </el-sub-menu>
     </el-menu>
     

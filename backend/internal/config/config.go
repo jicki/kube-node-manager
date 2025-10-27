@@ -55,10 +55,11 @@ type ProgressConfig struct {
 }
 
 type MonitoringConfig struct {
-	Enabled  bool          `mapstructure:"enabled"`  // 启用节点异常监控
-	Interval int           `mapstructure:"interval"` // 监控周期（秒）
-	Cache    CacheConfig   `mapstructure:"cache"`    // 缓存配置
-	Cleanup  CleanupConfig `mapstructure:"cleanup"`  // 清理配置
+	Enabled                bool          `mapstructure:"enabled"`                  // 启用节点异常监控
+	Interval               int           `mapstructure:"interval"`                 // 监控周期（秒）
+	ReportSchedulerEnabled bool          `mapstructure:"report_scheduler_enabled"` // 启用报告调度器
+	Cache                  CacheConfig   `mapstructure:"cache"`                    // 缓存配置
+	Cleanup                CleanupConfig `mapstructure:"cleanup"`                  // 清理配置
 }
 
 type CleanupConfig struct {
@@ -114,6 +115,7 @@ func LoadConfig() *Config {
 	viper.SetDefault("progress.enable_database", false)
 	viper.SetDefault("monitoring.enabled", true)
 	viper.SetDefault("monitoring.interval", 60)
+	viper.SetDefault("monitoring.report_scheduler_enabled", true)
 	viper.SetDefault("monitoring.cache.enabled", true)
 	viper.SetDefault("monitoring.cache.type", "postgres")
 	viper.SetDefault("monitoring.cache.postgres.table_name", "cache_entries")

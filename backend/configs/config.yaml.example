@@ -98,8 +98,9 @@ logging:
 
 # 节点异常监控配置
 monitoring:
-  enabled: true       # 是否启用节点异常监控
-  interval: 60        # 监控周期（秒），建议 60-300 秒，避免对集群造成压力
+  enabled: true                 # 是否启用节点异常监控
+  interval: 60                  # 监控周期（秒），建议 60-300 秒，避免对集群造成压力
+  report_scheduler_enabled: true # 是否启用异常报告调度器（具体配置在系统界面管理）
   
   # 缓存配置（多副本部署必须启用，避免缓存不一致问题）
   cache:

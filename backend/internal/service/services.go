@@ -25,19 +25,20 @@ import (
 )
 
 type Services struct {
-	Auth     *auth.Service
-	User     *user.Service
-	Cluster  *cluster.Service
-	Node     *node.Service
-	Label    *label.Service
-	Taint    *taint.Service
-	Audit    *audit.Service
-	LDAP     *ldap.Service
-	K8s      *k8s.Service
-	Progress *progress.Service
-	Gitlab   *gitlab.Service
-	Feishu   *feishu.Service
-	Anomaly  *anomaly.Service
+	Auth          *auth.Service
+	User          *user.Service
+	Cluster       *cluster.Service
+	Node          *node.Service
+	Label         *label.Service
+	Taint         *taint.Service
+	Audit         *audit.Service
+	LDAP          *ldap.Service
+	K8s           *k8s.Service
+	Progress      *progress.Service
+	Gitlab        *gitlab.Service
+	Feishu        *feishu.Service
+	Anomaly       *anomaly.Service
+	AnomalyReport *anomaly.ReportService
 }
 
 // clusterServiceAdapter 适配器，将 cluster.Service 适配为 feishu.ClusterServiceInterface
@@ -217,19 +218,27 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	// 创建异常监控服务
 	anomalySvc := anomaly.NewService(db, logger, k8sSvc, clusterSvc, cacheInstance, cacheTTL, cleanupSvc, cfg.Monitoring.Enabled, cfg.Monitoring.Interval)
 
+	// 创建异常报告服务
+	reportEnabled := false
+	if cfg.Monitoring.ReportSchedulerEnabled {
+		reportEnabled = true
+	}
+	anomalyReportSvc := anomaly.NewReportService(db, logger, anomalySvc, reportEnabled)
+
 	return &Services{
-		Auth:     authSvc,
-		User:     user.NewService(db, logger, auditSvc),
-		Cluster:  clusterSvc,
-		Node:     nodeSvc,
-		Label:    labelSvc,
-		Taint:    taintSvc,
-		Audit:    auditSvc,
-		LDAP:     ldapSvc,
-		K8s:      k8sSvc,
-		Progress: progressSvc,
-		Gitlab:   gitlab.NewService(db, logger),
-		Feishu:   feishuSvc,
-		Anomaly:  anomalySvc,
+		Auth:          authSvc,
+		User:          user.NewService(db, logger, auditSvc),
+		Cluster:       clusterSvc,
+		Node:          nodeSvc,
+		Label:         labelSvc,
+		Taint:         taintSvc,
+		Audit:         auditSvc,
+		LDAP:          ldapSvc,
+		K8s:           k8sSvc,
+		Progress:      progressSvc,
+		Gitlab:        gitlab.NewService(db, logger),
+		Feishu:        feishuSvc,
+		Anomaly:       anomalySvc,
+		AnomalyReport: anomalyReportSvc,
 	}
 }

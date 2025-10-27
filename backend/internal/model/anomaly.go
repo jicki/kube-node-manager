@@ -75,3 +75,146 @@ type AnomalyTypeStatistics struct {
 	AnomalyType AnomalyType `json:"anomaly_type"`
 	TotalCount  int64       `json:"total_count"` // 总异常次数
 }
+
+// NodeRoleStatistics 按节点角色聚合统计
+type NodeRoleStatistics struct {
+	Role            string  `json:"role"`             // 节点角色（master/worker/etcd等）
+	ClusterID       *uint   `json:"cluster_id"`       // 集群ID（可选，用于多集群统计）
+	ClusterName     string  `json:"cluster_name"`     // 集群名称
+	TotalCount      int64   `json:"total_count"`      // 总异常次数
+	ActiveCount     int64   `json:"active_count"`     // 活跃异常数
+	ResolvedCount   int64   `json:"resolved_count"`   // 已恢复异常数
+	AverageDuration float64 `json:"average_duration"` // 平均持续时长（秒）
+	AffectedNodes   int64   `json:"affected_nodes"`   // 受影响节点数
+	NodeCount       int64   `json:"node_count"`       // 该角色节点总数
+}
+
+// ClusterAggregateStatistics 按集群聚合统计
+type ClusterAggregateStatistics struct {
+	ClusterID       uint    `json:"cluster_id"`
+	ClusterName     string  `json:"cluster_name"`
+	TotalCount      int64   `json:"total_count"`      // 总异常次数
+	ActiveCount     int64   `json:"active_count"`     // 活跃异常数
+	ResolvedCount   int64   `json:"resolved_count"`   // 已恢复异常数
+	AverageDuration float64 `json:"average_duration"` // 平均持续时长（秒）
+	AffectedNodes   int64   `json:"affected_nodes"`   // 受影响节点数
+	TotalNodes      int64   `json:"total_nodes"`      // 集群节点总数
+	HealthScore     float64 `json:"health_score"`     // 集群健康度评分（0-100）
+}
+
+// NodeHistoryTrend 单节点历史趋势
+type NodeHistoryTrend struct {
+	Date          string  `json:"date"`           // 日期
+	TotalCount    int64   `json:"total_count"`    // 当日异常次数
+	ActiveCount   int64   `json:"active_count"`   // 当日活跃异常数
+	ResolvedCount int64   `json:"resolved_count"` // 当日已恢复异常数
+	AvgDuration   float64 `json:"avg_duration"`   // 当日平均持续时长
+}
+
+// MTTRStatistics 平均恢复时间统计
+type MTTRStatistics struct {
+	EntityType    string  `json:"entity_type"`    // 实体类型（node/cluster/role）
+	EntityName    string  `json:"entity_name"`    // 实体名称
+	MTTR          float64 `json:"mttr"`           // 平均恢复时间（秒）
+	ResolvedCount int64   `json:"resolved_count"` // 已恢复异常数
+	TotalDuration int64   `json:"total_duration"` // 累计恢复时长（秒）
+	MinDuration   int64   `json:"min_duration"`   // 最短恢复时间（秒）
+	MaxDuration   int64   `json:"max_duration"`   // 最长恢复时间（秒）
+}
+
+// SLAMetrics SLA 可用性指标
+type SLAMetrics struct {
+	EntityType       string    `json:"entity_type"`       // 实体类型（node/cluster）
+	EntityName       string    `json:"entity_name"`       // 实体名称
+	StartTime        time.Time `json:"start_time"`        // 统计开始时间
+	EndTime          time.Time `json:"end_time"`          // 统计结束时间
+	TotalTime        int64     `json:"total_time"`        // 总时间（秒）
+	DowntimeDuration int64     `json:"downtime_duration"` // 异常时长（秒）
+	UptimeDuration   int64     `json:"uptime_duration"`   // 正常时长（秒）
+	Availability     float64   `json:"availability"`      // 可用性百分比（0-100）
+	AnomalyCount     int64     `json:"anomaly_count"`     // 异常次数
+}
+
+// RecoveryMetrics 恢复率和复发率指标
+type RecoveryMetrics struct {
+	EntityType     string  `json:"entity_type"`     // 实体类型（node/cluster）
+	EntityName     string  `json:"entity_name"`     // 实体名称
+	TotalCount     int64   `json:"total_count"`     // 总异常次数
+	ResolvedCount  int64   `json:"resolved_count"`  // 已恢复异常数
+	ActiveCount    int64   `json:"active_count"`    // 活跃异常数
+	RecoveryRate   float64 `json:"recovery_rate"`   // 恢复率（%）
+	RecurringCount int64   `json:"recurring_count"` // 复发异常次数
+	RecurrenceRate float64 `json:"recurrence_rate"` // 复发率（%）
+}
+
+// NodeHealthScore 节点健康度评分
+type NodeHealthScore struct {
+	NodeName        string             `json:"node_name"`
+	ClusterID       uint               `json:"cluster_id"`
+	ClusterName     string             `json:"cluster_name"`
+	HealthScore     float64            `json:"health_score"`     // 综合健康度评分（0-100）
+	ScoreLevel      string             `json:"score_level"`      // 评分等级（优秀/良好/一般/较差）
+	TotalAnomalies  int64              `json:"total_anomalies"`  // 总异常次数
+	ActiveAnomalies int64              `json:"active_anomalies"` // 活跃异常数
+	AvgMTTR         float64            `json:"avg_mttr"`         // 平均恢复时间
+	Availability    float64            `json:"availability"`     // 可用性（%）
+	LastAnomaly     *time.Time         `json:"last_anomaly"`     // 最后一次异常时间
+	Factors         map[string]float64 `json:"factors"`          // 影响因素分解
+}
+
+// GetScoreLevel 根据分数返回评分等级
+func (s *NodeHealthScore) GetScoreLevel() string {
+	if s.HealthScore >= 90 {
+		return "优秀"
+	} else if s.HealthScore >= 75 {
+		return "良好"
+	} else if s.HealthScore >= 60 {
+		return "一般"
+	}
+	return "较差"
+}
+
+// HeatmapDataPoint 热力图数据点
+type HeatmapDataPoint struct {
+	Time     string `json:"time"`      // 时间点
+	NodeName string `json:"node_name"` // 节点名称
+	Value    int64  `json:"value"`     // 异常数量
+}
+
+// CalendarDataPoint 日历图数据点
+type CalendarDataPoint struct {
+	Date  string `json:"date"`  // 日期（YYYY-MM-DD）
+	Value int64  `json:"value"` // 异常数量
+}
+
+// ReportFrequency 报告频率
+type ReportFrequency string
+
+const (
+	ReportFrequencyDaily   ReportFrequency = "daily"
+	ReportFrequencyWeekly  ReportFrequency = "weekly"
+	ReportFrequencyMonthly ReportFrequency = "monthly"
+)
+
+// AnomalyReportConfig 异常报告配置
+type AnomalyReportConfig struct {
+	ID              uint            `json:"id" gorm:"primaryKey"`
+	Enabled         bool            `json:"enabled" gorm:"default:false;index"`
+	ReportName      string          `json:"report_name" gorm:"size:100;not null"`
+	Schedule        string          `json:"schedule" gorm:"size:50"`      // Cron 表达式
+	Frequency       ReportFrequency `json:"frequency" gorm:"size:20"`     // daily/weekly/monthly
+	ClusterIDs      string          `json:"cluster_ids" gorm:"type:text"` // JSON 数组，空为全部
+	FeishuEnabled   bool            `json:"feishu_enabled" gorm:"default:false"`
+	FeishuWebhook   string          `json:"feishu_webhook" gorm:"size:500"`
+	EmailEnabled    bool            `json:"email_enabled" gorm:"default:false"`
+	EmailRecipients string          `json:"email_recipients" gorm:"type:text"` // JSON 数组
+	LastRunTime     *time.Time      `json:"last_run_time"`
+	NextRunTime     *time.Time      `json:"next_run_time"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+// TableName 指定表名
+func (AnomalyReportConfig) TableName() string {
+	return "anomaly_report_configs"
+}

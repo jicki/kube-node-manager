@@ -106,6 +106,12 @@ const router = createRouter({
           name: 'AnomalyDetail',
           component: () => import('@/views/analytics/AnomalyDetail.vue'),
           meta: { title: '异常详情', icon: 'Document', requiresAuth: true }
+        },
+        {
+          path: 'analytics-report-settings',
+          name: 'AnalyticsReportSettings',
+          component: () => import('@/views/analytics/ReportSettings.vue'),
+          meta: { title: '分析报告配置', icon: 'DataAnalysis', requiresAuth: true, permission: 'admin' }
         }
       ]
     },

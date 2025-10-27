@@ -727,3 +727,243 @@ func (s *Service) GetTypeStatistics(clusterID *uint, startTime, endTime *time.Ti
 
 	return statistics, nil
 }
+
+// GetRoleStatistics 获取按节点角色聚合统计
+func (s *Service) GetRoleStatistics(clusterID *uint, startTime, endTime *time.Time) ([]model.NodeRoleStatistics, error) {
+	// 设置默认时间范围（最近30天）
+	if startTime == nil {
+		t := time.Now().AddDate(0, 0, -30)
+		startTime = &t
+	}
+	if endTime == nil {
+		t := time.Now()
+		endTime = &t
+	}
+
+	// 构建缓存键
+	clusterIDStr := "all"
+	if clusterID != nil {
+		clusterIDStr = fmt.Sprintf("%d", *clusterID)
+	}
+	cacheKey := s.buildCacheKey("anomaly:role_stats",
+		clusterIDStr,
+		startTime.Format("2006-01-02"),
+		endTime.Format("2006-01-02"),
+	)
+
+	// 尝试从缓存获取
+	ctx := context.Background()
+	if cached, err := s.cache.Get(ctx, cacheKey); err == nil {
+		var statistics []model.NodeRoleStatistics
+		if err := json.Unmarshal(cached, &statistics); err == nil {
+			return statistics, nil
+		}
+	}
+
+	// 获取所有异常记录（包含集群信息）
+	query := s.db.Model(&model.NodeAnomaly{}).
+		Select("node_name, cluster_id, cluster_name, COUNT(*) as count, SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as active, SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved, AVG(CASE WHEN status = 'Resolved' THEN duration ELSE 0 END) as avg_duration").
+		Where("start_time >= ? AND start_time <= ?", startTime, endTime)
+
+	if clusterID != nil {
+		query = query.Where("cluster_id = ?", *clusterID)
+	}
+
+	var anomalyData []struct {
+		NodeName    string
+		ClusterID   uint
+		ClusterName string
+		Count       int64
+		Active      int64
+		Resolved    int64
+		AvgDuration float64
+	}
+
+	if err := query.Group("node_name, cluster_id, cluster_name").Find(&anomalyData).Error; err != nil {
+		return nil, fmt.Errorf("failed to query anomaly data: %w", err)
+	}
+
+	// 获取所有相关集群的节点信息，以便提取角色
+	clusterMap := make(map[uint]model.Cluster)
+	var clusters []model.Cluster
+	clusterQuery := s.db.Where("status = ?", model.ClusterStatusActive)
+	if clusterID != nil {
+		clusterQuery = clusterQuery.Where("id = ?", *clusterID)
+	}
+	if err := clusterQuery.Find(&clusters).Error; err != nil {
+		return nil, fmt.Errorf("failed to query clusters: %w", err)
+	}
+	for _, c := range clusters {
+		clusterMap[c.ID] = c
+	}
+
+	// 构建节点角色映射
+	nodeRoleMap := make(map[uint]map[string]string) // clusterID -> nodeName -> role
+	for cID, c := range clusterMap {
+		nodeRoleMap[cID] = make(map[string]string)
+		nodes, err := s.k8sSvc.ListNodes(c.Name)
+		if err != nil {
+			s.logger.Warningf("Failed to list nodes for cluster %s: %v", c.Name, err)
+			continue
+		}
+		for _, node := range nodes {
+			// 获取主要角色（取第一个）
+			if len(node.Roles) > 0 {
+				nodeRoleMap[cID][node.Name] = node.Roles[0]
+			} else {
+				nodeRoleMap[cID][node.Name] = "worker"
+			}
+		}
+	}
+
+	// 按角色聚合统计
+	roleStatsMap := make(map[string]*model.NodeRoleStatistics)
+	nodesByRole := make(map[string]map[string]bool) // role -> set of node names
+
+	for _, data := range anomalyData {
+		role := nodeRoleMap[data.ClusterID][data.NodeName]
+		if role == "" {
+			role = "worker" // 默认角色
+		}
+
+		key := role
+		if clusterID != nil {
+			key = fmt.Sprintf("%s-%d", role, data.ClusterID)
+		}
+
+		if _, exists := roleStatsMap[key]; !exists {
+			roleStatsMap[key] = &model.NodeRoleStatistics{
+				Role:        role,
+				ClusterName: data.ClusterName,
+			}
+			if clusterID != nil {
+				roleStatsMap[key].ClusterID = clusterID
+			}
+			nodesByRole[key] = make(map[string]bool)
+		}
+
+		stats := roleStatsMap[key]
+		stats.TotalCount += data.Count
+		stats.ActiveCount += data.Active
+		stats.ResolvedCount += data.Resolved
+		stats.AverageDuration += data.AvgDuration * float64(data.Resolved)
+		nodesByRole[key][data.NodeName] = true
+	}
+
+	// 计算平均持续时长和受影响节点数
+	var result []model.NodeRoleStatistics
+	for key, stats := range roleStatsMap {
+		if stats.ResolvedCount > 0 {
+			stats.AverageDuration = stats.AverageDuration / float64(stats.ResolvedCount)
+		}
+		stats.AffectedNodes = int64(len(nodesByRole[key]))
+
+		// 计算该角色的节点总数
+		roleNodeCount := int64(0)
+		for cID := range nodeRoleMap {
+			if clusterID == nil || *clusterID == cID {
+				for _, nodeRole := range nodeRoleMap[cID] {
+					if nodeRole == stats.Role {
+						roleNodeCount++
+					}
+				}
+			}
+		}
+		stats.NodeCount = roleNodeCount
+
+		result = append(result, *stats)
+	}
+
+	// 写入缓存
+	if data, err := json.Marshal(result); err == nil {
+		if err := s.cache.Set(ctx, cacheKey, data, s.cacheTTL.Statistics); err != nil {
+			s.logger.Warningf("Failed to cache role statistics: %v", err)
+		}
+	}
+
+	return result, nil
+}
+
+// GetClusterAggregateStatistics 获取按集群聚合统计
+func (s *Service) GetClusterAggregateStatistics(startTime, endTime *time.Time) ([]model.ClusterAggregateStatistics, error) {
+	// 设置默认时间范围（最近30天）
+	if startTime == nil {
+		t := time.Now().AddDate(0, 0, -30)
+		startTime = &t
+	}
+	if endTime == nil {
+		t := time.Now()
+		endTime = &t
+	}
+
+	// 构建缓存键
+	cacheKey := s.buildCacheKey("anomaly:cluster_aggregate",
+		startTime.Format("2006-01-02"),
+		endTime.Format("2006-01-02"),
+	)
+
+	// 尝试从缓存获取
+	ctx := context.Background()
+	if cached, err := s.cache.Get(ctx, cacheKey); err == nil {
+		var statistics []model.ClusterAggregateStatistics
+		if err := json.Unmarshal(cached, &statistics); err == nil {
+			return statistics, nil
+		}
+	}
+
+	// 查询数据库
+	var statistics []model.ClusterAggregateStatistics
+	query := `
+		SELECT 
+			cluster_id,
+			cluster_name,
+			COUNT(*) as total_count,
+			SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as active_count,
+			SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count,
+			AVG(CASE WHEN status = 'Resolved' THEN duration ELSE 0 END) as average_duration,
+			COUNT(DISTINCT node_name) as affected_nodes
+		FROM node_anomalies
+		WHERE start_time >= ? AND start_time <= ?
+		GROUP BY cluster_id, cluster_name
+		ORDER BY total_count DESC
+	`
+
+	if err := s.db.Raw(query, startTime, endTime).Scan(&statistics).Error; err != nil {
+		return nil, fmt.Errorf("failed to get cluster aggregate statistics: %w", err)
+	}
+
+	// 获取每个集群的节点总数并计算健康度评分
+	for i := range statistics {
+		// 获取集群信息
+		var cluster model.Cluster
+		if err := s.db.First(&cluster, statistics[i].ClusterID).Error; err == nil {
+			nodes, err := s.k8sSvc.ListNodes(cluster.Name)
+			if err == nil {
+				statistics[i].TotalNodes = int64(len(nodes))
+			}
+		}
+
+		// 计算健康度评分
+		// 评分逻辑：100分 - (异常率 × 50) - (活跃异常率 × 30)
+		if statistics[i].TotalNodes > 0 {
+			anomalyRate := float64(statistics[i].AffectedNodes) / float64(statistics[i].TotalNodes)
+			activeRate := float64(statistics[i].ActiveCount) / float64(statistics[i].TotalCount)
+			score := 100.0 - (anomalyRate * 50) - (activeRate * 30)
+			if score < 0 {
+				score = 0
+			}
+			statistics[i].HealthScore = score
+		} else {
+			statistics[i].HealthScore = 100.0
+		}
+	}
+
+	// 写入缓存
+	if data, err := json.Marshal(statistics); err == nil {
+		if err := s.cache.Set(ctx, cacheKey, data, s.cacheTTL.Statistics); err != nil {
+			s.logger.Warningf("Failed to cache cluster aggregate statistics: %v", err)
+		}
+	}
+
+	return statistics, nil
+}
