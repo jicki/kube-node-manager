@@ -204,6 +204,7 @@
                 v-loading="healthLoading"
                 :data="topUnhealthyNodes"
                 stripe
+                :height="600"
                 style="width: 100%"
               >
                 <el-table-column type="index" label="排名" width="80" />
@@ -240,7 +241,12 @@
                 </el-table-column>
                 <el-table-column label="平均恢复时间" width="140">
                   <template #default="{ row }">
-                    {{ formatSeconds(row.avg_recovery_time) }}
+                    <span v-if="row.avg_recovery_time && row.avg_recovery_time > 0">
+                      {{ formatSeconds(row.avg_recovery_time) }}
+                    </span>
+                    <el-tooltip v-else content="该节点暂无已恢复的异常记录" placement="top">
+                      <span style="color: #999">-</span>
+                    </el-tooltip>
                   </template>
                 </el-table-column>
                 <el-table-column label="操作" width="120" fixed="right">
@@ -363,6 +369,108 @@
         </el-card>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 节点健康详情对话框 -->
+    <el-dialog
+      v-model="healthDetailDialogVisible"
+      :title="`节点健康详情 - ${selectedNodeHealth?.node_name || ''}`"
+      width="800px"
+      destroy-on-close
+    >
+      <div v-if="selectedNodeHealth" class="health-detail-content">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="节点名称">
+            {{ selectedNodeHealth.node_name }}
+          </el-descriptions-item>
+          <el-descriptions-item label="所属集群">
+            {{ selectedNodeHealth.cluster_name }}
+          </el-descriptions-item>
+          <el-descriptions-item label="健康度评分">
+            <el-progress
+              :percentage="selectedNodeHealth.health_score"
+              :color="getHealthColor(selectedNodeHealth.health_score)"
+              :stroke-width="20"
+            >
+              <span style="font-size: 14px; font-weight: bold">
+                {{ selectedNodeHealth.health_score.toFixed(2) }}分
+              </span>
+            </el-progress>
+          </el-descriptions-item>
+          <el-descriptions-item label="健康等级">
+            <el-tag :type="getHealthLevelType(selectedNodeHealth.health_score)" size="large">
+              {{ getHealthLevel(selectedNodeHealth.health_score) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="总异常数">
+            <el-tag type="info" size="large">{{ selectedNodeHealth.total_anomalies }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="活跃异常">
+            <el-tag 
+              :type="selectedNodeHealth.active_anomalies > 0 ? 'danger' : 'success'" 
+              size="large"
+            >
+              {{ selectedNodeHealth.active_anomalies }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="平均恢复时间">
+            <el-tag type="warning" size="large">
+              {{ formatSeconds(selectedNodeHealth.avg_recovery_time) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="最近异常">
+            <span v-if="selectedNodeHealth.last_anomaly_time">
+              {{ formatDateTime(selectedNodeHealth.last_anomaly_time) }}
+            </span>
+            <span v-else>无</span>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <el-divider content-position="left">异常详细信息</el-divider>
+        
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-statistic title="健康指数" :value="selectedNodeHealth.health_score" :precision="2">
+              <template #suffix>/ 100</template>
+            </el-statistic>
+          </el-col>
+          <el-col :span="12">
+            <el-statistic 
+              title="异常率" 
+              :value="selectedNodeHealth.total_anomalies > 0 ? ((selectedNodeHealth.active_anomalies / selectedNodeHealth.total_anomalies) * 100) : 0" 
+              :precision="1"
+              suffix="%"
+            />
+          </el-col>
+        </el-row>
+
+        <div style="margin-top: 20px;">
+          <el-alert
+            v-if="selectedNodeHealth.active_anomalies > 0"
+            title="当前有活跃异常，请及时处理"
+            type="warning"
+            :closable="false"
+            show-icon
+          />
+          <el-alert
+            v-else
+            title="节点运行正常，无活跃异常"
+            type="success"
+            :closable="false"
+            show-icon
+          />
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="healthDetailDialogVisible = false">关闭</el-button>
+        <el-button 
+          type="primary" 
+          @click="router.push({ name: 'NodeList', query: { node_name: selectedNodeHealth?.node_name } })"
+        >
+          查看节点详情
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -418,6 +526,10 @@ const pollInterval = 30 // 秒
 
 // 集群列表
 const clusters = ref([])
+
+// 节点健康详情对话框
+const healthDetailDialogVisible = ref(false)
+const selectedNodeHealth = ref(null)
 
 // 过滤表单
 const filterForm = reactive({
@@ -897,12 +1009,17 @@ const renderMTTRChart = (data) => {
   if (chartData.length === 0) {
     const option = {
       title: {
-        text: '暂无数据',
+        text: '暂无已恢复的异常',
+        subtext: '只有异常恢复后才能统计平均恢复时间',
         left: 'center',
         top: 'center',
         textStyle: {
           color: '#999',
           fontSize: 14
+        },
+        subtextStyle: {
+          color: '#ccc',
+          fontSize: 12
         }
       }
     }
@@ -1136,8 +1253,9 @@ const refreshHealthData = () => {
 
 // 显示节点健康详情（跳转或弹窗）
 const showNodeHealthDetail = (row) => {
-  // TODO: 可以弹出NodeHealthCard组件显示详细信息
-  console.log('查看节点健康详情：', row.node_name)
+  selectedNodeHealth.value = row
+  healthDetailDialogVisible.value = true
+  console.log('查看节点健康详情：', row.node_name, row)
 }
 
 // 获取健康度颜色
@@ -1308,5 +1426,25 @@ onUnmounted(() => {
 :deep(.el-pagination) {
   margin-top: 20px;
   text-align: right;
+}
+
+/* 健康详情对话框样式 */
+.health-detail-content {
+  padding: 10px;
+}
+
+.health-detail-content .el-descriptions {
+  margin-bottom: 20px;
+}
+
+.health-detail-content .el-divider {
+  margin: 24px 0;
+}
+
+.health-detail-content .el-statistic {
+  text-align: center;
+  padding: 20px;
+  background: #f5f7fa;
+  border-radius: 8px;
 }
 </style>
