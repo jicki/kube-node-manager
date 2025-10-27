@@ -271,7 +271,7 @@ import {
   testReportSend,
   runReportNow
 } from '@/api/anomaly'
-import { getClusters } from '@/api/cluster'
+import clusterApi from '@/api/cluster'
 
 // 数据
 const configs = ref([])
@@ -386,7 +386,7 @@ const loadConfigs = async () => {
 // 加载集群列表
 const loadClusters = async () => {
   try {
-    const res = await getClusters({ page: 1, page_size: 100 })
+    const res = await clusterApi.getClusters({ page: 1, page_size: 100 })
     clusters.value = res.data?.items || []
   } catch (error) {
     console.error('加载集群列表失败：', error)
