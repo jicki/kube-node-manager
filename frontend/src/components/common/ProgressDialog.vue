@@ -98,6 +98,8 @@ const isCompleted = ref(false)
 const isError = ref(false)
 const websocket = ref(null)
 const completionTimer = ref(null)
+const reconnectCount = ref(0)
+const maxReconnectAttempts = 5 // 最大重连次数
 
 // 计算进度百分比（四舍五入为整数）
 const roundedProgress = computed(() => {
@@ -138,6 +140,13 @@ const connectWebSocket = () => {
     return
   }
 
+  // 检查是否超过最大重连次数
+  if (reconnectCount.value >= maxReconnectAttempts) {
+    console.log('已达到最大重连次数限制，停止重连')
+    ElMessage.warning('WebSocket 连接超时，请刷新页面重试')
+    return
+  }
+
   // 先关闭已有连接（防止重复连接）
   if (websocket.value) {
     console.log('关闭已有的WebSocket连接以建立新连接')
@@ -151,15 +160,15 @@ const connectWebSocket = () => {
   
   const wsUrl = `${protocol}//${host}/api/v1/progress/ws?token=${token}`
   
-  console.log('Attempting to connect WebSocket:', wsUrl)
+  console.log(`尝试连接 WebSocket (${reconnectCount.value + 1}/${maxReconnectAttempts}):`, wsUrl)
   console.log('TaskId:', props.taskId)
-  console.log('Token exists:', !!token)
   
   try {
     websocket.value = new WebSocket(wsUrl)
 
     websocket.value.onopen = () => {
       console.log('WebSocket连接已建立')
+      reconnectCount.value = 0 // 连接成功后重置重连计数
     }
 
     websocket.value.onmessage = (event) => {
@@ -174,30 +183,34 @@ const connectWebSocket = () => {
     websocket.value.onclose = (event) => {
       console.log('WebSocket连接已关闭', { code: event.code, reason: event.reason, wasClean: event.wasClean })
 
-      // 如果任务未完成（包括进度100%但未收到完成消息的情况），都要重连
+      // 如果任务已完成或出错，不再重连
+      if (isCompleted.value || isError.value) {
+        console.log('任务已完成或出错，不再重连')
+        return
+      }
+
+      // 检查是否需要重连
       const shouldReconnect = !isCompleted.value && !isError.value && visible.value && props.taskId
       const isNearCompletion = progressData.value.progress >= 100 && !isCompleted.value
 
-      if (shouldReconnect || isNearCompletion) {
-        console.log('检测到连接关闭，任务未完成，1秒后尝试重连')
+      if ((shouldReconnect || isNearCompletion) && reconnectCount.value < maxReconnectAttempts) {
+        reconnectCount.value++
+        const reconnectDelay = Math.min(1000 * reconnectCount.value, 3000) // 递增延迟，最大3秒
+        console.log(`任务未完成，${reconnectDelay}ms 后尝试第 ${reconnectCount.value} 次重连`)
         setTimeout(() => {
           // 重连前再次检查状态
           if ((!isCompleted.value && !isError.value && visible.value && props.taskId) ||
               (progressData.value.progress >= 100 && !isCompleted.value)) {
-            console.log('重连WebSocket以接收可能的完成消息')
             connectWebSocket()
           }
-        }, 1000) // 缩短重连间隔到1秒
+        }, reconnectDelay)
       }
     }
 
     websocket.value.onerror = (error) => {
       console.error('WebSocket错误:', error)
-      console.error('WebSocket URL:', wsUrl)
-      console.error('WebSocket状态:', websocket.value?.readyState)
-      
-      // 不要因为连接错误就立即显示错误消息，因为可能是正常的连接替换
-      console.warn('WebSocket连接遇到错误，可能是连接替换导致')
+      // 不要立即显示错误消息，因为可能是正常的连接替换
+      console.warn('WebSocket连接遇到错误')
     }
   } catch (error) {
     console.error('创建WebSocket连接失败:', error)
@@ -244,6 +257,10 @@ const handleProgressUpdate = (data) => {
         clearTimeout(completionTimer.value)
         completionTimer.value = null
       }
+
+      // 任务完成后立即关闭 WebSocket 连接，避免重连
+      console.log('任务完成，关闭 WebSocket 连接')
+      closeWebSocket()
 
       ElMessage.success(data.message || '批量操作完成')
       emit('completed', data)
@@ -336,6 +353,7 @@ const resetState = () => {
   }
   isCompleted.value = false
   isError.value = false
+  reconnectCount.value = 0 // 重置重连计数
 
   // 清理完成检查定时器
   if (completionTimer.value) {

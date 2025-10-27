@@ -112,8 +112,6 @@ func (s *Service) SetAuthService(authService TokenValidator) {
 
 // HandleWebSocket 处理WebSocket连接
 func (s *Service) HandleWebSocket(c *gin.Context) {
-	s.logger.Infof("WebSocket connection attempt from %s", c.ClientIP())
-
 	// 从查询参数获取token
 	token := c.Query("token")
 	if token == "" {
@@ -122,8 +120,6 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
-	s.logger.Infof("WebSocket token received (length: %d)", len(token))
-
 	// 验证token
 	if s.authService == nil {
 		s.logger.Errorf("Auth service not set for WebSocket authentication")
@@ -131,7 +127,6 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
-	s.logger.Infof("Validating WebSocket token...")
 	claims, err := s.authService.ValidateToken(token)
 	if err != nil {
 		s.logger.Errorf("WebSocket token validation failed: %v", err)
@@ -146,7 +141,6 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 	}
 
 	userID := claims.UserID
-	s.logger.Infof("WebSocket authentication successful for user %d", userID)
 
 	// 升级HTTP连接为WebSocket
 	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -167,14 +161,12 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 	// 注册连接（关闭已存在的连接）
 	s.connMutex.Lock()
 	if existingConn, exists := s.connections[userID]; exists {
-		s.logger.Infof("Closing existing WebSocket connection for user %d", userID)
+		// 静默关闭旧连接，避免日志过多
 		close(existingConn.send)
 		existingConn.ws.Close()
 	}
 	s.connections[userID] = conn
 	s.connMutex.Unlock()
-
-	s.logger.Infof("WebSocket connected for user %d", userID)
 
 	// 启动消息发送goroutine
 	go s.writePump(conn)
@@ -211,7 +203,7 @@ func (s *Service) writePump(conn *Connection) {
 		ticker.Stop()
 		conn.ws.Close()
 		s.removeConnection(conn.userID)
-		s.logger.Infof("WritePump closed for user %d", conn.userID)
+		// 减少日志输出，仅在异常情况下记录
 	}()
 
 	for {
@@ -219,7 +211,7 @@ func (s *Service) writePump(conn *Connection) {
 		case message, ok := <-conn.send:
 			conn.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if !ok {
-				s.logger.Infof("Send channel closed for user %d, sending close message", conn.userID)
+				// 静默关闭，减少日志输出
 				conn.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
@@ -279,7 +271,7 @@ func (s *Service) readPump(conn *Connection) {
 	defer func() {
 		conn.ws.Close()
 		s.removeConnection(conn.userID)
-		s.logger.Infof("ReadPump closed for user %d", conn.userID)
+		// 减少日志输出
 	}()
 
 	conn.ws.SetReadLimit(1024)
@@ -293,18 +285,11 @@ func (s *Service) readPump(conn *Connection) {
 	for {
 		messageType, message, err := conn.ws.ReadMessage()
 		if err != nil {
-			// 检查是否是正常的关闭
-			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				s.logger.Infof("WebSocket connection closed normally for user %d: %v", conn.userID, err)
-			} else if websocket.IsCloseError(err, websocket.CloseNoStatusReceived) {
-				// Close 1005: 浏览器切换标签页、刷新等正常行为，不记录为错误
-				s.logger.Infof("WebSocket connection closed without status for user %d (browser tab switch/refresh)", conn.userID)
-			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived) {
-				// 真正的异常关闭才记录为错误
+			// 只记录真正的异常关闭错误
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived) {
 				s.logger.Errorf("WebSocket unexpected error for user %d: %v", conn.userID, err)
-			} else {
-				s.logger.Infof("WebSocket connection closed for user %d: %v", conn.userID, err)
 			}
+			// 其他正常关闭（包括 CloseNoStatusReceived）不记录日志
 			break
 		}
 
@@ -339,7 +324,7 @@ func (s *Service) removeConnection(userID uint) {
 	if conn, exists := s.connections[userID]; exists {
 		close(conn.send)
 		delete(s.connections, userID)
-		s.logger.Infof("WebSocket disconnected for user %d", userID)
+		// 静默移除连接，减少日志输出
 	}
 }
 
