@@ -11,6 +11,10 @@
           <el-icon><Plus /></el-icon>
           添加污点
         </el-button>
+        <el-button type="success" @click="showCopyTaintsDialog">
+          <el-icon><CopyDocument /></el-icon>
+          复制节点污点
+        </el-button>
         <el-button @click="refreshData">
           <el-icon><Refresh /></el-icon>
           刷新
@@ -460,6 +464,85 @@
       </template>
     </el-dialog>
 
+    <!-- 复制污点对话框 -->
+    <el-dialog
+      v-model="copyTaintsDialogVisible"
+      title="复制节点污点"
+      width="600px"
+      :close-on-click-modal="false"
+      class="copy-taints-dialog"
+    >
+      <el-form label-width="100px">
+        <el-form-item label="源节点" required>
+          <el-select
+            v-model="copyTaintsForm.sourceNode"
+            placeholder="选择要复制污点的源节点"
+            style="width: 100%"
+            filterable
+            @change="handleSourceNodeChange"
+          >
+            <el-option
+              v-for="node in nodesWithTaints"
+              :key="node.name"
+              :label="`${node.name} (${node.taints?.length || 0} 个污点)`"
+              :value="node.name"
+            >
+              <div style="display: flex; justify-content: space-between;">
+                <span>{{ node.name }}</span>
+                <el-tag v-if="node.taints && node.taints.length > 0" size="small" type="info">
+                  {{ node.taints.length }} 个污点
+                </el-tag>
+              </div>
+            </el-option>
+          </el-select>
+        </el-form-item>
+
+        <el-form-item v-if="copyTaintsForm.sourceNode && sourceTaintsPreview.length > 0" label="源节点污点">
+          <div class="source-taints-preview">
+            <el-tag
+              v-for="(taint, index) in sourceTaintsPreview"
+              :key="index"
+              :type="getTaintEffectType(taint.effect)"
+              size="small"
+              style="margin-right: 8px; margin-bottom: 8px;"
+            >
+              {{ taint.key }}{{ taint.value ? `=${taint.value}` : '' }}:{{ taint.effect }}
+            </el-tag>
+          </div>
+          <div class="form-help-text">
+            这些污点将会完全替代目标节点的现有污点
+          </div>
+        </el-form-item>
+
+        <el-form-item label="目标节点" required>
+          <NodeSelector
+            v-model="copyTaintsForm.targetNodes"
+            :nodes="availableTargetNodes"
+            :loading="loading"
+            :show-labels="true"
+            :max-label-display="2"
+          />
+          <div class="form-help-text">
+            {{ copyTaintsForm.targetNodes.length > 0 
+              ? `已选择 ${copyTaintsForm.targetNodes.length} 个目标节点` 
+              : '请选择要应用污点的目标节点' }}
+          </div>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="copyTaintsDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="copying"
+          :disabled="!copyTaintsForm.sourceNode || copyTaintsForm.targetNodes.length === 0"
+          @click="handleCopyTaints"
+        >
+          {{ copyTaintsForm.targetNodes.length > 1 ? '批量复制' : '复制污点' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- 进度对话框 -->
     <ProgressDialog 
       v-model="progressDialogVisible"
@@ -473,6 +556,7 @@
 
 <script setup>
 import { ref, computed, onMounted, reactive, nextTick } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import taintApi from '@/api/taint'
 import nodeApi from '@/api/node'
 import { useClusterStore } from '@/store/modules/cluster'
@@ -498,8 +582,10 @@ import {
 const loading = ref(false)
 const saving = ref(false)
 const applying = ref(false)
+const copying = ref(false)
 const taintDialogVisible = ref(false)
 const applyDialogVisible = ref(false)
+const copyTaintsDialogVisible = ref(false)
 
 // 进度对话框相关
 const progressDialogVisible = ref(false)
@@ -512,6 +598,13 @@ const taints = ref([])
 const availableNodes = ref([])
 const selectedTemplate = ref(null)
 const selectedNodes = ref([])
+
+// 复制污点相关
+const copyTaintsForm = reactive({
+  sourceNode: '',
+  targetNodes: []
+})
+const sourceTaintsPreview = ref([])
 
 // 分页
 const pagination = reactive({
@@ -588,6 +681,19 @@ const taintStats = computed(() => {
   })
   
   return { total, noSchedule, preferNoSchedule, noExecute }
+})
+
+// 有污点的节点列表
+const nodesWithTaints = computed(() => {
+  return availableNodes.value.filter(node => node.taints && node.taints.length > 0)
+})
+
+// 可用的目标节点（排除源节点）
+const availableTargetNodes = computed(() => {
+  if (!copyTaintsForm.sourceNode) {
+    return availableNodes.value
+  }
+  return availableNodes.value.filter(node => node.name !== copyTaintsForm.sourceNode)
 })
 
 // 过滤和搜索的计算属性
@@ -1274,6 +1380,117 @@ const resetSearchState = () => {
   filteredAndSortedTaints.value = []
 }
 
+// 显示复制污点对话框
+const showCopyTaintsDialog = async () => {
+  // 确保节点数据已加载
+  await fetchNodes()
+  
+  // 检查是否有节点有污点
+  if (nodesWithTaints.value.length === 0) {
+    ElMessage.warning('当前集群没有带污点的节点')
+    return
+  }
+  
+  // 重置表单
+  copyTaintsForm.sourceNode = ''
+  copyTaintsForm.targetNodes = []
+  sourceTaintsPreview.value = []
+  
+  copyTaintsDialogVisible.value = true
+}
+
+// 处理源节点变更
+const handleSourceNodeChange = (nodeName) => {
+  const sourceNode = availableNodes.value.find(node => node.name === nodeName)
+  if (sourceNode && sourceNode.taints) {
+    sourceTaintsPreview.value = sourceNode.taints
+  } else {
+    sourceTaintsPreview.value = []
+  }
+  
+  // 清空目标节点选择
+  copyTaintsForm.targetNodes = []
+}
+
+// 处理复制污点
+const handleCopyTaints = async () => {
+  try {
+    if (!copyTaintsForm.sourceNode) {
+      ElMessage.error('请选择源节点')
+      return
+    }
+    
+    if (copyTaintsForm.targetNodes.length === 0) {
+      ElMessage.error('请选择目标节点')
+      return
+    }
+    
+    const clusterStore = useClusterStore()
+    const clusterName = clusterStore.currentClusterName
+    
+    if (!clusterName) {
+      ElMessage.error('请先选择集群')
+      return
+    }
+    
+    // 确认操作
+    const confirmMessage = copyTaintsForm.targetNodes.length === 1 
+      ? `确认要将节点 "${copyTaintsForm.sourceNode}" 的 ${sourceTaintsPreview.value.length} 个污点复制到节点 "${copyTaintsForm.targetNodes[0]}" 吗？` 
+      : `确认要将节点 "${copyTaintsForm.sourceNode}" 的 ${sourceTaintsPreview.value.length} 个污点复制到 ${copyTaintsForm.targetNodes.length} 个目标节点吗？`
+    
+    await ElMessageBox.confirm(
+      `${confirmMessage}\n\n注意：这将完全替代目标节点的现有污点！`,
+      '确认复制污点',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    copying.value = true
+    
+    // 单个复制还是批量复制
+    if (copyTaintsForm.targetNodes.length === 1) {
+      // 单个复制
+      await taintApi.copyNodeTaints({
+        cluster_name: clusterName,
+        source_node_name: copyTaintsForm.sourceNode,
+        target_node_name: copyTaintsForm.targetNodes[0]
+      })
+      
+      ElMessage.success('污点复制成功')
+      copyTaintsDialogVisible.value = false
+      refreshData()
+    } else {
+      // 批量复制（带进度）
+      const response = await taintApi.batchCopyTaintsWithProgress({
+        cluster_name: clusterName,
+        source_node_name: copyTaintsForm.sourceNode,
+        target_node_names: copyTaintsForm.targetNodes
+      })
+      
+      if (response.data && response.data.code === 200) {
+        const taskId = response.data.data.task_id
+        currentTaskId.value = taskId
+        copyTaintsDialogVisible.value = false
+        progressDialogVisible.value = true
+        
+        ElMessage.success('批量复制任务已启动')
+      } else {
+        throw new Error(response.data?.message || '启动批量复制任务失败')
+      }
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('复制污点失败:', error)
+      ElMessage.error(`复制污点失败: ${error.message || error}`)
+    }
+  } finally {
+    copying.value = false
+  }
+}
+
 onMounted(() => {
   // 页面进入时重置搜索状态，避免从其他页面切换回来时保留搜索条件
   resetSearchState()
@@ -1284,6 +1501,23 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 复制污点对话框样式 */
+.copy-taints-dialog .source-taints-preview {
+  padding: 12px;
+  background-color: #f5f7fa;
+  border-radius: 6px;
+  min-height: 60px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.copy-taints-dialog .form-help-text {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+}
+
 .node-option {
   display: flex;
   align-items: center;

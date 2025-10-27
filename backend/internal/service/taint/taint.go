@@ -40,6 +40,20 @@ type BatchUpdateRequest struct {
 	Operation   string          `json:"operation"` // add, remove, replace
 }
 
+// CopyTaintsRequest 复制污点请求
+type CopyTaintsRequest struct {
+	ClusterName    string `json:"cluster_name" binding:"required"`
+	SourceNodeName string `json:"source_node_name" binding:"required"`
+	TargetNodeName string `json:"target_node_name" binding:"required"`
+}
+
+// BatchCopyTaintsRequest 批量复制污点请求
+type BatchCopyTaintsRequest struct {
+	ClusterName     string   `json:"cluster_name" binding:"required"`
+	SourceNodeName  string   `json:"source_node_name" binding:"required"`
+	TargetNodeNames []string `json:"target_node_names" binding:"required"`
+}
+
 // TemplateCreateRequest 创建污点模板请求
 type TemplateCreateRequest struct {
 	Name        string          `json:"name" binding:"required"`
@@ -915,6 +929,256 @@ func (s *Service) RemoveTaint(clusterName, nodeName, taintKey string, userID uin
 		Action:       model.ActionUpdate,
 		ResourceType: model.ResourceTaint,
 		Details:      fmt.Sprintf("Removed taint %s from node %s in cluster %s", taintKey, nodeName, clusterName),
+		Status:       model.AuditStatusSuccess,
+	})
+
+	return nil
+}
+
+// CopyNodeTaints 复制节点污点
+// 从源节点复制所有污点到目标节点，完全替代目标节点的现有污点
+func (s *Service) CopyNodeTaints(req CopyTaintsRequest, userID uint) error {
+	// 获取源节点信息
+	sourceNode, err := s.k8sSvc.GetNode(req.ClusterName, req.SourceNodeName)
+	if err != nil {
+		s.logger.Errorf("Failed to get source node %s in cluster %s: %v", req.SourceNodeName, req.ClusterName, err)
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
+		s.auditSvc.Log(audit.LogRequest{
+			UserID:       userID,
+			ClusterID:    clusterID,
+			NodeName:     req.SourceNodeName,
+			Action:       model.ActionUpdate,
+			ResourceType: model.ResourceTaint,
+			Details:      fmt.Sprintf("Failed to copy taints from node %s: source node not found", req.SourceNodeName),
+			Status:       model.AuditStatusFailed,
+			ErrorMsg:     err.Error(),
+		})
+		return fmt.Errorf("failed to get source node %s in cluster %s: %w", req.SourceNodeName, req.ClusterName, err)
+	}
+
+	// 验证目标节点存在
+	_, err = s.k8sSvc.GetNode(req.ClusterName, req.TargetNodeName)
+	if err != nil {
+		s.logger.Errorf("Failed to get target node %s in cluster %s: %v", req.TargetNodeName, req.ClusterName, err)
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
+		s.auditSvc.Log(audit.LogRequest{
+			UserID:       userID,
+			ClusterID:    clusterID,
+			NodeName:     req.TargetNodeName,
+			Action:       model.ActionUpdate,
+			ResourceType: model.ResourceTaint,
+			Details:      fmt.Sprintf("Failed to copy taints to node %s: target node not found", req.TargetNodeName),
+			Status:       model.AuditStatusFailed,
+			ErrorMsg:     err.Error(),
+		})
+		return fmt.Errorf("failed to get target node %s in cluster %s: %w", req.TargetNodeName, req.ClusterName, err)
+	}
+
+	// 复制源节点的所有污点
+	copiedTaints := make([]k8s.TaintInfo, len(sourceNode.Taints))
+	copy(copiedTaints, sourceNode.Taints)
+
+	// 设置时间戳
+	now := time.Now()
+	for i := range copiedTaints {
+		copiedTaints[i].TimeAdded = &now
+	}
+
+	// 使用 replace 操作完全替代目标节点的污点
+	updateReq := UpdateTaintsRequest{
+		ClusterName: req.ClusterName,
+		NodeName:    req.TargetNodeName,
+		Taints:      copiedTaints,
+		Operation:   TaintOperationReplace,
+	}
+
+	if err := s.UpdateNodeTaints(updateReq, userID); err != nil {
+		s.logger.Errorf("Failed to copy taints from node %s to node %s: %v", req.SourceNodeName, req.TargetNodeName, err)
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
+		s.auditSvc.Log(audit.LogRequest{
+			UserID:       userID,
+			ClusterID:    clusterID,
+			NodeName:     req.TargetNodeName,
+			Action:       model.ActionUpdate,
+			ResourceType: model.ResourceTaint,
+			Details:      fmt.Sprintf("Failed to copy taints from node %s to node %s", req.SourceNodeName, req.TargetNodeName),
+			Status:       model.AuditStatusFailed,
+			ErrorMsg:     err.Error(),
+		})
+		return fmt.Errorf("failed to copy taints: %w", err)
+	}
+
+	s.logger.Infof("Successfully copied %d taints from node %s to node %s", len(copiedTaints), req.SourceNodeName, req.TargetNodeName)
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
+	s.auditSvc.Log(audit.LogRequest{
+		UserID:       userID,
+		ClusterID:    clusterID,
+		NodeName:     req.TargetNodeName,
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceTaint,
+		Details:      fmt.Sprintf("Copied %d taints from node %s to node %s in cluster %s", len(copiedTaints), req.SourceNodeName, req.TargetNodeName, req.ClusterName),
+		Status:       model.AuditStatusSuccess,
+	})
+
+	return nil
+}
+
+// TaintCopyProcessor 实现 BatchProcessor 接口用于批量复制污点
+type TaintCopyProcessor struct {
+	svc               *Service
+	req               BatchCopyTaintsRequest
+	userID            uint
+	sourceTaints      []k8s.TaintInfo
+	sourceNodeChecked bool
+}
+
+func (p *TaintCopyProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
+	// 第一次执行时检查源节点并获取污点（避免重复获取）
+	if !p.sourceNodeChecked {
+		sourceNode, err := p.svc.k8sSvc.GetNode(p.req.ClusterName, p.req.SourceNodeName)
+		if err != nil {
+			return fmt.Errorf("failed to get source node %s: %w", p.req.SourceNodeName, err)
+		}
+		p.sourceTaints = make([]k8s.TaintInfo, len(sourceNode.Taints))
+		copy(p.sourceTaints, sourceNode.Taints)
+		p.sourceNodeChecked = true
+	}
+
+	// 为每个目标节点复制污点
+	copyReq := CopyTaintsRequest{
+		ClusterName:    p.req.ClusterName,
+		SourceNodeName: p.req.SourceNodeName,
+		TargetNodeName: nodeName,
+	}
+
+	return p.svc.CopyNodeTaints(copyReq, p.userID)
+}
+
+// BatchCopyTaints 批量复制节点污点（不带进度推送）
+func (s *Service) BatchCopyTaints(req BatchCopyTaintsRequest, userID uint) error {
+	return s.BatchCopyTaintsWithProgress(req, userID, "")
+}
+
+// BatchCopyTaintsWithProgress 批量复制节点污点（带进度推送）
+func (s *Service) BatchCopyTaintsWithProgress(req BatchCopyTaintsRequest, userID uint, taskID string) error {
+	s.logger.Infof("Starting batch taint copy from node %s to %d target nodes in cluster %s", req.SourceNodeName, len(req.TargetNodeNames), req.ClusterName)
+
+	// 验证源节点存在并获取污点
+	sourceNode, err := s.k8sSvc.GetNode(req.ClusterName, req.SourceNodeName)
+	if err != nil {
+		s.logger.Errorf("Failed to get source node %s in cluster %s: %v", req.SourceNodeName, req.ClusterName, err)
+		var clusterID *uint
+		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+			clusterID = &cID
+		}
+		s.auditSvc.Log(audit.LogRequest{
+			UserID:       userID,
+			ClusterID:    clusterID,
+			NodeName:     req.SourceNodeName,
+			Action:       model.ActionUpdate,
+			ResourceType: model.ResourceTaint,
+			Details:      fmt.Sprintf("Failed to batch copy taints from node %s: source node not found", req.SourceNodeName),
+			Status:       model.AuditStatusFailed,
+			ErrorMsg:     err.Error(),
+		})
+		return fmt.Errorf("failed to get source node %s in cluster %s: %w", req.SourceNodeName, req.ClusterName, err)
+	}
+
+	// 如果提供了taskID，则使用进度推送
+	if taskID != "" && s.progressSvc != nil {
+		processor := &TaintCopyProcessor{
+			svc:               s,
+			req:               req,
+			userID:            userID,
+			sourceTaints:      make([]k8s.TaintInfo, len(sourceNode.Taints)),
+			sourceNodeChecked: true,
+		}
+		copy(processor.sourceTaints, sourceNode.Taints)
+
+		// 使用进度推送的并发处理
+		maxConcurrency := 5 // 限制并发数避免过载
+		if err := s.progressSvc.ProcessBatchWithProgress(
+			context.Background(),
+			taskID,
+			"batch_copy_taint",
+			req.TargetNodeNames,
+			userID,
+			maxConcurrency,
+			processor,
+		); err != nil {
+			var clusterID *uint
+			if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+				clusterID = &cID
+			}
+			s.auditSvc.Log(audit.LogRequest{
+				UserID:       userID,
+				ClusterID:    clusterID,
+				Action:       model.ActionUpdate,
+				ResourceType: model.ResourceTaint,
+				Details:      fmt.Sprintf("Batch copy taints from node %s failed for %d target nodes", req.SourceNodeName, len(req.TargetNodeNames)),
+				Status:       model.AuditStatusFailed,
+				ErrorMsg:     err.Error(),
+			})
+			return err
+		}
+	} else {
+		// 传统的顺序处理方式（向后兼容）
+		var errors []string
+		for _, targetNodeName := range req.TargetNodeNames {
+			copyReq := CopyTaintsRequest{
+				ClusterName:    req.ClusterName,
+				SourceNodeName: req.SourceNodeName,
+				TargetNodeName: targetNodeName,
+			}
+
+			if err := s.CopyNodeTaints(copyReq, userID); err != nil {
+				errorMsg := fmt.Sprintf("Node %s: %v", targetNodeName, err)
+				errors = append(errors, errorMsg)
+				s.logger.Errorf("Failed to copy taints to node %s: %v", targetNodeName, err)
+			}
+		}
+
+		if len(errors) > 0 {
+			combinedError := strings.Join(errors, "; ")
+			var clusterID *uint
+			if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+				clusterID = &cID
+			}
+			s.auditSvc.Log(audit.LogRequest{
+				UserID:       userID,
+				ClusterID:    clusterID,
+				Action:       model.ActionUpdate,
+				ResourceType: model.ResourceTaint,
+				Details:      fmt.Sprintf("Batch copy taints from node %s failed for %d nodes", req.SourceNodeName, len(errors)),
+				Status:       model.AuditStatusFailed,
+				ErrorMsg:     combinedError,
+			})
+			return fmt.Errorf("batch copy failed for some nodes: %s", combinedError)
+		}
+	}
+
+	var clusterID *uint
+	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
+		clusterID = &cID
+	}
+	s.auditSvc.Log(audit.LogRequest{
+		UserID:       userID,
+		ClusterID:    clusterID,
+		Action:       model.ActionUpdate,
+		ResourceType: model.ResourceTaint,
+		Details:      fmt.Sprintf("Batch copied taints from node %s to %d target nodes in cluster %s", req.SourceNodeName, len(req.TargetNodeNames), req.ClusterName),
 		Status:       model.AuditStatusSuccess,
 	})
 

@@ -193,6 +193,33 @@ const taintApi = {
       method: 'post',
       data
     })
+  },
+
+  // 复制节点污点
+  copyNodeTaints(data) {
+    return request({
+      url: '/api/v1/taints/copy',
+      method: 'post',
+      data
+    })
+  },
+
+  // 批量复制节点污点
+  batchCopyTaints(data) {
+    return request({
+      url: '/api/v1/taints/batch-copy',
+      method: 'post',
+      data
+    })
+  },
+
+  // 批量复制节点污点（带进度）
+  batchCopyTaintsWithProgress(data) {
+    return request({
+      url: '/api/v1/taints/batch-copy-progress',
+      method: 'post',
+      data
+    })
   }
 }
 

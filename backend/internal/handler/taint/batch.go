@@ -23,7 +23,7 @@ type BatchTaintRequest struct {
 func (h *Handler) BatchAddTaints(c *gin.Context) {
 	var req BatchTaintRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error("Failed to bind batch add taints request: %v", err)
+		h.logger.Errorf("Failed to bind batch add taints request: %v", err)
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: "请求参数错误: " + err.Error(),
@@ -84,7 +84,7 @@ func (h *Handler) BatchAddTaints(c *gin.Context) {
 						taintReq.Operation = "add"
 
 						if err := h.taintSvc.UpdateNodeTaints(taintReq, userID.(uint)); err != nil {
-							h.logger.Error("Failed to batch add taints for node %s: %v", nodeName, err)
+							h.logger.Errorf("Failed to batch add taints for node %s: %v", nodeName, err)
 							c.JSON(http.StatusInternalServerError, Response{
 								Code:    http.StatusInternalServerError,
 								Message: fmt.Sprintf("为节点 %s 添加污点失败: %s", nodeName, err.Error()),
@@ -111,7 +111,7 @@ func (h *Handler) BatchDeleteTaints(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error("Failed to bind batch delete taints request: %v", err)
+		h.logger.Errorf("Failed to bind batch delete taints request: %v", err)
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: "请求参数错误: " + err.Error(),
@@ -165,7 +165,7 @@ func (h *Handler) BatchDeleteTaints(c *gin.Context) {
 		}
 
 		if err := h.taintSvc.UpdateNodeTaints(taintReq, userID.(uint)); err != nil {
-			h.logger.Error("Failed to batch delete taints for node %s: %v", nodeName, err)
+			h.logger.Errorf("Failed to batch delete taints for node %s: %v", nodeName, err)
 			c.JSON(http.StatusInternalServerError, Response{
 				Code:    http.StatusInternalServerError,
 				Message: fmt.Sprintf("为节点 %s 删除污点失败: %s", nodeName, err.Error()),
@@ -345,6 +345,181 @@ func (h *Handler) BatchDeleteTaintsWithProgress(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{
 		Code:    http.StatusOK,
 		Message: "批量删除污点任务已启动",
+		Data: map[string]string{
+			"task_id": taskID,
+		},
+	})
+}
+
+// CopyNodeTaints 复制节点污点
+// @Summary 复制节点污点
+// @Description 从源节点复制所有污点到目标节点，完全替代目标节点的现有污点
+// @Tags taints
+// @Accept json
+// @Produce json
+// @Param request body taint.CopyTaintsRequest true "复制污点请求"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /taints/copy [post]
+func (h *Handler) CopyNodeTaints(c *gin.Context) {
+	var req taint.CopyTaintsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Errorf("Failed to bind copy taints request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "请求参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取当前用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "用户未认证",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以复制污点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "权限不足。只有管理员和用户角色可以复制污点",
+		})
+		return
+	}
+
+	if err := h.taintSvc.CopyNodeTaints(req, userID.(uint)); err != nil {
+		h.logger.Errorf("Failed to copy node taints: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: fmt.Sprintf("复制污点失败: %s", err.Error()),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "复制污点成功",
+	})
+}
+
+// BatchCopyTaints 批量复制节点污点
+// @Summary 批量复制节点污点
+// @Description 从源节点复制所有污点到多个目标节点，完全替代目标节点的现有污点
+// @Tags taints
+// @Accept json
+// @Produce json
+// @Param request body taint.BatchCopyTaintsRequest true "批量复制污点请求"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /taints/batch-copy [post]
+func (h *Handler) BatchCopyTaints(c *gin.Context) {
+	var req taint.BatchCopyTaintsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Errorf("Failed to bind batch copy taints request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "请求参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取当前用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "用户未认证",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以批量复制污点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "权限不足。只有管理员和用户角色可以批量复制污点",
+		})
+		return
+	}
+
+	if err := h.taintSvc.BatchCopyTaints(req, userID.(uint)); err != nil {
+		h.logger.Errorf("Failed to batch copy node taints: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: fmt.Sprintf("批量复制污点失败: %s", err.Error()),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "批量复制污点成功",
+	})
+}
+
+// BatchCopyTaintsWithProgress 带进度推送的批量复制污点
+// @Summary 带进度推送的批量复制节点污点
+// @Description 从源节点复制所有污点到多个目标节点，完全替代目标节点的现有污点，支持进度推送
+// @Tags taints
+// @Accept json
+// @Produce json
+// @Param request body taint.BatchCopyTaintsRequest true "批量复制污点请求"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 500 {object} Response
+// @Router /taints/batch-copy-progress [post]
+func (h *Handler) BatchCopyTaintsWithProgress(c *gin.Context) {
+	var req taint.BatchCopyTaintsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Errorf("Failed to bind batch copy taints with progress request: %v", err)
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "请求参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取当前用户ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, Response{
+			Code:    http.StatusUnauthorized,
+			Message: "用户未认证",
+		})
+		return
+	}
+
+	// 检查用户权限：只有 admin 和 user 角色可以批量复制污点
+	userRole, _ := c.Get("user_role")
+	if userRole != model.RoleAdmin && userRole != model.RoleUser {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "权限不足。只有管理员和用户角色可以批量复制污点",
+		})
+		return
+	}
+
+	// 生成任务ID
+	taskID := fmt.Sprintf("taint_copy_batch_%d_%d", userID.(uint), time.Now().UnixNano())
+
+	// 启动异步批量操作
+	go func() {
+		if err := h.taintSvc.BatchCopyTaintsWithProgress(req, userID.(uint), taskID); err != nil {
+			h.logger.Errorf("Failed to batch copy taints with progress: %v", err)
+		}
+	}()
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "批量复制污点任务已启动",
 		Data: map[string]string{
 			"task_id": taskID,
 		},

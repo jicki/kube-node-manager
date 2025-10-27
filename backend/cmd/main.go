@@ -207,6 +207,8 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		nodes.POST("/taints/batch-delete", handlers.Taint.BatchDeleteTaints)
 		nodes.POST("/taints/batch-add-progress", handlers.Taint.BatchAddTaintsWithProgress)
 		nodes.POST("/taints/batch-delete-progress", handlers.Taint.BatchDeleteTaintsWithProgress)
+		nodes.POST("/taints/batch-copy", handlers.Taint.BatchCopyTaints)
+		nodes.POST("/taints/batch-copy-progress", handlers.Taint.BatchCopyTaintsWithProgress)
 		// 节点操作（带进度）
 		nodes.POST("/batch-cordon-progress", handlers.Node.BatchCordonWithProgress)
 		nodes.POST("/batch-uncordon-progress", handlers.Node.BatchUncordonWithProgress)
@@ -230,6 +232,9 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		taints.GET("/:cluster_id/:node_name", handlers.Taint.GetTaintUsage)
 		taints.POST("/:cluster_id/:node_name", handlers.Taint.UpdateNodeTaints)
 		taints.DELETE("/:cluster_id/:node_name", handlers.Taint.RemoveTaint)
+		taints.POST("/copy", handlers.Taint.CopyNodeTaints)
+		taints.POST("/batch-copy", handlers.Taint.BatchCopyTaints)
+		taints.POST("/batch-copy-progress", handlers.Taint.BatchCopyTaintsWithProgress)
 		taints.GET("/templates", handlers.Taint.ListTemplates)
 		taints.POST("/templates", handlers.Taint.CreateTemplate)
 		taints.PUT("/templates/:id", handlers.Taint.UpdateTemplate)
