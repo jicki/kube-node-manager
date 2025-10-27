@@ -778,9 +778,13 @@ const loadRoleStatistics = async () => {
       end_time: computedEndTime.value
     }
     const res = await getRoleStatistics(params)
-    renderRoleChart(res.data || [])
+    // 处理响应数据，可能是 res.data 或 res.data.data
+    const data = res.data?.data || res.data || []
+    console.log('角色统计数据：', data)
+    renderRoleChart(data)
   } catch (error) {
     console.error('加载角色统计失败：', error)
+    renderRoleChart([])
   }
 }
 
@@ -869,9 +873,13 @@ const loadMTTRStatistics = async () => {
       end_time: computedEndTime.value
     }
     const res = await getMTTR(params)
-    renderMTTRChart(res.data || [])
+    // 处理响应数据
+    const data = res.data?.data || res.data || []
+    console.log('MTTR统计数据：', data)
+    renderMTTRChart(data)
   } catch (error) {
     console.error('加载MTTR统计失败：', error)
+    renderMTTRChart([])
   }
 }
 
@@ -1109,7 +1117,10 @@ const loadHealthData = async () => {
       end_time: computedEndTime.value
     }
     const res = await getTopUnhealthyNodes(params)
-    topUnhealthyNodes.value = res.data || []
+    // 处理响应数据
+    const data = res.data?.data || res.data || []
+    console.log('节点健康数据：', data)
+    topUnhealthyNodes.value = data
   } catch (error) {
     console.error('加载节点健康数据失败：', error)
     topUnhealthyNodes.value = []
