@@ -125,6 +125,142 @@
         />
       </el-tab-pane>
 
+      <!-- 高级统计面板 -->
+      <el-tab-pane label="高级统计" name="advanced">
+        <el-row :gutter="20">
+          <!-- 按角色聚合统计 -->
+          <el-col :span="12">
+            <el-card>
+              <template #header>
+                <div class="card-header">
+                  <span>按节点角色统计</span>
+                </div>
+              </template>
+              <div ref="roleChartRef" style="width: 100%; height: 300px"></div>
+            </el-card>
+          </el-col>
+
+          <!-- MTTR 统计 -->
+          <el-col :span="12">
+            <el-card>
+              <template #header>
+                <div class="card-header">
+                  <span>平均恢复时间 (MTTR)</span>
+                  <el-tooltip content="Mean Time To Recovery - 平均恢复时间" placement="top">
+                    <el-icon><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </div>
+              </template>
+              <div ref="mttrChartRef" style="width: 100%; height: 300px"></div>
+            </el-card>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="20" style="margin-top: 20px">
+          <!-- SLA 可用性 -->
+          <el-col :span="12">
+            <el-card>
+              <template #header>
+                <div class="card-header">
+                  <span>SLA 可用性</span>
+                  <el-tooltip content="Service Level Agreement - 服务可用性百分比" placement="top">
+                    <el-icon><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </div>
+              </template>
+              <div ref="slaChartRef" style="width: 100%; height: 300px"></div>
+            </el-card>
+          </el-col>
+
+          <!-- 恢复率和复发率 -->
+          <el-col :span="12">
+            <el-card>
+              <template #header>
+                <div class="card-header">
+                  <span>恢复率 & 复发率</span>
+                </div>
+              </template>
+              <div ref="recoveryChartRef" style="width: 100%; height: 300px"></div>
+            </el-card>
+          </el-col>
+        </el-row>
+      </el-tab-pane>
+
+      <!-- 节点健康面板 -->
+      <el-tab-pane label="节点健康" name="health">
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-card>
+              <template #header>
+                <div class="card-header">
+                  <span>节点健康度排行 Top 10</span>
+                  <el-button type="primary" size="small" @click="refreshHealthData">
+                    <el-icon><Refresh /></el-icon>
+                    刷新
+                  </el-button>
+                </div>
+              </template>
+              <el-table
+                v-loading="healthLoading"
+                :data="topUnhealthyNodes"
+                stripe
+                style="width: 100%"
+              >
+                <el-table-column type="index" label="排名" width="80" />
+                <el-table-column prop="node_name" label="节点名称" width="200" />
+                <el-table-column prop="cluster_name" label="集群" width="150" />
+                <el-table-column label="健康度评分" width="200">
+                  <template #default="{ row }">
+                    <el-progress
+                      :percentage="row.health_score"
+                      :color="getHealthColor(row.health_score)"
+                      :stroke-width="16"
+                    >
+                      <span style="font-size: 12px; font-weight: bold">
+                        {{ row.health_score.toFixed(1) }}分
+                      </span>
+                    </el-progress>
+                  </template>
+                </el-table-column>
+                <el-table-column label="等级" width="100">
+                  <template #default="{ row }">
+                    <el-tag :type="getHealthLevelType(row.health_score)">
+                      {{ getHealthLevel(row.health_score) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="total_anomalies" label="总异常数" width="120" />
+                <el-table-column prop="active_anomalies" label="活跃异常" width="120">
+                  <template #default="{ row }">
+                    <el-tag v-if="row.active_anomalies > 0" type="danger">
+                      {{ row.active_anomalies }}
+                    </el-tag>
+                    <span v-else>0</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="平均恢复时间" width="140">
+                  <template #default="{ row }">
+                    {{ formatSeconds(row.avg_recovery_time) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="120" fixed="right">
+                  <template #default="{ row }">
+                    <el-button
+                      type="primary"
+                      size="small"
+                      link
+                      @click="showNodeHealthDetail(row)"
+                    >
+                      查看详情
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </el-card>
+          </el-col>
+        </el-row>
+      </el-tab-pane>
+
       <!-- 异常记录面板 -->
       <el-tab-pane label="异常记录" name="records">
         <el-card class="table-card">
@@ -231,7 +367,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import {
   Search,
   Refresh,
@@ -240,13 +376,24 @@ import {
   DataAnalysis,
   Warning,
   CircleCheck,
-  Monitor
+  Monitor,
+  QuestionFilled
 } from '@element-plus/icons-vue'
-import { getAnomalies, getActiveAnomalies, triggerCheck } from '@/api/anomaly'
+import {
+  getAnomalies,
+  getActiveAnomalies,
+  triggerCheck,
+  getRoleStatistics,
+  getMTTR,
+  getSLA,
+  getRecoveryMetrics,
+  getTopUnhealthyNodes
+} from '@/api/anomaly'
 import clusterApi from '@/api/cluster'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/store/modules/auth'
 import { usePageVisibility } from '@/composables/usePageVisibility'
+import * as echarts from 'echarts'
 import EmptyState from '@/components/common/EmptyState.vue'
 import TrendCharts from '@/components/analytics/TrendCharts.vue'
 import { handleError, showSuccess, showWarning, ErrorLevel } from '@/utils/errorHandler'
@@ -301,6 +448,22 @@ const pagination = reactive({
 
 // 手动检测加载状态
 const checkLoading = ref(false)
+
+// 高级统计图表 refs
+const roleChartRef = ref(null)
+const mttrChartRef = ref(null)
+const slaChartRef = ref(null)
+const recoveryChartRef = ref(null)
+
+// 高级统计图表实例
+let roleChart = null
+let mttrChart = null
+let slaChart = null
+let recoveryChart = null
+
+// 节点健康数据
+const topUnhealthyNodes = ref([])
+const healthLoading = ref(false)
 
 // 计算属性：图表时间范围
 const computedStartTime = computed(() => {
@@ -586,6 +749,395 @@ watch(isVisible, (visible) => {
   }
 })
 
+// 监听Tab切换
+watch(activeTab, async (newTab) => {
+  if (newTab === 'advanced') {
+    await nextTick()
+    loadAdvancedStatistics()
+  } else if (newTab === 'health') {
+    loadHealthData()
+  }
+})
+
+// 加载高级统计数据
+const loadAdvancedStatistics = async () => {
+  await Promise.all([
+    loadRoleStatistics(),
+    loadMTTRStatistics(),
+    loadSLAMetrics(),
+    loadRecoveryMetrics()
+  ])
+}
+
+// 加载按角色统计
+const loadRoleStatistics = async () => {
+  try {
+    const params = {
+      cluster_id: filterForm.cluster_id,
+      start_time: computedStartTime.value,
+      end_time: computedEndTime.value
+    }
+    const res = await getRoleStatistics(params)
+    renderRoleChart(res.data || [])
+  } catch (error) {
+    console.error('加载角色统计失败：', error)
+  }
+}
+
+// 渲染角色统计图表
+const renderRoleChart = (data) => {
+  if (!roleChartRef.value) return
+  
+  if (!roleChart) {
+    roleChart = echarts.init(roleChartRef.value)
+  }
+  
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow'
+      }
+    },
+    legend: {
+      data: ['总异常', '活跃异常', '已恢复']
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: data.map(item => item.role || '未知')
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
+      {
+        name: '总异常',
+        type: 'bar',
+        data: data.map(item => item.total_anomalies),
+        itemStyle: { color: '#409EFF' }
+      },
+      {
+        name: '活跃异常',
+        type: 'bar',
+        data: data.map(item => item.active_anomalies),
+        itemStyle: { color: '#F56C6C' }
+      },
+      {
+        name: '已恢复',
+        type: 'bar',
+        data: data.map(item => item.resolved_anomalies),
+        itemStyle: { color: '#67C23A' }
+      }
+    ]
+  }
+  
+  roleChart.setOption(option)
+}
+
+// 加载MTTR统计
+const loadMTTRStatistics = async () => {
+  try {
+    const params = {
+      entity_type: 'cluster',
+      cluster_id: filterForm.cluster_id,
+      start_time: computedStartTime.value,
+      end_time: computedEndTime.value
+    }
+    const res = await getMTTR(params)
+    renderMTTRChart(res.data || [])
+  } catch (error) {
+    console.error('加载MTTR统计失败：', error)
+  }
+}
+
+// 渲染MTTR图表
+const renderMTTRChart = (data) => {
+  if (!mttrChartRef.value) return
+  
+  if (!mttrChart) {
+    mttrChart = echarts.init(mttrChartRef.value)
+  }
+  
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params) => {
+        const item = params[0]
+        return `${item.name}<br/>平均恢复时间: ${formatSeconds(item.value)}`
+      }
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: data.map(item => item.entity_name || '全部')
+    },
+    yAxis: {
+      type: 'value',
+      name: '时间(秒)',
+      axisLabel: {
+        formatter: '{value}s'
+      }
+    },
+    series: [{
+      data: data.map(item => item.avg_recovery_time),
+      type: 'bar',
+      itemStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: '#83bff6' },
+          { offset: 1, color: '#188df0' }
+        ])
+      },
+      label: {
+        show: true,
+        position: 'top',
+        formatter: (params) => formatSeconds(params.value)
+      }
+    }]
+  }
+  
+  mttrChart.setOption(option)
+}
+
+// 加载SLA统计
+const loadSLAMetrics = async () => {
+  try {
+    const params = {
+      entity_type: 'cluster',
+      cluster_id: filterForm.cluster_id,
+      start_time: computedStartTime.value,
+      end_time: computedEndTime.value
+    }
+    const res = await getSLA(params)
+    renderSLAChart(res.data || {})
+  } catch (error) {
+    console.error('加载SLA统计失败：', error)
+  }
+}
+
+// 渲染SLA图表
+const renderSLAChart = (data) => {
+  if (!slaChartRef.value) return
+  
+  if (!slaChart) {
+    slaChart = echarts.init(slaChartRef.value)
+  }
+  
+  const slaPercentage = data.sla_percentage || 0
+  
+  const option = {
+    series: [{
+      type: 'gauge',
+      startAngle: 180,
+      endAngle: 0,
+      min: 0,
+      max: 100,
+      splitNumber: 10,
+      axisLine: {
+        lineStyle: {
+          width: 30,
+          color: [
+            [0.9, '#F56C6C'],
+            [0.95, '#E6A23C'],
+            [0.99, '#409EFF'],
+            [1, '#67C23A']
+          ]
+        }
+      },
+      pointer: {
+        itemStyle: {
+          color: 'auto'
+        }
+      },
+      axisTick: {
+        distance: -30,
+        length: 8,
+        lineStyle: {
+          color: '#fff',
+          width: 2
+        }
+      },
+      splitLine: {
+        distance: -30,
+        length: 30,
+        lineStyle: {
+          color: '#fff',
+          width: 4
+        }
+      },
+      axisLabel: {
+        color: 'auto',
+        distance: 40,
+        fontSize: 12,
+        formatter: '{value}%'
+      },
+      detail: {
+        valueAnimation: true,
+        formatter: '{value}%',
+        color: 'auto',
+        fontSize: 30
+      },
+      data: [{
+        value: slaPercentage.toFixed(2),
+        name: 'SLA 可用性'
+      }]
+    }]
+  }
+  
+  slaChart.setOption(option)
+}
+
+// 加载恢复率和复发率
+const loadRecoveryMetrics = async () => {
+  try {
+    const params = {
+      entity_type: 'cluster',
+      cluster_id: filterForm.cluster_id,
+      start_time: computedStartTime.value,
+      end_time: computedEndTime.value
+    }
+    const res = await getRecoveryMetrics(params)
+    renderRecoveryChart(res.data || {})
+  } catch (error) {
+    console.error('加载恢复指标失败：', error)
+  }
+}
+
+// 渲染恢复率图表
+const renderRecoveryChart = (data) => {
+  if (!recoveryChartRef.value) return
+  
+  if (!recoveryChart) {
+    recoveryChart = echarts.init(recoveryChartRef.value)
+  }
+  
+  const option = {
+    tooltip: {
+      trigger: 'item'
+    },
+    legend: {
+      top: '10%',
+      left: 'center'
+    },
+    series: [{
+      name: '恢复指标',
+      type: 'pie',
+      radius: ['40%', '70%'],
+      avoidLabelOverlap: false,
+      itemStyle: {
+        borderRadius: 10,
+        borderColor: '#fff',
+        borderWidth: 2
+      },
+      label: {
+        show: true,
+        formatter: '{b}: {c}%'
+      },
+      emphasis: {
+        label: {
+          show: true,
+          fontSize: 16,
+          fontWeight: 'bold'
+        }
+      },
+      data: [
+        {
+          value: (data.recovery_rate || 0).toFixed(1),
+          name: '恢复率',
+          itemStyle: { color: '#67C23A' }
+        },
+        {
+          value: (data.recurrence_rate || 0).toFixed(1),
+          name: '复发率',
+          itemStyle: { color: '#F56C6C' }
+        }
+      ]
+    }]
+  }
+  
+  recoveryChart.setOption(option)
+}
+
+// 加载节点健康数据
+const loadHealthData = async () => {
+  healthLoading.value = true
+  try {
+    const params = {
+      cluster_id: filterForm.cluster_id,
+      limit: 10,
+      start_time: computedStartTime.value,
+      end_time: computedEndTime.value
+    }
+    const res = await getTopUnhealthyNodes(params)
+    topUnhealthyNodes.value = res.data || []
+  } catch (error) {
+    console.error('加载节点健康数据失败：', error)
+    topUnhealthyNodes.value = []
+  } finally {
+    healthLoading.value = false
+  }
+}
+
+// 刷新健康数据
+const refreshHealthData = () => {
+  loadHealthData()
+}
+
+// 显示节点健康详情（跳转或弹窗）
+const showNodeHealthDetail = (row) => {
+  // TODO: 可以弹出NodeHealthCard组件显示详细信息
+  console.log('查看节点健康详情：', row.node_name)
+}
+
+// 获取健康度颜色
+const getHealthColor = (score) => {
+  if (score >= 90) return '#67C23A'
+  if (score >= 75) return '#409EFF'
+  if (score >= 60) return '#E6A23C'
+  if (score >= 40) return '#F56C6C'
+  return '#909399'
+}
+
+// 获取健康度等级
+const getHealthLevel = (score) => {
+  if (score >= 90) return '优秀'
+  if (score >= 75) return '良好'
+  if (score >= 60) return '一般'
+  if (score >= 40) return '较差'
+  return '很差'
+}
+
+// 获取健康度等级类型
+const getHealthLevelType = (score) => {
+  if (score >= 90) return 'success'
+  if (score >= 75) return ''
+  if (score >= 60) return 'warning'
+  return 'danger'
+}
+
+// 格式化秒数
+const formatSeconds = (seconds) => {
+  if (!seconds || seconds === 0) return '-'
+  
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`
+  }
+  return `${minutes}m`
+}
+
 // 初始化
 onMounted(() => {
   loadClusters()
@@ -594,11 +1146,25 @@ onMounted(() => {
   
   // 启动智能轮询
   startPolling()
+  
+  // 响应式调整图表大小
+  window.addEventListener('resize', () => {
+    roleChart?.resize()
+    mttrChart?.resize()
+    slaChart?.resize()
+    recoveryChart?.resize()
+  })
 })
 
 // 清理
 onUnmounted(() => {
   stopPolling()
+  
+  // 销毁图表实例
+  roleChart?.dispose()
+  mttrChart?.dispose()
+  slaChart?.dispose()
+  recoveryChart?.dispose()
 })
 </script>
 
