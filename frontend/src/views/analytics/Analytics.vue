@@ -274,6 +274,18 @@
             <div class="card-header">
               <span>异常记录列表</span>
               <div>
+                <el-input
+                  v-model="filterForm.node_name"
+                  placeholder="节点名称"
+                  clearable
+                  style="width: 200px; margin-right: 10px"
+                  @clear="handleFilterChange"
+                  @keyup.enter="handleFilterChange"
+                >
+                  <template #append>
+                    <el-button :icon="Search" @click="handleFilterChange" />
+                  </template>
+                </el-input>
                 <el-select
                   v-model="filterForm.anomaly_type"
                   placeholder="异常类型"
@@ -465,9 +477,9 @@
         <el-button @click="healthDetailDialogVisible = false">关闭</el-button>
         <el-button 
           type="primary" 
-          @click="router.push({ name: 'NodeList', query: { node_name: selectedNodeHealth?.node_name } })"
+          @click="viewNodeAnomalies"
         >
-          查看节点详情
+          查看异常详情
         </el-button>
       </template>
     </el-dialog>
@@ -534,6 +546,7 @@ const selectedNodeHealth = ref(null)
 // 过滤表单
 const filterForm = reactive({
   cluster_id: null,
+  node_name: '',
   anomaly_type: '',
   dateRange: [],
   dimension: 'day'
@@ -642,6 +655,9 @@ const loadAnomalies = async () => {
 
     if (filterForm.cluster_id) {
       params.cluster_id = filterForm.cluster_id
+    }
+    if (filterForm.node_name) {
+      params.node_name = filterForm.node_name
     }
     if (filterForm.anomaly_type) {
       params.anomaly_type = filterForm.anomaly_type
@@ -1256,6 +1272,27 @@ const showNodeHealthDetail = (row) => {
   selectedNodeHealth.value = row
   healthDetailDialogVisible.value = true
   console.log('查看节点健康详情：', row.node_name, row)
+}
+
+// 查看节点异常详情
+const viewNodeAnomalies = () => {
+  if (!selectedNodeHealth.value) return
+  
+  // 关闭对话框
+  healthDetailDialogVisible.value = false
+  
+  // 切换到异常记录tab
+  activeTab.value = 'records'
+  
+  // 设置过滤条件
+  filterForm.cluster_id = selectedNodeHealth.value.cluster_id
+  filterForm.node_name = selectedNodeHealth.value.node_name
+  filterForm.anomaly_type = ''
+  
+  // 等待DOM更新后加载数据
+  nextTick(() => {
+    loadAnomalies()
+  })
 }
 
 // 获取健康度颜色
