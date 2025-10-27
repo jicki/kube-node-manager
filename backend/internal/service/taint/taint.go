@@ -1037,33 +1037,44 @@ func (s *Service) CopyNodeTaints(req CopyTaintsRequest, userID uint) error {
 
 // TaintCopyProcessor 实现 BatchProcessor 接口用于批量复制污点
 type TaintCopyProcessor struct {
-	svc               *Service
-	req               BatchCopyTaintsRequest
-	userID            uint
-	sourceTaints      []k8s.TaintInfo
-	sourceNodeChecked bool
+	svc          *Service
+	req          BatchCopyTaintsRequest
+	userID       uint
+	sourceTaints []k8s.TaintInfo
 }
 
 func (p *TaintCopyProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
-	// 第一次执行时检查源节点并获取污点（避免重复获取）
-	if !p.sourceNodeChecked {
-		sourceNode, err := p.svc.k8sSvc.GetNode(p.req.ClusterName, p.req.SourceNodeName)
-		if err != nil {
-			return fmt.Errorf("failed to get source node %s: %w", p.req.SourceNodeName, err)
-		}
-		p.sourceTaints = make([]k8s.TaintInfo, len(sourceNode.Taints))
-		copy(p.sourceTaints, sourceNode.Taints)
-		p.sourceNodeChecked = true
+	// 验证目标节点存在
+	_, err := p.svc.k8sSvc.GetNode(p.req.ClusterName, nodeName)
+	if err != nil {
+		p.svc.logger.Errorf("Failed to get target node %s in cluster %s: %v", nodeName, p.req.ClusterName, err)
+		return fmt.Errorf("failed to get target node %s in cluster %s: %w", nodeName, p.req.ClusterName, err)
 	}
 
-	// 为每个目标节点复制污点
-	copyReq := CopyTaintsRequest{
-		ClusterName:    p.req.ClusterName,
-		SourceNodeName: p.req.SourceNodeName,
-		TargetNodeName: nodeName,
+	// 复制源节点的污点并设置时间戳
+	copiedTaints := make([]k8s.TaintInfo, len(p.sourceTaints))
+	copy(copiedTaints, p.sourceTaints)
+
+	now := time.Now()
+	for i := range copiedTaints {
+		copiedTaints[i].TimeAdded = &now
 	}
 
-	return p.svc.CopyNodeTaints(copyReq, p.userID)
+	// 使用 replace 操作完全替代目标节点的污点
+	updateReq := UpdateTaintsRequest{
+		ClusterName: p.req.ClusterName,
+		NodeName:    nodeName,
+		Taints:      copiedTaints,
+		Operation:   TaintOperationReplace,
+	}
+
+	if err := p.svc.UpdateNodeTaints(updateReq, p.userID); err != nil {
+		p.svc.logger.Errorf("Failed to copy taints to node %s: %v", nodeName, err)
+		return fmt.Errorf("failed to copy taints to node %s: %w", nodeName, err)
+	}
+
+	p.svc.logger.Infof("Successfully copied %d taints to node %s", len(copiedTaints), nodeName)
+	return nil
 }
 
 // BatchCopyTaints 批量复制节点污点（不带进度推送）
@@ -1098,14 +1109,16 @@ func (s *Service) BatchCopyTaintsWithProgress(req BatchCopyTaintsRequest, userID
 
 	// 如果提供了taskID，则使用进度推送
 	if taskID != "" && s.progressSvc != nil {
+		// 预先复制源节点的污点
+		sourceTaints := make([]k8s.TaintInfo, len(sourceNode.Taints))
+		copy(sourceTaints, sourceNode.Taints)
+
 		processor := &TaintCopyProcessor{
-			svc:               s,
-			req:               req,
-			userID:            userID,
-			sourceTaints:      make([]k8s.TaintInfo, len(sourceNode.Taints)),
-			sourceNodeChecked: true,
+			svc:          s,
+			req:          req,
+			userID:       userID,
+			sourceTaints: sourceTaints,
 		}
-		copy(processor.sourceTaints, sourceNode.Taints)
 
 		// 使用进度推送的并发处理
 		maxConcurrency := 5 // 限制并发数避免过载

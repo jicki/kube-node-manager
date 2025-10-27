@@ -468,9 +468,10 @@
     <el-dialog
       v-model="copyTaintsDialogVisible"
       title="复制节点污点"
-      width="600px"
+      width="50%"
       :close-on-click-modal="false"
       class="copy-taints-dialog"
+      destroy-on-close
     >
       <el-form label-width="100px">
         <el-form-item label="源节点" required>
@@ -1516,6 +1517,19 @@ onMounted(() => {
   font-size: 12px;
   color: #909399;
   line-height: 1.5;
+}
+
+/* 响应式布局 */
+@media screen and (max-width: 768px) {
+  .copy-taints-dialog {
+    width: 90% !important;
+  }
+}
+
+@media screen and (max-width: 1200px) {
+  .copy-taints-dialog {
+    width: 70% !important;
+  }
 }
 
 .node-option {
