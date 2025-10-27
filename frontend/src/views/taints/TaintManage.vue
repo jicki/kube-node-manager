@@ -1269,7 +1269,7 @@ const applyTemplateToNodes = async (template) => {
 // 进度处理函数
 const handleProgressCompleted = (data) => {
   ElMessage.success('批量污点操作完成')
-  refreshData()
+  refreshData(true) // 强制刷新节点数据以显示最新的污点
   applyDialogVisible.value = false
 }
 
@@ -1359,6 +1359,8 @@ const handleApplyTemplate = async () => {
       await taintApi.applyTemplate(applyData)
       ElMessage.success('模板应用成功')
       applyDialogVisible.value = false
+      // 应用成功后刷新节点数据
+      refreshData(true)
     }
     
   } catch (error) {

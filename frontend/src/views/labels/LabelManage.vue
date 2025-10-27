@@ -1169,7 +1169,7 @@ const showApplyDialog = async (template) => {
 // 进度处理函数
 const handleProgressCompleted = (data) => {
   ElMessage.success('批量标签操作完成')
-  refreshData()
+  refreshData(true) // 强制刷新节点数据以显示最新的标签
   applyDialogVisible.value = false
 }
 
@@ -1277,6 +1277,8 @@ const handleApplyTemplate = async () => {
       await labelApi.applyTemplate(applyData)
       ElMessage.success('模板应用成功')
       applyDialogVisible.value = false
+      // 应用成功后刷新节点数据
+      refreshData(true)
     }
     
   } catch (error) {
