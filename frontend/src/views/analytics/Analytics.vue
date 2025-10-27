@@ -208,9 +208,9 @@
                 style="width: 100%"
               >
                 <el-table-column type="index" label="排名" width="80" />
-                <el-table-column prop="node_name" label="节点名称" width="200" />
-                <el-table-column prop="cluster_name" label="集群" width="150" />
-                <el-table-column label="健康度评分" width="200">
+                <el-table-column prop="node_name" label="节点名称" min-width="200" show-overflow-tooltip />
+                <el-table-column prop="cluster_name" label="集群" min-width="150" show-overflow-tooltip />
+                <el-table-column label="健康度评分" min-width="220">
                   <template #default="{ row }">
                     <el-progress
                       :percentage="row.health_score"
@@ -223,15 +223,15 @@
                     </el-progress>
                   </template>
                 </el-table-column>
-                <el-table-column label="等级" width="100">
+                <el-table-column label="等级" width="100" align="center">
                   <template #default="{ row }">
                     <el-tag :type="getHealthLevelType(row.health_score)">
                       {{ getHealthLevel(row.health_score) }}
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column prop="total_anomalies" label="总异常数" width="120" />
-                <el-table-column prop="active_anomalies" label="活跃异常" width="120">
+                <el-table-column prop="total_anomalies" label="总异常数" width="120" align="center" />
+                <el-table-column prop="active_anomalies" label="活跃异常" width="120" align="center">
                   <template #default="{ row }">
                     <el-tag v-if="row.active_anomalies > 0" type="danger">
                       {{ row.active_anomalies }}
@@ -239,17 +239,17 @@
                     <span v-else>0</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="平均恢复时间" width="140">
+                <el-table-column label="平均恢复时间" min-width="160" align="center">
                   <template #default="{ row }">
-                    <span v-if="row.avg_recovery_time && row.avg_recovery_time > 0">
-                      {{ formatSeconds(row.avg_recovery_time) }}
+                    <span v-if="row.avg_mttr && row.avg_mttr > 0">
+                      {{ formatSeconds(row.avg_mttr) }}
                     </span>
                     <el-tooltip v-else content="该节点暂无已恢复的异常记录" placement="top">
                       <span style="color: #999">-</span>
                     </el-tooltip>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="120" fixed="right">
+                <el-table-column label="操作" width="120" fixed="right" align="center">
                   <template #default="{ row }">
                     <el-button
                       type="primary"
@@ -414,12 +414,12 @@
           </el-descriptions-item>
           <el-descriptions-item label="平均恢复时间">
             <el-tag type="warning" size="large">
-              {{ formatSeconds(selectedNodeHealth.avg_recovery_time) }}
+              {{ formatSeconds(selectedNodeHealth.avg_mttr) }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="最近异常">
-            <span v-if="selectedNodeHealth.last_anomaly_time">
-              {{ formatDateTime(selectedNodeHealth.last_anomaly_time) }}
+            <span v-if="selectedNodeHealth.last_anomaly">
+              {{ formatDateTime(selectedNodeHealth.last_anomaly) }}
             </span>
             <span v-else>无</span>
           </el-descriptions-item>
@@ -1053,7 +1053,7 @@ const renderMTTRChart = (data) => {
       }
     },
     series: [{
-      data: chartData.map(item => item.avg_recovery_time || 0),
+      data: chartData.map(item => item.mttr || 0),
       type: 'bar',
       itemStyle: {
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
