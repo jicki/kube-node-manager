@@ -11,12 +11,65 @@
 
 ### 🐛 Bug 修复
 
+#### 缓存失效导致标签/污点更新不显示 🔥 (Critical)
+
+**问题描述**：
+- 批量删除/更新标签或污点后，操作显示成功但节点列表仍显示旧数据
+- 需要多次手动刷新才能看到最新的标签/污点状态
+- 后端日志显示操作成功，但前端获取的是缓存的旧数据
+
+**根本原因**：
+- `UpdateNodeLabels` 和 `UpdateNodeTaints` 函数在成功更新后**没有清除节点缓存**
+- 导致后续的 API 请求返回过期的缓存数据
+- 其他操作（如 Cordon/Uncordon）都正确调用了缓存失效，但标签/污点更新遗漏了
+
+**修复内容**：
+
+1. ✅ **添加标签更新后的缓存失效** - `UpdateNodeLabels` 成功后清除节点缓存
+   ```go
+   // backend/internal/service/k8s/k8s.go
+   func (s *Service) UpdateNodeLabels(clusterName string, req LabelUpdateRequest) error {
+       // ... 更新逻辑 ...
+       
+       // 清除缓存
+       s.cache.InvalidateNode(clusterName, req.NodeName)
+       
+       return nil
+   }
+   ```
+
+2. ✅ **添加污点更新后的缓存失效** - `UpdateNodeTaints` 成功后清除节点缓存
+   ```go
+   // backend/internal/service/k8s/k8s.go
+   func (s *Service) UpdateNodeTaints(clusterName string, req TaintUpdateRequest) error {
+       // ... 更新逻辑 ...
+       
+       // 清除缓存
+       s.cache.InvalidateNode(clusterName, req.NodeName)
+       
+       return nil
+   }
+   ```
+
+**修复效果**：
+- ✅ 标签/污点更新后立即失效缓存
+- ✅ 下次 API 请求直接从 K8s 获取最新数据
+- ✅ 前端刷新时显示正确的最新状态
+- ✅ 无需多次手动刷新
+
+**全面审计**：
+- ✅ 已审计所有 17 个节点更新相关函数
+- ✅ 所有操作都正确实现缓存失效机制
+- ✅ 详细审计报告: [cache-invalidation-audit.md](./cache-invalidation-audit.md)
+
+---
+
 #### 路由切换刷新和批量操作刷新优化
 
 **问题描述**：
 - 从标签/污点管理应用标签后，切换到节点管理页面，新增的标签/污点没有显示
 - 批量删除标签/污点完成后，节点列表没有立即刷新，需要手动点击刷新按钮
-- WebSocket 连接断开导致完成消息无法送达，需要多次手动刷新才能看到更新
+- WebSocket 连接断开导致完成消息无法送达，无法触发自动刷新
 
 **修复内容**：
 

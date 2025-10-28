@@ -487,6 +487,10 @@ func (s *Service) UpdateNodeLabels(clusterName string, req LabelUpdateRequest) e
 		} else {
 			s.logger.Infof("Successfully updated labels for node %s in cluster %s", req.NodeName, clusterName)
 		}
+
+		// 清除缓存
+		s.cache.InvalidateNode(clusterName, req.NodeName)
+
 		return nil
 	}
 
@@ -588,6 +592,10 @@ func (s *Service) UpdateNodeTaints(clusterName string, req TaintUpdateRequest) e
 		} else {
 			s.logger.Infof("Successfully updated taints for node %s in cluster %s", req.NodeName, clusterName)
 		}
+
+		// 清除缓存
+		s.cache.InvalidateNode(clusterName, req.NodeName)
+
 		return nil
 	}
 
