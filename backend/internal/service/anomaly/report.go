@@ -128,9 +128,13 @@ func (rs *ReportService) addSchedulerJob(config model.AnomalyReportConfig) error
 	rs.jobMap[config.ID] = entryID
 
 	// 计算下次执行时间
-	nextTime := rs.scheduler.Entry(entryID).Next
-	config.NextRunTime = &nextTime
-	if err := rs.db.Model(&config).Update("next_run_time", nextTime).Error; err != nil {
+	entry := rs.scheduler.Entry(entryID)
+	nextTime := entry.Next
+
+	// 更新数据库中的下次执行时间（使用 Where 和 Updates 确保更新生效）
+	if err := rs.db.Model(&model.AnomalyReportConfig{}).
+		Where("id = ?", config.ID).
+		Update("next_run_time", nextTime).Error; err != nil {
 		rs.logger.Warningf("Failed to update next run time for config %d: %v", config.ID, err)
 	}
 
