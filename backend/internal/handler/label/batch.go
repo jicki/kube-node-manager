@@ -15,7 +15,7 @@ import (
 func (h *Handler) BatchAddLabels(c *gin.Context) {
 	var req BatchLabelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error("Failed to bind batch add labels request: %v", err)
+		h.logger.Errorf("Failed to bind batch add labels request: %v", err)
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: "请求参数错误: " + err.Error(),
@@ -78,7 +78,7 @@ func (h *Handler) BatchAddLabels(c *gin.Context) {
 			}
 
 			if err := h.labelSvc.BatchUpdateLabels(batchReq, userID.(uint)); err != nil {
-				h.logger.Error("Failed to batch add labels for node %s: %v", nodeName, err)
+				h.logger.Errorf("Failed to batch add labels for node %s: %v", nodeName, err)
 				c.JSON(http.StatusInternalServerError, Response{
 					Code:    http.StatusInternalServerError,
 					Message: fmt.Sprintf("为节点 %s 添加标签失败: %s", nodeName, err.Error()),
@@ -102,7 +102,7 @@ func (h *Handler) BatchDeleteLabels(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error("Failed to bind batch delete labels request: %v", err)
+		h.logger.Errorf("Failed to bind batch delete labels request: %v", err)
 		c.JSON(http.StatusBadRequest, Response{
 			Code:    http.StatusBadRequest,
 			Message: "请求参数错误: " + err.Error(),
@@ -140,30 +140,29 @@ func (h *Handler) BatchDeleteLabels(c *gin.Context) {
 		return
 	}
 
-	// 为每个节点批量删除标签
-	for _, nodeName := range req.Nodes {
-		// 构建要删除的标签键值对（值设为空字符串表示删除）
-		labels := make(map[string]string)
-		for _, key := range req.Keys {
-			labels[key] = ""
-		}
+	h.logger.Infof("Batch delete labels: cluster=%s, nodes=%v, keys=%v", clusterName, req.Nodes, req.Keys)
 
-		// 构建BatchUpdateRequest
-		batchReq := label.BatchUpdateRequest{
-			ClusterName: clusterName,
-			NodeNames:   []string{nodeName},
-			Labels:      labels,
-			Operation:   "remove",
-		}
+	// 构建要删除的标签键值对
+	labels := make(map[string]string)
+	for _, key := range req.Keys {
+		labels[key] = "" // 空值表示删除
+	}
 
-		if err := h.labelSvc.BatchUpdateLabels(batchReq, userID.(uint)); err != nil {
-			h.logger.Error("Failed to batch delete labels for node %s: %v", nodeName, err)
-			c.JSON(http.StatusInternalServerError, Response{
-				Code:    http.StatusInternalServerError,
-				Message: fmt.Sprintf("为节点 %s 删除标签失败: %s", nodeName, err.Error()),
-			})
-			return
-		}
+	// 构建批量删除请求 - 一次性处理所有节点
+	batchReq := label.BatchUpdateRequest{
+		ClusterName: clusterName,
+		NodeNames:   req.Nodes,
+		Labels:      labels,
+		Operation:   "remove",
+	}
+
+	if err := h.labelSvc.BatchUpdateLabels(batchReq, userID.(uint)); err != nil {
+		h.logger.Errorf("Failed to batch delete labels: %v", err)
+		c.JSON(http.StatusInternalServerError, Response{
+			Code:    http.StatusInternalServerError,
+			Message: fmt.Sprintf("批量删除标签失败: %s", err.Error()),
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, Response{

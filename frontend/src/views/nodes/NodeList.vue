@@ -901,8 +901,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onActivated, reactive, nextTick, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNodeStore } from '@/store/modules/node'
 import { useClusterStore } from '@/store/modules/cluster'
@@ -938,6 +938,7 @@ import {
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
+const route = useRoute()
 const nodeStore = useNodeStore()
 const clusterStore = useClusterStore()
 const authStore = useAuthStore()
@@ -999,12 +1000,33 @@ const batchDeleteLabelsForm = reactive({
 })
 const batchDeleteLabelsFormRef = ref(null)
 const customLabelKey = ref('')
+// 系统标签前缀列表
+const systemLabelPrefixes = [
+  'kubernetes.io/',
+  'k8s.io/',
+  'node.kubernetes.io/',
+  'node-role.kubernetes.io/',
+  'beta.kubernetes.io/',
+  'failure-domain.beta.kubernetes.io/',
+  'topology.kubernetes.io/'
+]
+
+// 检查是否为系统标签
+const isSystemLabel = (key) => {
+  return systemLabelPrefixes.some(prefix => key.startsWith(prefix))
+}
+
 const availableLabelKeys = computed(() => {
-  // 从已选择的节点中提取所有标签键
+  // 从已选择的节点中提取所有标签键，并过滤系统标签
   const keys = new Set()
   selectedNodes.value.forEach(node => {
     if (node.labels) {
-      Object.keys(node.labels).forEach(key => keys.add(key))
+      Object.keys(node.labels).forEach(key => {
+        // 只添加非系统标签
+        if (!isSystemLabel(key)) {
+          keys.add(key)
+        }
+      })
     }
   })
   return Array.from(keys).sort()
@@ -1017,12 +1039,29 @@ const batchDeleteTaintsForm = reactive({
 })
 const batchDeleteTaintsFormRef = ref(null)
 const customTaintKey = ref('')
+// 系统污点前缀列表
+const systemTaintPrefixes = [
+  'node.kubernetes.io/',
+  'node-role.kubernetes.io/',
+  'topology.kubernetes.io/'
+]
+
+// 检查是否为系统污点
+const isSystemTaint = (key) => {
+  return systemTaintPrefixes.some(prefix => key.startsWith(prefix))
+}
+
 const availableTaintKeys = computed(() => {
-  // 从已选择的节点中提取所有污点键
+  // 从已选择的节点中提取所有污点键，并过滤系统污点
   const keys = new Set()
   selectedNodes.value.forEach(node => {
     if (node.taints && Array.isArray(node.taints)) {
-      node.taints.forEach(taint => keys.add(taint.key))
+      node.taints.forEach(taint => {
+        // 只添加非系统污点
+        if (!isSystemTaint(taint.key)) {
+          keys.add(taint.key)
+        }
+      })
     }
   })
   return Array.from(keys).sort()
@@ -1945,6 +1984,27 @@ onMounted(async () => {
   
   // 然后获取节点数据
   fetchNodes()
+})
+
+// 监听路由变化，从标签/污点管理切换回节点管理时自动刷新
+let lastRoute = null
+watch(() => route.name, (newRouteName, oldRouteName) => {
+  // 当从标签管理或污点管理切换到节点管理时刷新数据
+  if (newRouteName === 'NodeList' && 
+      (oldRouteName === 'LabelManage' || oldRouteName === 'TaintManage')) {
+    console.log(`路由切换: ${oldRouteName} -> ${newRouteName}, 刷新节点数据`)
+    refreshData()
+  }
+  lastRoute = oldRouteName
+})
+
+// 使用 onActivated 处理 keep-alive 缓存场景
+onActivated(() => {
+  // 如果是从其他页面切换回来，刷新数据
+  if (lastRoute === 'LabelManage' || lastRoute === 'TaintManage') {
+    console.log(`激活页面: 从 ${lastRoute} 返回，刷新节点数据`)
+    refreshData()
+  }
 })
 </script>
 

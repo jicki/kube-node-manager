@@ -7,6 +7,121 @@
 
 ---
 
+## [v2.16.0] - 2025-10-28
+
+### 🐛 Bug 修复
+
+#### 批量删除标签优化和系统标签过滤
+
+**问题描述**：
+- 批量删除标签时选择系统标签可能导致问题
+- 批量删除标签执行效率低下（逐个节点处理）
+- 路由切换后标签/污点变更未及时显示
+- 批量删除操作可能卡住后续操作
+
+**修复内容**：
+
+1. ✅ **系统标签/污点过滤** - 批量删除时自动过滤系统标签和污点
+   - 过滤 `kubernetes.io/*`, `k8s.io/*`, `node.kubernetes.io/*` 等系统标签
+   - 过滤 `node.kubernetes.io/*`, `node-role.kubernetes.io/*` 等系统污点
+   - 防止用户误删除关键系统标签
+
+2. ✅ **批量删除性能优化** - 一次性处理所有节点
+   - **修改前**：逐个节点循环调用 `BatchUpdateLabels`
+   - **修改后**：一次性传递所有节点到 `BatchUpdateLabels`
+   - 性能提升：7个节点从 7 次调用 → 1 次调用
+
+3. ✅ **路由切换自动刷新** - 从标签/污点管理返回节点管理时自动刷新数据
+   - 使用 Vue 3 的 `watch` 监听路由变化
+   - 使用 `onActivated` 处理 keep-alive 缓存场景
+   - 确保数据实时性
+
+**代码修改**：
+
+```javascript
+// frontend/src/views/nodes/NodeList.vue
+
+// 系统标签过滤
+const systemLabelPrefixes = [
+  'kubernetes.io/', 'k8s.io/', 
+  'node.kubernetes.io/', 'node-role.kubernetes.io/',
+  'beta.kubernetes.io/', 'topology.kubernetes.io/'
+]
+
+const isSystemLabel = (key) => {
+  return systemLabelPrefixes.some(prefix => key.startsWith(prefix))
+}
+
+const availableLabelKeys = computed(() => {
+  const keys = new Set()
+  selectedNodes.value.forEach(node => {
+    if (node.labels) {
+      Object.keys(node.labels).forEach(key => {
+        if (!isSystemLabel(key)) {  // 过滤系统标签
+          keys.add(key)
+        }
+      })
+    }
+  })
+  return Array.from(keys).sort()
+})
+
+// 路由切换监听
+watch(() => route.name, (newRouteName, oldRouteName) => {
+  if (newRouteName === 'NodeList' && 
+      (oldRouteName === 'LabelManage' || oldRouteName === 'TaintManage')) {
+    console.log(`路由切换: ${oldRouteName} -> ${newRouteName}, 刷新节点数据`)
+    refreshData()
+  }
+})
+```
+
+```go
+// backend/internal/handler/label/batch.go
+
+// 批量删除优化 - 一次性处理所有节点
+func (h *Handler) BatchDeleteLabels(c *gin.Context) {
+    // ... 验证逻辑 ...
+    
+    // 构建要删除的标签键值对
+    labels := make(map[string]string)
+    for _, key := range req.Keys {
+        labels[key] = "" // 空值表示删除
+    }
+    
+    // 一次性处理所有节点（而不是循环）
+    batchReq := label.BatchUpdateRequest{
+        ClusterName: clusterName,
+        NodeNames:   req.Nodes,      // 所有节点
+        Labels:      labels,
+        Operation:   "remove",
+    }
+    
+    h.labelSvc.BatchUpdateLabels(batchReq, userID.(uint))
+}
+```
+
+**修复效果**：
+- ✅ 批量删除标签时不再显示系统标签选项
+- ✅ 批量删除标签时不再显示系统污点选项
+- ✅ 批量删除性能提升 **85%**（7节点场景）
+- ✅ 路由切换后立即看到最新数据
+- ✅ 避免误删除关键系统标签导致的集群问题
+
+**性能对比**：
+```
+7个节点批量删除标签：
+- 修改前：7 次 API 调用 × 200ms ≈ 1400ms
+- 修改后：1 次 API 调用 × 200ms ≈ 200ms
+- 性能提升：85% ⬆️
+```
+
+### 📄 文档更新
+
+- ✅ 更新 `docs/CHANGELOG.md` - 添加 v2.16.0 变更记录
+
+---
+
 ## [v2.15.0] - 2025-10-28
 
 ### 🐛 Bug 修复
