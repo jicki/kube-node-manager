@@ -161,10 +161,25 @@ docker-build: ## 构建 Docker 镜像（多阶段构建）并推送
 	docker build \
 		--build-arg VITE_API_BASE_URL="$(VITE_API_BASE_URL)" \
 		--build-arg VITE_ENABLE_LDAP="$(VITE_ENABLE_LDAP)" \
+		--build-arg CACHEBUST=$$(date +%s) \
 		-t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
 	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:latest
 	@echo "镜像构建成功，开始推送..."
 	@$(MAKE) docker-push
+
+docker-build-no-cache: ## 强制无缓存构建 Docker 镜像（用于前端更新）并推送
+	@echo "⚠️  警告: 使用无缓存构建，将花费较长时间（约10分钟）"
+	@echo "清理 statik 文件..."
+	rm -rf backend/statik/statik.go
+	@echo "强制无缓存构建 Docker 镜像 [版本: $(VERSION_TAG)]..."
+	docker build --no-cache \
+		--build-arg VITE_API_BASE_URL="$(VITE_API_BASE_URL)" \
+		--build-arg VITE_ENABLE_LDAP="$(VITE_ENABLE_LDAP)" \
+		-t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
+	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:latest
+	@echo "镜像构建成功，开始推送..."
+	@$(MAKE) docker-push
+	@echo "✅ 无缓存构建完成！前端代码已完全更新。"
 
 docker-build-only: ## 只构建 Docker 镜像，不推送
 	@echo "清理 statik 文件..."
@@ -173,9 +188,22 @@ docker-build-only: ## 只构建 Docker 镜像，不推送
 	docker build \
 		--build-arg VITE_API_BASE_URL="$(VITE_API_BASE_URL)" \
 		--build-arg VITE_ENABLE_LDAP="$(VITE_ENABLE_LDAP)" \
+		--build-arg CACHEBUST=$$(date +%s) \
 		-t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
 	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:latest
 	@echo "镜像构建完成（未推送）"
+
+docker-build-only-no-cache: ## 只构建 Docker 镜像（无缓存），不推送
+	@echo "⚠️  警告: 使用无缓存构建，将花费较长时间"
+	@echo "清理 statik 文件..."
+	rm -rf backend/statik/statik.go
+	@echo "强制无缓存构建 Docker 镜像 [版本: $(VERSION_TAG)]..."
+	docker build --no-cache \
+		--build-arg VITE_API_BASE_URL="$(VITE_API_BASE_URL)" \
+		--build-arg VITE_ENABLE_LDAP="$(VITE_ENABLE_LDAP)" \
+		-t $(REGISTRY)/kube-node-manager:$(VERSION_TAG) .
+	docker tag $(REGISTRY)/kube-node-manager:$(VERSION_TAG) $(REGISTRY)/kube-node-manager:latest
+	@echo "✅ 无缓存构建完成（未推送）"
 
 docker-build-dev: ## 构建开发环境镜像
 	@echo "清理 statik 文件..."
@@ -344,6 +372,32 @@ k8s-scale: ## 扩缩容 Pod (需要指定副本数)
 	@echo "扩缩容 Pod..."
 	@if [ -z "$(REPLICAS)" ]; then echo "错误: 请指定副本数，例如: make k8s-scale REPLICAS=3"; exit 1; fi
 	kubectl scale statefulset/kube-node-manager --replicas=$(REPLICAS)
+
+k8s-update: ## 更新 Kubernetes 部署（使用新版本镜像）
+	@echo "更新 Kubernetes 部署 [版本: $(VERSION_TAG)]..."
+	kubectl set image statefulset/kube-node-mgr kube-node-mgr=$(REGISTRY)/kube-node-manager:$(VERSION_TAG) -n kube-node-mgr
+	kubectl rollout status statefulset/kube-node-mgr -n kube-node-mgr
+
+k8s-deploy-full: docker-build-no-cache k8s-update ## 🚀 完整部署流程（无缓存构建 + 推送 + K8s更新）
+	@echo ""
+	@echo "✅ 完整部署流程完成！"
+	@echo ""
+	@echo "📝 请完成以下浏览器端验证步骤："
+	@echo "  1. 清除浏览器缓存（Ctrl+Shift+Delete）"
+	@echo "  2. 强制刷新页面（Ctrl+F5 或 Cmd+Shift+R）"
+	@echo "  3. 或使用无痕模式打开"
+	@echo "  4. 检查报告配置页面是否显示数据"
+	@echo ""
+	@echo "🔍 快速验证命令："
+	@echo "  # 查看 Pod 日志"
+	@echo "  kubectl logs -f kube-node-mgr-0 -n kube-node-mgr"
+	@echo ""
+	@echo "  # 查看 Pod 状态"
+	@echo "  kubectl get pods -n kube-node-mgr"
+	@echo ""
+	@echo "  # 测试 API"
+	@echo "  kubectl exec kube-node-mgr-0 -n kube-node-mgr -- wget -qO- http://localhost:8080/api/v1/anomaly-reports/configs"
+	@echo ""
 
 # kubectl 插件相关
 build-plugin: ## 构建 kubectl 插件

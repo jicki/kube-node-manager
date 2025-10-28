@@ -18,13 +18,15 @@ COPY frontend/ .
 # 设置构建时环境变量（可通过docker build --build-arg传入）
 ARG VITE_API_BASE_URL=""
 ARG VITE_ENABLE_LDAP="false"
+ARG CACHEBUST=1
 
 # 设置环境变量供构建使用
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_ENABLE_LDAP=$VITE_ENABLE_LDAP
+ENV CACHEBUST=$CACHEBUST
 
-# 构建前端应用
-RUN npm run build
+# 构建前端应用（CACHEBUST 用于强制刷新缓存）
+RUN echo "Building frontend with CACHEBUST=${CACHEBUST}..." && npm run build
 
 # 多阶段构建 - 后端构建阶段
 FROM reg.deeproute.ai/deeproute-public/zzh/golang:1.24-alpine-plugin AS backend-builder
