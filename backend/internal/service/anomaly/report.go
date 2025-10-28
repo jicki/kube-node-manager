@@ -140,7 +140,7 @@ func (rs *ReportService) addSchedulerJob(config model.AnomalyReportConfig) error
 
 // GetReportConfigs 获取所有报告配置
 func (rs *ReportService) GetReportConfigs() ([]model.AnomalyReportConfig, error) {
-	var configs []model.AnomalyReportConfig
+	configs := make([]model.AnomalyReportConfig, 0) // 初始化为空数组而不是 nil
 	if err := rs.db.Order("id DESC").Find(&configs).Error; err != nil {
 		return nil, fmt.Errorf("failed to get report configs: %w", err)
 	}

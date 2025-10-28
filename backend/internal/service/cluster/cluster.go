@@ -427,7 +427,7 @@ func (s *Service) List(req ListRequest, userID uint) (*ListResponse, error) {
 	offset := (req.Page - 1) * req.PageSize
 
 	// 获取集群列表
-	var clusters []model.Cluster
+	clusters := make([]model.Cluster, 0) // 初始化为空数组而不是nil
 	if err := query.Order("created_at DESC").Offset(offset).Limit(req.PageSize).Find(&clusters).Error; err != nil {
 		s.logger.Errorf("Failed to list clusters: %v", err)
 		return nil, fmt.Errorf("failed to list clusters: %w", err)

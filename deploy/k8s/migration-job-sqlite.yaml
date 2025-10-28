@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kube-node-mgr-migration
+  namespace: kube-node-mgr
+  labels:
+    app: kube-node-mgr
+    component: migration
+spec:
+  # 保留完成的 Job 1天
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: kube-node-mgr
+        component: migration
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: kube-node-mgr
+      containers:
+      - name: migration
+        image: kube-node-mgr:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Starting database migration..."
+          echo "Database file: ${DATABASE_DSN}"
+          
+          # 检查数据库文件是否存在
+          if [ ! -f "${DATABASE_DSN}" ]; then
+            echo "Database file does not exist, will be created"
+          else
+            echo "Database file exists"
+            ls -lh "${DATABASE_DSN}"
+          fi
+          
+          # 执行迁移
+          cd /app
+          go run backend/tools/migrate.go
+          
+          echo "Migration completed!"
+          echo "Tables in database:"
+          sqlite3 "${DATABASE_DSN}" ".tables"
+        env:
+        - name: DATABASE_DSN
+          value: "/app/data/kube-node-mgr.db"
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: config
+          mountPath: /app/configs
+          readOnly: true
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: kube-node-mgr-data
+      - name: config
+        configMap:
+          name: kube-node-mgr-config
+

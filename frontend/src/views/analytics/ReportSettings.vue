@@ -387,7 +387,7 @@ const loadConfigs = async () => {
 const loadClusters = async () => {
   try {
     const res = await clusterApi.getClusters({ page: 1, page_size: 100 })
-    clusters.value = res.data?.items || []
+    clusters.value = res.data?.clusters || [] // 修复：后端返回的是 clusters 而不是 items
   } catch (error) {
     console.error('加载集群列表失败：', error)
   }

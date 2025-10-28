@@ -1,0 +1,67 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kube-node-mgr-migration
+  namespace: kube-node-mgr
+  labels:
+    app: kube-node-mgr
+    component: migration
+spec:
+  # 保留完成的 Job 1天
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: kube-node-mgr
+        component: migration
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: kube-node-mgr
+      containers:
+      - name: migration
+        image: kube-node-mgr:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Starting database migration..."
+          /app/backend/tools/migrate || exit 1
+          echo "Migration completed successfully!"
+        env:
+        # 数据库配置（根据实际情况修改）
+        - name: DATABASE_TYPE
+          value: "postgres"  # 或 "sqlite"
+        - name: DATABASE_HOST
+          value: "postgresql"
+        - name: DATABASE_PORT
+          value: "5432"
+        - name: DATABASE_NAME
+          value: "kube_node_mgr"
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: kube-node-mgr-secret
+              key: database-user
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kube-node-mgr-secret
+              key: database-password
+        volumeMounts:
+        # 如果使用 SQLite
+        - name: data
+          mountPath: /app/data
+        # 配置文件
+        - name: config
+          mountPath: /app/configs
+          readOnly: true
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: kube-node-mgr-data
+      - name: config
+        configMap:
+          name: kube-node-mgr-config
+
