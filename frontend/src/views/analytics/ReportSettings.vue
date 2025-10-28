@@ -375,7 +375,7 @@ const loadConfigs = async () => {
   loading.value = true
   try {
     const res = await getReportConfigs()
-    configs.value = res.data || []
+    configs.value = res.data?.data || []
   } catch (error) {
     ElMessage.error('加载报告配置失败：' + error.message)
   } finally {
@@ -387,7 +387,7 @@ const loadConfigs = async () => {
 const loadClusters = async () => {
   try {
     const res = await clusterApi.getClusters({ page: 1, page_size: 100 })
-    clusters.value = res.data?.clusters || [] // 修复：后端返回的是 clusters 而不是 items
+    clusters.value = res.data?.data?.clusters || []
   } catch (error) {
     console.error('加载集群列表失败：', error)
   }
