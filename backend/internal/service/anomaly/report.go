@@ -33,7 +33,7 @@ func NewReportService(db *gorm.DB, logger *logger.Logger, anomalySvc *Service, e
 		db:         db,
 		logger:     logger,
 		anomalySvc: anomalySvc,
-		scheduler:  cron.New(cron.WithSeconds()),
+		scheduler:  cron.New(), // 使用标准的 5 字段 Cron 表达式（分 时 日 月 周）
 		jobMap:     make(map[uint]cron.EntryID),
 		enabled:    enabled,
 		ctx:        ctx,
