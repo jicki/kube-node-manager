@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"fmt"
+	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/cluster"
 )
 
@@ -72,11 +73,30 @@ func (h *ClusterCommandHandler) handleListClusters(ctx *CommandContext) (*Comman
 			status = "Unavailable"
 		}
 
+		// 获取集群的异常节点数量
+		anomalyNodeCount := 0
+		if ctx.Service.anomalyService != nil {
+			clusterID := c.ID
+			anomalies, err := ctx.Service.anomalyService.GetActiveAnomalies(&clusterID)
+			if err == nil {
+				// 类型断言获取异常列表
+				if anomalyList, ok := anomalies.([]model.NodeAnomaly); ok {
+					// 统计唯一的节点名称
+					nodeSet := make(map[string]bool)
+					for _, a := range anomalyList {
+						nodeSet[a.NodeName] = true
+					}
+					anomalyNodeCount = len(nodeSet)
+				}
+			}
+		}
+
 		clusters = append(clusters, map[string]interface{}{
-			"name":    c.Name,
-			"status":  status,
-			"nodes":   c.NodeCount,
-			"version": c.Version,
+			"name":          c.Name,
+			"status":        status,
+			"nodes":         c.NodeCount,
+			"version":       c.Version,
+			"anomaly_nodes": anomalyNodeCount,
 		})
 	}
 

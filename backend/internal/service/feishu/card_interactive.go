@@ -304,13 +304,19 @@ func BuildClusterListCardWithActions(clusters []map[string]interface{}, currentC
 			version = v
 		}
 
+		// 获取异常节点数量
+		anomalyNodeCount := 0
+		if a, ok := cluster["anomaly_nodes"].(int); ok {
+			anomalyNodeCount = a
+		}
+
 		isCurrent := clusterName == currentCluster
 		clusterPrefix := ""
 		if isCurrent {
 			clusterPrefix = "👉 "
 		}
 
-		clusterInfo := fmt.Sprintf("%s**%s**\n状态: %s | 节点: %d | 版本: %s", clusterPrefix, clusterName, status, nodeCount, version)
+		clusterInfo := fmt.Sprintf("%s**%s**\n状态: %s | 节点: %d | 异常节点: %d | 版本: %s", clusterPrefix, clusterName, status, nodeCount, anomalyNodeCount, version)
 
 		elements = append(elements, map[string]interface{}{
 			"tag": "div",

@@ -45,6 +45,11 @@ type TaintServiceInterface interface {
 	RemoveTaint(clusterName, nodeName, taintKey string, userID uint) error
 }
 
+// AnomalyServiceInterface 异常服务接口
+type AnomalyServiceInterface interface {
+	GetActiveAnomalies(clusterID *uint) (interface{}, error)
+}
+
 // Service handles Feishu (Lark) related operations
 type Service struct {
 	db             *gorm.DB
@@ -56,6 +61,7 @@ type Service struct {
 	auditService   AuditServiceInterface
 	labelService   LabelServiceInterface
 	taintService   TaintServiceInterface
+	anomalyService AnomalyServiceInterface
 }
 
 // NewService creates a new Feishu service
@@ -92,6 +98,11 @@ func (s *Service) SetLabelService(labelSvc LabelServiceInterface) {
 // SetTaintService 设置污点服务
 func (s *Service) SetTaintService(taintSvc TaintServiceInterface) {
 	s.taintService = taintSvc
+}
+
+// SetAnomalyService 设置异常服务
+func (s *Service) SetAnomalyService(anomalySvc AnomalyServiceInterface) {
+	s.anomalyService = anomalySvc
 }
 
 // InitializeEventClient 初始化或重启事件客户端

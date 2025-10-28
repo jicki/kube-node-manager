@@ -150,6 +150,15 @@ func (a *taintServiceAdapter) RemoveTaint(clusterName, nodeName, taintKey string
 	return a.svc.RemoveTaint(clusterName, nodeName, taintKey, userID)
 }
 
+// anomalyServiceAdapter 适配器，将 anomaly.Service 适配为 feishu.AnomalyServiceInterface
+type anomalyServiceAdapter struct {
+	svc *anomaly.Service
+}
+
+func (a *anomalyServiceAdapter) GetActiveAnomalies(clusterID *uint) (interface{}, error) {
+	return a.svc.GetActiveAnomalies(clusterID)
+}
+
 func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Services {
 	auditSvc := audit.NewService(db, logger)
 	k8sSvc := k8s.NewService(logger)
@@ -178,19 +187,6 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	clusterSvc := cluster.NewService(db, logger, auditSvc, k8sSvc)
 	feishuSvc := feishu.NewService(db, logger)
 
-	// 创建适配器并设置飞书服务的依赖
-	clusterAdapter := &clusterServiceAdapter{svc: clusterSvc}
-	nodeAdapter := &nodeServiceAdapter{svc: nodeSvc}
-	auditAdapter := &auditServiceAdapter{svc: auditSvc}
-	labelAdapter := &labelServiceAdapter{svc: labelSvc}
-	taintAdapter := &taintServiceAdapter{svc: taintSvc}
-
-	feishuSvc.SetClusterService(clusterAdapter)
-	feishuSvc.SetNodeService(nodeAdapter)
-	feishuSvc.SetAuditService(auditAdapter)
-	feishuSvc.SetLabelService(labelAdapter)
-	feishuSvc.SetTaintService(taintAdapter)
-
 	// 初始化缓存
 	cacheInstance, err := cache.NewCache(&cfg.Monitoring.Cache, db, logger)
 	if err != nil {
@@ -217,6 +213,21 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 
 	// 创建异常监控服务
 	anomalySvc := anomaly.NewService(db, logger, k8sSvc, clusterSvc, cacheInstance, cacheTTL, cleanupSvc, cfg.Monitoring.Enabled, cfg.Monitoring.Interval)
+
+	// 创建适配器并设置飞书服务的依赖
+	clusterAdapter := &clusterServiceAdapter{svc: clusterSvc}
+	nodeAdapter := &nodeServiceAdapter{svc: nodeSvc}
+	auditAdapter := &auditServiceAdapter{svc: auditSvc}
+	labelAdapter := &labelServiceAdapter{svc: labelSvc}
+	taintAdapter := &taintServiceAdapter{svc: taintSvc}
+	anomalyAdapter := &anomalyServiceAdapter{svc: anomalySvc}
+
+	feishuSvc.SetClusterService(clusterAdapter)
+	feishuSvc.SetNodeService(nodeAdapter)
+	feishuSvc.SetAuditService(auditAdapter)
+	feishuSvc.SetLabelService(labelAdapter)
+	feishuSvc.SetTaintService(taintAdapter)
+	feishuSvc.SetAnomalyService(anomalyAdapter)
 
 	// 创建异常报告服务
 	reportEnabled := false
