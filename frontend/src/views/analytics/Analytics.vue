@@ -1091,12 +1091,20 @@ const renderMTTRChart = (data) => {
 // 加载SLA统计
 const loadSLAMetrics = async () => {
   try {
-    // SLA统计暂时跳过，因为需要entity_name参数
-    // 显示一个默认的仪表盘
-    renderSLAChart({ sla_percentage: 99.5 })
+    const params = {
+      entity_type: 'cluster',
+      cluster_id: filterForm.cluster_id,
+      start_time: computedStartTime.value,
+      end_time: computedEndTime.value
+    }
+    const res = await getSLA(params)
+    // 处理响应数据
+    const data = res.data?.data || res.data || {}
+    console.log('SLA统计数据：', data)
+    renderSLAChart(data)
   } catch (error) {
     console.error('加载SLA统计失败：', error)
-    renderSLAChart({ sla_percentage: 0 })
+    renderSLAChart({ availability: 0 })
   }
 }
 
@@ -1108,7 +1116,7 @@ const renderSLAChart = (data) => {
     slaChart = echarts.init(slaChartRef.value)
   }
   
-  const slaPercentage = data.sla_percentage || 0
+  const slaPercentage = data.availability || data.sla_percentage || 0
   
   const option = {
     series: [{
@@ -1175,9 +1183,17 @@ const renderSLAChart = (data) => {
 // 加载恢复率和复发率
 const loadRecoveryMetrics = async () => {
   try {
-    // 恢复指标暂时跳过，因为需要entity_name参数
-    // 显示一个默认的饼图
-    renderRecoveryChart({ recovery_rate: 85, recurrence_rate: 15 })
+    const params = {
+      entity_type: 'cluster',
+      cluster_id: filterForm.cluster_id,
+      start_time: computedStartTime.value,
+      end_time: computedEndTime.value
+    }
+    const res = await getRecoveryMetrics(params)
+    // 处理响应数据
+    const data = res.data?.data || res.data || {}
+    console.log('恢复指标数据：', data)
+    renderRecoveryChart(data)
   } catch (error) {
     console.error('加载恢复指标失败：', error)
     renderRecoveryChart({ recovery_rate: 0, recurrence_rate: 0 })
@@ -1192,9 +1208,35 @@ const renderRecoveryChart = (data) => {
     recoveryChart = echarts.init(recoveryChartRef.value)
   }
   
+  const recoveryRate = data.recovery_rate || 0
+  const recurrenceRate = data.recurrence_rate || 0
+  
+  // 如果没有数据，显示提示
+  if (recoveryRate === 0 && recurrenceRate === 0) {
+    const option = {
+      title: {
+        text: '暂无恢复数据',
+        subtext: '需要有已恢复的异常才能计算恢复率',
+        left: 'center',
+        top: 'center',
+        textStyle: {
+          color: '#999',
+          fontSize: 14
+        },
+        subtextStyle: {
+          color: '#ccc',
+          fontSize: 12
+        }
+      }
+    }
+    recoveryChart.setOption(option)
+    return
+  }
+  
   const option = {
     tooltip: {
-      trigger: 'item'
+      trigger: 'item',
+      formatter: '{b}: {c}%'
     },
     legend: {
       top: '10%',
@@ -1223,12 +1265,12 @@ const renderRecoveryChart = (data) => {
       },
       data: [
         {
-          value: (data.recovery_rate || 0).toFixed(1),
+          value: parseFloat(recoveryRate.toFixed(1)),
           name: '恢复率',
           itemStyle: { color: '#67C23A' }
         },
         {
-          value: (data.recurrence_rate || 0).toFixed(1),
+          value: parseFloat(recurrenceRate.toFixed(1)),
           name: '复发率',
           itemStyle: { color: '#F56C6C' }
         }
@@ -1278,20 +1320,25 @@ const showNodeHealthDetail = (row) => {
 const viewNodeAnomalies = () => {
   if (!selectedNodeHealth.value) return
   
+  // 设置过滤条件（在切换 tab 之前）
+  filterForm.cluster_id = selectedNodeHealth.value.cluster_id
+  filterForm.node_name = selectedNodeHealth.value.node_name
+  filterForm.anomaly_type = ''
+  
   // 关闭对话框
   healthDetailDialogVisible.value = false
   
   // 切换到异常记录tab
   activeTab.value = 'records'
   
-  // 设置过滤条件
-  filterForm.cluster_id = selectedNodeHealth.value.cluster_id
-  filterForm.node_name = selectedNodeHealth.value.node_name
-  filterForm.anomaly_type = ''
-  
   // 等待DOM更新后加载数据
   nextTick(() => {
+    // 重置分页
+    pagination.page = 1
+    // 加载异常数据
     loadAnomalies()
+    // 同时刷新摘要信息
+    loadActiveSummary()
   })
 }
 

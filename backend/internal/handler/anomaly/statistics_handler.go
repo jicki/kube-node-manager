@@ -171,17 +171,12 @@ func (h *Handler) GetMTTR(c *gin.Context) {
 }
 
 // GetSLA 获取 SLA 可用性指标
+// 支持两种模式：
+// 1. 提供 entity_name 时，返回单个实体的 SLA
+// 2. 不提供 entity_name 时，返回集群/角色聚合的 SLA
 func (h *Handler) GetSLA(c *gin.Context) {
-	entityType := c.DefaultQuery("entity_type", "node")
+	entityType := c.DefaultQuery("entity_type", "cluster")
 	entityName := c.Query("entity_name")
-
-	if entityName == "" {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    400,
-			Message: "缺少必需参数: entity_name",
-		})
-		return
-	}
 
 	var clusterID *uint
 	if clusterIDStr := c.Query("cluster_id"); clusterIDStr != "" {
@@ -203,6 +198,27 @@ func (h *Handler) GetSLA(c *gin.Context) {
 		}
 	}
 
+	// 如果没有提供 entity_name，返回聚合数据
+	if entityName == "" {
+		metrics, err := h.anomalySvc.GetSLAMetrics(entityType, "", clusterID, startTime, endTime)
+		if err != nil {
+			h.logger.Errorf("Failed to get SLA metrics: %v", err)
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    500,
+				Message: "获取 SLA 指标失败",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, Response{
+			Code:    200,
+			Message: "获取 SLA 指标成功",
+			Data:    metrics,
+		})
+		return
+	}
+
+	// 提供了 entity_name，返回单个实体的数据
 	metrics, err := h.anomalySvc.GetSLAMetrics(entityType, entityName, clusterID, startTime, endTime)
 	if err != nil {
 		h.logger.Errorf("Failed to get SLA metrics: %v", err)
@@ -221,17 +237,12 @@ func (h *Handler) GetSLA(c *gin.Context) {
 }
 
 // GetRecoveryMetrics 获取恢复率和复发率
+// 支持两种模式：
+// 1. 提供 entity_name 时，返回单个实体的恢复指标
+// 2. 不提供 entity_name 时，返回集群/角色聚合的恢复指标
 func (h *Handler) GetRecoveryMetrics(c *gin.Context) {
-	entityType := c.DefaultQuery("entity_type", "node")
+	entityType := c.DefaultQuery("entity_type", "cluster")
 	entityName := c.Query("entity_name")
-
-	if entityName == "" {
-		c.JSON(http.StatusBadRequest, Response{
-			Code:    400,
-			Message: "缺少必需参数: entity_name",
-		})
-		return
-	}
 
 	var clusterID *uint
 	if clusterIDStr := c.Query("cluster_id"); clusterIDStr != "" {
@@ -253,6 +264,27 @@ func (h *Handler) GetRecoveryMetrics(c *gin.Context) {
 		}
 	}
 
+	// 如果没有提供 entity_name，返回聚合数据
+	if entityName == "" {
+		metrics, err := h.anomalySvc.GetRecoveryMetrics(entityType, "", clusterID, startTime, endTime)
+		if err != nil {
+			h.logger.Errorf("Failed to get recovery metrics: %v", err)
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    500,
+				Message: "获取恢复指标失败",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, Response{
+			Code:    200,
+			Message: "获取恢复指标成功",
+			Data:    metrics,
+		})
+		return
+	}
+
+	// 提供了 entity_name，返回单个实体的数据
 	metrics, err := h.anomalySvc.GetRecoveryMetrics(entityType, entityName, clusterID, startTime, endTime)
 	if err != nil {
 		h.logger.Errorf("Failed to get recovery metrics: %v", err)
