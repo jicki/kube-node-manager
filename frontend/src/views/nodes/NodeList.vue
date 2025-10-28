@@ -1356,6 +1356,9 @@ const confirmBatchCordon = async () => {
       progressDialogVisible.value = true
       cordonConfirmVisible.value = false
       
+      // 启动降级方案：如果WebSocket断开，使用轮询检测完成
+      startProgressFallback('cordon')
+      
       // 不立即设置loading为false，等进度完成后再处理
     } else {
       // 对于少量节点，使用原有的同步方式
@@ -1393,6 +1396,9 @@ const batchUncordon = async () => {
       // 获取任务ID
       currentTaskId.value = progressResponse.data.data.task_id
       progressDialogVisible.value = true
+      
+      // 启动降级方案：如果WebSocket断开，使用轮询检测完成
+      startProgressFallback('uncordon')
       
       // 不立即设置loading为false，等进度完成后再处理
     } else {
@@ -1476,6 +1482,9 @@ const confirmBatchDrain = async () => {
       currentTaskId.value = progressResponse.data.data.task_id
       progressDialogVisible.value = true
       drainConfirmVisible.value = false
+      
+      // 启动降级方案：如果WebSocket断开，使用轮询检测完成
+      startProgressFallback('drain')
       
       // 不立即设置loading为false，等进度完成后再处理
     } else {
@@ -1671,6 +1680,12 @@ const startProgressFallback = (operationType) => {
       batchLoading.deleteLabels = false
     } else if (operationType === 'deleteTaints') {
       batchLoading.deleteTaints = false
+    } else if (operationType === 'cordon') {
+      batchLoading.cordon = false
+    } else if (operationType === 'uncordon') {
+      batchLoading.uncordon = false
+    } else if (operationType === 'drain') {
+      batchLoading.drain = false
     }
     
     // 清除选择

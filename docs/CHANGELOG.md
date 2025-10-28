@@ -7,6 +7,43 @@
 
 ---
 
+## [v2.16.1] - 2025-10-28
+
+### 🐛 Bug 修复
+
+#### 批量调度操作缺少降级方案
+
+**问题描述**：
+- 批量禁止调度（Cordon）、批量解除调度（Uncordon）、批量驱逐（Drain）缺少 WebSocket 断开降级方案
+- 当 WebSocket 连接在批量操作过程中断开时，前端无法收到完成消息，导致界面不刷新
+- 用户需要手动多次刷新才能看到最新状态
+
+**修复内容**：
+
+1. ✅ **批量禁止调度降级方案** - 为 `confirmBatchCordon` 添加降级定时器
+2. ✅ **批量解除调度降级方案** - 为 `batchUncordon` 添加降级定时器
+3. ✅ **批量驱逐降级方案** - 为 `confirmBatchDrain` 添加降级定时器
+
+**修复代码**：
+```javascript
+// frontend/src/views/nodes/NodeList.vue
+if (nodeNames.length > 5) {
+  const progressResponse = await nodeApi.batchCordonWithProgress(...)
+  currentTaskId.value = progressResponse.data.data.task_id
+  progressDialogVisible.value = true
+  
+  // 🔥 新增：启动降级方案
+  startProgressFallback('cordon')
+}
+```
+
+**修复效果**：
+- ✅ 所有批量操作都有降级保护
+- ✅ WebSocket 断开时 30 秒后自动刷新
+- ✅ 确保用户始终能看到最新状态
+
+---
+
 ## [v2.16.0] - 2025-10-28
 
 ### 🐛 Bug 修复
@@ -91,6 +128,12 @@
    - 如果 WebSocket 完成消息未送达，定时器触发自动刷新
    - WebSocket 成功推送完成消息时清除降级定时器
    - 避免因网络问题导致界面无法刷新
+   - 支持所有批量操作类型：
+     * 批量禁止调度（Cordon）
+     * 批量解除调度（Uncordon）
+     * 批量驱逐（Drain）
+     * 批量删除标签
+     * 批量删除污点
 
 **代码修改**：
 
