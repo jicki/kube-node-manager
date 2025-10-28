@@ -1221,6 +1221,7 @@ const resetSearchFilters = () => {
 
 // 刷新数据
 const refreshData = async () => {
+  console.log('refreshData() 被调用')
   try {
     // 重新加载集群信息
     await clusterStore.fetchClusters()
@@ -1238,7 +1239,9 @@ const refreshData = async () => {
   }
   
   // 刷新节点数据，fetchNodes现在会自动获取禁止调度历史
+  console.log('开始刷新节点数据...')
   await fetchNodes()
+  console.log('节点数据刷新完成')
 }
 
 // 查看节点详情
@@ -1645,17 +1648,25 @@ const addCustomLabelKey = () => {
 
 // 进度处理函数
 const handleProgressCompleted = async (data) => {
+  console.log('批量操作进度完成回调被触发', data)
   ElMessage.success('批量操作完成')
-  // 刷新节点数据以显示最新状态
-  await refreshData()
-  clearSelection()
   
-  // 重置loading状态
+  // 先重置loading状态，避免影响刷新
   batchLoading.cordon = false
   batchLoading.uncordon = false
   batchLoading.drain = false
   batchLoading.deleteLabels = false
   batchLoading.deleteTaints = false
+  
+  // 清除选择
+  clearSelection()
+  
+  // 延迟刷新以确保后端操作完全完成
+  console.log('延迟200ms后刷新节点数据以显示最新状态')
+  setTimeout(async () => {
+    await refreshData()
+    console.log('批量操作后节点数据已刷新')
+  }, 200)
 }
 
 const handleProgressError = (data) => {
@@ -1988,22 +1999,30 @@ onMounted(async () => {
 
 // 监听路由变化，从标签/污点管理切换回节点管理时自动刷新
 let lastRoute = null
-watch(() => route.name, (newRouteName, oldRouteName) => {
+watch(() => route.name, async (newRouteName, oldRouteName) => {
   // 当从标签管理或污点管理切换到节点管理时刷新数据
   if (newRouteName === 'NodeList' && 
       (oldRouteName === 'LabelManage' || oldRouteName === 'TaintManage')) {
-    console.log(`路由切换: ${oldRouteName} -> ${newRouteName}, 刷新节点数据`)
-    refreshData()
+    console.log(`路由切换: ${oldRouteName} -> ${newRouteName}, 强制刷新节点数据`)
+    // 延迟100ms确保页面完全渲染后再刷新
+    setTimeout(async () => {
+      await refreshData()
+      console.log('节点数据已刷新')
+    }, 100)
   }
   lastRoute = oldRouteName
 })
 
 // 使用 onActivated 处理 keep-alive 缓存场景
-onActivated(() => {
+onActivated(async () => {
   // 如果是从其他页面切换回来，刷新数据
   if (lastRoute === 'LabelManage' || lastRoute === 'TaintManage') {
-    console.log(`激活页面: 从 ${lastRoute} 返回，刷新节点数据`)
-    refreshData()
+    console.log(`激活页面: 从 ${lastRoute} 返回，强制刷新节点数据`)
+    // 延迟100ms确保页面完全渲染后再刷新
+    setTimeout(async () => {
+      await refreshData()
+      console.log('节点数据已刷新')
+    }, 100)
   }
 })
 </script>

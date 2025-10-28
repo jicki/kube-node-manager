@@ -11,6 +11,76 @@
 
 ### 🐛 Bug 修复
 
+#### 路由切换刷新和批量操作刷新优化
+
+**问题描述**：
+- 从标签/污点管理应用标签后，切换到节点管理页面，新增的标签/污点没有显示
+- 批量删除标签/污点完成后，节点列表没有立即刷新，需要手动点击刷新按钮
+
+**修复内容**：
+
+1. ✅ **路由切换自动刷新** - 从标签/污点管理切换回节点管理时自动刷新数据
+   - 添加 Vue 3 `watch` 监听路由名称变化
+   - 添加 `onActivated` 处理 keep-alive 缓存场景
+   - 延迟100ms刷新确保页面完全渲染
+   - 添加日志追踪以便调试
+
+2. ✅ **批量操作完成后立即刷新** - 所有批量操作完成后自动刷新节点列表
+   - 批量禁止调度（Cordon）完成后刷新
+   - 批量解除调度（Uncordon）完成后刷新
+   - 批量删除标签完成后刷新
+   - 批量删除污点完成后刷新
+   - 延迟200ms刷新确保后端操作完全完成
+
+**代码修改**：
+
+```javascript
+// frontend/src/views/nodes/NodeList.vue
+
+// 路由切换监听
+watch(() => route.name, async (newRouteName, oldRouteName) => {
+  if (newRouteName === 'NodeList' && 
+      (oldRouteName === 'LabelManage' || oldRouteName === 'TaintManage')) {
+    console.log(`路由切换: ${oldRouteName} -> ${newRouteName}, 强制刷新节点数据`)
+    // 延迟100ms确保页面完全渲染后再刷新
+    setTimeout(async () => {
+      await refreshData()
+      console.log('节点数据已刷新')
+    }, 100)
+  }
+  lastRoute = oldRouteName
+})
+
+// 批量操作完成回调
+const handleProgressCompleted = async (data) => {
+  console.log('批量操作进度完成回调被触发', data)
+  ElMessage.success('批量操作完成')
+  
+  // 先重置loading状态，避免影响刷新
+  batchLoading.cordon = false
+  batchLoading.uncordon = false
+  batchLoading.drain = false
+  batchLoading.deleteLabels = false
+  batchLoading.deleteTaints = false
+  
+  // 清除选择
+  clearSelection()
+  
+  // 延迟刷新以确保后端操作完全完成
+  console.log('延迟200ms后刷新节点数据以显示最新状态')
+  setTimeout(async () => {
+    await refreshData()
+    console.log('批量操作后节点数据已刷新')
+  }, 200)
+}
+```
+
+**修复效果**：
+- ✅ 从标签/污点管理切换回节点管理 → 自动刷新显示最新数据
+- ✅ 批量删除标签/污点完成 → 自动刷新显示最新状态
+- ✅ 无需手动点击刷新按钮
+- ✅ 提升用户体验，操作流畅自然
+
 #### 批量删除标签优化和系统标签过滤
 
 **问题描述**：
