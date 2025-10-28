@@ -686,6 +686,13 @@ const handleFilterChange = () => {
   pagination.page = 1
   loadAnomalies()
   loadActiveSummary()
+  
+  // 根据当前 tab 刷新对应的数据
+  if (activeTab.value === 'advanced') {
+    loadAdvancedStatistics()
+  } else if (activeTab.value === 'health') {
+    loadHealthData()
+  }
 }
 
 // 查询
@@ -874,6 +881,26 @@ watch(isVisible, (visible) => {
   } else {
     // 页面隐藏时停止轮询
     stopPolling()
+  }
+})
+
+// 监听集群筛选变化
+watch(() => filterForm.cluster_id, () => {
+  // 刷新所有统计数据
+  loadActiveSummary()
+  
+  // 根据当前 tab 刷新对应的数据
+  if (activeTab.value === 'overview') {
+    // 刷新趋势图表
+    if (trendChartsRef.value) {
+      trendChartsRef.value.refresh()
+    }
+  } else if (activeTab.value === 'advanced') {
+    loadAdvancedStatistics()
+  } else if (activeTab.value === 'health') {
+    loadHealthData()
+  } else if (activeTab.value === 'records') {
+    // 异常记录在 handleFilterChange 中已经处理
   }
 })
 
