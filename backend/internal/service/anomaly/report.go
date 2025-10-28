@@ -1,11 +1,14 @@
 package anomaly
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/pkg/logger"
+	"net/http"
 	"sync"
 	"time"
 
@@ -425,12 +428,56 @@ func (rs *ReportService) GenerateReport(config *model.AnomalyReportConfig) (*Rep
 
 // SendReportToFeishu 发送报告到飞书
 func (rs *ReportService) SendReportToFeishu(config *model.AnomalyReportConfig, content *ReportContent) error {
-	// TODO: 实现飞书卡片发送逻辑
-	// 这里需要调用飞书 Webhook API
-	// 可以复用现有的 feishu.Service 和卡片构建器
-
 	rs.logger.Infof("Sending report to Feishu webhook: %s", config.FeishuWebhook)
-	// 实现略，后续根据需要完善
+
+	// 构建飞书卡片
+	card := rs.buildFeishuReportCard(content)
+
+	// 准备 webhook 请求体
+	webhookReq := map[string]interface{}{
+		"msg_type": "interactive",
+		"card":     card,
+	}
+
+	jsonData, err := json.Marshal(webhookReq)
+	if err != nil {
+		return fmt.Errorf("failed to marshal webhook request: %w", err)
+	}
+
+	// 发送 HTTP POST 请求到 webhook
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(config.FeishuWebhook, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to send webhook request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read webhook response: %w", err)
+	}
+
+	// 检查响应状态
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("webhook returned error status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// 解析响应 JSON
+	var webhookResp map[string]interface{}
+	if err := json.Unmarshal(body, &webhookResp); err != nil {
+		rs.logger.Warningf("Failed to parse webhook response: %v", err)
+		// 不返回错误，因为消息可能已发送成功
+		return nil
+	}
+
+	// 检查飞书 API 返回码
+	if code, ok := webhookResp["code"].(float64); ok && code != 0 {
+		msg := webhookResp["msg"].(string)
+		return fmt.Errorf("feishu webhook error: code=%v, msg=%s", code, msg)
+	}
+
+	rs.logger.Infof("Successfully sent report to Feishu webhook")
 	return nil
 }
 
@@ -475,4 +522,246 @@ func (rs *ReportService) TestReportSend(configID uint) error {
 	}
 
 	return nil
+}
+
+// buildFeishuReportCard 构建飞书报告卡片
+func (rs *ReportService) buildFeishuReportCard(content *ReportContent) map[string]interface{} {
+	// 格式化时间范围
+	timeRange := fmt.Sprintf("%s ~ %s",
+		content.PeriodStart.Format("2006-01-02 15:04"),
+		content.PeriodEnd.Format("2006-01-02 15:04"))
+
+	// 构建元素列表
+	elements := []interface{}{
+		// 报告时间范围
+		map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": fmt.Sprintf("**📅 报告周期**: %s", timeRange),
+				"tag":     "lark_md",
+			},
+		},
+		// 集群信息
+		map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": fmt.Sprintf("**🏢 监控集群**: %s（共 %d 个）",
+					formatClusters(content.Clusters),
+					content.Summary.TotalClusters),
+				"tag": "lark_md",
+			},
+		},
+		map[string]interface{}{
+			"tag": "hr",
+		},
+		// 统计摘要
+		map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": "**📊 统计摘要**",
+				"tag":     "lark_md",
+			},
+		},
+		map[string]interface{}{
+			"tag": "div",
+			"fields": []interface{}{
+				map[string]interface{}{
+					"is_short": true,
+					"text": map[string]interface{}{
+						"tag":     "lark_md",
+						"content": fmt.Sprintf("**总异常数**\n%d", content.Summary.TotalAnomalies),
+					},
+				},
+				map[string]interface{}{
+					"is_short": true,
+					"text": map[string]interface{}{
+						"tag":     "lark_md",
+						"content": fmt.Sprintf("**活跃异常**\n🔴 %d", content.Summary.ActiveAnomalies),
+					},
+				},
+			},
+		},
+		map[string]interface{}{
+			"tag": "div",
+			"fields": []interface{}{
+				map[string]interface{}{
+					"is_short": true,
+					"text": map[string]interface{}{
+						"tag":     "lark_md",
+						"content": fmt.Sprintf("**已恢复**\n✅ %d", content.Summary.ResolvedAnomalies),
+					},
+				},
+				map[string]interface{}{
+					"is_short": true,
+					"text": map[string]interface{}{
+						"tag":     "lark_md",
+						"content": fmt.Sprintf("**受影响节点**\n⚠️ %d", content.Summary.AffectedNodes),
+					},
+				},
+			},
+		},
+	}
+
+	// 添加异常类型统计
+	if len(content.TypeStats) > 0 {
+		elements = append(elements, map[string]interface{}{
+			"tag": "hr",
+		})
+		elements = append(elements, map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": "**🔍 异常类型分布**",
+				"tag":     "lark_md",
+			},
+		})
+
+		typeTexts := make([]string, 0, len(content.TypeStats))
+		for _, ts := range content.TypeStats {
+			icon := getAnomalyTypeIcon(string(ts.AnomalyType))
+			typeTexts = append(typeTexts, fmt.Sprintf("• %s %s: %d 次", icon, ts.AnomalyType, ts.TotalCount))
+		}
+
+		elements = append(elements, map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": formatList(typeTexts, 5),
+				"tag":     "lark_md",
+			},
+		})
+	}
+
+	// 添加问题节点 Top 5
+	if len(content.TopNodes) > 0 {
+		elements = append(elements, map[string]interface{}{
+			"tag": "hr",
+		})
+		elements = append(elements, map[string]interface{}{
+			"tag": "div",
+			"text": map[string]interface{}{
+				"content": "**⚠️ 异常最多的节点（Top 5）**",
+				"tag":     "lark_md",
+			},
+		})
+
+		topCount := 5
+		if len(content.TopNodes) < topCount {
+			topCount = len(content.TopNodes)
+		}
+
+		for i := 0; i < topCount; i++ {
+			node := content.TopNodes[i]
+			healthIcon := getHealthIcon(node.HealthScore)
+			elements = append(elements, map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"content": fmt.Sprintf("%d. **%s** (%s)\n   异常: %d 次 | 健康度: %s %.1f%%",
+						i+1, node.NodeName, node.ClusterName,
+						node.AnomalyCount, healthIcon, node.HealthScore),
+					"tag": "lark_md",
+				},
+			})
+		}
+	}
+
+	// 添加注释
+	elements = append(elements, map[string]interface{}{
+		"tag": "hr",
+	})
+	elements = append(elements, map[string]interface{}{
+		"tag": "note",
+		"elements": []interface{}{
+			map[string]interface{}{
+				"tag":     "plain_text",
+				"content": "💡 查看详细数据请访问 Kube Node Manager 控制台",
+			},
+		},
+	})
+
+	// 构建卡片
+	card := map[string]interface{}{
+		"config": map[string]interface{}{
+			"wide_screen_mode": true,
+		},
+		"header": map[string]interface{}{
+			"template": "blue",
+			"title": map[string]interface{}{
+				"content": fmt.Sprintf("📊 %s", content.ReportName),
+				"tag":     "plain_text",
+			},
+		},
+		"elements": elements,
+	}
+
+	return card
+}
+
+// formatClusters 格式化集群列表
+func formatClusters(clusters []string) string {
+	if len(clusters) == 0 {
+		return "所有集群"
+	}
+	if len(clusters) <= 3 {
+		result := ""
+		for i, c := range clusters {
+			if i > 0 {
+				result += ", "
+			}
+			result += c
+		}
+		return result
+	}
+	return fmt.Sprintf("%s 等 %d 个", clusters[0], len(clusters))
+}
+
+// formatList 格式化列表，最多显示 maxItems 项
+func formatList(items []string, maxItems int) string {
+	if len(items) == 0 {
+		return "无"
+	}
+
+	result := ""
+	count := maxItems
+	if len(items) < count {
+		count = len(items)
+	}
+
+	for i := 0; i < count; i++ {
+		if i > 0 {
+			result += "\n"
+		}
+		result += items[i]
+	}
+
+	if len(items) > maxItems {
+		result += fmt.Sprintf("\n... 还有 %d 项", len(items)-maxItems)
+	}
+
+	return result
+}
+
+// getAnomalyTypeIcon 获取异常类型对应的图标
+func getAnomalyTypeIcon(anomalyType string) string {
+	icons := map[string]string{
+		"NotReady":           "🔴",
+		"DiskPressure":       "💾",
+		"MemoryPressure":     "🧠",
+		"PIDPressure":        "⚙️",
+		"NetworkUnavailable": "🌐",
+	}
+	if icon, ok := icons[anomalyType]; ok {
+		return icon
+	}
+	return "⚠️"
+}
+
+// getHealthIcon 根据健康度获取图标
+func getHealthIcon(score float64) string {
+	if score >= 90 {
+		return "🟢"
+	} else if score >= 70 {
+		return "🟡"
+	} else if score >= 50 {
+		return "🟠"
+	}
+	return "🔴"
 }
