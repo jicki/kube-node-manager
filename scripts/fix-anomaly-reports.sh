@@ -107,15 +107,15 @@ check_sqlite_db() {
 run_migration() {
     print_header "运行数据库迁移"
     
-    if [ ! -f "backend/cmd/migrate.go" ]; then
-        print_error "迁移脚本不存在，请先运行 Cursor AI 创建迁移脚本"
+    if [ ! -f "backend/tools/migrate.go" ]; then
+        print_error "迁移脚本不存在"
         return 1
     fi
     
     print_info "开始执行数据库迁移..."
     cd backend
     
-    if go run cmd/migrate.go; then
+    if go run tools/migrate.go; then
         print_success "数据库迁移完成"
         cd ..
         return 0
@@ -242,7 +242,7 @@ main() {
         local)
             print_info "检测到本地进程，请手动停止并重启应用"
             print_info "或者直接运行迁移脚本即可："
-            print_info "  cd backend && go run cmd/migrate.go"
+            print_info "  cd backend && go run tools/migrate.go"
             ;;
         none)
             print_warning "未检测到运行中的应用"

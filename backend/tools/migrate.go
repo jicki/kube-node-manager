@@ -45,11 +45,23 @@ func main() {
 	}
 	defer sqlDB.Close()
 
-	// 列出所有表
+	// 根据数据库类型列出表
 	var tables []string
-	result := db.Raw("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").Scan(&tables)
-	if result.Error != nil {
-		log.Fatal("Failed to list tables:", result.Error)
+	if cfg.Database.Type == "sqlite" {
+		result := db.Raw("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").Scan(&tables)
+		if result.Error != nil {
+			log.Fatal("Failed to list tables:", result.Error)
+		}
+	} else if cfg.Database.Type == "postgres" || cfg.Database.Type == "postgresql" {
+		result := db.Raw(`
+			SELECT table_name 
+			FROM information_schema.tables 
+			WHERE table_schema = 'public' 
+			ORDER BY table_name
+		`).Scan(&tables)
+		if result.Error != nil {
+			log.Fatal("Failed to list tables:", result.Error)
+		}
 	}
 
 	log.Println("\nTables in database:")
