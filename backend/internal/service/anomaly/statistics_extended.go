@@ -50,7 +50,7 @@ func (s *Service) GetNodeHistoryTrend(clusterID uint, nodeName string, startTime
 			COUNT(*) as total_count,
 			SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as active_count,
 			SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count,
-			AVG(CASE WHEN status = 'Resolved' THEN duration ELSE 0 END) as avg_duration
+			AVG(CASE WHEN status = 'Resolved' THEN duration ELSE NULL END) as avg_duration
 		FROM node_anomalies
 		WHERE cluster_id = ? AND node_name = ? AND start_time >= ? AND start_time <= ?
 		GROUP BY date

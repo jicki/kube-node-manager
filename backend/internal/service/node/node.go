@@ -14,10 +14,11 @@ import (
 
 // Service 节点管理服务
 type Service struct {
-	logger      *logger.Logger
-	k8sSvc      *k8s.Service
-	auditSvc    *audit.Service
-	progressSvc *progress.Service
+	logger          *logger.Logger
+	k8sSvc          *k8s.Service
+	auditSvc        *audit.Service
+	progressSvc     *progress.Service
+	concurrencyCtrl *ConcurrencyController // 并发控制器
 }
 
 // ListRequest 节点列表请求
@@ -97,9 +98,10 @@ type CordonHistoryResponse struct {
 // NewService 创建新的节点管理服务实例
 func NewService(logger *logger.Logger, k8sSvc *k8s.Service, auditSvc *audit.Service) *Service {
 	return &Service{
-		logger:   logger,
-		k8sSvc:   k8sSvc,
-		auditSvc: auditSvc,
+		logger:          logger,
+		k8sSvc:          k8sSvc,
+		auditSvc:        auditSvc,
+		concurrencyCtrl: NewConcurrencyController(),
 	}
 }
 
@@ -725,12 +727,20 @@ type CordonProcessor struct {
 }
 
 func (p *CordonProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
+	startTime := time.Now()
+
 	req := CordonRequest{
 		ClusterName: p.clusterName,
 		NodeName:    nodeName,
 		Reason:      p.reason,
 	}
-	return p.svc.Cordon(req, p.userID)
+	err := p.svc.Cordon(req, p.userID)
+
+	// 记录操作延迟
+	latency := time.Since(startTime)
+	p.svc.concurrencyCtrl.RecordLatency(latency)
+
+	return err
 }
 
 // UncordonProcessor 解除调度处理器
@@ -742,12 +752,20 @@ type UncordonProcessor struct {
 }
 
 func (p *UncordonProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
+	startTime := time.Now()
+
 	req := CordonRequest{
 		ClusterName: p.clusterName,
 		NodeName:    nodeName,
 		Reason:      p.reason,
 	}
-	return p.svc.Uncordon(req, p.userID)
+	err := p.svc.Uncordon(req, p.userID)
+
+	// 记录操作延迟
+	latency := time.Since(startTime)
+	p.svc.concurrencyCtrl.RecordLatency(latency)
+
+	return err
 }
 
 // DrainProcessor 驱逐处理器
@@ -759,12 +777,20 @@ type DrainProcessor struct {
 }
 
 func (p *DrainProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
+	startTime := time.Now()
+
 	req := DrainRequest{
 		ClusterName: p.clusterName,
 		NodeName:    nodeName,
 		Reason:      p.reason,
 	}
-	return p.svc.Drain(req, p.userID)
+	err := p.svc.Drain(req, p.userID)
+
+	// 记录操作延迟
+	latency := time.Since(startTime)
+	p.svc.concurrencyCtrl.RecordLatency(latency)
+
+	return err
 }
 
 // BatchCordonWithProgress 批量禁止调度节点（带进度）
@@ -780,6 +806,13 @@ func (s *Service) BatchCordonWithProgress(req BatchNodeRequest, userID uint, tas
 		userID:      userID,
 	}
 
+	// 动态计算并发数
+	clusterSize := len(req.Nodes)
+	avgLatency := s.concurrencyCtrl.GetAverageLatency()
+	concurrency := s.concurrencyCtrl.Calculate("cordon", clusterSize, avgLatency)
+	s.logger.Infof("Batch cordon: cluster_size=%d, avg_latency=%v, concurrency=%d",
+		clusterSize, avgLatency, concurrency)
+
 	ctx := context.Background()
 	return s.progressSvc.ProcessBatchWithProgress(
 		ctx,
@@ -787,7 +820,7 @@ func (s *Service) BatchCordonWithProgress(req BatchNodeRequest, userID uint, tas
 		"batch_cordon",
 		req.Nodes,
 		userID,
-		5, // 并发数
+		concurrency,
 		processor,
 	)
 }
@@ -805,6 +838,13 @@ func (s *Service) BatchUncordonWithProgress(req BatchNodeRequest, userID uint, t
 		userID:      userID,
 	}
 
+	// 动态计算并发数
+	clusterSize := len(req.Nodes)
+	avgLatency := s.concurrencyCtrl.GetAverageLatency()
+	concurrency := s.concurrencyCtrl.Calculate("uncordon", clusterSize, avgLatency)
+	s.logger.Infof("Batch uncordon: cluster_size=%d, avg_latency=%v, concurrency=%d",
+		clusterSize, avgLatency, concurrency)
+
 	ctx := context.Background()
 	return s.progressSvc.ProcessBatchWithProgress(
 		ctx,
@@ -812,7 +852,7 @@ func (s *Service) BatchUncordonWithProgress(req BatchNodeRequest, userID uint, t
 		"batch_uncordon",
 		req.Nodes,
 		userID,
-		5, // 并发数
+		concurrency,
 		processor,
 	)
 }
@@ -830,6 +870,13 @@ func (s *Service) BatchDrainWithProgress(req BatchNodeRequest, userID uint, task
 		userID:      userID,
 	}
 
+	// 动态计算并发数
+	clusterSize := len(req.Nodes)
+	avgLatency := s.concurrencyCtrl.GetAverageLatency()
+	concurrency := s.concurrencyCtrl.Calculate("drain", clusterSize, avgLatency)
+	s.logger.Infof("Batch drain: cluster_size=%d, avg_latency=%v, concurrency=%d",
+		clusterSize, avgLatency, concurrency)
+
 	ctx := context.Background()
 	return s.progressSvc.ProcessBatchWithProgress(
 		ctx,
@@ -837,7 +884,7 @@ func (s *Service) BatchDrainWithProgress(req BatchNodeRequest, userID uint, task
 		"batch_drain",
 		req.Nodes,
 		userID,
-		3, // 驱逐操作较重，减少并发数
+		concurrency,
 		processor,
 	)
 }

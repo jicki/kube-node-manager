@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"kube-node-manager/internal/cache"
 	"kube-node-manager/pkg/logger"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ type Service struct {
 	clients        map[string]*kubernetes.Clientset
 	metricsClients map[string]*metricsclientset.Clientset
 	mu             sync.RWMutex
+	cache          *cache.K8sCache // K8s API缓存层
 }
 
 // NodeInfo Kubernetes节点信息
@@ -112,6 +114,7 @@ func NewService(logger *logger.Logger) *Service {
 		logger:         logger,
 		clients:        make(map[string]*kubernetes.Clientset),
 		metricsClients: make(map[string]*metricsclientset.Clientset),
+		cache:          cache.NewK8sCache(logger),
 	}
 }
 
@@ -248,8 +251,51 @@ func (s *Service) GetClusterInfo(clusterName string) (*ClusterInfo, error) {
 	}, nil
 }
 
-// ListNodes 获取节点列表
+// ListNodes 获取节点列表（带缓存）
 func (s *Service) ListNodes(clusterName string) ([]NodeInfo, error) {
+	return s.ListNodesWithCache(clusterName, false)
+}
+
+// ListNodesWithCache 获取节点列表（可选择是否强制刷新缓存）
+func (s *Service) ListNodesWithCache(clusterName string, forceRefresh bool) ([]NodeInfo, error) {
+	ctx := context.Background()
+
+	// 定义获取函数
+	fetchFunc := func() (interface{}, error) {
+		return s.fetchNodesFromAPI(clusterName)
+	}
+
+	// 使用缓存层
+	cachedData, err := s.cache.GetNodeList(ctx, clusterName, forceRefresh, fetchFunc)
+	if err != nil {
+		return nil, err
+	}
+
+	// 类型断言
+	nodes, ok := cachedData.([]NodeInfo)
+	if !ok {
+		return nil, fmt.Errorf("invalid cached data type")
+	}
+
+	// 异步预取前20个节点的详情（优化用户体验）
+	if len(nodes) > 0 && !forceRefresh {
+		go func() {
+			nodeNames := make([]string, 0, len(nodes))
+			for _, node := range nodes {
+				nodeNames = append(nodeNames, node.Name)
+			}
+
+			s.cache.PrefetchNodeDetails(clusterName, nodeNames, 20, func(nodeName string) (interface{}, error) {
+				return s.fetchNodeFromAPI(clusterName, nodeName)
+			})
+		}()
+	}
+
+	return nodes, nil
+}
+
+// fetchNodesFromAPI 从K8s API获取节点列表（无缓存）
+func (s *Service) fetchNodesFromAPI(clusterName string) ([]NodeInfo, error) {
 	client, err := s.getClient(clusterName)
 	if err != nil {
 		s.logger.Errorf("Failed to get client for cluster %s: %v", clusterName, err)
@@ -278,7 +324,7 @@ func (s *Service) ListNodes(clusterName string) ([]NodeInfo, error) {
 		return nil, fmt.Errorf("failed to list nodes in cluster %s: %w", clusterName, err)
 	}
 
-	s.logger.Infof("Successfully retrieved %d nodes from cluster %s", len(nodeList.Items), clusterName)
+	s.logger.Infof("Successfully retrieved %d nodes from cluster %s (uncached)", len(nodeList.Items), clusterName)
 
 	var nodes []NodeInfo
 	gpuNodeCount := 0
@@ -311,8 +357,37 @@ func (s *Service) ListNodes(clusterName string) ([]NodeInfo, error) {
 	return nodes, nil
 }
 
-// GetNode 获取单个节点信息
+// GetNode 获取单个节点信息（带缓存）
 func (s *Service) GetNode(clusterName, nodeName string) (*NodeInfo, error) {
+	return s.GetNodeWithCache(clusterName, nodeName, false)
+}
+
+// GetNodeWithCache 获取单个节点信息（可选择是否强制刷新缓存）
+func (s *Service) GetNodeWithCache(clusterName, nodeName string, forceRefresh bool) (*NodeInfo, error) {
+	ctx := context.Background()
+
+	// 定义获取函数
+	fetchFunc := func() (interface{}, error) {
+		return s.fetchNodeFromAPI(clusterName, nodeName)
+	}
+
+	// 使用缓存层
+	cachedData, err := s.cache.GetNodeDetail(ctx, clusterName, nodeName, forceRefresh, fetchFunc)
+	if err != nil {
+		return nil, err
+	}
+
+	// 类型断言
+	node, ok := cachedData.(*NodeInfo)
+	if !ok {
+		return nil, fmt.Errorf("invalid cached data type")
+	}
+
+	return node, nil
+}
+
+// fetchNodeFromAPI 从K8s API获取单个节点信息（无缓存）
+func (s *Service) fetchNodeFromAPI(clusterName, nodeName string) (*NodeInfo, error) {
 	client, err := s.getClient(clusterName)
 	if err != nil {
 		return nil, err
@@ -547,6 +622,10 @@ func (s *Service) CordonNode(clusterName, nodeName string) error {
 	}
 
 	s.logger.Infof("Successfully cordoned node %s in cluster %s", nodeName, clusterName)
+
+	// 清除缓存
+	s.cache.InvalidateNode(clusterName, nodeName)
+
 	return nil
 }
 
@@ -587,6 +666,10 @@ func (s *Service) CordonNodeWithReason(clusterName, nodeName, reason string) err
 	}
 
 	s.logger.Infof("Successfully cordoned node %s in cluster %s with reason: %s", nodeName, clusterName, reason)
+
+	// 清除缓存
+	s.cache.InvalidateNode(clusterName, nodeName)
+
 	return nil
 }
 
@@ -625,6 +708,10 @@ func (s *Service) UncordonNode(clusterName, nodeName string) error {
 	}
 
 	s.logger.Infof("Successfully uncordoned node %s in cluster %s", nodeName, clusterName)
+
+	// 清除缓存
+	s.cache.InvalidateNode(clusterName, nodeName)
+
 	return nil
 }
 

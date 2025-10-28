@@ -501,7 +501,7 @@ func (s *Service) GetStatistics(req StatisticsRequest) ([]model.AnomalyStatistic
 			COUNT(*) as total_count,
 			SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as active_count,
 			SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count,
-			AVG(CASE WHEN status = 'Resolved' THEN duration ELSE 0 END) as average_duration,
+			AVG(CASE WHEN status = 'Resolved' THEN duration ELSE NULL END) as average_duration,
 			COUNT(DISTINCT node_name) as affected_nodes
 		FROM node_anomalies
 		WHERE start_time >= ? AND start_time <= ?
@@ -762,7 +762,7 @@ func (s *Service) GetRoleStatistics(clusterID *uint, startTime, endTime *time.Ti
 
 	// 获取所有异常记录（包含集群信息）
 	query := s.db.Model(&model.NodeAnomaly{}).
-		Select("node_name, cluster_id, cluster_name, COUNT(*) as count, SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as active, SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved, AVG(CASE WHEN status = 'Resolved' THEN duration ELSE 0 END) as avg_duration").
+		Select("node_name, cluster_id, cluster_name, COUNT(*) as count, SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as active, SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved, AVG(CASE WHEN status = 'Resolved' THEN duration ELSE NULL END) as avg_duration").
 		Where("start_time >= ? AND start_time <= ?", startTime, endTime)
 
 	if clusterID != nil {
@@ -920,7 +920,7 @@ func (s *Service) GetClusterAggregateStatistics(startTime, endTime *time.Time) (
 			COUNT(*) as total_count,
 			SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as active_count,
 			SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count,
-			AVG(CASE WHEN status = 'Resolved' THEN duration ELSE 0 END) as average_duration,
+			AVG(CASE WHEN status = 'Resolved' THEN duration ELSE NULL END) as average_duration,
 			COUNT(DISTINCT node_name) as affected_nodes
 		FROM node_anomalies
 		WHERE start_time >= ? AND start_time <= ?
