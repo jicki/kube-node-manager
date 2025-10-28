@@ -1227,7 +1227,8 @@ const confirmCordon = async () => {
     await nodeStore.cordonNode(node.name, reason)
     ElMessage.success(`节点 ${node.name} 已禁止调度`)
     cordonConfirmVisible.value = false
-    // nodeStore.cordonNode 内部已经调用了 fetchNodes，会自动更新禁止调度历史
+    // 刷新节点数据以显示最新的调度状态
+    await refreshData()
   } catch (error) {
     ElMessage.error(`禁止调度节点失败: ${error.message}`)
   }
@@ -1238,7 +1239,8 @@ const uncordonNode = async (node) => {
   try {
     await nodeStore.uncordonNode(node.name)
     ElMessage.success(`节点 ${node.name} 已解除调度限制`)
-    // nodeStore.uncordonNode 内部已经调用了 fetchNodes，会自动更新禁止调度历史
+    // 刷新节点数据以显示最新的调度状态
+    await refreshData()
   } catch (error) {
     ElMessage.error(`解除调度节点失败: ${error.message}`)
   }
@@ -1318,6 +1320,8 @@ const confirmBatchCordon = async () => {
       ElMessage.success(`成功禁止调度 ${nodeNames.length} 个节点`)
       clearSelection()
       cordonConfirmVisible.value = false
+      // 刷新节点数据以显示最新的调度状态
+      await refreshData()
       batchLoading.cordon = false
     }
   } catch (error) {
@@ -1353,6 +1357,8 @@ const batchUncordon = async () => {
       await nodeStore.batchUncordon(nodeNames)
       ElMessage.success(`成功解除调度限制 ${nodeNames.length} 个节点`)
       clearSelection()
+      // 刷新节点数据以显示最新的调度状态
+      await refreshData()
       batchLoading.uncordon = false
     }
   } catch (error) {
@@ -1503,7 +1509,8 @@ const confirmBatchDeleteLabels = async () => {
       ElMessage.success(`成功删除 ${selectedNodes.value.length} 个节点的标签`)
       batchDeleteLabelsVisible.value = false
       clearSelection()
-      refreshData()
+      // 刷新节点数据以显示最新的标签
+      await refreshData()
     }
   } catch (error) {
     ElMessage.error(`批量删除标签失败: ${error.message || '未知错误'}`)
@@ -1566,7 +1573,8 @@ const confirmBatchDeleteTaints = async () => {
       ElMessage.success(`成功删除 ${selectedNodes.value.length} 个节点的污点`)
       batchDeleteTaintsVisible.value = false
       clearSelection()
-      refreshData()
+      // 刷新节点数据以显示最新的污点
+      await refreshData()
     }
   } catch (error) {
     ElMessage.error(`批量删除污点失败: ${error.message || '未知错误'}`)
@@ -1597,9 +1605,10 @@ const addCustomLabelKey = () => {
 }
 
 // 进度处理函数
-const handleProgressCompleted = (data) => {
+const handleProgressCompleted = async (data) => {
   ElMessage.success('批量操作完成')
-  refreshData()
+  // 刷新节点数据以显示最新状态
+  await refreshData()
   clearSelection()
   
   // 重置loading状态
