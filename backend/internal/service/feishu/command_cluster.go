@@ -2,8 +2,10 @@ package feishu
 
 import (
 	"fmt"
-	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/cluster"
+	"kube-node-manager/internal/service/k8s"
+	"kube-node-manager/internal/service/node"
+	"strings"
 )
 
 // ClusterCommandHandler handles cluster-related commands
@@ -73,20 +75,21 @@ func (h *ClusterCommandHandler) handleListClusters(ctx *CommandContext) (*Comman
 			status = "Unavailable"
 		}
 
-		// 获取集群的异常节点数量
+		// 获取集群的异常节点数量（实时从 K8s 获取）
 		anomalyNodeCount := 0
-		if ctx.Service.anomalyService != nil {
-			clusterID := c.ID
-			anomalies, err := ctx.Service.anomalyService.GetActiveAnomalies(&clusterID)
+		if ctx.Service.nodeService != nil {
+			nodeResult, err := ctx.Service.nodeService.List(node.ListRequest{
+				ClusterName: c.Name,
+			}, ctx.UserMapping.SystemUserID)
 			if err == nil {
-				// 类型断言获取异常列表
-				if anomalyList, ok := anomalies.([]model.NodeAnomaly); ok {
-					// 统计唯一的节点名称
-					nodeSet := make(map[string]bool)
-					for _, a := range anomalyList {
-						nodeSet[a.NodeName] = true
+				if nodeList, ok := nodeResult.([]k8s.NodeInfo); ok {
+					// 统计 NotReady 或禁止调度的节点
+					for _, n := range nodeList {
+						isReady := strings.HasPrefix(n.Status, "Ready,") || n.Status == "Ready"
+						if !isReady || !n.Schedulable {
+							anomalyNodeCount++
+						}
 					}
-					anomalyNodeCount = len(nodeSet)
 				}
 			}
 		}

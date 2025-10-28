@@ -304,10 +304,10 @@ func BuildClusterListCardWithActions(clusters []map[string]interface{}, currentC
 			version = v
 		}
 
-		// 获取异常节点数量
-		anomalyNodeCount := 0
+		// 获取问题节点数量
+		problemNodeCount := 0
 		if a, ok := cluster["anomaly_nodes"].(int); ok {
-			anomalyNodeCount = a
+			problemNodeCount = a
 		}
 
 		isCurrent := clusterName == currentCluster
@@ -316,7 +316,13 @@ func BuildClusterListCardWithActions(clusters []map[string]interface{}, currentC
 			clusterPrefix = "👉 "
 		}
 
-		clusterInfo := fmt.Sprintf("%s**%s**\n状态: %s | 节点: %d | 异常节点: %d | 版本: %s", clusterPrefix, clusterName, status, nodeCount, anomalyNodeCount, version)
+		// 根据问题节点数量显示不同的图标
+		problemNodeText := fmt.Sprintf("%d", problemNodeCount)
+		if problemNodeCount > 0 {
+			problemNodeText = fmt.Sprintf("⚠️ %d", problemNodeCount)
+		}
+
+		clusterInfo := fmt.Sprintf("%s**%s**\n状态: %s | 节点: %d | 问题节点: %s | 版本: %s", clusterPrefix, clusterName, status, nodeCount, problemNodeText, version)
 
 		elements = append(elements, map[string]interface{}{
 			"tag": "div",
