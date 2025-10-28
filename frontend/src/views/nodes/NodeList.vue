@@ -992,6 +992,7 @@ const batchLoading = reactive({
 // 进度对话框相关
 const progressDialogVisible = ref(false)
 const currentTaskId = ref('')
+const progressFallbackTimer = ref(null)
 
 // 批量删除标签对话框相关
 const batchDeleteLabelsVisible = ref(false)
@@ -1541,8 +1542,11 @@ const confirmBatchDeleteLabels = async () => {
       progressDialogVisible.value = true
       batchDeleteLabelsVisible.value = false
       
+      // 启动降级方案：如果WebSocket断开，使用轮询检测完成
+      startProgressFallback('deleteLabels')
+      
       // 不立即设置loading为false，等进度完成后再处理
-    } else {
+    } else{
       // 对于少量节点，使用原有的同步方式
       await labelApi.batchDeleteLabels(requestData, {
         params: { cluster_name: clusterStore.currentClusterName }
@@ -1605,6 +1609,9 @@ const confirmBatchDeleteTaints = async () => {
       progressDialogVisible.value = true
       batchDeleteTaintsVisible.value = false
       
+      // 启动降级方案：如果WebSocket断开，使用轮询检测完成
+      startProgressFallback('deleteTaints')
+      
       // 不立即设置loading为false，等进度完成后再处理
     } else {
       // 对于少量节点，使用原有的同步方式
@@ -1646,9 +1653,52 @@ const addCustomLabelKey = () => {
   }
 }
 
+// 启动降级方案：定时检查任务完成并刷新
+const startProgressFallback = (operationType) => {
+  // 清除之前的定时器
+  if (progressFallbackTimer.value) {
+    clearTimeout(progressFallbackTimer.value)
+  }
+  
+  console.log(`启动降级方案定时器，操作类型: ${operationType}`)
+  
+  // 30秒后强制刷新（即使WebSocket没有推送完成消息）
+  progressFallbackTimer.value = setTimeout(async () => {
+    console.log('降级方案触发：30秒超时，强制刷新节点数据')
+    
+    // 重置loading状态
+    if (operationType === 'deleteLabels') {
+      batchLoading.deleteLabels = false
+    } else if (operationType === 'deleteTaints') {
+      batchLoading.deleteTaints = false
+    }
+    
+    // 清除选择
+    clearSelection()
+    
+    // 刷新数据
+    await refreshData()
+    console.log('降级方案完成：节点数据已刷新')
+    
+    // 关闭进度对话框
+    if (progressDialogVisible.value) {
+      progressDialogVisible.value = false
+      ElMessage.info('批量操作可能已完成，已自动刷新数据')
+    }
+  }, 30000) // 30秒超时
+}
+
 // 进度处理函数
 const handleProgressCompleted = async (data) => {
   console.log('批量操作进度完成回调被触发', data)
+  
+  // 清除降级方案定时器
+  if (progressFallbackTimer.value) {
+    clearTimeout(progressFallbackTimer.value)
+    progressFallbackTimer.value = null
+    console.log('清除降级方案定时器（WebSocket成功推送完成消息）')
+  }
+  
   ElMessage.success('批量操作完成')
   
   // 先重置loading状态，避免影响刷新
@@ -1671,6 +1721,13 @@ const handleProgressCompleted = async (data) => {
 
 const handleProgressError = (data) => {
   console.error('批量操作失败:', data)
+  
+  // 清除降级方案定时器
+  if (progressFallbackTimer.value) {
+    clearTimeout(progressFallbackTimer.value)
+    progressFallbackTimer.value = null
+  }
+  
   ElMessage.error('批量操作失败')
   
   // 重置loading状态
@@ -1683,6 +1740,12 @@ const handleProgressError = (data) => {
 
 const handleProgressCancelled = () => {
   console.log('批量操作已取消')
+  
+  // 清除降级方案定时器
+  if (progressFallbackTimer.value) {
+    clearTimeout(progressFallbackTimer.value)
+    progressFallbackTimer.value = null
+  }
   
   // 重置loading状态
   batchLoading.cordon = false
