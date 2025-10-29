@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import axios from 'axios'
+import request from '@/utils/request'
 
 export const useFeaturesStore = defineStore('features', {
   state: () => ({
@@ -63,7 +63,7 @@ export const useFeaturesStore = defineStore('features', {
       this.loading = true
       this.error = null
       try {
-        const response = await axios.get('/api/v1/features')
+        const response = await request.get('/api/v1/features')
         if (response.data && response.data.data) {
           this.features = response.data.data
         }
@@ -80,7 +80,7 @@ export const useFeaturesStore = defineStore('features', {
     // 更新自动化主开关
     async updateAutomationEnabled(enabled) {
       try {
-        await axios.put('/api/v1/features/automation/enabled', { enabled })
+        await request.put('/api/v1/features/automation/enabled', { enabled })
         this.features.automation.enabled = enabled
         return { success: true }
       } catch (error) {
@@ -95,7 +95,7 @@ export const useFeaturesStore = defineStore('features', {
     // 更新 Ansible 配置
     async updateAnsibleConfig(config) {
       try {
-        await axios.put('/api/v1/features/automation/ansible', config)
+        await request.put('/api/v1/features/automation/ansible', config)
         this.features.automation.ansible = config
         return { success: true }
       } catch (error) {
@@ -110,7 +110,7 @@ export const useFeaturesStore = defineStore('features', {
     // 更新 SSH 配置
     async updateSSHConfig(config) {
       try {
-        await axios.put('/api/v1/features/automation/ssh', config)
+        await request.put('/api/v1/features/automation/ssh', config)
         this.features.automation.ssh = config
         return { success: true }
       } catch (error) {
