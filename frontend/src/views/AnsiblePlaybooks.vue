@@ -308,7 +308,9 @@ const fetchPlaybooks = async () => {
 const fetchClusters = async () => {
   try {
     const res = await listClusters()
-    clusters.value = res.data || []
+    // 处理可能的分页结构：res.data.list 或 res.data
+    const clusterList = res.data?.list || res.data || []
+    clusters.value = Array.isArray(clusterList) ? clusterList : []
   } catch (error) {
     console.error('获取集群列表失败', error)
   }
@@ -318,7 +320,9 @@ const fetchClusters = async () => {
 const fetchNodes = async (clusterName) => {
   try {
     const res = await listNodes({ cluster: clusterName })
-    nodes.value = res.data?.map(n => n.name) || []
+    // 处理可能的分页结构：res.data.list 或 res.data
+    const nodeList = res.data?.list || res.data || []
+    nodes.value = Array.isArray(nodeList) ? nodeList.map(n => n.name || n) : []
   } catch (error) {
     console.error('获取节点列表失败', error)
   }
