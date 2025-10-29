@@ -11,13 +11,13 @@ type AnsiblePlaybook struct {
 	ID          uint           `gorm:"primarykey" json:"id"`
 	Name        string         `gorm:"type:varchar(100);not null;index" json:"name"`
 	Description string         `gorm:"type:text" json:"description"`
-	Content     string         `gorm:"type:text;not null" json:"content"`      // Playbook YAML 内容
-	Version     int            `gorm:"default:1" json:"version"`               // 版本号
-	Category    string         `gorm:"type:varchar(50);index" json:"category"` // 分类：system, docker, kernel, security, custom
-	Tags        string         `gorm:"type:varchar(255)" json:"tags"`          // 标签，逗号分隔
-	Variables   string         `gorm:"type:json" json:"variables"`             // 参数定义（JSON 格式）
-	IsBuiltin   bool           `gorm:"default:false;index" json:"is_builtin"`  // 是否内置（不可删除）
-	IsActive    bool           `gorm:"default:true;index" json:"is_active"`    // 是否启用
+	Content     string         `gorm:"type:text;not null" json:"content"`       // Playbook YAML 内容
+	Version     int            `gorm:"default:1" json:"version"`                // 版本号
+	Category    string         `gorm:"type:varchar(50);index" json:"category"`  // 分类：system, docker, kernel, security, custom
+	Tags        string         `gorm:"type:varchar(255)" json:"tags"`           // 标签，逗号分隔
+	Variables   string         `gorm:"type:json;default:'{}'" json:"variables"` // 参数定义（JSON 格式）
+	IsBuiltin   bool           `gorm:"default:false;index" json:"is_builtin"`   // 是否内置（不可删除）
+	IsActive    bool           `gorm:"default:true;index" json:"is_active"`     // 是否启用
 	CreatedBy   uint           `json:"created_by"`
 	UpdatedBy   uint           `json:"updated_by"`
 	CreatedAt   time.Time      `json:"created_at"`
@@ -86,7 +86,7 @@ type Script struct {
 	Version     int            `gorm:"default:1" json:"version"`                  // 版本号
 	Category    string         `gorm:"type:varchar(50);index" json:"category"`    // 分类
 	Tags        string         `gorm:"type:varchar(255)" json:"tags"`             // 标签
-	Parameters  string         `gorm:"type:json" json:"parameters"`               // 参数定义
+	Parameters  string         `gorm:"type:json;default:'{}'" json:"parameters"`  // 参数定义
 	IsBuiltin   bool           `gorm:"default:false;index" json:"is_builtin"`
 	IsActive    bool           `gorm:"default:true;index" json:"is_active"`
 	CreatedBy   uint           `json:"created_by"`
@@ -104,8 +104,8 @@ type ScriptExecution struct {
 	ScriptName   string         `gorm:"type:varchar(100)" json:"script_name"`
 	ClusterName  string         `gorm:"type:varchar(100);index" json:"cluster_name"`
 	ClusterID    *uint          `gorm:"index" json:"cluster_id"`
-	TargetNodes  string         `gorm:"type:text" json:"target_nodes"` // JSON 数组
-	Parameters   string         `gorm:"type:json" json:"parameters"`   // 执行参数
+	TargetNodes  string         `gorm:"type:text" json:"target_nodes"`            // JSON 数组
+	Parameters   string         `gorm:"type:json;default:'{}'" json:"parameters"` // 执行参数
 	Status       string         `gorm:"type:varchar(20);index" json:"status"`
 	StartTime    *time.Time     `json:"start_time"`
 	EndTime      *time.Time     `json:"end_time"`
@@ -151,7 +151,7 @@ type WorkflowExecution struct {
 	ClusterName  string         `gorm:"type:varchar(100);index" json:"cluster_name"`
 	ClusterID    *uint          `gorm:"index" json:"cluster_id"`
 	TargetNodes  string         `gorm:"type:text" json:"target_nodes"`
-	Parameters   string         `gorm:"type:json" json:"parameters"`
+	Parameters   string         `gorm:"type:json;default:'{}'" json:"parameters"`
 	Status       string         `gorm:"type:varchar(20);index" json:"status"`
 	CurrentStep  string         `gorm:"type:varchar(100)" json:"current_step"` // 当前执行步骤
 	StepResults  string         `gorm:"type:text" json:"step_results"`         // 步骤执行结果（JSON）

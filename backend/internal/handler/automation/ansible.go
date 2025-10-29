@@ -73,6 +73,11 @@ func (h *AnsibleHandler) CreatePlaybook(c *gin.Context) {
 	playbook.CreatedBy = userID.(uint)
 	playbook.UpdatedBy = userID.(uint)
 
+	// 确保 Variables 字段有默认值
+	if playbook.Variables == "" {
+		playbook.Variables = "{}"
+	}
+
 	if err := h.ansibleSvc.CreatePlaybook(&playbook); err != nil {
 		h.logger.Errorf("Failed to create playbook: %v", err)
 		c.JSON(http.StatusInternalServerError, Response{
@@ -129,7 +134,9 @@ func (h *AnsibleHandler) GetPlaybook(c *gin.Context) {
 // @Produce json
 // @Param category query string false "分类"
 // @Param is_active query bool false "是否启用"
-// @Success 200 {object} Response
+// @Param page query int false "页码"
+// @Param size query int false "每页数量"
+// @Success 200 {object} PaginatedResponse
 // @Router /api/v1/automation/ansible/playbooks [get]
 func (h *AnsibleHandler) ListPlaybooks(c *gin.Context) {
 	category := c.Query("category")
@@ -138,6 +145,16 @@ func (h *AnsibleHandler) ListPlaybooks(c *gin.Context) {
 	if isActiveStr := c.Query("is_active"); isActiveStr != "" {
 		active := isActiveStr == "true"
 		isActive = &active
+	}
+
+	// 获取分页参数
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 100 {
+		size = 20
 	}
 
 	playbooks, err := h.ansibleSvc.ListPlaybooks(category, isActive)
@@ -150,10 +167,27 @@ func (h *AnsibleHandler) ListPlaybooks(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, Response{
+	// 计算分页
+	total := int64(len(playbooks))
+	start := (page - 1) * size
+	end := start + size
+
+	if start > len(playbooks) {
+		start = len(playbooks)
+	}
+	if end > len(playbooks) {
+		end = len(playbooks)
+	}
+
+	pagedPlaybooks := playbooks[start:end]
+
+	c.JSON(http.StatusOK, PaginatedResponse{
 		Code:    http.StatusOK,
 		Message: "Success",
-		Data:    playbooks,
+		Data:    pagedPlaybooks,
+		Total:   total,
+		Page:    page,
+		Size:    size,
 	})
 }
 
@@ -196,6 +230,11 @@ func (h *AnsibleHandler) UpdatePlaybook(c *gin.Context) {
 	}
 
 	updates.UpdatedBy = userID.(uint)
+
+	// 确保 Variables 字段有默认值
+	if updates.Variables == "" {
+		updates.Variables = "{}"
+	}
 
 	if err := h.ansibleSvc.UpdatePlaybook(uint(id), &updates); err != nil {
 		h.logger.Errorf("Failed to update playbook: %v", err)

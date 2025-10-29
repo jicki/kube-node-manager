@@ -45,6 +45,7 @@ func (h *WorkflowHandler) CreateWorkflow(c *gin.Context) {
 
 	userID, _ := c.Get("user_id")
 	workflow.CreatedBy = userID.(uint)
+	workflow.UpdatedBy = userID.(uint)
 
 	if err := h.workflowSvc.CreateWorkflow(&workflow); err != nil {
 		h.logger.Errorf("Failed to create workflow: %v", err)
@@ -89,6 +90,10 @@ func (h *WorkflowHandler) UpdateWorkflow(c *gin.Context) {
 		})
 		return
 	}
+
+	// 获取用户 ID
+	userID, _ := c.Get("user_id")
+	updates.UpdatedBy = userID.(uint)
 
 	if err := h.workflowSvc.UpdateWorkflow(uint(id), &updates); err != nil {
 		h.logger.Errorf("Failed to update workflow: %v", err)

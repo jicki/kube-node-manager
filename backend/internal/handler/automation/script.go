@@ -47,6 +47,12 @@ func (h *ScriptHandler) CreateScript(c *gin.Context) {
 	// 获取用户 ID
 	userID, _ := c.Get("user_id")
 	script.CreatedBy = userID.(uint)
+	script.UpdatedBy = userID.(uint)
+
+	// 确保 Parameters 字段有默认值
+	if script.Parameters == "" {
+		script.Parameters = "{}"
+	}
 
 	if err := h.scriptSvc.CreateScript(&script); err != nil {
 		h.logger.Errorf("Failed to create script: %v", err)
@@ -90,6 +96,15 @@ func (h *ScriptHandler) UpdateScript(c *gin.Context) {
 			Message: "Invalid request parameters: " + err.Error(),
 		})
 		return
+	}
+
+	// 获取用户 ID
+	userID, _ := c.Get("user_id")
+	updates.UpdatedBy = userID.(uint)
+
+	// 确保 Parameters 字段有默认值
+	if updates.Parameters == "" {
+		updates.Parameters = "{}"
 	}
 
 	if err := h.scriptSvc.UpdateScript(uint(id), &updates); err != nil {
