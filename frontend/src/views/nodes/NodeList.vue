@@ -2121,12 +2121,26 @@ watch(() => route.name, async (newRouteName, oldRouteName) => {
   // 当从标签管理或污点管理切换到节点管理时刷新数据
   if (newRouteName === 'NodeList' && 
       (oldRouteName === 'LabelManage' || oldRouteName === 'TaintManage')) {
-    console.log(`路由切换: ${oldRouteName} -> ${newRouteName}, 强制刷新节点数据`)
-    // 延迟100ms确保页面完全渲染后再刷新
+    console.log(`🔄 [路由切换] ${oldRouteName} -> ${newRouteName}, 强制刷新节点数据`)
+    
+    // 使用双重刷新机制确保获取到最新数据
+    // 第一次：立即刷新
+    refreshData().then(() => {
+      console.log('✅ [路由切换] 第一次刷新完成')
+    }).catch(err => {
+      console.error('❌ [路由切换] 第一次刷新失败:', err)
+    })
+    
+    // 第二次：延迟刷新（确保后端缓存清除完成）
     setTimeout(async () => {
-      await refreshData()
-      console.log('节点数据已刷新')
-    }, 100)
+      console.log('🔄 [路由切换] 开始二次刷新（确保缓存已清除）')
+      try {
+        await refreshData()
+        console.log('✅ [路由切换] 二次刷新完成，数据已更新')
+      } catch (err) {
+        console.error('❌ [路由切换] 二次刷新失败:', err)
+      }
+    }, 800) // 延长到800ms，确保后端缓存清除完成
   }
   lastRoute = oldRouteName
 })
@@ -2135,12 +2149,26 @@ watch(() => route.name, async (newRouteName, oldRouteName) => {
 onActivated(async () => {
   // 如果是从其他页面切换回来，刷新数据
   if (lastRoute === 'LabelManage' || lastRoute === 'TaintManage') {
-    console.log(`激活页面: 从 ${lastRoute} 返回，强制刷新节点数据`)
-    // 延迟100ms确保页面完全渲染后再刷新
+    console.log(`🔄 [页面激活] 从 ${lastRoute} 返回，强制刷新节点数据`)
+    
+    // 使用双重刷新机制确保获取到最新数据
+    // 第一次：立即刷新
+    refreshData().then(() => {
+      console.log('✅ [页面激活] 第一次刷新完成')
+    }).catch(err => {
+      console.error('❌ [页面激活] 第一次刷新失败:', err)
+    })
+    
+    // 第二次：延迟刷新
     setTimeout(async () => {
-      await refreshData()
-      console.log('节点数据已刷新')
-    }, 100)
+      console.log('🔄 [页面激活] 开始二次刷新（确保缓存已清除）')
+      try {
+        await refreshData()
+        console.log('✅ [页面激活] 二次刷新完成，数据已更新')
+      } catch (err) {
+        console.error('❌ [页面激活] 二次刷新失败:', err)
+      }
+    }, 800) // 延长到800ms，确保后端缓存清除完成
   }
 })
 </script>

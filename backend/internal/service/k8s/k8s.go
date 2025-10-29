@@ -637,7 +637,7 @@ func (s *Service) CordonNode(clusterName, nodeName string) error {
 	return nil
 }
 
-// CordonNodeWithReason 禁止调度节点并添加原因注释
+// CordonNodeWithReason 禁止调度节点并添加原因注释（带重试机制处理资源冲突）
 func (s *Service) CordonNodeWithReason(clusterName, nodeName, reason string) error {
 	client, err := s.getClient(clusterName)
 	if err != nil {
@@ -647,41 +647,68 @@ func (s *Service) CordonNodeWithReason(clusterName, nodeName, reason string) err
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to get node: %w", err)
+	// 使用重试机制处理资源冲突错误
+	maxRetries := 3
+	var lastErr error
+	
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// 使用指数退避策略
+			backoff := time.Duration(100*(1<<uint(attempt-1))) * time.Millisecond
+			s.logger.Infof("Retrying cordon node %s (attempt %d/%d) after %v", nodeName, attempt+1, maxRetries+1, backoff)
+			time.Sleep(backoff)
+		}
+
+		// 每次重试都重新获取节点以获取最新的 ResourceVersion
+		node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+		if err != nil {
+			lastErr = fmt.Errorf("failed to get node: %w", err)
+			continue
+		}
+
+		// 设置不可调度
+		node.Spec.Unschedulable = true
+
+		// 添加或更新annotation
+		if node.Annotations == nil {
+			node.Annotations = make(map[string]string)
+		}
+
+		// 添加禁止调度的原因注释
+		if reason != "" {
+			node.Annotations["deeproute.cn/kube-node-mgr"] = reason
+		}
+
+		// 添加禁止调度的时间戳（ISO 8601格式）
+		node.Annotations["deeproute.cn/kube-node-mgr-timestamp"] = time.Now().UTC().Format(time.RFC3339)
+
+		_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+		if err != nil {
+			// 检查是否是资源冲突错误（状态码 409）
+			if strings.Contains(err.Error(), "the object has been modified") || 
+			   strings.Contains(err.Error(), "Operation cannot be fulfilled") {
+				lastErr = err
+				s.logger.Warningf("Node %s resource conflict on attempt %d: %v", nodeName, attempt+1, err)
+				continue // 重试
+			}
+			// 其他类型的错误直接返回
+			return fmt.Errorf("failed to cordon node with reason: %w", err)
+		}
+
+		// 成功
+		s.logger.Infof("Successfully cordoned node %s in cluster %s with reason: %s (attempt %d/%d)", nodeName, clusterName, reason, attempt+1, maxRetries+1)
+
+		// 清除缓存
+		s.cache.InvalidateNode(clusterName, nodeName)
+
+		return nil
 	}
 
-	// 设置不可调度
-	node.Spec.Unschedulable = true
-
-	// 添加或更新annotation
-	if node.Annotations == nil {
-		node.Annotations = make(map[string]string)
-	}
-
-	// 添加禁止调度的原因注释
-	if reason != "" {
-		node.Annotations["deeproute.cn/kube-node-mgr"] = reason
-	}
-
-	// 添加禁止调度的时间戳（ISO 8601格式）
-	node.Annotations["deeproute.cn/kube-node-mgr-timestamp"] = time.Now().UTC().Format(time.RFC3339)
-
-	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to cordon node with reason: %w", err)
-	}
-
-	s.logger.Infof("Successfully cordoned node %s in cluster %s with reason: %s", nodeName, clusterName, reason)
-
-	// 清除缓存
-	s.cache.InvalidateNode(clusterName, nodeName)
-
-	return nil
+	// 所有重试都失败了
+	return fmt.Errorf("failed to cordon node after %d attempts: %w", maxRetries+1, lastErr)
 }
 
-// UncordonNode 取消节点驱逐
+// UncordonNode 取消节点驱逐（带重试机制处理资源冲突）
 func (s *Service) UncordonNode(clusterName, nodeName string) error {
 	client, err := s.getClient(clusterName)
 	if err != nil {
@@ -691,36 +718,65 @@ func (s *Service) UncordonNode(clusterName, nodeName string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to get node: %w", err)
-	}
+	// 使用重试机制处理资源冲突错误
+	maxRetries := 3
+	var lastErr error
+	
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// 使用指数退避策略
+			backoff := time.Duration(100*(1<<uint(attempt-1))) * time.Millisecond
+			s.logger.Infof("Retrying uncordon node %s (attempt %d/%d) after %v", nodeName, attempt+1, maxRetries+1, backoff)
+			time.Sleep(backoff)
+		}
 
-	// 如果节点已经可调度，直接返回成功
-	if !node.Spec.Unschedulable {
-		s.logger.Infof("Node %s in cluster %s is already uncordoned", nodeName, clusterName)
+		// 每次重试都重新获取节点以获取最新的 ResourceVersion
+		node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+		if err != nil {
+			lastErr = fmt.Errorf("failed to get node: %w", err)
+			continue
+		}
+
+		// 如果节点已经可调度，直接返回成功
+		if !node.Spec.Unschedulable {
+			s.logger.Infof("Node %s in cluster %s is already uncordoned", nodeName, clusterName)
+			// 清除缓存
+			s.cache.InvalidateNode(clusterName, nodeName)
+			return nil
+		}
+
+		node.Spec.Unschedulable = false
+
+		// 删除相关的annotations
+		if node.Annotations != nil {
+			delete(node.Annotations, "deeproute.cn/kube-node-mgr")
+			delete(node.Annotations, "deeproute.cn/kube-node-mgr-timestamp")
+		}
+
+		_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+		if err != nil {
+			// 检查是否是资源冲突错误（状态码 409）
+			if strings.Contains(err.Error(), "the object has been modified") || 
+			   strings.Contains(err.Error(), "Operation cannot be fulfilled") {
+				lastErr = err
+				s.logger.Warningf("Node %s resource conflict on attempt %d: %v", nodeName, attempt+1, err)
+				continue // 重试
+			}
+			// 其他类型的错误直接返回
+			return fmt.Errorf("failed to uncordon node: %w", err)
+		}
+
+		// 成功
+		s.logger.Infof("Successfully uncordoned node %s in cluster %s (attempt %d/%d)", nodeName, clusterName, attempt+1, maxRetries+1)
+
+		// 清除缓存
+		s.cache.InvalidateNode(clusterName, nodeName)
+
 		return nil
 	}
 
-	node.Spec.Unschedulable = false
-
-	// 删除相关的annotations
-	if node.Annotations != nil {
-		delete(node.Annotations, "deeproute.cn/kube-node-mgr")
-		delete(node.Annotations, "deeproute.cn/kube-node-mgr-timestamp")
-	}
-
-	_, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to uncordon node: %w", err)
-	}
-
-	s.logger.Infof("Successfully uncordoned node %s in cluster %s", nodeName, clusterName)
-
-	// 清除缓存
-	s.cache.InvalidateNode(clusterName, nodeName)
-
-	return nil
+	// 所有重试都失败了
+	return fmt.Errorf("failed to uncordon node after %d attempts: %w", maxRetries+1, lastErr)
 }
 
 // GetNodeCordonInfo 获取节点的禁止调度信息

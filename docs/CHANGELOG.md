@@ -11,7 +11,133 @@
 
 ### 🐛 Bug 修复
 
-#### 批量操作缓存刷新问题
+#### 1. 跨页面数据刷新问题
+
+**问题描述**：
+- 在标签管理或污点管理页面应用标签/污点到节点后
+- 切换到节点管理页面
+- 节点的标签和污点显示为旧数据
+- 需要手动刷新几次才能看到更新
+
+**根本原因**：
+1. **单次刷新不足**：原来只刷新一次，延迟 100ms
+2. **时序竞态条件**：后端缓存清除需要时间，100ms 可能不够
+3. **获取旧缓存**：第一次刷新可能获取到未清除的缓存数据
+
+**修复内容**：
+
+1. ✅ **双重刷新机制** - 路由切换时立即刷新 + 延迟 800ms 再刷新
+2. ✅ **延长延迟时间** - 从 100ms 增加到 800ms，确保缓存清除完成
+3. ✅ **详细日志追踪** - 添加 emoji 标记的日志，方便调试
+4. ✅ **处理两种场景** - watch 路由变化 + onActivated 生命周期钩子
+
+**修复代码**：
+```javascript
+// frontend/src/views/nodes/NodeList.vue
+watch(() => route.name, async (newRouteName, oldRouteName) => {
+  if (newRouteName === 'NodeList' && 
+      (oldRouteName === 'LabelManage' || oldRouteName === 'TaintManage')) {
+    console.log(`🔄 [路由切换] ${oldRouteName} -> ${newRouteName}`)
+    
+    // 第一次：立即刷新
+    refreshData().then(() => {
+      console.log('✅ [路由切换] 第一次刷新完成')
+    })
+    
+    // 第二次：延迟 800ms 刷新
+    setTimeout(async () => {
+      await refreshData()
+      console.log('✅ [路由切换] 二次刷新完成，数据已更新')
+    }, 800)
+  }
+})
+```
+
+**修复效果**：
+- ✅ 从标签/污点管理切换到节点管理时，自动双重刷新
+- ✅ 第一次刷新提供即时响应
+- ✅ 第二次刷新确保获取最新数据（800ms 后）
+- ✅ 用户无需手动刷新，自动显示最新的标签和污点
+- ✅ 详细日志方便追踪刷新流程
+
+**影响范围**：
+- 前端节点列表页面（NodeList.vue）
+- 路由切换刷新逻辑
+- keep-alive 页面激活逻辑
+
+---
+
+#### 2. 批量操作资源冲突重试机制
+
+**问题描述**：
+- 批量操作时偶尔出现 `Operation cannot be fulfilled on nodes: the object has been modified` 错误
+- 这是 Kubernetes 资源并发修改冲突（Optimistic Locking Conflict）
+- 由于双重刷新机制或其他并发操作导致节点 ResourceVersion 变化
+- 没有重试机制，导致操作直接失败
+
+**修复内容**：
+
+1. ✅ **添加指数退避重试机制** - 最多重试 3 次（共 4 次尝试）
+2. ✅ **智能错误检测** - 仅对资源冲突错误进行重试
+3. ✅ **重新获取最新版本** - 每次重试前重新 Get 节点获取最新 ResourceVersion
+4. ✅ **详细重试日志** - 记录每次重试尝试和退避时间
+
+**修复代码**：
+```go
+// backend/internal/service/k8s/k8s.go
+func (s *Service) UncordonNode(clusterName, nodeName string) error {
+    maxRetries := 3
+    var lastErr error
+    
+    for attempt := 0; attempt <= maxRetries; attempt++ {
+        if attempt > 0 {
+            // 指数退避: 100ms, 200ms, 400ms
+            backoff := time.Duration(100*(1<<uint(attempt-1))) * time.Millisecond
+            time.Sleep(backoff)
+        }
+        
+        // 重新获取节点以获取最新 ResourceVersion
+        node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+        // ... 修改节点
+        _, err = client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+        
+        if err != nil {
+            // 检查是否是资源冲突错误
+            if strings.Contains(err.Error(), "the object has been modified") || 
+               strings.Contains(err.Error(), "Operation cannot be fulfilled") {
+                lastErr = err
+                continue // 重试
+            }
+            return err // 其他错误直接返回
+        }
+        
+        return nil // 成功
+    }
+    
+    return fmt.Errorf("failed after %d attempts: %w", maxRetries+1, lastErr)
+}
+```
+
+**重试策略**：
+- 第 1 次尝试：立即执行
+- 第 2 次尝试：等待 100ms
+- 第 3 次尝试：等待 200ms  
+- 第 4 次尝试：等待 400ms
+
+**修复效果**：
+- ✅ 自动处理并发修改冲突，无需用户重试
+- ✅ 指数退避策略避免资源竞争
+- ✅ 只对可重试的错误进行重试，其他错误立即返回
+- ✅ 最大重试次数限制，避免无限循环
+- ✅ 详细日志记录重试过程
+
+**影响范围**：
+- `CordonNodeWithReason` 函数（批量禁止调度）
+- `UncordonNode` 函数（批量解除调度）
+
+---
+
+#### 3. 批量操作缓存刷新问题
 
 **问题描述**：
 - 批量禁止调度（Cordon）、批量解除调度（Uncordon）、批量标签更新、批量污点更新操作完成后，前端没有立即获取到最新的节点状态
