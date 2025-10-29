@@ -112,6 +112,37 @@ const router = createRouter({
           name: 'AnalyticsReportSettings',
           component: () => import('@/views/analytics/ReportSettings.vue'),
           meta: { title: '分析报告配置', icon: 'DataAnalysis', requiresAuth: true, permission: 'admin' }
+        },
+        {
+          path: 'automation-settings',
+          name: 'AutomationSettings',
+          component: () => import('@/views/AutomationSettings.vue'),
+          meta: { title: '自动化配置', icon: 'Setting', requiresAuth: true, permission: 'admin' }
+        },
+        // Automation Routes
+        {
+          path: 'automation/ansible',
+          name: 'AnsiblePlaybooks',
+          component: () => import('@/views/AnsiblePlaybooks.vue'),
+          meta: { title: 'Ansible Playbooks', icon: 'Files', requiresAuth: true }
+        },
+        {
+          path: 'automation/ssh',
+          name: 'SSHCommand',
+          component: () => import('@/views/SSHCommand.vue'),
+          meta: { title: 'SSH 命令执行', icon: 'Connection', requiresAuth: true }
+        },
+        {
+          path: 'automation/scripts',
+          name: 'ScriptsList',
+          component: () => import('@/views/ScriptsList.vue'),
+          meta: { title: '脚本管理', icon: 'Document', requiresAuth: true }
+        },
+        {
+          path: 'automation/workflows',
+          name: 'WorkflowsList',
+          component: () => import('@/views/WorkflowsList.vue'),
+          meta: { title: '工作流管理', icon: 'Connection', requiresAuth: true }
         }
       ]
     },

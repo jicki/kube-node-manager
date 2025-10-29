@@ -140,6 +140,12 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 
 	api := router.Group("/api/v1")
 
+	// Features 端点（无需认证，用于检查功能状态）
+	features := api.Group("/features")
+	{
+		features.GET("", handlers.Features.GetFeatures)
+	}
+
 	auth := api.Group("/auth")
 	{
 		auth.POST("/login", handlers.Auth.Login)
@@ -323,6 +329,80 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		anomalyReports.DELETE("/configs/:id", handlers.AnomalyReport.DeleteReportConfig)
 		anomalyReports.POST("/configs/:id/test", handlers.AnomalyReport.TestReportSend)
 		anomalyReports.POST("/configs/:id/run", handlers.AnomalyReport.RunReportNow)
+	}
+
+	// Features 管理端点（需要 admin 权限）
+	featuresManagement := protected.Group("/features/automation")
+	{
+		featuresManagement.PUT("/enabled", handlers.Features.UpdateAutomationEnabled)
+		featuresManagement.PUT("/ansible", handlers.Features.UpdateAnsibleConfig)
+		featuresManagement.PUT("/ssh", handlers.Features.UpdateSSHConfig)
+	}
+
+	// Automation - Ansible 路由
+	ansible := protected.Group("/automation/ansible")
+	{
+		// Playbook 管理
+		ansible.GET("/playbooks", handlers.Ansible.ListPlaybooks)
+		ansible.GET("/playbooks/:id", handlers.Ansible.GetPlaybook)
+		ansible.POST("/playbooks", handlers.Ansible.CreatePlaybook)
+		ansible.PUT("/playbooks/:id", handlers.Ansible.UpdatePlaybook)
+		ansible.DELETE("/playbooks/:id", handlers.Ansible.DeletePlaybook)
+
+		// Playbook 执行
+		ansible.POST("/run", handlers.Ansible.ExecutePlaybook)
+		ansible.GET("/status/:task_id", handlers.Ansible.GetExecutionStatus)
+		ansible.POST("/cancel/:task_id", handlers.Ansible.CancelExecution)
+
+		// 执行历史
+		ansible.GET("/history", handlers.Ansible.ListExecutions)
+	}
+
+	// Automation - SSH 路由
+	ssh := protected.Group("/automation/ssh")
+	{
+		// SSH 命令执行
+		ssh.POST("/execute", handlers.SSH.ExecuteCommand)
+		ssh.GET("/status/:task_id", handlers.SSH.GetExecutionStatus)
+
+		// 执行历史
+		ssh.GET("/history", handlers.SSH.ListExecutions)
+	}
+
+	// Automation - 脚本管理路由
+	scripts := protected.Group("/automation/scripts")
+	{
+		// 脚本管理
+		scripts.GET("", handlers.Script.ListScripts)
+		scripts.GET("/:id", handlers.Script.GetScript)
+		scripts.POST("", handlers.Script.CreateScript)
+		scripts.PUT("/:id", handlers.Script.UpdateScript)
+		scripts.DELETE("/:id", handlers.Script.DeleteScript)
+
+		// 脚本执行
+		scripts.POST("/execute", handlers.Script.ExecuteScript)
+		scripts.GET("/status/:task_id", handlers.Script.GetExecutionStatus)
+
+		// 执行历史
+		scripts.GET("/history", handlers.Script.ListExecutions)
+	}
+
+	// Automation - 工作流管理路由
+	workflows := protected.Group("/automation/workflows")
+	{
+		// 工作流管理
+		workflows.GET("", handlers.Workflow.ListWorkflows)
+		workflows.GET("/:id", handlers.Workflow.GetWorkflow)
+		workflows.POST("", handlers.Workflow.CreateWorkflow)
+		workflows.PUT("/:id", handlers.Workflow.UpdateWorkflow)
+		workflows.DELETE("/:id", handlers.Workflow.DeleteWorkflow)
+
+		// 工作流执行
+		workflows.POST("/execute", handlers.Workflow.ExecuteWorkflow)
+		workflows.GET("/status/:task_id", handlers.Workflow.GetExecutionStatus)
+
+		// 执行历史
+		workflows.GET("/history", handlers.Workflow.ListExecutions)
 	}
 }
 

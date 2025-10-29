@@ -8,11 +8,20 @@
 import { onMounted } from 'vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { useClusterStore } from '@/store/modules/cluster'
+import { useFeaturesStore } from '@/store/modules/features'
 
 const authStore = useAuthStore()
 const clusterStore = useClusterStore()
+const featuresStore = useFeaturesStore()
 
 onMounted(async () => {
+  // 初始化功能特性配置（无需认证）
+  try {
+    await featuresStore.fetchFeatures()
+  } catch (error) {
+    console.error('Failed to fetch features:', error)
+  }
+
   // 初始化认证信息
   if (authStore.token) {
     try {

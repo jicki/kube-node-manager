@@ -138,9 +138,93 @@ microservice:
   instance_id: ""     # 实例ID，留空自动生成
   register_interval: 30 # 服务注册间隔 (秒)
   
+# 自动化运维配置
+automation:
+  enabled: false  # 自动化功能主开关 (默认禁用，启用后需要在系统配置中进行配置)
+  
+  # Ansible 配置
+  ansible:
+    enabled: true
+    binary_path: "/usr/bin/ansible-playbook"  # ansible-playbook 二进制文件路径
+    temp_dir: "/tmp/ansible-runs"             # Ansible 临时执行目录
+    timeout: 3600                             # Playbook 执行超时 (秒)
+    max_concurrent: 10                        # 最大并发执行数
+  
+  # SSH 配置
+  ssh:
+    enabled: true
+    timeout: 300                              # SSH 命令执行超时 (秒)
+    max_concurrent: 50                        # 最大并发连接数
+    connection_pool_size: 20                  # 连接池大小
+    connection_timeout: 30                    # 连接超时 (秒)
+    keepalive_interval: 60                    # Keep-alive 间隔 (秒)
+  
+  # 脚本配置
+  scripts:
+    enabled: true
+    temp_dir: "/tmp/scripts"                  # 脚本临时执行目录
+    max_script_size: 1048576                  # 最大脚本大小 (字节, 1MB)
+    execution_timeout: 600                    # 脚本执行超时 (秒)
+  
+  # 工作流配置
+  workflows:
+    enabled: true
+    max_steps: 50                             # 工作流最大步骤数
+    step_timeout: 3600                        # 单步骤最大超时 (秒)
+    max_retries: 3                            # 步骤失败最大重试次数
+  
+  # 安全配置
+  security:
+    encryption_key: ""                        # 凭据加密密钥 (32字节, 必须通过环境变量 AUTOMATION_ENCRYPTION_KEY 设置)
+    require_approval: false                   # 是否需要审批
+    dangerous_commands:                       # 危险命令黑名单
+      - "rm -rf /"
+      - "rm -rf /*"
+      - "dd if=/dev/zero"
+      - "mkfs"
+      - ":(){ :|:& };:"                      # Fork bomb
+      - "> /dev/sda"
+      - "chmod -R 777 /"
+    command_whitelist_mode: false             # 是否启用命令白名单模式
+    command_whitelist: []                     # 命令白名单 (仅在 whitelist_mode = true 时生效)
+
+# 自动化功能说明:
+# 1. 启用自动化功能:
+#    - 设置 automation.enabled = true
+#    - 设置环境变量 AUTOMATION_ENCRYPTION_KEY（必须为32字节字符串）
+#    - 登录系统后在"系统配置" -> "自动化配置"中配置详细参数
+#
+# 2. Ansible Playbook 执行:
+#    - 支持在线编辑和执行 Playbook
+#    - 内置系统升级、Docker重启、内核升级、安全补丁等常用 Playbook
+#    - 支持自定义 Playbook 导入和版本管理
+#
+# 3. SSH 命令执行:
+#    - 支持批量并发执行 Shell 命令
+#    - 内置危险命令检测和拦截机制
+#    - 支持实时输出和执行历史记录
+#
+# 4. 脚本管理:
+#    - 支持 Shell 和 Python 脚本
+#    - 内置系统信息收集、磁盘清理、日志收集、性能诊断等常用脚本
+#    - 支持脚本参数化和版本控制
+#
+# 5. 工作流编排:
+#    - 支持 DAG 编排和条件分支
+#    - 支持步骤重试和超时控制
+#    - 内置节点维护、故障诊断、批量部署等工作流模板
+#
+# 6. 安全特性:
+#    - SSH 凭据 AES-256-GCM 加密存储
+#    - 危险命令黑名单拦截
+#    - 完整的审计日志记录
+#    - 权限分级控制（admin/user/viewer）
+
 # 环境变量覆盖说明:
 # - PORT: 覆盖 server.port
 # - LOG_FORMAT: 覆盖 logging.format (text/json)
 # - LOG_LEVEL: 覆盖 logging.level  
 # - DATABASE_URL: 覆盖完整数据库连接字符串
 # - SERVICE_NAME: 覆盖 microservice.service_name
+# - AUTOMATION_ENABLED: 覆盖 automation.enabled (true/false)
+# - AUTOMATION_ENCRYPTION_KEY: 覆盖 automation.security.encryption_key（必须为32字节，推荐使用环境变量）

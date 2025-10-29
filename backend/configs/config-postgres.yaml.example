@@ -95,3 +95,57 @@ microservice:
 #   可以通过环境变量覆盖配置:
 #   export DATABASE_HOST="postgres-server"
 #   export DATABASE_PASSWORD="env-password"
+
+# 自动化运维配置
+automation:
+  enabled: false  # 自动化功能主开关 (默认禁用)
+  
+  # Ansible 配置
+  ansible:
+    enabled: true
+    binary_path: "/usr/bin/ansible-playbook"
+    temp_dir: "/tmp/ansible-runs"
+    timeout: 3600
+    max_concurrent: 10
+  
+  # SSH 配置
+  ssh:
+    enabled: true
+    timeout: 300
+    max_concurrent: 50
+    connection_pool_size: 20
+    connection_timeout: 30
+    keepalive_interval: 60
+  
+  # 脚本配置
+  scripts:
+    enabled: true
+    temp_dir: "/tmp/scripts"
+    max_script_size: 1048576
+    execution_timeout: 600
+  
+  # 工作流配置
+  workflows:
+    enabled: true
+    max_steps: 50
+    step_timeout: 3600
+    max_retries: 3
+  
+  # 安全配置
+  security:
+    encryption_key: ""  # 必须通过环境变量 AUTOMATION_ENCRYPTION_KEY 设置 (32字节)
+    require_approval: false
+    dangerous_commands:
+      - "rm -rf /"
+      - "rm -rf /*"
+      - "dd if=/dev/zero"
+      - "mkfs"
+      - ":(){ :|:& };:"
+      - "> /dev/sda"
+      - "chmod -R 777 /"
+    command_whitelist_mode: false
+    command_whitelist: []
+
+# 环境变量说明:
+# - AUTOMATION_ENABLED=true          # 启用自动化功能
+# - AUTOMATION_ENCRYPTION_KEY=xxx    # 加密密钥（必须32字节）

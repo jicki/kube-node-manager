@@ -4,7 +4,9 @@ import (
 	"kube-node-manager/internal/handler/anomaly"
 	"kube-node-manager/internal/handler/audit"
 	"kube-node-manager/internal/handler/auth"
+	"kube-node-manager/internal/handler/automation"
 	"kube-node-manager/internal/handler/cluster"
+	"kube-node-manager/internal/handler/features"
 	"kube-node-manager/internal/handler/feishu"
 	"kube-node-manager/internal/handler/gitlab"
 	"kube-node-manager/internal/handler/label"
@@ -29,6 +31,11 @@ type Handlers struct {
 	Feishu        *feishu.Handler
 	Anomaly       *anomaly.Handler
 	AnomalyReport *anomaly.ReportHandler
+	Features      *features.Handler
+	Ansible       *automation.AnsibleHandler
+	SSH           *automation.SSHHandler
+	Script        *automation.ScriptHandler
+	Workflow      *automation.WorkflowHandler
 }
 
 func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
@@ -45,5 +52,10 @@ func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
 		Feishu:        feishu.NewHandler(services.Feishu, services.Audit, logger),
 		Anomaly:       anomaly.NewHandler(services.Anomaly, services.Anomaly.GetCleanupService(), logger),
 		AnomalyReport: anomaly.NewReportHandler(services.AnomalyReport),
+		Features:      features.NewHandler(services.Features, logger),
+		Ansible:       automation.NewAnsibleHandler(services.Ansible, logger),
+		SSH:           automation.NewSSHHandler(services.SSH, logger),
+		Script:        automation.NewScriptHandler(services.Script, logger),
+		Workflow:      automation.NewWorkflowHandler(services.Workflow, logger),
 	}
 }

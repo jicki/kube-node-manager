@@ -9,7 +9,9 @@ import (
 	"kube-node-manager/internal/service/anomaly"
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/auth"
+	"kube-node-manager/internal/service/automation"
 	"kube-node-manager/internal/service/cluster"
+	"kube-node-manager/internal/service/features"
 	"kube-node-manager/internal/service/feishu"
 	"kube-node-manager/internal/service/gitlab"
 	"kube-node-manager/internal/service/k8s"
@@ -39,6 +41,11 @@ type Services struct {
 	Feishu        *feishu.Service
 	Anomaly       *anomaly.Service
 	AnomalyReport *anomaly.ReportService
+	Features      *features.Service
+	Ansible       *automation.AnsibleService
+	SSH           *automation.SSHService
+	Script        *automation.ScriptService
+	Workflow      *automation.WorkflowService
 }
 
 // clusterServiceAdapter 适配器，将 cluster.Service 适配为 feishu.ClusterServiceInterface
@@ -236,6 +243,79 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	}
 	anomalyReportSvc := anomaly.NewReportService(db, logger, anomalySvc, reportEnabled)
 
+	// 创建功能特性服务
+	featuresSvc := features.NewService(logger, db)
+
+	// 创建 Ansible 服务（使用默认配置）
+	ansibleSvc := automation.NewAnsibleService(
+		db,
+		logger,
+		k8sSvc,
+		progressSvc,
+		"/usr/bin/ansible-playbook",    // binaryPath - 可以从配置读取
+		"/tmp/ansible-runs",            // tempDir - 可以从配置读取
+		3600*time.Second,               // timeout - 1 hour
+		"kube-node-manager-secret-key", // encryptionKey - 应该从环境变量读取
+	)
+
+	// 初始化内置 Playbooks
+	go func() {
+		if err := ansibleSvc.InitializeBuiltinPlaybooks(); err != nil {
+			logger.Errorf("Failed to initialize builtin playbooks: %v", err)
+		}
+	}()
+
+	// 创建凭据管理器（与 Ansible 共享）
+	credentialMgr := automation.NewCredentialManager(db, logger, "kube-node-manager-secret-key")
+
+	// 创建 SSH 服务
+	sshSvc := automation.NewSSHService(
+		db,
+		logger,
+		progressSvc,
+		credentialMgr,
+		20,            // maxPoolSize - 最大连接池大小
+		5*time.Minute, // idleTimeout - 空闲超时
+	)
+
+	// 迁移 SSH 执行记录表
+	if err := db.AutoMigrate(&automation.SSHExecutionRecord{}); err != nil {
+		logger.Errorf("Failed to migrate SSH execution record table: %v", err)
+	}
+
+	// 创建脚本服务
+	scriptSvc := automation.NewScriptService(
+		db,
+		logger,
+		progressSvc,
+		sshSvc,
+		"/tmp/scripts", // scriptDir - 可以从配置读取
+	)
+
+	// 初始化内置脚本
+	go func() {
+		if err := scriptSvc.InitializeBuiltinScripts(); err != nil {
+			logger.Errorf("Failed to initialize builtin scripts: %v", err)
+		}
+	}()
+
+	// 创建工作流服务
+	workflowSvc := automation.NewWorkflowService(
+		db,
+		logger,
+		progressSvc,
+		ansibleSvc,
+		sshSvc,
+		scriptSvc,
+	)
+
+	// 初始化内置工作流
+	go func() {
+		if err := workflowSvc.InitializeBuiltinWorkflows(); err != nil {
+			logger.Errorf("Failed to initialize builtin workflows: %v", err)
+		}
+	}()
+
 	return &Services{
 		Auth:          authSvc,
 		User:          user.NewService(db, logger, auditSvc),
@@ -251,5 +331,10 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 		Feishu:        feishuSvc,
 		Anomaly:       anomalySvc,
 		AnomalyReport: anomalyReportSvc,
+		Features:      featuresSvc,
+		Ansible:       ansibleSvc,
+		SSH:           sshSvc,
+		Script:        scriptSvc,
+		Workflow:      workflowSvc,
 	}
 }
