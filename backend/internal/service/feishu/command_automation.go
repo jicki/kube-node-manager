@@ -18,14 +18,17 @@ func (h *AutomationCommandHandler) Description() string {
 // Handle processes the automation command
 func (h *AutomationCommandHandler) Handle(ctx *CommandContext) (*CommandResponse, error) {
 	// 检查功能是否启用
-	config, err := ctx.Service.db.Table("automation_configs").
+	var config struct {
+		ConfigValue string
+	}
+	err := ctx.Service.db.Table("automation_configs").
 		Where("config_key = ?", "automation.enabled").
 		Select("config_value").
-		First(&struct{ ConfigValue string }{}).Error
-	
+		First(&config).Error
+
 	if err == nil {
 		var enabled bool
-		if json.Unmarshal([]byte(config), &enabled); enabled == false {
+		if json.Unmarshal([]byte(config.ConfigValue), &enabled) == nil && !enabled {
 			return &CommandResponse{
 				Text: "❌ 自动化功能未启用\n\n请联系管理员在系统配置中启用自动化功能。",
 			}, nil
@@ -746,6 +749,9 @@ func truncateString(s string, maxLength int) string {
 func buildPlaybookExecutionCard(playbookID int, clusterName string, targetNodes []string) string {
 	// 这里应该构建飞书卡片 JSON
 	// 简化版本，实际应该使用完整的卡片构建器
+	content := fmt.Sprintf("**Playbook ID**: %d\\n**集群**: %s\\n**目标节点**: %s\\n\\n**请确认后点击执行按钮**",
+		playbookID, clusterName, strings.Join(targetNodes, ", "))
+
 	card := fmt.Sprintf(`{
   "config": {"wide_screen_mode": true},
   "header": {
@@ -753,19 +759,22 @@ func buildPlaybookExecutionCard(playbookID int, clusterName string, targetNodes 
     "template": "blue"
   },
   "elements": [
-    {"tag": "div", "text": {"tag": "lark_md", "content": "**Playbook ID**: %d\n**集群**: %s\n**目标节点**: %s\n\n**请确认后点击执行按钮**"}},
+    {"tag": "div", "text": {"tag": "lark_md", "content": "%s"}},
     {"tag": "action", "actions": [
       {"tag": "button", "text": {"tag": "plain_text", "content": "✅ 确认执行"}, "type": "primary", "value": "confirm"},
       {"tag": "button", "text": {"tag": "plain_text", "content": "❌ 取消"}, "type": "default", "value": "cancel"}
     ]}
   ]
-}`, playbookID, clusterName, strings.Join(targetNodes, ", "))
+}`, content)
 
 	return card
 }
 
 // buildSSHExecutionCard builds a confirmation card for SSH execution
 func buildSSHExecutionCard(clusterName, command string, targetNodes []string) string {
+	content := fmt.Sprintf("**命令**: `%s`\\n**集群**: %s\\n**目标节点**: %s\\n\\n**请确认后点击执行按钮**",
+		command, clusterName, strings.Join(targetNodes, ", "))
+
 	card := fmt.Sprintf(`{
   "config": {"wide_screen_mode": true},
   "header": {
@@ -773,19 +782,22 @@ func buildSSHExecutionCard(clusterName, command string, targetNodes []string) st
     "template": "orange"
   },
   "elements": [
-    {"tag": "div", "text": {"tag": "lark_md", "content": "**命令**: \`%s\`\n**集群**: %s\n**目标节点**: %s\n\n**请确认后点击执行按钮**"}},
+    {"tag": "div", "text": {"tag": "lark_md", "content": "%s"}},
     {"tag": "action", "actions": [
       {"tag": "button", "text": {"tag": "plain_text", "content": "✅ 确认执行"}, "type": "primary", "value": "confirm"},
       {"tag": "button", "text": {"tag": "plain_text", "content": "❌ 取消"}, "type": "default", "value": "cancel"}
     ]}
   ]
-}`, command, clusterName, strings.Join(targetNodes, ", "))
+}`, content)
 
 	return card
 }
 
 // buildScriptExecutionCard builds a confirmation card for script execution
 func buildScriptExecutionCard(scriptID int, clusterName string, targetNodes []string) string {
+	content := fmt.Sprintf("**脚本 ID**: %d\\n**集群**: %s\\n**目标节点**: %s\\n\\n**请确认后点击执行按钮**",
+		scriptID, clusterName, strings.Join(targetNodes, ", "))
+
 	card := fmt.Sprintf(`{
   "config": {"wide_screen_mode": true},
   "header": {
@@ -793,19 +805,22 @@ func buildScriptExecutionCard(scriptID int, clusterName string, targetNodes []st
     "template": "green"
   },
   "elements": [
-    {"tag": "div", "text": {"tag": "lark_md", "content": "**脚本 ID**: %d\n**集群**: %s\n**目标节点**: %s\n\n**请确认后点击执行按钮**"}},
+    {"tag": "div", "text": {"tag": "lark_md", "content": "%s"}},
     {"tag": "action", "actions": [
       {"tag": "button", "text": {"tag": "plain_text", "content": "✅ 确认执行"}, "type": "primary", "value": "confirm"},
       {"tag": "button", "text": {"tag": "plain_text", "content": "❌ 取消"}, "type": "default", "value": "cancel"}
     ]}
   ]
-}`, scriptID, clusterName, strings.Join(targetNodes, ", "))
+}`, content)
 
 	return card
 }
 
 // buildWorkflowExecutionCard builds a confirmation card for workflow execution
 func buildWorkflowExecutionCard(workflowID int, clusterName string, targetNodes []string) string {
+	content := fmt.Sprintf("**工作流 ID**: %d\\n**集群**: %s\\n**目标节点**: %s\\n\\n**请确认后点击执行按钮**",
+		workflowID, clusterName, strings.Join(targetNodes, ", "))
+
 	card := fmt.Sprintf(`{
   "config": {"wide_screen_mode": true},
   "header": {
@@ -813,14 +828,13 @@ func buildWorkflowExecutionCard(workflowID int, clusterName string, targetNodes 
     "template": "purple"
   },
   "elements": [
-    {"tag": "div", "text": {"tag": "lark_md", "content": "**工作流 ID**: %d\n**集群**: %s\n**目标节点**: %s\n\n**请确认后点击执行按钮**"}},
+    {"tag": "div", "text": {"tag": "lark_md", "content": "%s"}},
     {"tag": "action", "actions": [
       {"tag": "button", "text": {"tag": "plain_text", "content": "✅ 确认执行"}, "type": "primary", "value": "confirm"},
       {"tag": "button", "text": {"tag": "plain_text", "content": "❌ 取消"}, "type": "default", "value": "cancel"}
     ]}
   ]
-}`, workflowID, clusterName, strings.Join(targetNodes, ", "))
+}`, content)
 
 	return card
 }
-
