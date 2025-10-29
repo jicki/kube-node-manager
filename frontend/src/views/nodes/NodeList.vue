@@ -1222,27 +1222,37 @@ const resetSearchFilters = () => {
 
 // 刷新数据
 const refreshData = async () => {
-  console.log('refreshData() 被调用')
+  console.log('🔄 [refreshData] 开始刷新数据')
+  
   try {
     // 重新加载集群信息
+    console.log('🔄 [refreshData] 获取集群信息')
     await clusterStore.fetchClusters()
     clusterStore.loadCurrentCluster()
+    console.log('✅ [refreshData] 集群信息已更新')
     
     // 如果没有当前集群，尝试设置第一个活跃集群
     if (!clusterStore.hasCurrentCluster && clusterStore.hasCluster) {
       const firstActiveCluster = clusterStore.activeClusters[0] || clusterStore.clusters[0]
       if (firstActiveCluster) {
         clusterStore.setCurrentCluster(firstActiveCluster)
+        console.log('✅ [refreshData] 设置当前集群:', firstActiveCluster.name)
       }
     }
   } catch (error) {
-    console.warn('Failed to refresh cluster info:', error)
+    console.error('❌ [refreshData] 获取集群信息失败:', error)
   }
   
   // 刷新节点数据，fetchNodes现在会自动获取禁止调度历史
-  console.log('开始刷新节点数据...')
-  await fetchNodes()
-  console.log('节点数据刷新完成')
+  console.log('🔄 [refreshData] 开始刷新节点列表...')
+  try {
+    await fetchNodes()
+    console.log('✅ [refreshData] 节点数据刷新完成')
+    console.log('📊 [refreshData] 当前节点数量:', nodeStore.nodes.length)
+  } catch (error) {
+    console.error('❌ [refreshData] 节点数据刷新失败:', error)
+    throw error
+  }
 }
 
 // 查看节点详情
@@ -1669,12 +1679,12 @@ const startProgressFallback = (operationType) => {
     clearTimeout(progressFallbackTimer.value)
   }
   
-  console.log(`启动降级方案定时器，操作类型: ${operationType}`)
+  console.log(`⏰ [降级方案] 启动定时器，操作类型: ${operationType}`)
   
   // 8秒后强制刷新（即使WebSocket没有推送完成消息）
   // 缩短超时时间，确保用户在WebSocket断开时也能快速看到更新
   progressFallbackTimer.value = setTimeout(async () => {
-    console.log('降级方案触发：8秒超时，强制刷新节点数据（WebSocket可能断开）')
+    console.log('⚠️ [降级方案] 触发：8秒超时，强制刷新节点数据（WebSocket可能断开）')
     
     // 重置loading状态
     if (operationType === 'deleteLabels') {
@@ -1692,10 +1702,25 @@ const startProgressFallback = (operationType) => {
     // 清除选择
     clearSelection()
     
-    // 刷新数据
-    console.log('降级方案：开始刷新节点数据')
-    await refreshData()
-    console.log('降级方案完成：节点数据已刷新')
+    // 刷新数据（降级方案也进行双重刷新确保数据更新）
+    console.log('🔄 [降级方案] 第一次刷新节点数据')
+    try {
+      await refreshData()
+      console.log('✅ [降级方案] 第一次刷新完成')
+    } catch (err) {
+      console.error('❌ [降级方案] 第一次刷新失败:', err)
+    }
+    
+    // 延迟再刷新一次，确保数据完全更新
+    setTimeout(async () => {
+      console.log('🔄 [降级方案] 第二次刷新节点数据')
+      try {
+        await refreshData()
+        console.log('✅ [降级方案] 第二次刷新完成，数据已更新')
+      } catch (err) {
+        console.error('❌ [降级方案] 第二次刷新失败:', err)
+      }
+    }, 500)
     
     // 关闭进度对话框
     if (progressDialogVisible.value) {
@@ -1707,13 +1732,13 @@ const startProgressFallback = (operationType) => {
 
 // 进度处理函数
 const handleProgressCompleted = async (data) => {
-  console.log('批量操作进度完成回调被触发', data)
+  console.log('✅ [批量操作] 完成回调被触发', data)
   
   // 清除降级方案定时器
   if (progressFallbackTimer.value) {
     clearTimeout(progressFallbackTimer.value)
     progressFallbackTimer.value = null
-    console.log('清除降级方案定时器（WebSocket成功推送完成消息）')
+    console.log('✅ [批量操作] 清除降级方案定时器（WebSocket成功推送完成消息）')
   }
   
   ElMessage.success('批量操作完成')
@@ -1728,13 +1753,25 @@ const handleProgressCompleted = async (data) => {
   // 清除选择
   clearSelection()
   
+  // 立即刷新一次（不等待），然后延迟再刷新一次确保数据完全更新
+  console.log('🔄 [批量操作] 立即刷新节点数据')
+  refreshData().then(() => {
+    console.log('✅ [批量操作] 第一次刷新完成')
+  }).catch(err => {
+    console.error('❌ [批量操作] 第一次刷新失败:', err)
+  })
+  
   // 延迟刷新以确保后端操作完全完成和缓存清除
-  console.log('延迟500ms后刷新节点数据以显示最新状态')
+  console.log('⏰ [批量操作] 设置800ms后二次刷新，确保缓存清除完成')
   setTimeout(async () => {
-    console.log('开始刷新节点数据（批量操作完成后）')
-    await refreshData()
-    console.log('批量操作后节点数据已刷新')
-  }, 500)
+    console.log('🔄 [批量操作] 开始二次刷新节点数据')
+    try {
+      await refreshData()
+      console.log('✅ [批量操作] 二次刷新完成，数据已更新')
+    } catch (err) {
+      console.error('❌ [批量操作] 二次刷新失败:', err)
+    }
+  }, 800)
 }
 
 const handleProgressError = (data) => {

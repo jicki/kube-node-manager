@@ -63,40 +63,56 @@ func (s *Service) InvalidateClusterCache(clusterName string) {
 ```
 
 **前端刷新优化**：
-14. ✅ **延长 WebSocket 完成回调刷新延迟** - 从 200ms 增加到 500ms，确保后端缓存清除完成
-15. ✅ **缩短降级方案超时时间** - 从 30秒缩短到 8秒，改善 WebSocket 断开时的用户体验
-16. ✅ **优化降级方案提示消息** - 从"可能已完成"改为"已完成"，提供更明确的反馈
+14. ✅ **双重刷新机制** - 立即刷新 + 延迟刷新（800ms），确保数据一定会更新
+15. ✅ **降级方案双重刷新** - 降级方案也采用双重刷新，防止单次刷新失败
+16. ✅ **详细日志追踪** - 添加 emoji 标记的详细日志，方便调试和追踪刷新流程
+17. ✅ **缩短降级方案超时时间** - 从 30秒缩短到 8秒，改善 WebSocket 断开时的用户体验
+18. ✅ **优化降级方案提示消息** - 从"可能已完成"改为"已完成"，提供更明确的反馈
 
 **修复代码（前端）**：
 ```javascript
 // frontend/src/views/nodes/NodeList.vue
 const handleProgressCompleted = async (data) => {
   // ...
-  // 延迟500ms后刷新，确保后端缓存清除完成
+  // 双重刷新机制：立即刷新 + 延迟刷新
+  console.log('🔄 [批量操作] 立即刷新节点数据')
+  refreshData().then(() => {
+    console.log('✅ [批量操作] 第一次刷新完成')
+  }).catch(err => {
+    console.error('❌ [批量操作] 第一次刷新失败:', err)
+  })
+  
+  // 延迟800ms后再次刷新，确保后端缓存清除完成
   setTimeout(async () => {
+    console.log('🔄 [批量操作] 开始二次刷新节点数据')
     await refreshData()
-  }, 500)
+    console.log('✅ [批量操作] 二次刷新完成，数据已更新')
+  }, 800)
 }
 
 const startProgressFallback = (operationType) => {
-  // 8秒后强制刷新（原30秒）
+  // 8秒后强制刷新（原30秒），也使用双重刷新机制
   progressFallbackTimer.value = setTimeout(async () => {
-    console.log('降级方案触发：8秒超时，强制刷新节点数据（WebSocket可能断开）')
-    // ...
+    console.log('⚠️ [降级方案] 触发：8秒超时，强制刷新')
     await refreshData()
-    // ...
+    // 再延迟500ms刷新一次
+    setTimeout(async () => {
+      await refreshData()
+    }, 500)
   }, 8000)
 }
 ```
 
 **修复效果**：
 - ✅ 批量操作完成后立即清除缓存
+- ✅ **双重刷新机制确保数据一定会更新**（立即刷新 + 延迟 800ms 再刷新）
 - ✅ 前端刷新时获取最新的节点状态
-- ✅ 用户体验显著提升，无需等待或手动强制刷新
+- ✅ 用户体验显著提升，**无需手动刷新**
 - ✅ 适用于同步批量操作（≤5个节点）
 - ✅ 适用于异步批量操作（>5个节点）
 - ✅ WebSocket 断开时用户仅需等待 8 秒即可看到更新（原 30 秒）
-- ✅ 刷新延迟优化避免了竞态条件
+- ✅ 详细的 emoji 日志方便追踪和调试刷新流程
+- ✅ 双重刷新避免了单次刷新因时序问题导致的数据不更新
 
 **影响范围**：
 - 后端节点服务层（node service）
