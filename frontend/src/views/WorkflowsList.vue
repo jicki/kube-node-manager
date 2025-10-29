@@ -65,11 +65,11 @@ const fetchWorkflows = async () => {
   loading.value = true
   try {
     const res = await listWorkflows({ page: pagination.page, size: pagination.size })
-    // 处理可能的嵌套结构：res.data.list 或 res.data
-    const workflowData = res.data || {}
-    const workflowList = workflowData.list || workflowData || []
+    // 后端返回格式: res.data = { code, message, data: [...], total, page, size }
+    const responseData = res.data || {}
+    const workflowList = responseData.data || []
     workflows.value = Array.isArray(workflowList) ? workflowList : []
-    pagination.total = res.total || workflowData.total || 0
+    pagination.total = responseData.total || 0
   } catch (error) {
     ElMessage.error('获取工作流列表失败')
   } finally {

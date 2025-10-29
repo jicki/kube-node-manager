@@ -206,8 +206,9 @@ const getStatusLabel = (status) => {
 const fetchClusters = async () => {
   try {
     const res = await listClusters()
-    // 处理可能的分页结构：res.data.list 或 res.data
-    const clusterList = res.data?.list || res.data || []
+    // 后端返回格式: res.data = { code, message, data: { clusters: [...], total, page, page_size } }
+    const responseData = res.data?.data || {}
+    const clusterList = responseData.clusters || []
     clusters.value = Array.isArray(clusterList) ? clusterList : []
   } catch (error) {
     console.error('获取集群列表失败', error)
@@ -218,8 +219,9 @@ const handleClusterChange = async () => {
   form.target_nodes = []
   try {
     const res = await listNodes({ cluster: form.cluster_name })
-    // 处理可能的分页结构：res.data.list 或 res.data
-    const nodeList = res.data?.list || res.data || []
+    // 后端返回格式: res.data = { code, message, data: [...] }
+    const responseData = res.data || {}
+    const nodeList = responseData.data || []
     nodes.value = Array.isArray(nodeList) ? nodeList.map(n => n.name || n) : []
   } catch (error) {
     console.error('获取节点列表失败', error)

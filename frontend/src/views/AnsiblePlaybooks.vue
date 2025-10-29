@@ -295,8 +295,11 @@ const fetchPlaybooks = async () => {
     }
     
     const res = await listPlaybooks(params)
-    playbooks.value = res.data || []
-    pagination.total = res.total || 0
+    // 后端返回格式: res.data = { code, message, data: [...], total, page, size }
+    const responseData = res.data || {}
+    const playbookList = responseData.data || []
+    playbooks.value = Array.isArray(playbookList) ? playbookList : []
+    pagination.total = responseData.total || 0
   } catch (error) {
     ElMessage.error('获取 Playbook 列表失败')
   } finally {
@@ -308,8 +311,9 @@ const fetchPlaybooks = async () => {
 const fetchClusters = async () => {
   try {
     const res = await listClusters()
-    // 处理可能的分页结构：res.data.list 或 res.data
-    const clusterList = res.data?.list || res.data || []
+    // 后端返回格式: res.data = { code, message, data: { clusters: [...], total, page, page_size } }
+    const responseData = res.data?.data || {}
+    const clusterList = responseData.clusters || []
     clusters.value = Array.isArray(clusterList) ? clusterList : []
   } catch (error) {
     console.error('获取集群列表失败', error)
@@ -320,8 +324,9 @@ const fetchClusters = async () => {
 const fetchNodes = async (clusterName) => {
   try {
     const res = await listNodes({ cluster: clusterName })
-    // 处理可能的分页结构：res.data.list 或 res.data
-    const nodeList = res.data?.list || res.data || []
+    // 后端返回格式: res.data = { code, message, data: [...] }
+    const responseData = res.data || {}
+    const nodeList = responseData.data || []
     nodes.value = Array.isArray(nodeList) ? nodeList.map(n => n.name || n) : []
   } catch (error) {
     console.error('获取节点列表失败', error)
