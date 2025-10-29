@@ -703,36 +703,29 @@ func (h *AutomationCommandHandler) getWorkflowStatus(ctx *CommandContext, taskID
 
 // handleHelp shows help information
 func (h *AutomationCommandHandler) handleHelp(ctx *CommandContext) (*CommandResponse, error) {
-	text := `🤖 **自动化运维命令帮助**
-
-**Ansible Playbook**:
-• \`/automation ansible list [category]\` - 列出 Playbook
-• \`/automation ansible info <id>\` - 查看 Playbook 详情
-• \`/automation ansible run <id> <cluster> <nodes...>\` - 执行 Playbook
-
-**SSH 命令**:
-• \`/automation ssh <cluster> "<command>" <nodes...>\` - 执行 SSH 命令
-
-**脚本管理**:
-• \`/automation script list [category]\` - 列出脚本
-• \`/automation script info <id>\` - 查看脚本详情
-• \`/automation script run <id> <cluster> <nodes...>\` - 执行脚本
-
-**工作流**:
-• \`/automation workflow list [category]\` - 列出工作流
-• \`/automation workflow info <id>\` - 查看工作流详情
-• \`/automation workflow run <id> <cluster> <nodes...>\` - 执行工作流
-
-**状态查询**:
-• \`/automation status <task_id>\` - 查询任务执行状态
-
-**示例**:
-\`/automation ansible list system\`
-\`/automation ansible run 1 production node1 node2\`
-\`/automation ssh production "uptime" node1 node2\`
-\`/automation status ansible-exec-1234567890-abc123\`
-
-💡 提示: 执行命令前会显示确认卡片，请仔细检查后确认执行。`
+	text := "🤖 **自动化运维命令帮助**\n\n" +
+		"**Ansible Playbook**:\n" +
+		"• `/automation ansible list [category]` - 列出 Playbook\n" +
+		"• `/automation ansible info <id>` - 查看 Playbook 详情\n" +
+		"• `/automation ansible run <id> <cluster> <nodes...>` - 执行 Playbook\n\n" +
+		"**SSH 命令**:\n" +
+		"• `/automation ssh <cluster> \"<command>\" <nodes...>` - 执行 SSH 命令\n\n" +
+		"**脚本管理**:\n" +
+		"• `/automation script list [category]` - 列出脚本\n" +
+		"• `/automation script info <id>` - 查看脚本详情\n" +
+		"• `/automation script run <id> <cluster> <nodes...>` - 执行脚本\n\n" +
+		"**工作流**:\n" +
+		"• `/automation workflow list [category]` - 列出工作流\n" +
+		"• `/automation workflow info <id>` - 查看工作流详情\n" +
+		"• `/automation workflow run <id> <cluster> <nodes...>` - 执行工作流\n\n" +
+		"**状态查询**:\n" +
+		"• `/automation status <task_id>` - 查询任务执行状态\n\n" +
+		"**示例**:\n" +
+		"`/automation ansible list system`\n" +
+		"`/automation ansible run 1 production node1 node2`\n" +
+		"`/automation ssh production \"uptime\" node1 node2`\n" +
+		"`/automation status ansible-exec-1234567890-abc123`\n\n" +
+		"💡 提示: 执行命令前会显示确认卡片，请仔细检查后确认执行。"
 
 	return &CommandResponse{
 		Text: text,
