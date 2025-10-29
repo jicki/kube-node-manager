@@ -62,12 +62,41 @@ func (s *Service) InvalidateClusterCache(clusterName string) {
 }
 ```
 
+**前端刷新优化**：
+14. ✅ **延长 WebSocket 完成回调刷新延迟** - 从 200ms 增加到 500ms，确保后端缓存清除完成
+15. ✅ **缩短降级方案超时时间** - 从 30秒缩短到 8秒，改善 WebSocket 断开时的用户体验
+16. ✅ **优化降级方案提示消息** - 从"可能已完成"改为"已完成"，提供更明确的反馈
+
+**修复代码（前端）**：
+```javascript
+// frontend/src/views/nodes/NodeList.vue
+const handleProgressCompleted = async (data) => {
+  // ...
+  // 延迟500ms后刷新，确保后端缓存清除完成
+  setTimeout(async () => {
+    await refreshData()
+  }, 500)
+}
+
+const startProgressFallback = (operationType) => {
+  // 8秒后强制刷新（原30秒）
+  progressFallbackTimer.value = setTimeout(async () => {
+    console.log('降级方案触发：8秒超时，强制刷新节点数据（WebSocket可能断开）')
+    // ...
+    await refreshData()
+    // ...
+  }, 8000)
+}
+```
+
 **修复效果**：
 - ✅ 批量操作完成后立即清除缓存
 - ✅ 前端刷新时获取最新的节点状态
 - ✅ 用户体验显著提升，无需等待或手动强制刷新
 - ✅ 适用于同步批量操作（≤5个节点）
 - ✅ 适用于异步批量操作（>5个节点）
+- ✅ WebSocket 断开时用户仅需等待 8 秒即可看到更新（原 30 秒）
+- ✅ 刷新延迟优化避免了竞态条件
 
 **影响范围**：
 - 后端节点服务层（node service）
@@ -75,6 +104,7 @@ func (s *Service) InvalidateClusterCache(clusterName string) {
 - 后端污点服务层（taint service）
 - 后端 Kubernetes 服务层（k8s service）
 - 缓存管理层（cache）
+- 前端节点列表页面（NodeList.vue）
 
 ---
 

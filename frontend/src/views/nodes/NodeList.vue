@@ -1671,9 +1671,10 @@ const startProgressFallback = (operationType) => {
   
   console.log(`启动降级方案定时器，操作类型: ${operationType}`)
   
-  // 30秒后强制刷新（即使WebSocket没有推送完成消息）
+  // 8秒后强制刷新（即使WebSocket没有推送完成消息）
+  // 缩短超时时间，确保用户在WebSocket断开时也能快速看到更新
   progressFallbackTimer.value = setTimeout(async () => {
-    console.log('降级方案触发：30秒超时，强制刷新节点数据')
+    console.log('降级方案触发：8秒超时，强制刷新节点数据（WebSocket可能断开）')
     
     // 重置loading状态
     if (operationType === 'deleteLabels') {
@@ -1692,15 +1693,16 @@ const startProgressFallback = (operationType) => {
     clearSelection()
     
     // 刷新数据
+    console.log('降级方案：开始刷新节点数据')
     await refreshData()
     console.log('降级方案完成：节点数据已刷新')
     
     // 关闭进度对话框
     if (progressDialogVisible.value) {
       progressDialogVisible.value = false
-      ElMessage.info('批量操作可能已完成，已自动刷新数据')
+      ElMessage.success('批量操作已完成，数据已刷新')
     }
-  }, 30000) // 30秒超时
+  }, 8000) // 8秒超时（从30秒缩短，提升用户体验）
 }
 
 // 进度处理函数
@@ -1726,12 +1728,13 @@ const handleProgressCompleted = async (data) => {
   // 清除选择
   clearSelection()
   
-  // 延迟刷新以确保后端操作完全完成
-  console.log('延迟200ms后刷新节点数据以显示最新状态')
+  // 延迟刷新以确保后端操作完全完成和缓存清除
+  console.log('延迟500ms后刷新节点数据以显示最新状态')
   setTimeout(async () => {
+    console.log('开始刷新节点数据（批量操作完成后）')
     await refreshData()
     console.log('批量操作后节点数据已刷新')
-  }, 200)
+  }, 500)
 }
 
 const handleProgressError = (data) => {
