@@ -38,23 +38,24 @@ type CacheEntry struct {
 }
 
 // NewK8sCache 创建K8s缓存实例
+// 多副本部署优化：使用较短的TTL减少副本间数据不一致窗口
 func NewK8sCache(logger *logger.Logger) *K8sCache {
 	return &K8sCache{
 		nodeListCache:   &sync.Map{},
 		nodeDetailCache: &sync.Map{},
-		listCacheTTL:    30 * time.Second, // 列表缓存30秒
-		detailCacheTTL:  5 * time.Minute,  // 详情缓存5分钟
-		staleThreshold:  5 * time.Minute,  // 过期阈值5分钟
+		listCacheTTL:    10 * time.Second, // 列表缓存10秒（多副本环境优化）
+		detailCacheTTL:  1 * time.Minute,  // 详情缓存1分钟（多副本环境优化）
+		staleThreshold:  2 * time.Minute,  // 过期阈值2分钟（异步刷新窗口）
 		logger:          logger,
 		refreshLocks:    &sync.Map{},
 	}
 }
 
 // GetNodeList 获取节点列表（带缓存）
-// 缓存策略：
-// - <30s: 直接返回缓存
-// - 30s-5min: 返回缓存并异步刷新
-// - >5min或forceRefresh: 同步刷新
+// 缓存策略（多副本环境优化）：
+// - <10s: 直接返回缓存（新鲜数据）
+// - 10s-2min: 返回缓存并异步刷新（过期但可用）
+// - >2min或forceRefresh: 同步刷新（强制更新）
 func (c *K8sCache) GetNodeList(ctx context.Context, cluster string, forceRefresh bool, fetchFunc func() (interface{}, error)) (interface{}, error) {
 	// 强制刷新，清除缓存
 	if forceRefresh {

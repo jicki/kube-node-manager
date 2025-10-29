@@ -8,7 +8,7 @@ server:
 
 database:
   # 数据库类型: sqlite, postgres
-  type: "postgres"  # 选择使用的数据库类型
+  type: "postgres"  # 多副本环境必须使用 postgres
   
   # SQLite 配置 (当 type = "sqlite" 时使用)
   # dsn: "./data/kube-node-manager.db"
@@ -26,12 +26,14 @@ database:
   # 对于 SQLite: "./data/kube-node-manager.db" 或 ":memory:"
   
   # 连接池配置 (PostgreSQL 专用，SQLite 忽略)
-  max_open_conns: 50    # 最大打开连接数
-  max_idle_conns: 20    # 最大空闲连接数
+  max_open_conns: 50    # 最大打开连接数（多副本建议提高）
+  max_idle_conns: 20    # 最大空闲连接数（多副本建议提高）
   max_lifetime: 7200    # 连接最大生存时间 (秒)
 
+# Progress 服务配置（批量操作进度推送）
 progress:
-  enable_database: true  # 启用数据库模式, 多副本开启
+  enable_database: true  # ✅ 启用数据库存储，多副本环境必须开启
+  # 说明：将 progress 消息存储到 PostgreSQL，确保跨副本的消息一致性
 
 jwt:
   secret: "your-jwt-secret-change-in-production"
@@ -53,11 +55,52 @@ logging:
   level: "info"       # debug, info, warn, error
   structured: true   # 是否启用结构化日志
 
-# 监控配置
+# 节点异常监控配置
 monitoring:
-  enabled: true       # 是否启用监控指标端点
-  interval: 120       # 监控指标采集间隔 (秒)
-  path: "/metrics"    # 监控指标端点路径
+  enabled: true                 # 是否启用节点异常监控
+  interval: 120                 # 监控周期（秒），建议 60-300 秒
+  path: "/metrics"              # 监控指标端点路径
+  report_scheduler_enabled: true # 是否启用异常报告调度器
+  
+  # ⭐ 缓存配置（多副本部署必须启用 PostgreSQL 共享缓存）
+  # 
+  # ⚠️  重要说明（v2.16.5）：
+  # - 此配置仅用于"监控数据"缓存（异常统计、类型统计等）
+  # - ❌ 不影响"K8s 节点数据"缓存（节点列表、详情）
+  # - K8s 节点缓存当前使用内存缓存 + 短 TTL(10秒) 来缓解多副本一致性问题
+  # 
+  # 影响范围：
+  # ✅ 监控数据缓存：使用 PostgreSQL 共享缓存（完美的多副本一致性）
+  # ⚖️  K8s 节点缓存：使用内存缓存 + 短 TTL（10秒不一致窗口）
+  cache:
+    enabled: true     # ✅ 启用缓存（多副本环境必须开启）
+    type: "postgres"  # ⭐ 缓存类型: postgres（推荐，多副本必须）, memory（仅单副本）
+    
+    # PostgreSQL 缓存配置（多副本环境推荐）
+    # 优势（仅限监控数据）：
+    # - ✅ 所有副本共享同一缓存
+    # - ✅ 缓存清除对所有副本立即生效
+    # - ✅ 完美解决监控数据的多副本不一致问题
+    postgres:
+      table_name: "cache_entries"     # 缓存表名
+      cleanup_interval: 300           # 清理过期数据周期（秒），建议 300-600
+      use_unlogged: true              # 使用 UNLOGGED 表提升性能 2-3 倍
+                                      # 注意：数据库重启后缓存会丢失（可接受）
+    
+    # 缓存 TTL 配置（单位：秒）
+    # 说明：这些配置控制监控数据的缓存时间
+    ttl:
+      statistics: 300   # 统计数据缓存: 5分钟（总体统计）
+      active: 30        # 活跃异常缓存: 30秒（频繁更新的数据）
+      clusters: 600     # 集群列表缓存: 10分钟（变化较少）
+      type_stats: 300   # 类型统计缓存: 5分钟（分类统计）
+  
+  # 数据清理配置
+  cleanup:
+    enabled: true         # 是否启用自动清理
+    retention_days: 60    # 数据保留天数，默认90天
+    cleanup_time: "02:00" # 每天清理时间（格式：HH:MM）
+    batch_size: 1000      # 批量删除大小，避免长时间锁表
 
 # 健康检查配置  
 health:
@@ -67,12 +110,145 @@ health:
 # 微服务配置
 microservice:
   service_name: "kube-node-mgr"
-  instance_id: ""     # 实例ID，留空自动生成
+  instance_id: ""     # 实例ID，留空自动生成（每个副本会自动生成唯一ID）
   register_interval: 30 # 服务注册间隔 (秒)
-  
-# 环境变量覆盖说明:
+
+# ==============================================================================
+# 环境变量覆盖说明
+# ==============================================================================
 # - PORT: 覆盖 server.port
 # - LOG_FORMAT: 覆盖 logging.format (text/json)
 # - LOG_LEVEL: 覆盖 logging.level  
 # - DATABASE_URL: 覆盖完整数据库连接字符串
 # - SERVICE_NAME: 覆盖 microservice.service_name
+
+# ==============================================================================
+# 多副本部署配置说明 (v2.16.5+)
+# ==============================================================================
+#
+# 本配置文件专为多副本（multi-replica）部署环境设计
+# 
+# ⚠️  关键配置要求：
+#
+# 1. 数据库配置
+#    ✅ database.type: "postgres"     # 必须使用 PostgreSQL
+#    ❌ database.type: "sqlite"        # SQLite 不支持多副本
+#
+# 2. Progress 配置
+#    ✅ progress.enable_database: true # 必须启用数据库模式
+#    说明：确保批量操作进度消息跨副本一致
+#
+# 3. 缓存配置 ⭐ 最关键
+#    ✅ monitoring.cache.enabled: true    # 必须启用缓存
+#    ✅ monitoring.cache.type: "postgres" # 必须使用 PostgreSQL 共享缓存
+#    ❌ monitoring.cache.type: "memory"   # 内存缓存会导致数据不一致
+#
+# ⚠️  当前限制（v2.16.5）：
+#    monitoring.cache 配置只影响"监控数据缓存"（异常统计等）
+#    不影响"K8s 节点数据缓存"（节点列表、详情）
+#    
+#    解决方案：
+#    - 监控数据：PostgreSQL 共享缓存（完美一致性）✅
+#    - K8s 节点数据：内存缓存 + 短 TTL（10秒，缓解问题）⚖️
+#
+# 📊 为什么多副本需要共享缓存？
+#
+#    问题场景：
+#    - 用户在副本 A 执行批量禁止调度
+#    - 副本 A 清除了自己的缓存
+#    - 但副本 B 和 C 的缓存未清除！
+#    - 用户刷新页面，负载均衡器路由到副本 B
+#    - 副本 B 返回旧的缓存数据（显示"可调度"）
+#    - 用户再次刷新，路由到副本 A
+#    - 副本 A 返回新数据（显示"不可调度"）
+#    - 结果：用户看到数据反复变化 ❌
+#
+#    解决方案：
+#    - 使用 PostgreSQL 共享缓存
+#    - 所有副本共享同一份缓存数据
+#    - 任何副本清除缓存，其他副本立即生效
+#    - 用户无论访问哪个副本都看到一致的数据 ✅
+#
+# 🚀 部署步骤：
+#
+#    1. 确保 PostgreSQL 数据库已配置并可访问
+#    2. 启动第一个副本，自动创建缓存表
+#    3. 启动其他副本，连接到同一数据库
+#    4. 验证缓存表创建成功：
+#       SELECT * FROM cache_entries LIMIT 1;
+#
+# 📈 性能优化说明：
+#
+#    - use_unlogged: true
+#      优势：性能提升 2-3 倍
+#      劣势：数据库重启后缓存丢失（可接受，会自动重建）
+#
+#    - K8s 节点缓存 TTL（代码层面，backend/internal/cache/k8s_cache.go）
+#      listCacheTTL: 10秒    # 节点列表缓存（从 30秒缩短）
+#      detailCacheTTL: 1分钟  # 节点详情缓存（从 5分钟缩短）
+#      说明：短 TTL 缓解多副本不一致问题，在一致性和性能间取得平衡
+#
+#    - 监控数据缓存 TTL（配置文件，monitoring.cache.ttl）
+#      statistics: 5分钟     # 统计数据缓存
+#      active: 30秒          # 活跃异常缓存
+#      clusters: 10分钟      # 集群列表缓存
+#      说明：使用 PostgreSQL 共享缓存，完美的一致性
+#
+# 🏗️ 缓存架构图（v2.16.5）：
+#
+#    ┌──────────────────────────────────────────────────────────────┐
+#    │                     应用层 (多副本)                          │
+#    ├──────────────────────────────────────────────────────────────┤
+#    │                                                              │
+#    │  副本 A            副本 B            副本 C                  │
+#    │  ┌────────┐        ┌────────┐        ┌────────┐            │
+#    │  │ K8s节点│        │ K8s节点│        │ K8s节点│            │
+#    │  │ 缓存   │        │ 缓存   │        │ 缓存   │            │
+#    │  │ (内存) │        │ (内存) │        │ (内存) │            │
+#    │  │ TTL:10s│        │ TTL:10s│        │ TTL:10s│            │
+#    │  └────────┘        └────────┘        └────────┘            │
+#    │      ⚠️                ⚠️                ⚠️                  │
+#    │   不同步              不同步            不同步               │
+#    │                                                              │
+#    │  ┌─────────────────────────────────────────────┐            │
+#    │  │      监控数据缓存 (PostgreSQL)              │            │
+#    │  │      ✅ 所有副本共享                         │            │
+#    │  │      ✅ 完美一致性                           │            │
+#    │  └─────────────────────────────────────────────┘            │
+#    │                                                              │
+#    └──────────────────────────────────────────────────────────────┘
+#                               │
+#                               ▼
+#                      PostgreSQL 数据库
+#                      - 业务数据
+#                      - Progress 消息
+#                      - 监控数据缓存
+#
+# 🔍 监控指标：
+#
+#    - 缓存命中率：目标 > 80%
+#    - K8s API 调用频率：< 60 次/分钟/副本
+#    - 数据一致性：监控数据 100%，K8s 数据 > 90%（10秒窗口）
+#
+# 🚀 未来改进方向：
+#
+#    1. 短期（已完成）：
+#       ✅ 缩短 K8s 节点缓存 TTL 到 10秒
+#       ✅ 启用监控数据 PostgreSQL 共享缓存
+#       ✅ 启用 Progress PostgreSQL 共享存储
+#
+#    2. 中期（规划中）：
+#       - 重构 K8sCache 以支持 PostgreSQL 共享缓存
+#       - 或实现缓存失效通知机制（消息队列）
+#       - 统一缓存配置，所有缓存使用同一配置项
+#
+#    3. 长期（可选）：
+#       - 引入 Redis 作为专业的共享缓存服务
+#       - 实现缓存预热和智能刷新策略
+#
+# 📚 参考文档：
+#
+#    - docs/multi-replica-cache-optimization.md  （详细架构说明）
+#    - docs/CHANGELOG.md (v2.16.5)                （版本变更记录）
+#
+# ==============================================================================
