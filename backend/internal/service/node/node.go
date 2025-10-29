@@ -519,6 +519,15 @@ func (s *Service) BatchCordon(req BatchNodeRequest, userID uint) (map[string]int
 	errors := make(map[string]string)
 	successful := make([]string, 0)
 
+	// 批量操作完成后清除缓存，确保前端能获取到最新数据
+	defer func() {
+		if len(successful) > 0 {
+			// 清除整个集群的缓存
+			s.k8sSvc.InvalidateClusterCache(req.ClusterName)
+			s.logger.Infof("Invalidated cache for cluster %s after batch cordon operation", req.ClusterName)
+		}
+	}()
+
 	for _, nodeName := range req.Nodes {
 		cordonReq := CordonRequest{
 			ClusterName: req.ClusterName,
@@ -562,6 +571,15 @@ func (s *Service) BatchUncordon(req BatchNodeRequest, userID uint) (map[string]i
 	results := make(map[string]interface{})
 	errors := make(map[string]string)
 	successful := make([]string, 0)
+
+	// 批量操作完成后清除缓存，确保前端能获取到最新数据
+	defer func() {
+		if len(successful) > 0 {
+			// 清除整个集群的缓存
+			s.k8sSvc.InvalidateClusterCache(req.ClusterName)
+			s.logger.Infof("Invalidated cache for cluster %s after batch uncordon operation", req.ClusterName)
+		}
+	}()
 
 	for _, nodeName := range req.Nodes {
 		uncordonReq := CordonRequest{
@@ -663,6 +681,15 @@ func (s *Service) BatchDrain(req BatchNodeRequest, userID uint) (map[string]inte
 	successful := make([]string, 0)
 
 	s.logger.Infof("User %d initiating batch drain operation on %d nodes in cluster %s", userID, len(req.Nodes), req.ClusterName)
+
+	// 批量操作完成后清除缓存，确保前端能获取到最新数据
+	defer func() {
+		if len(successful) > 0 {
+			// 清除整个集群的缓存
+			s.k8sSvc.InvalidateClusterCache(req.ClusterName)
+			s.logger.Infof("Invalidated cache for cluster %s after batch drain operation", req.ClusterName)
+		}
+	}()
 
 	for _, nodeName := range req.Nodes {
 		drainReq := DrainRequest{
@@ -814,7 +841,7 @@ func (s *Service) BatchCordonWithProgress(req BatchNodeRequest, userID uint, tas
 		clusterSize, avgLatency, concurrency)
 
 	ctx := context.Background()
-	return s.progressSvc.ProcessBatchWithProgress(
+	err := s.progressSvc.ProcessBatchWithProgress(
 		ctx,
 		taskID,
 		"batch_cordon",
@@ -823,6 +850,14 @@ func (s *Service) BatchCordonWithProgress(req BatchNodeRequest, userID uint, tas
 		concurrency,
 		processor,
 	)
+
+	// 批量操作完成后清除缓存，确保前端能获取到最新数据
+	if err == nil {
+		s.k8sSvc.InvalidateClusterCache(req.ClusterName)
+		s.logger.Infof("Invalidated cache for cluster %s after batch cordon with progress", req.ClusterName)
+	}
+
+	return err
 }
 
 // BatchUncordonWithProgress 批量解除调度节点（带进度）
@@ -846,7 +881,7 @@ func (s *Service) BatchUncordonWithProgress(req BatchNodeRequest, userID uint, t
 		clusterSize, avgLatency, concurrency)
 
 	ctx := context.Background()
-	return s.progressSvc.ProcessBatchWithProgress(
+	err := s.progressSvc.ProcessBatchWithProgress(
 		ctx,
 		taskID,
 		"batch_uncordon",
@@ -855,6 +890,14 @@ func (s *Service) BatchUncordonWithProgress(req BatchNodeRequest, userID uint, t
 		concurrency,
 		processor,
 	)
+
+	// 批量操作完成后清除缓存，确保前端能获取到最新数据
+	if err == nil {
+		s.k8sSvc.InvalidateClusterCache(req.ClusterName)
+		s.logger.Infof("Invalidated cache for cluster %s after batch uncordon with progress", req.ClusterName)
+	}
+
+	return err
 }
 
 // BatchDrainWithProgress 批量驱逐节点（带进度）
@@ -878,7 +921,7 @@ func (s *Service) BatchDrainWithProgress(req BatchNodeRequest, userID uint, task
 		clusterSize, avgLatency, concurrency)
 
 	ctx := context.Background()
-	return s.progressSvc.ProcessBatchWithProgress(
+	err := s.progressSvc.ProcessBatchWithProgress(
 		ctx,
 		taskID,
 		"batch_drain",
@@ -887,6 +930,14 @@ func (s *Service) BatchDrainWithProgress(req BatchNodeRequest, userID uint, task
 		concurrency,
 		processor,
 	)
+
+	// 批量操作完成后清除缓存，确保前端能获取到最新数据
+	if err == nil {
+		s.k8sSvc.InvalidateClusterCache(req.ClusterName)
+		s.logger.Infof("Invalidated cache for cluster %s after batch drain with progress", req.ClusterName)
+	}
+
+	return err
 }
 
 // GetCordonHistory 获取节点的禁止调度历史

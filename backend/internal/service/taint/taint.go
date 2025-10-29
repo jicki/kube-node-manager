@@ -297,6 +297,16 @@ func (s *Service) BatchUpdateTaints(req BatchUpdateRequest, userID uint) error {
 func (s *Service) BatchUpdateTaintsWithProgress(req BatchUpdateRequest, userID uint, taskID string) error {
 	s.logger.Infof("Starting batch taint update for %d nodes in cluster %s", len(req.NodeNames), req.ClusterName)
 
+	// 标记是否有成功的操作，用于决定是否清除缓存
+	hasSuccess := false
+	defer func() {
+		// 批量操作完成后清除缓存，确保前端能获取到最新数据
+		if hasSuccess {
+			s.k8sSvc.InvalidateClusterCache(req.ClusterName)
+			s.logger.Infof("Invalidated cache for cluster %s after batch taint update", req.ClusterName)
+		}
+	}()
+
 	// 如果提供了taskID，则使用进度推送
 	if taskID != "" && s.progressSvc != nil {
 		processor := &TaintProcessor{
@@ -331,9 +341,11 @@ func (s *Service) BatchUpdateTaintsWithProgress(req BatchUpdateRequest, userID u
 			})
 			return err
 		}
+		hasSuccess = true // 异步操作假定有成功
 	} else {
 		// 传统的顺序处理方式（向后兼容）
 		var errors []string
+		successCount := 0
 		for _, nodeName := range req.NodeNames {
 			updateReq := UpdateTaintsRequest{
 				ClusterName: req.ClusterName,
@@ -346,7 +358,13 @@ func (s *Service) BatchUpdateTaintsWithProgress(req BatchUpdateRequest, userID u
 				errorMsg := fmt.Sprintf("Node %s: %v", nodeName, err)
 				errors = append(errors, errorMsg)
 				s.logger.Errorf("Failed to update taints for node %s: %v", nodeName, err)
+			} else {
+				successCount++
 			}
+		}
+
+		if successCount > 0 {
+			hasSuccess = true
 		}
 
 		if len(errors) > 0 {
@@ -1086,6 +1104,16 @@ func (s *Service) BatchCopyTaints(req BatchCopyTaintsRequest, userID uint) error
 func (s *Service) BatchCopyTaintsWithProgress(req BatchCopyTaintsRequest, userID uint, taskID string) error {
 	s.logger.Infof("Starting batch taint copy from node %s to %d target nodes in cluster %s", req.SourceNodeName, len(req.TargetNodeNames), req.ClusterName)
 
+	// 标记是否有成功的操作，用于决定是否清除缓存
+	hasSuccess := false
+	defer func() {
+		// 批量操作完成后清除缓存，确保前端能获取到最新数据
+		if hasSuccess {
+			s.k8sSvc.InvalidateClusterCache(req.ClusterName)
+			s.logger.Infof("Invalidated cache for cluster %s after batch taint copy", req.ClusterName)
+		}
+	}()
+
 	// 验证源节点存在并获取污点
 	sourceNode, err := s.k8sSvc.GetNode(req.ClusterName, req.SourceNodeName)
 	if err != nil {
@@ -1146,9 +1174,11 @@ func (s *Service) BatchCopyTaintsWithProgress(req BatchCopyTaintsRequest, userID
 			})
 			return err
 		}
+		hasSuccess = true // 异步操作假定有成功
 	} else {
 		// 传统的顺序处理方式（向后兼容）
 		var errors []string
+		successCount := 0
 		for _, targetNodeName := range req.TargetNodeNames {
 			copyReq := CopyTaintsRequest{
 				ClusterName:    req.ClusterName,
@@ -1160,7 +1190,13 @@ func (s *Service) BatchCopyTaintsWithProgress(req BatchCopyTaintsRequest, userID
 				errorMsg := fmt.Sprintf("Node %s: %v", targetNodeName, err)
 				errors = append(errors, errorMsg)
 				s.logger.Errorf("Failed to copy taints to node %s: %v", targetNodeName, err)
+			} else {
+				successCount++
 			}
+		}
+
+		if successCount > 0 {
+			hasSuccess = true
 		}
 
 		if len(errors) > 0 {

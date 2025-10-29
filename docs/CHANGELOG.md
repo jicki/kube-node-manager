@@ -7,6 +7,77 @@
 
 ---
 
+## [v2.16.2] - 2025-10-29
+
+### 🐛 Bug 修复
+
+#### 批量操作缓存刷新问题
+
+**问题描述**：
+- 批量禁止调度（Cordon）、批量解除调度（Uncordon）、批量标签更新、批量污点更新操作完成后，前端没有立即获取到最新的节点状态
+- 由于后端缓存未及时清除，前端刷新时可能获取到过时的缓存数据
+- 用户需要等待缓存过期（30秒）或强制刷新才能看到正确的节点状态
+
+**修复内容**：
+
+**节点调度操作**：
+1. ✅ **BatchCordon 缓存清除** - 批量禁止调度操作完成后立即清除集群缓存
+2. ✅ **BatchUncordon 缓存清除** - 批量解除调度操作完成后立即清除集群缓存
+3. ✅ **BatchCordonWithProgress 缓存清除** - 带进度的批量禁止调度完成后清除缓存
+4. ✅ **BatchUncordonWithProgress 缓存清除** - 带进度的批量解除调度完成后清除缓存
+5. ✅ **BatchDrain 缓存清除** - 批量驱逐操作完成后清除缓存
+6. ✅ **BatchDrainWithProgress 缓存清除** - 带进度的批量驱逐完成后清除缓存
+
+**标签管理操作**：
+7. ✅ **BatchUpdateLabels 缓存清除** - 批量更新标签操作完成后立即清除集群缓存
+8. ✅ **BatchUpdateLabelsWithProgress 缓存清除** - 带进度的批量更新标签完成后清除缓存
+
+**污点管理操作**：
+9. ✅ **BatchUpdateTaints 缓存清除** - 批量更新污点操作完成后立即清除集群缓存
+10. ✅ **BatchUpdateTaintsWithProgress 缓存清除** - 带进度的批量更新污点完成后清除缓存
+11. ✅ **BatchCopyTaints 缓存清除** - 批量复制污点操作完成后立即清除集群缓存
+12. ✅ **BatchCopyTaintsWithProgress 缓存清除** - 带进度的批量复制污点完成后清除缓存
+
+**基础设施**：
+13. ✅ **新增 InvalidateClusterCache 方法** - 在 k8s service 中提供集群缓存清除接口
+
+**修复代码**：
+```go
+// backend/internal/service/node/node.go
+func (s *Service) BatchCordon(req BatchNodeRequest, userID uint) (map[string]interface{}, error) {
+    // 批量操作完成后清除缓存，确保前端能获取到最新数据
+    defer func() {
+        if len(successful) > 0 {
+            s.k8sSvc.InvalidateClusterCache(req.ClusterName)
+            s.logger.Infof("Invalidated cache for cluster %s after batch cordon operation", req.ClusterName)
+        }
+    }()
+    
+    // ... 批量操作逻辑
+}
+
+// backend/internal/service/k8s/k8s.go
+func (s *Service) InvalidateClusterCache(clusterName string) {
+    s.cache.InvalidateCluster(clusterName)
+}
+```
+
+**修复效果**：
+- ✅ 批量操作完成后立即清除缓存
+- ✅ 前端刷新时获取最新的节点状态
+- ✅ 用户体验显著提升，无需等待或手动强制刷新
+- ✅ 适用于同步批量操作（≤5个节点）
+- ✅ 适用于异步批量操作（>5个节点）
+
+**影响范围**：
+- 后端节点服务层（node service）
+- 后端标签服务层（label service）
+- 后端污点服务层（taint service）
+- 后端 Kubernetes 服务层（k8s service）
+- 缓存管理层（cache）
+
+---
+
 ## [v2.16.1] - 2025-10-28
 
 ### 🐛 Bug 修复

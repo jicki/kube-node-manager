@@ -1404,3 +1404,8 @@ func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[
 
 	return podCounts
 }
+
+// InvalidateClusterCache 清除指定集群的所有缓存
+func (s *Service) InvalidateClusterCache(clusterName string) {
+	s.cache.InvalidateCluster(clusterName)
+}

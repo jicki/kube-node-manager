@@ -278,6 +278,16 @@ func (s *Service) BatchUpdateLabels(req BatchUpdateRequest, userID uint) error {
 func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID uint, taskID string) error {
 	s.logger.Infof("Starting batch update for %d nodes in cluster %s", len(req.NodeNames), req.ClusterName)
 
+	// 标记是否有成功的操作，用于决定是否清除缓存
+	hasSuccess := false
+	defer func() {
+		// 批量操作完成后清除缓存，确保前端能获取到最新数据
+		if hasSuccess {
+			s.k8sSvc.InvalidateClusterCache(req.ClusterName)
+			s.logger.Infof("Invalidated cache for cluster %s after batch label update", req.ClusterName)
+		}
+	}()
+
 	// 如果提供了taskID，则使用进度推送
 	if taskID != "" && s.progressSvc != nil {
 		processor := &LabelProcessor{
@@ -312,9 +322,11 @@ func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID u
 			})
 			return err
 		}
+		hasSuccess = true // 异步操作假定有成功
 	} else {
 		// 传统的顺序处理方式（向后兼容）
 		var errors []string
+		successCount := 0
 		for i, nodeName := range req.NodeNames {
 			updateReq := UpdateLabelsRequest{
 				ClusterName: req.ClusterName,
@@ -328,6 +340,7 @@ func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID u
 				errors = append(errors, errorMsg)
 				s.logger.Errorf("Failed to update labels for node %s: %v", nodeName, err)
 			} else {
+				successCount++
 				s.logger.Infof("Successfully updated labels for node %s (%d/%d)", nodeName, i+1, len(req.NodeNames))
 			}
 
@@ -335,6 +348,10 @@ func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID u
 			if i < len(req.NodeNames)-1 {
 				time.Sleep(50 * time.Millisecond)
 			}
+		}
+
+		if successCount > 0 {
+			hasSuccess = true
 		}
 
 		if len(errors) > 0 {
