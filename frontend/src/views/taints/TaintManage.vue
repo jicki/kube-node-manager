@@ -864,8 +864,10 @@ const fetchNodes = async (forceRefresh = false) => {
     })
     console.log('[污点管理] API响应:', response)
     
-    // 后端返回格式: { code, message, data: [...] } - data直接是节点数组
-    const nodes = response.data.data || []
+    // 处理可能的分页结构：res.data.list 或 res.data
+    const nodeData = response.data.data || response.data || {}
+    const nodeList = nodeData.list || nodeData || []
+    const nodes = Array.isArray(nodeList) ? nodeList : []
     console.log('[污点管理] 解析的节点数据:', nodes)
     console.log('[污点管理] 节点数量:', nodes.length)
     
