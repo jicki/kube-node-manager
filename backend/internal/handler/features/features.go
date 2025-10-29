@@ -1,6 +1,7 @@
 package features
 
 import (
+	"fmt"
 	"net/http"
 
 	"kube-node-manager/internal/service/features"
@@ -88,7 +89,13 @@ func (h *Handler) UpdateAutomationEnabled(c *gin.Context) {
 
 	// 检查用户权限：只有 admin 可以修改功能开关
 	userRole, _ := c.Get("user_role")
-	if userRole != "admin" {
+	roleStr := ""
+	if role, ok := userRole.(string); ok {
+		roleStr = role
+	} else {
+		roleStr = fmt.Sprintf("%v", userRole)
+	}
+	if roleStr != "admin" {
 		c.JSON(http.StatusForbidden, Response{
 			Code:    http.StatusForbidden,
 			Message: "Only admin can modify feature settings",
@@ -142,7 +149,13 @@ func (h *Handler) UpdateAnsibleConfig(c *gin.Context) {
 
 	// 检查用户权限
 	userRole, _ := c.Get("user_role")
-	if userRole != "admin" {
+	roleStr := ""
+	if role, ok := userRole.(string); ok {
+		roleStr = role
+	} else {
+		roleStr = fmt.Sprintf("%v", userRole)
+	}
+	if roleStr != "admin" {
 		c.JSON(http.StatusForbidden, Response{
 			Code:    http.StatusForbidden,
 			Message: "Only admin can modify feature settings",
@@ -196,7 +209,13 @@ func (h *Handler) UpdateSSHConfig(c *gin.Context) {
 
 	// 检查用户权限
 	userRole, _ := c.Get("user_role")
-	if userRole != "admin" {
+	roleStr := ""
+	if role, ok := userRole.(string); ok {
+		roleStr = role
+	} else {
+		roleStr = fmt.Sprintf("%v", userRole)
+	}
+	if roleStr != "admin" {
 		c.JSON(http.StatusForbidden, Response{
 			Code:    http.StatusForbidden,
 			Message: "Only admin can modify feature settings",

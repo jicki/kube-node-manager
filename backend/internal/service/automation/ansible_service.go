@@ -350,6 +350,7 @@ func (as *AnsibleService) InitializeBuiltinPlaybooks() error {
         state: latest
       when: ansible_os_family == "RedHat"`,
 			Category:  "system",
+			Variables: "{}",
 			IsBuiltin: true,
 			IsActive:  true,
 		},
@@ -373,6 +374,7 @@ func (as *AnsibleService) InitializeBuiltinPlaybooks() error {
         timeout: 30
       ignore_errors: yes`,
 			Category:  "docker",
+			Variables: "{}",
 			IsBuiltin: true,
 			IsActive:  true,
 		},
@@ -396,6 +398,7 @@ func (as *AnsibleService) InitializeBuiltinPlaybooks() error {
         state: latest
       when: ansible_os_family == "RedHat"`,
 			Category:  "kernel",
+			Variables: "{}",
 			IsBuiltin: true,
 			IsActive:  true,
 		},
@@ -420,6 +423,7 @@ func (as *AnsibleService) InitializeBuiltinPlaybooks() error {
         security: yes
       when: ansible_os_family == "RedHat"`,
 			Category:  "security",
+			Variables: "{}",
 			IsBuiltin: true,
 			IsActive:  true,
 		},
