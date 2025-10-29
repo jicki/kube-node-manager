@@ -21,15 +21,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&NodeAnomaly{},
 		&AnomalyReportConfig{},
 		&CacheEntry{},
-		// 自动化相关模型
-		&AnsiblePlaybook{},
-		&AnsibleExecution{},
-		&SSHCredential{},
-		&Script{},
-		&ScriptExecution{},
-		&Workflow{},
-		&WorkflowExecution{},
-		&AutomationConfig{},
 	)
 }
 

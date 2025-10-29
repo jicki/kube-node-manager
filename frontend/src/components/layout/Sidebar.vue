@@ -123,34 +123,6 @@
         </el-menu-item>
       </el-sub-menu>
 
-      <!-- 自动化 (只在启用时显示) -->
-      <el-sub-menu v-if="isAutomationEnabled" index="automation">
-        <template #title>
-          <el-icon><Setting /></el-icon>
-          <span>自动化</span>
-        </template>
-
-        <el-menu-item index="/automation/ansible">
-          <el-icon><DocumentCopy /></el-icon>
-          <template #title>Ansible</template>
-        </el-menu-item>
-
-        <el-menu-item index="/automation/ssh">
-          <el-icon><Connection /></el-icon>
-          <template #title>SSH 命令</template>
-        </el-menu-item>
-
-        <el-menu-item index="/automation/scripts">
-          <el-icon><DocumentCopy /></el-icon>
-          <template #title>脚本管理</template>
-        </el-menu-item>
-
-        <el-menu-item index="/automation/workflows">
-          <el-icon><List /></el-icon>
-          <template #title>工作流</template>
-        </el-menu-item>
-      </el-sub-menu>
-
       <!-- 系统配置 -->
       <el-sub-menu index="system-config">
         <template #title>
@@ -199,14 +171,6 @@
           <el-icon><DataAnalysis /></el-icon>
           <template #title>分析报告</template>
         </el-menu-item>
-
-        <el-menu-item
-          v-if="hasPermission('admin')"
-          index="/automation-settings"
-        >
-          <el-icon><Setting /></el-icon>
-          <template #title>自动化配置</template>
-        </el-menu-item>
       </el-sub-menu>
     </el-menu>
     
@@ -227,7 +191,6 @@ import { useAuthStore } from '@/store/modules/auth'
 import { useClusterStore } from '@/store/modules/cluster'
 import { useGitlabStore } from '@/store/modules/gitlab'
 import { useFeishuStore } from '@/store/modules/feishu'
-import { useFeaturesStore } from '@/store/modules/features'
 import {
   Monitor,
   CollectionTag,
@@ -255,7 +218,6 @@ const authStore = useAuthStore()
 const clusterStore = useClusterStore()
 const gitlabStore = useGitlabStore()
 const feishuStore = useFeishuStore()
-const featuresStore = useFeaturesStore()
 
 // 当前选中的菜单
 const activeMenu = computed(() => route.path)
@@ -270,7 +232,7 @@ const defaultOpeneds = computed(() => {
     openedMenus.push('node-management')
   }
 
-  if (['/clusters', '/audit', '/users', '/gitlab-settings', '/feishu-settings', '/analytics-report-settings', '/automation-settings'].includes(path)) {
+  if (['/clusters', '/audit', '/users', '/gitlab-settings', '/feishu-settings'].includes(path)) {
     openedMenus.push('system-config')
   }
 
@@ -282,10 +244,6 @@ const defaultOpeneds = computed(() => {
     openedMenus.push('feishu')
   }
 
-  if (path.startsWith('/automation/')) {
-    openedMenus.push('automation')
-  }
-
   return openedMenus
 })
 
@@ -294,9 +252,6 @@ const isGitlabEnabled = computed(() => gitlabStore.isEnabled)
 
 // Feishu enabled status
 const isFeishuEnabled = computed(() => feishuStore.isEnabled)
-
-// Automation enabled status
-const isAutomationEnabled = computed(() => featuresStore.isAutomationEnabled)
 
 // 集群列表和当前集群
 const clusters = computed(() => clusterStore.clusters)

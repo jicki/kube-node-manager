@@ -190,7 +190,4 @@ const nodeApi = {
   }
 }
 
-// 命名导出（用于自动化页面）
-export const listNodes = nodeApi.getNodes
-
 export default nodeApi

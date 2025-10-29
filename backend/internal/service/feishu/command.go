@@ -54,9 +54,6 @@ func NewCommandRouter() *CommandRouter {
 	router.Register("label", &LabelCommandHandler{})
 	router.Register("taint", &TaintCommandHandler{})
 	router.Register("quick", &QuickCommandHandler{})
-	// TODO: 暂时隐藏 automation 命令，后续需要时取消注释
-	// router.Register("automation", &AutomationCommandHandler{})
-	// router.Register("auto", &AutomationCommandHandler{}) // 别名
 
 	return router
 }
