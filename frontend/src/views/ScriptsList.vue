@@ -60,8 +60,11 @@ const fetchScripts = async () => {
   loading.value = true
   try {
     const res = await listScripts({ page: pagination.page, size: pagination.size })
-    scripts.value = res.data || []
-    pagination.total = res.total || 0
+    // 处理可能的嵌套结构：res.data.list 或 res.data
+    const scriptData = res.data || {}
+    const scriptList = scriptData.list || scriptData || []
+    scripts.value = Array.isArray(scriptList) ? scriptList : []
+    pagination.total = res.total || scriptData.total || 0
   } catch (error) {
     ElMessage.error('获取脚本列表失败')
   } finally {
