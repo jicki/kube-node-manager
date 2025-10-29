@@ -85,4 +85,7 @@ const clusterApi = {
   }
 }
 
+// 命名导出（用于自动化页面）
+export const listClusters = clusterApi.getClusters
+
 export default clusterApi
