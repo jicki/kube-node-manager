@@ -337,6 +337,7 @@ type InventoryCreateRequest struct {
 type InventoryUpdateRequest struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
+	SSHKeyID    *uint                  `json:"ssh_key_id"` // 关联的 SSH 密钥 ID
 	Content     string                 `json:"content"`
 	HostsData   map[string]interface{} `json:"hosts_data"`
 }
@@ -346,6 +347,7 @@ type GenerateInventoryRequest struct {
 	Name        string            `json:"name" binding:"required"`
 	Description string            `json:"description"`
 	ClusterID   uint              `json:"cluster_id" binding:"required"`
+	SSHKeyID    *uint             `json:"ssh_key_id"`  // 关联的 SSH 密钥 ID
 	NodeLabels  map[string]string `json:"node_labels"` // 用于筛选节点的标签
 }
 

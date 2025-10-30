@@ -60,7 +60,7 @@ func (s *InventoryService) ListInventories(req model.InventoryListRequest, userI
 	}
 
 	// 查询数据（包含关联）
-	if err := query.Preload("Cluster").Preload("User").Order("created_at DESC").Find(&inventories).Error; err != nil {
+	if err := query.Preload("Cluster").Preload("User").Preload("SSHKey").Order("created_at DESC").Find(&inventories).Error; err != nil {
 		s.logger.Errorf("Failed to list inventories: %v", err)
 		return nil, 0, fmt.Errorf("failed to list inventories: %w", err)
 	}
@@ -72,7 +72,7 @@ func (s *InventoryService) ListInventories(req model.InventoryListRequest, userI
 func (s *InventoryService) GetInventory(id uint) (*model.AnsibleInventory, error) {
 	var inventory model.AnsibleInventory
 
-	if err := s.db.Preload("Cluster").Preload("User").First(&inventory, id).Error; err != nil {
+	if err := s.db.Preload("Cluster").Preload("User").Preload("SSHKey").First(&inventory, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("inventory not found")
 		}
@@ -106,6 +106,7 @@ func (s *InventoryService) CreateInventory(req model.InventoryCreateRequest, use
 		Description: req.Description,
 		SourceType:  req.SourceType,
 		ClusterID:   req.ClusterID,
+		SSHKeyID:    req.SSHKeyID, // 关联 SSH 密钥
 		Content:     req.Content,
 		HostsData:   req.HostsData,
 		UserID:      userID,
@@ -150,6 +151,11 @@ func (s *InventoryService) UpdateInventory(id uint, req model.InventoryUpdateReq
 	// 更新字段
 	if req.Description != "" {
 		inventory.Description = req.Description
+	}
+
+	// 更新 SSH 密钥关联
+	if req.SSHKeyID != nil {
+		inventory.SSHKeyID = req.SSHKeyID
 	}
 
 	if req.Content != "" {
@@ -270,6 +276,7 @@ func (s *InventoryService) GenerateFromK8s(req model.GenerateInventoryRequest, u
 		Description: req.Description,
 		SourceType:  model.InventorySourceK8s,
 		ClusterID:   &req.ClusterID,
+		SSHKeyID:    req.SSHKeyID, // 关联 SSH 密钥
 		Content:     content,
 		HostsData:   hostsData,
 		UserID:      userID,
