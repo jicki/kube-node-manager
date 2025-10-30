@@ -282,11 +282,17 @@ func (s *Service) ListNodesWithCache(clusterName string, forceRefresh bool) ([]N
 			smartCache := rtMgr.GetSmartCache()
 			if smartCache != nil {
 				type SmartCache interface {
-					ListNodes(clusterName string) ([]NodeInfo, error)
+					GetNodes(clusterName string) ([]*corev1.Node, bool)
 				}
 				if sc, ok := smartCache.(SmartCache); ok {
-					nodes, err := sc.ListNodes(clusterName)
-					if err == nil && len(nodes) > 0 {
+					k8sNodes, found := sc.GetNodes(clusterName)
+					if found && len(k8sNodes) > 0 {
+						// 转换 corev1.Node 切片为 NodeInfo 切片
+						nodes := make([]NodeInfo, 0, len(k8sNodes))
+						for _, k8sNode := range k8sNodes {
+							nodeInfo := s.nodeToNodeInfo(k8sNode)
+							nodes = append(nodes, nodeInfo)
+						}
 						s.logger.Infof("Retrieved %d nodes from smart cache for cluster %s", len(nodes), clusterName)
 						return nodes, nil
 					}
@@ -413,13 +419,15 @@ func (s *Service) GetNodeWithCache(clusterName, nodeName string, forceRefresh bo
 			smartCache := rtMgr.GetSmartCache()
 			if smartCache != nil {
 				type SmartCache interface {
-					GetNode(clusterName, nodeName string) (*NodeInfo, error)
+					GetNode(clusterName, nodeName string) (*corev1.Node, bool)
 				}
 				if sc, ok := smartCache.(SmartCache); ok {
-					node, err := sc.GetNode(clusterName, nodeName)
-					if err == nil && node != nil {
+					k8sNode, found := sc.GetNode(clusterName, nodeName)
+					if found && k8sNode != nil {
+						// 转换 corev1.Node 为 NodeInfo
+						nodeInfo := s.nodeToNodeInfo(k8sNode)
 						s.logger.Infof("Retrieved node %s from smart cache for cluster %s", nodeName, clusterName)
-						return node, nil
+						return &nodeInfo, nil
 					}
 					// SmartCache 未就绪或无数据，回退到传统方式
 					s.logger.Infof("SmartCache not ready for node %s/%s, falling back to API", clusterName, nodeName)
