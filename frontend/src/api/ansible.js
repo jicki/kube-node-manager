@@ -227,6 +227,72 @@ export function refreshInventory(id) {
   })
 }
 
+// SSH 密钥管理 API
+
+/**
+ * 列出 SSH 密钥
+ */
+export function listSSHKeys(params) {
+  return request({
+    url: '/api/v1/ansible/ssh-keys',
+    method: 'get',
+    params
+  })
+}
+
+/**
+ * 获取 SSH 密钥详情
+ */
+export function getSSHKey(id) {
+  return request({
+    url: `/api/v1/ansible/ssh-keys/${id}`,
+    method: 'get'
+  })
+}
+
+/**
+ * 创建 SSH 密钥
+ */
+export function createSSHKey(data) {
+  return request({
+    url: '/api/v1/ansible/ssh-keys',
+    method: 'post',
+    data
+  })
+}
+
+/**
+ * 更新 SSH 密钥
+ */
+export function updateSSHKey(id, data) {
+  return request({
+    url: `/api/v1/ansible/ssh-keys/${id}`,
+    method: 'put',
+    data
+  })
+}
+
+/**
+ * 删除 SSH 密钥
+ */
+export function deleteSSHKey(id) {
+  return request({
+    url: `/api/v1/ansible/ssh-keys/${id}`,
+    method: 'delete'
+  })
+}
+
+/**
+ * 测试 SSH 连接
+ */
+export function testSSHConnection(id, data) {
+  return request({
+    url: `/api/v1/ansible/ssh-keys/${id}/test`,
+    method: 'post',
+    data
+  })
+}
+
 // WebSocket 连接
 
 /**

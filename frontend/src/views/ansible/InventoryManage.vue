@@ -112,26 +112,27 @@
       :close-on-click-modal="false"
     >
       <el-form :model="inventoryForm" label-width="120px">
-        <el-form-item label="清单名称" required>
-          <el-input v-model="inventoryForm.name" placeholder="请输入清单名称" />
+        <el-form-item label="清单名称" :required="!isViewMode">
+          <el-input v-model="inventoryForm.name" placeholder="请输入清单名称" :disabled="isViewMode" />
         </el-form-item>
         <el-form-item label="描述">
-          <el-input v-model="inventoryForm.description" type="textarea" :rows="3" placeholder="请输入描述" />
+          <el-input v-model="inventoryForm.description" type="textarea" :rows="3" placeholder="请输入描述" :disabled="isViewMode" />
         </el-form-item>
-        <el-form-item label="清单内容" required>
+        <el-form-item label="清单内容" :required="!isViewMode">
           <el-input 
             v-model="inventoryForm.content" 
             type="textarea" 
             :rows="15"
             placeholder="请输入 Ansible Inventory 内容（INI 格式）&#10;&#10;示例：&#10;[webservers]&#10;192.168.1.10 ansible_user=root&#10;192.168.1.11 ansible_user=root&#10;&#10;[dbservers]&#10;192.168.1.20 ansible_user=root" 
             style="font-family: 'Courier New', monospace; font-size: 13px;"
+            :disabled="isViewMode"
           />
         </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
+          <el-button @click="dialogVisible = false">{{ isViewMode ? '关闭' : '取消' }}</el-button>
+          <el-button v-if="!isViewMode" type="primary" @click="handleSave" :loading="saving">保存</el-button>
         </div>
       </template>
     </el-dialog>
@@ -153,6 +154,7 @@ const generateDialogVisible = ref(false)
 const dialogTitle = ref('')
 const generating = ref(false)
 const saving = ref(false)
+const isViewMode = ref(false) // 是否为查看模式（只读）
 
 const queryParams = reactive({
   page: 1,
@@ -236,6 +238,7 @@ const handleGenerate = async () => {
 }
 
 const showCreateDialog = () => {
+  isViewMode.value = false // 创建模式，可编辑
   dialogTitle.value = '手动创建清单'
   Object.assign(inventoryForm, {
     id: null,
@@ -281,6 +284,7 @@ const handleSave = async () => {
 }
 
 const handleView = async (row) => {
+  isViewMode.value = true // 查看模式，只读
   dialogTitle.value = '查看清单'
   try {
     const res = await ansibleAPI.getInventory(row.id)
@@ -296,6 +300,7 @@ const handleView = async (row) => {
 }
 
 const handleEdit = async (row) => {
+  isViewMode.value = false // 编辑模式，可编辑
   dialogTitle.value = '编辑清单'
   try {
     const res = await ansibleAPI.getInventory(row.id)

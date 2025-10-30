@@ -130,6 +130,12 @@ const router = createRouter({
           name: 'AnsibleInventories',
           component: () => import('@/views/ansible/InventoryManage.vue'),
           meta: { title: '主机清单', icon: 'List', requiresAuth: true }
+        },
+        {
+          path: 'ansible-ssh-keys',
+          name: 'AnsibleSSHKeys',
+          component: () => import('@/views/ansible/SSHKeyManage.vue'),
+          meta: { title: 'SSH 密钥', icon: 'Key', requiresAuth: true, permission: 'admin' }
         }
       ]
     },

@@ -144,6 +144,11 @@
           <el-icon><Menu /></el-icon>
           <template #title>主机清单</template>
         </el-menu-item>
+
+        <el-menu-item index="/ansible-ssh-keys">
+          <el-icon><Key /></el-icon>
+          <template #title>SSH 密钥</template>
+        </el-menu-item>
       </el-sub-menu>
 
       <!-- 系统配置 -->
@@ -230,7 +235,8 @@ import {
   DataAnalysis,
   Operation,
   Document,
-  Menu
+  Menu,
+  Key
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -270,7 +276,7 @@ const defaultOpeneds = computed(() => {
     openedMenus.push('feishu')
   }
 
-  if (['/ansible-tasks', '/ansible-templates', '/ansible-inventories'].includes(path)) {
+  if (['/ansible-tasks', '/ansible-templates', '/ansible-inventories', '/ansible-ssh-keys'].includes(path)) {
     openedMenus.push('ansible')
   }
 

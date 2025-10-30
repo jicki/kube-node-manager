@@ -51,29 +51,30 @@
       :close-on-click-modal="false"
     >
       <el-form :model="templateForm" label-width="120px">
-        <el-form-item label="模板名称" required>
-          <el-input v-model="templateForm.name" placeholder="请输入模板名称" />
+        <el-form-item label="模板名称" :required="!isViewMode">
+          <el-input v-model="templateForm.name" placeholder="请输入模板名称" :disabled="isViewMode" />
         </el-form-item>
         <el-form-item label="描述">
-          <el-input v-model="templateForm.description" type="textarea" :rows="3" placeholder="请输入描述" />
+          <el-input v-model="templateForm.description" type="textarea" :rows="3" placeholder="请输入描述" :disabled="isViewMode" />
         </el-form-item>
         <el-form-item label="标签">
-          <el-input v-model="templateForm.tags" placeholder="多个标签用逗号分隔" />
+          <el-input v-model="templateForm.tags" placeholder="多个标签用逗号分隔" :disabled="isViewMode" />
         </el-form-item>
-        <el-form-item label="Playbook 内容" required>
+        <el-form-item label="Playbook 内容" :required="!isViewMode">
           <el-input 
             v-model="templateForm.playbook_content" 
             type="textarea" 
             :rows="15"
             placeholder="请输入 Ansible Playbook YAML 内容&#10;&#10;示例：&#10;---&#10;- name: 示例 Playbook&#10;  hosts: all&#10;  tasks:&#10;    - name: Ping 测试&#10;      ping:" 
             style="font-family: 'Courier New', monospace; font-size: 13px;"
+            :disabled="isViewMode"
           />
         </el-form-item>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
+          <el-button @click="dialogVisible = false">{{ isViewMode ? '关闭' : '取消' }}</el-button>
+          <el-button v-if="!isViewMode" type="primary" @click="handleSave" :loading="saving">保存</el-button>
         </div>
       </template>
     </el-dialog>
@@ -93,6 +94,7 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const saving = ref(false)
 const isEdit = ref(false)
+const isViewMode = ref(false) // 是否为查看模式（只读）
 
 const queryParams = reactive({
   page: 1,
@@ -127,6 +129,7 @@ const loadTemplates = async () => {
 
 const showCreateDialog = () => {
   isEdit.value = false
+  isViewMode.value = false // 创建模式，可编辑
   dialogTitle.value = '创建模板'
   Object.assign(templateForm, {
     id: null,
@@ -139,6 +142,7 @@ const showCreateDialog = () => {
 }
 
 const handleView = (row) => {
+  isViewMode.value = true // 查看模式，只读
   dialogTitle.value = '查看模板'
   Object.assign(templateForm, row)
   dialogVisible.value = true
@@ -146,6 +150,7 @@ const handleView = (row) => {
 
 const handleEdit = (row) => {
   isEdit.value = true
+  isViewMode.value = false // 编辑模式，可编辑
   dialogTitle.value = '编辑模板'
   Object.assign(templateForm, row)
   dialogVisible.value = true
