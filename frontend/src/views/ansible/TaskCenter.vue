@@ -32,8 +32,7 @@
     <el-card style="margin-top: 20px">
       <el-form :inline="true" :model="queryParams">
         <el-form-item label="状态">
-          <el-select v-model="queryParams.status" placeholder="全部" clearable @change="handleQuery">
-            <el-option label="全部" value="" />
+          <el-select v-model="queryParams.status" placeholder="全部" clearable style="width: 120px">
             <el-option label="待执行" value="pending" />
             <el-option label="运行中" value="running" />
             <el-option label="成功" value="success" />
@@ -42,7 +41,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="关键字">
-          <el-input v-model="queryParams.keyword" placeholder="搜索任务名称" clearable @keyup.enter="handleQuery" />
+          <el-input v-model="queryParams.keyword" placeholder="搜索任务名称" clearable style="width: 200px" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleQuery">查询</el-button>
@@ -57,7 +56,25 @@
 
     <!-- 任务列表 -->
     <el-card style="margin-top: 20px">
-      <el-table :data="tasks" v-loading="loading" style="width: 100%">
+      <div style="margin-bottom: 16px">
+        <el-button 
+          type="danger" 
+          :disabled="selectedTasks.length === 0"
+          @click="handleBatchDelete"
+        >
+          批量删除 ({{ selectedTasks.length }})
+        </el-button>
+        <el-text type="info" size="small" style="margin-left: 16px">
+          提示：只能删除已完成、失败或取消的任务
+        </el-text>
+      </div>
+      <el-table 
+        :data="tasks" 
+        v-loading="loading" 
+        style="width: 100%"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="55" :selectable="canSelectTask" />
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="任务名称" min-width="200" />
         <el-table-column label="状态" width="120">
@@ -90,7 +107,7 @@
             {{ row.duration ? `${row.duration}秒` : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="250" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleViewLogs(row)">查看日志</el-button>
             <el-button 
@@ -108,6 +125,14 @@
               v-if="row.status === 'failed'"
             >
               重试
+            </el-button>
+            <el-button 
+              size="small" 
+              type="danger" 
+              @click="handleDelete(row)" 
+              v-if="row.status !== 'running' && row.status !== 'pending'"
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -202,6 +227,7 @@ const tasks = ref([])
 const total = ref(0)
 const loading = ref(false)
 const statistics = ref({})
+const selectedTasks = ref([])
 
 const queryParams = reactive({
   page: 1,
@@ -371,6 +397,78 @@ const handleRetry = async (row) => {
   } catch (error) {
     ElMessage.error('重试任务失败: ' + error.message)
   }
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除任务 "${row.name}" 吗？此操作不可恢复。`,
+      '删除确认',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    await ansibleAPI.deleteTask(row.id)
+    ElMessage.success('删除成功')
+    loadTasks()
+    loadStatistics()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败: ' + (error.message || '未知错误'))
+    }
+  }
+}
+
+const handleBatchDelete = async () => {
+  if (selectedTasks.value.length === 0) {
+    ElMessage.warning('请先选择要删除的任务')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedTasks.value.length} 个任务吗？此操作不可恢复。`,
+      '批量删除确认',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    const ids = selectedTasks.value.map(task => task.id)
+    const res = await ansibleAPI.batchDeleteTasks(ids)
+    
+    const successCount = res.data?.success_count || 0
+    const failedCount = res.data?.failed_count || 0
+    
+    if (failedCount > 0) {
+      ElMessage.warning(`成功删除 ${successCount} 个任务，${failedCount} 个任务删除失败`)
+      console.error('删除失败的任务:', res.data?.errors)
+    } else {
+      ElMessage.success(`成功删除 ${successCount} 个任务`)
+    }
+    
+    selectedTasks.value = []
+    loadTasks()
+    loadStatistics()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量删除失败: ' + (error.message || '未知错误'))
+    }
+  }
+}
+
+const handleSelectionChange = (selection) => {
+  selectedTasks.value = selection
+}
+
+const canSelectTask = (row) => {
+  // 只能选择已完成、失败或取消的任务
+  return row.status !== 'running' && row.status !== 'pending'
 }
 
 const copyLogs = async () => {

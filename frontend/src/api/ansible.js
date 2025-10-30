@@ -55,6 +55,27 @@ export function retryTask(id) {
 }
 
 /**
+ * 删除任务
+ */
+export function deleteTask(id) {
+  return request({
+    url: `/api/v1/ansible/tasks/${id}`,
+    method: 'delete'
+  })
+}
+
+/**
+ * 批量删除任务
+ */
+export function batchDeleteTasks(ids) {
+  return request({
+    url: '/api/v1/ansible/tasks/batch-delete',
+    method: 'post',
+    data: { ids }
+  })
+}
+
+/**
  * 获取任务日志
  */
 export function getTaskLogs(id, params) {

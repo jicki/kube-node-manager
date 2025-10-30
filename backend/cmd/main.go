@@ -335,6 +335,8 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.GET("/tasks", handlers.Ansible.ListTasks)
 		ansible.GET("/tasks/:id", handlers.Ansible.GetTask)
 		ansible.POST("/tasks", handlers.Ansible.CreateTask)
+		ansible.DELETE("/tasks/:id", handlers.Ansible.DeleteTask)
+		ansible.POST("/tasks/batch-delete", handlers.Ansible.DeleteTasks)
 		ansible.POST("/tasks/:id/cancel", handlers.Ansible.CancelTask)
 		ansible.POST("/tasks/:id/retry", handlers.Ansible.RetryTask)
 		ansible.GET("/tasks/:id/logs", handlers.Ansible.GetTaskLogs)

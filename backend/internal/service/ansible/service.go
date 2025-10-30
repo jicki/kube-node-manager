@@ -411,6 +411,65 @@ func (s *Service) validateTaskCreateRequest(req model.TaskCreateRequest) error {
 	return nil
 }
 
+// DeleteTask 删除单个任务
+func (s *Service) DeleteTask(taskID uint, userID uint, username string) error {
+	// 获取任务
+	task, err := s.GetTask(taskID)
+	if err != nil {
+		return err
+	}
+
+	// 检查任务状态 - 只能删除非运行中的任务
+	if task.Status == model.AnsibleTaskStatusRunning || task.Status == model.AnsibleTaskStatusPending {
+		return fmt.Errorf("cannot delete running or pending task")
+	}
+
+	// 删除任务（GORM 会级联删除关联的日志）
+	if err := s.db.Delete(task).Error; err != nil {
+		s.logger.Errorf("Failed to delete task %d: %v", taskID, err)
+		return fmt.Errorf("failed to delete task: %w", err)
+	}
+
+	s.logger.Infof("Task %d (%s) deleted by user %s (ID: %d)", taskID, task.Name, username, userID)
+	return nil
+}
+
+// DeleteTasks 批量删除任务
+func (s *Service) DeleteTasks(taskIDs []uint, userID uint, username string) (int, []string, error) {
+	var successCount int
+	var errors []string
+
+	for _, taskID := range taskIDs {
+		// 获取任务
+		task, err := s.GetTask(taskID)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Task %d: %v", taskID, err))
+			continue
+		}
+
+		// 检查任务状态 - 只能删除非运行中的任务
+		if task.Status == model.AnsibleTaskStatusRunning || task.Status == model.AnsibleTaskStatusPending {
+			errors = append(errors, fmt.Sprintf("Task %d: cannot delete running or pending task", taskID))
+			continue
+		}
+
+		// 删除任务
+		if err := s.db.Delete(task).Error; err != nil {
+			s.logger.Errorf("Failed to delete task %d: %v", taskID, err)
+			errors = append(errors, fmt.Sprintf("Task %d: %v", taskID, err))
+			continue
+		}
+
+		successCount++
+	}
+
+	if successCount > 0 {
+		s.logger.Infof("Deleted %d tasks by user %s (ID: %d)", successCount, username, userID)
+	}
+
+	return successCount, errors, nil
+}
+
 // CleanupOldTasks 清理旧任务（可定期执行）
 func (s *Service) CleanupOldTasks(daysToKeep int) error {
 	// 删除指定天数前的已完成任务

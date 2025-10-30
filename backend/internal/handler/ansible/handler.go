@@ -1,6 +1,7 @@
 package ansible
 
 import (
+	"fmt"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/ansible"
 	"kube-node-manager/pkg/logger"
@@ -313,5 +314,110 @@ func (h *Handler) GetStatistics(c *gin.Context) {
 		"message": "Success",
 		"data":    stats,
 	})
+}
+
+// DeleteTask 删除任务
+// @Summary 删除任务
+// @Tags Ansible
+// @Accept json
+// @Produce json
+// @Param id path int true "任务ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/ansible/tasks/{id} [delete]
+func (h *Handler) DeleteTask(c *gin.Context) {
+	if !checkAdminPermission(c) {
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	// 获取用户信息
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+
+	if err := h.service.DeleteTask(uint(id), userID.(uint), username.(string)); err != nil {
+		h.logger.Errorf("Failed to delete task %d: %v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 记录审计日志
+	h.logger.InfoWithFields("Deleted Ansible task", map[string]interface{}{
+		"task_id":  id,
+		"user_id":  userID,
+		"username": username,
+		"action":   "delete_ansible_task",
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Task deleted successfully",
+	})
+}
+
+// DeleteTasks 批量删除任务
+// @Summary 批量删除任务
+// @Tags Ansible
+// @Accept json
+// @Produce json
+// @Param ids body []uint true "任务ID列表"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/ansible/tasks/batch-delete [post]
+func (h *Handler) DeleteTasks(c *gin.Context) {
+	if !checkAdminPermission(c) {
+		return
+	}
+
+	var req struct {
+		IDs []uint `json:"ids" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no task ids provided"})
+		return
+	}
+
+	// 获取用户信息
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+
+	successCount, errors, err := h.service.DeleteTasks(req.IDs, userID.(uint), username.(string))
+	if err != nil {
+		h.logger.Errorf("Failed to batch delete tasks: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 记录审计日志
+	h.logger.InfoWithFields("Batch deleted Ansible tasks", map[string]interface{}{
+		"task_ids":      req.IDs,
+		"success_count": successCount,
+		"failed_count":  len(errors),
+		"user_id":       userID,
+		"username":      username,
+		"action":        "batch_delete_ansible_tasks",
+	})
+
+	response := gin.H{
+		"code":          200,
+		"message":       fmt.Sprintf("Successfully deleted %d tasks", successCount),
+		"success_count": successCount,
+	}
+
+	if len(errors) > 0 {
+		response["errors"] = errors
+		response["failed_count"] = len(errors)
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 

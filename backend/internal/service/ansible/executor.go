@@ -307,27 +307,39 @@ func (e *TaskExecutor) createInventoryFile(task *model.AnsibleTask) (string, err
 func (e *TaskExecutor) createSSHKeyFile(task *model.AnsibleTask) (string, error) {
 	// 获取清单信息
 	if task.InventoryID == nil {
+		e.logger.Warningf("Task %d has no inventory ID, skipping SSH key file creation", task.ID)
 		return "", nil
 	}
 
 	inventory, err := e.inventorySvc.GetInventory(*task.InventoryID)
 	if err != nil {
+		e.logger.Errorf("Failed to get inventory %d for task %d: %v", *task.InventoryID, task.ID, err)
 		return "", err
 	}
 
 	// 如果清单没有关联 SSH 密钥，返回空字符串
 	if inventory.SSHKeyID == nil {
+		e.logger.Warningf("Task %d: Inventory %d (%s) has no SSH key associated, Ansible will use default authentication", 
+			task.ID, inventory.ID, inventory.Name)
 		return "", nil
 	}
+
+	e.logger.Infof("Task %d: Using SSH key ID %d for inventory %d (%s)", 
+		task.ID, *inventory.SSHKeyID, inventory.ID, inventory.Name)
 
 	// 获取解密后的 SSH 密钥
 	sshKey, err := e.sshKeySvc.GetDecryptedByID(*inventory.SSHKeyID)
 	if err != nil {
+		e.logger.Errorf("Failed to get SSH key %d for task %d: %v", *inventory.SSHKeyID, task.ID, err)
 		return "", fmt.Errorf("failed to get ssh key: %w", err)
 	}
 
+	e.logger.Infof("Task %d: Retrieved SSH key %d (%s) - Type: %s, Username: %s", 
+		task.ID, sshKey.ID, sshKey.Name, sshKey.Type, sshKey.Username)
+
 	// 如果是密码认证，不需要创建密钥文件
 	if sshKey.Type == model.SSHKeyTypePassword {
+		e.logger.Infof("Task %d: SSH key is password type, will use password authentication", task.ID)
 		// Ansible 使用密码认证需要安装 sshpass
 		// 密码将通过环境变量传递（在 buildAnsibleCommand 中处理）
 		return "", nil
@@ -337,10 +349,11 @@ func (e *TaskExecutor) createSSHKeyFile(task *model.AnsibleTask) (string, error)
 	filename := filepath.Join(e.workDir, fmt.Sprintf("ssh-key-%d-%d.pem", task.ID, time.Now().Unix()))
 	
 	if err := os.WriteFile(filename, []byte(sshKey.PrivateKey), 0600); err != nil {
+		e.logger.Errorf("Failed to write SSH key file for task %d: %v", task.ID, err)
 		return "", fmt.Errorf("failed to write ssh key file: %w", err)
 	}
 
-	e.logger.Infof("Created SSH key file for task %d: %s", task.ID, filename)
+	e.logger.Infof("Task %d: Created SSH key file: %s (size: %d bytes)", task.ID, filename, len(sshKey.PrivateKey))
 	return filename, nil
 }
 
@@ -355,6 +368,9 @@ func (e *TaskExecutor) buildAnsibleCommand(ctx context.Context, playbookFile, in
 	// 如果有 SSH 密钥文件，添加 --private-key 参数
 	if sshKeyFile != "" {
 		args = append(args, "--private-key", sshKeyFile)
+		e.logger.Infof("Task %d: Ansible will use SSH key file: %s", task.ID, sshKeyFile)
+	} else {
+		e.logger.Warningf("Task %d: No SSH key file provided, Ansible will use default authentication", task.ID)
 	}
 
 	// 添加额外变量
@@ -371,6 +387,10 @@ func (e *TaskExecutor) buildAnsibleCommand(ctx context.Context, playbookFile, in
 		"ANSIBLE_HOST_KEY_CHECKING=False",
 		"ANSIBLE_STDOUT_CALLBACK=default",
 	)
+
+	// 记录完整的命令（用于调试）
+	cmdString := "ansible-playbook " + strings.Join(args, " ")
+	e.logger.Infof("Task %d: Executing command: %s", task.ID, cmdString)
 
 	return cmd
 }
