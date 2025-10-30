@@ -363,11 +363,10 @@ const handleCreate = async () => {
 const handleViewLogs = async (row) => {
   logDialogVisible.value = true
   try {
-    const res = await ansibleAPI.getTaskLogs(row.id, { limit: 5000 })
+    const res = await ansibleAPI.getTaskLogs(row.id, { full: true })
     console.log('任务日志响应:', res)
-    // axios拦截器返回完整response，所以路径是: res.data.data
-    const logs = res.data?.data || []
-    logContent.value = logs.map(log => log.content).join('\n')
+    // axios拦截器返回完整response，数据是字符串格式
+    logContent.value = res.data?.data || '暂无日志'
   } catch (error) {
     console.error('加载日志失败:', error)
     ElMessage.error('加载日志失败: ' + (error.message || '未知错误'))

@@ -118,6 +118,8 @@ type AnsibleTask struct {
 	HostsSkipped     int               `json:"hosts_skipped" gorm:"default:0;comment:跳过主机数"`
 	ErrorMsg         string            `json:"error_msg" gorm:"type:text;comment:错误信息"`
 	PlaybookContent  string            `json:"playbook_content" gorm:"type:text;not null;comment:Playbook内容"`
+	FullLog          string            `json:"full_log" gorm:"type:text;comment:完整日志"`
+	LogSize          int64             `json:"log_size" gorm:"default:0;comment:日志大小(bytes)"`
 	ExtraVars        ExtraVars         `json:"extra_vars" gorm:"type:jsonb;comment:额外变量"`
 	CreatedAt        time.Time         `json:"created_at"`
 	UpdatedAt        time.Time         `json:"updated_at"`

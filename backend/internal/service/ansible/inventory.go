@@ -190,9 +190,9 @@ func (s *InventoryService) DeleteInventory(id uint, userID uint) error {
 		return fmt.Errorf("failed to get inventory: %w", err)
 	}
 
-	// 检查是否有关联的任务
+	// 检查是否有关联的任务（排除已软删除的任务）
 	var taskCount int64
-	if err := s.db.Model(&model.AnsibleTask{}).Where("inventory_id = ?", id).Count(&taskCount).Error; err != nil {
+	if err := s.db.Model(&model.AnsibleTask{}).Where("inventory_id = ? AND deleted_at IS NULL", id).Count(&taskCount).Error; err != nil {
 		return fmt.Errorf("failed to check related tasks: %w", err)
 	}
 
@@ -231,10 +231,26 @@ func (s *InventoryService) GenerateFromK8s(req model.GenerateInventoryRequest, u
 		return nil, fmt.Errorf("no nodes found in cluster %s", cluster.Name)
 	}
 
-	// 过滤节点（根据标签）
+	// 过滤节点
 	var filteredNodes []k8s.NodeInfo
-	if len(req.NodeLabels) > 0 {
-		for _, node := range nodes {
+	for _, node := range nodes {
+		// 1. 首先过滤掉 master 和 control-plane 节点
+		isMaster := false
+		if _, exists := node.Labels["node-role.kubernetes.io/master"]; exists {
+			isMaster = true
+		}
+		if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; exists {
+			isMaster = true
+		}
+		
+		// 如果是 master/control-plane 节点，跳过
+		if isMaster {
+			s.logger.Infof("Skipping master/control-plane node: %s", node.Name)
+			continue
+		}
+		
+		// 2. 然后根据用户指定的标签过滤（如果有）
+		if len(req.NodeLabels) > 0 {
 			match := true
 			for key, value := range req.NodeLabels {
 				if nodeValue, exists := node.Labels[key]; !exists || nodeValue != value {
@@ -245,9 +261,10 @@ func (s *InventoryService) GenerateFromK8s(req model.GenerateInventoryRequest, u
 			if match {
 				filteredNodes = append(filteredNodes, node)
 			}
+		} else {
+			// 如果没有指定标签过滤条件，只要不是 master 节点就加入
+			filteredNodes = append(filteredNodes, node)
 		}
-	} else {
-		filteredNodes = nodes
 	}
 
 	if len(filteredNodes) == 0 {

@@ -237,21 +237,42 @@ func (h *Handler) GetTaskLogs(c *gin.Context) {
 		return
 	}
 
-	logType := model.AnsibleLogType(c.Query("log_type"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "1000"))
+	// 默认获取完整日志
+	// 如果指定了 full=false，则只获取重要日志（保留向后兼容）
+	useFull := c.DefaultQuery("full", "true") == "true"
 
-	logs, err := h.service.GetTaskLogs(uint(id), logType, limit)
-	if err != nil {
-		h.logger.Errorf("Failed to get task logs: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	if useFull {
+		// 获取完整日志
+		fullLog, err := h.service.GetTaskFullLog(uint(id))
+		if err != nil {
+			h.logger.Errorf("Failed to get task full log: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"code":    200,
+			"message": "Success",
+			"data":    fullLog,
+		})
+	} else {
+		// 获取重要日志（旧方式）
+		logType := model.AnsibleLogType(c.Query("log_type"))
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "1000"))
+
+		logs, err := h.service.GetTaskLogs(uint(id), logType, limit)
+		if err != nil {
+			h.logger.Errorf("Failed to get task logs: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"code":    200,
+			"message": "Success",
+			"data":    logs,
+		})
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "Success",
-		"data":    logs,
-	})
 }
 
 // RefreshTaskStatus 刷新任务状态

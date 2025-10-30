@@ -181,9 +181,9 @@ func (s *TemplateService) DeleteTemplate(id uint, userID uint) error {
 		return fmt.Errorf("failed to get template: %w", err)
 	}
 
-	// 检查是否有关联的任务
+	// 检查是否有关联的任务（排除已软删除的任务）
 	var taskCount int64
-	if err := s.db.Model(&model.AnsibleTask{}).Where("template_id = ?", id).Count(&taskCount).Error; err != nil {
+	if err := s.db.Model(&model.AnsibleTask{}).Where("template_id = ? AND deleted_at IS NULL", id).Count(&taskCount).Error; err != nil {
 		return fmt.Errorf("failed to check related tasks: %w", err)
 	}
 

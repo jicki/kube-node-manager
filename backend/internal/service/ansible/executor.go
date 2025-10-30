@@ -41,7 +41,11 @@ type RunningTask struct {
 	Cancel       context.CancelFunc
 	StartTime    time.Time
 	LogChannel   chan *model.AnsibleLog
-	SSHKeyFile   string // SSH 密钥临时文件路径
+	LogBuffer    *strings.Builder // 日志聚合缓冲区
+	LogMutex     sync.Mutex       // 保护 LogBuffer
+	LogSize      int64            // 当前日志大小
+	MaxLogSize   int64            // 最大日志大小 (10MB)
+	SSHKeyFile   string           // SSH 密钥临时文件路径
 }
 
 // NewTaskExecutor 创建任务执行器实例
@@ -96,10 +100,13 @@ func (e *TaskExecutor) ExecuteTask(taskID uint) error {
 
 	// 创建运行任务记录
 	runningTask := &RunningTask{
-		TaskID:     taskID,
-		Cancel:     cancel,
-		StartTime:  time.Now(),
-		LogChannel: make(chan *model.AnsibleLog, 100),
+		TaskID:      taskID,
+		Cancel:      cancel,
+		StartTime:   time.Now(),
+		LogChannel:  make(chan *model.AnsibleLog, 100),
+		LogBuffer:   &strings.Builder{},
+		LogSize:     0,
+		MaxLogSize:  10 * 1024 * 1024, // 10MB 日志大小限制
 	}
 
 	e.mu.Lock()
@@ -204,11 +211,20 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 	// 尝试解析统计信息（从日志中）
 	e.parseTaskStats(task)
 
+	// 保存完整日志到任务
+	runningTask.LogMutex.Lock()
+	task.FullLog = runningTask.LogBuffer.String()
+	task.LogSize = runningTask.LogSize
+	runningTask.LogMutex.Unlock()
+
 	// 标记任务完成
 	task.MarkCompleted(success, errorMsg)
 	if err := e.db.Save(task).Error; err != nil {
 		e.logger.Errorf("Failed to save task completion: %v", err)
 	}
+
+	e.logger.Infof("Task %d completed, log size: %d bytes (%d KB)", 
+		task.ID, task.LogSize, task.LogSize/1024)
 
 	// 移除运行任务记录
 	e.mu.Lock()
@@ -429,40 +445,98 @@ func (e *TaskExecutor) readOutput(reader io.Reader, runningTask *RunningTask, lo
 
 // collectLogs 收集并保存日志
 func (e *TaskExecutor) collectLogs(runningTask *RunningTask) {
-	buffer := make([]*model.AnsibleLog, 0, 50) // 批量保存日志
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
+	importantLogs := make([]*model.AnsibleLog, 0, 10) // 只保存重要日志到数据库
+	
 	for {
 		select {
 		case log, ok := <-runningTask.LogChannel:
 			if !ok {
-				// 通道关闭，保存剩余日志
-				if len(buffer) > 0 {
-					e.saveLogs(buffer)
+				// 通道关闭，保存重要日志
+				if len(importantLogs) > 0 {
+					e.saveImportantLogs(importantLogs)
 				}
 				return
 			}
 
-			buffer = append(buffer, log)
-
-			// 如果缓冲区满了，保存日志
-			if len(buffer) >= 50 {
-				e.saveLogs(buffer)
-				buffer = buffer[:0]
+			// 写入日志聚合缓冲区
+			runningTask.LogMutex.Lock()
+			if runningTask.LogSize < runningTask.MaxLogSize {
+				logLine := fmt.Sprintf("[%s] %s\n", log.LogType, log.Content)
+				runningTask.LogBuffer.WriteString(logLine)
+				runningTask.LogSize += int64(len(logLine))
+			} else if runningTask.LogSize == runningTask.MaxLogSize {
+				// 达到限制，记录一次警告
+				warningLine := "[SYSTEM] Log size limit reached (10MB), truncating further logs\n"
+				runningTask.LogBuffer.WriteString(warningLine)
+				runningTask.LogSize++ // 避免重复写入警告
 			}
+			runningTask.LogMutex.Unlock()
 
-		case <-ticker.C:
-			// 定期保存日志
-			if len(buffer) > 0 {
-				e.saveLogs(buffer)
-				buffer = buffer[:0]
+			// 推送到 WebSocket（仍然实时推送）
+			e.pushLogToWebSocket(log)
+
+			// 只保留重要的日志（错误、RECAP）到数据库
+			if e.isImportantLog(log) {
+				importantLogs = append(importantLogs, log)
+				if len(importantLogs) >= 10 {
+					e.saveImportantLogs(importantLogs)
+					importantLogs = importantLogs[:0]
+				}
 			}
 		}
 	}
 }
 
-// saveLogs 保存日志到数据库
+// isImportantLog 判断是否是重要日志（需要保存到数据库）
+func (e *TaskExecutor) isImportantLog(log *model.AnsibleLog) bool {
+	if log.LogType == model.AnsibleLogTypeStderr {
+		return true // 所有错误输出都保留
+	}
+	
+	content := strings.ToLower(log.Content)
+	// 保留包含特定关键字的日志
+	keywords := []string{"fatal", "error", "failed", "unreachable", "recap", "play recap"}
+	for _, keyword := range keywords {
+		if strings.Contains(content, keyword) {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// saveImportantLogs 保存重要日志到数据库
+func (e *TaskExecutor) saveImportantLogs(logs []*model.AnsibleLog) {
+	if len(logs) == 0 {
+		return
+	}
+
+	if err := e.db.Create(&logs).Error; err != nil {
+		e.logger.Errorf("Failed to save important logs: %v", err)
+	}
+}
+
+// pushLogToWebSocket 推送单条日志到 WebSocket
+func (e *TaskExecutor) pushLogToWebSocket(log *model.AnsibleLog) {
+	if e.wsHub == nil {
+		return
+	}
+
+	// 使用类型断言获取 WebSocket Hub 的方法
+	type WSHub interface {
+		BroadcastToTask(taskID uint, message interface{})
+	}
+
+	if hub, ok := e.wsHub.(WSHub); ok {
+		hub.BroadcastToTask(log.TaskID, map[string]interface{}{
+			"type":    "log",
+			"task_id": log.TaskID,
+			"log":     log,
+		})
+	}
+}
+
+// saveLogs 保存日志到数据库（保留兼容性）
 func (e *TaskExecutor) saveLogs(logs []*model.AnsibleLog) {
 	if len(logs) == 0 {
 		return

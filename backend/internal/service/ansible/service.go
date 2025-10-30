@@ -217,6 +217,21 @@ func (s *Service) ListTasks(req model.TaskListRequest, userID uint) ([]model.Ans
 }
 
 // GetTaskLogs 获取任务日志
+// GetTaskFullLog 获取任务的完整日志（从 task.FullLog 字段）
+func (s *Service) GetTaskFullLog(taskID uint) (string, error) {
+	var task model.AnsibleTask
+	if err := s.db.Select("full_log, log_size").First(&task, taskID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return "", fmt.Errorf("task not found")
+		}
+		s.logger.Errorf("Failed to get task full log: %v", err)
+		return "", fmt.Errorf("failed to get task full log: %w", err)
+	}
+
+	return task.FullLog, nil
+}
+
+// GetTaskLogs 获取任务的重要日志（从 ansible_logs 表）
 func (s *Service) GetTaskLogs(taskID uint, logType model.AnsibleLogType, limit int) ([]model.AnsibleLog, error) {
 	var logs []model.AnsibleLog
 

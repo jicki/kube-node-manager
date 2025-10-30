@@ -87,7 +87,8 @@ service.interceptors.response.use(
           message = '请求过于频繁，请稍后再试'
           break
         case 500:
-          message = '服务器内部错误'
+          // 优先使用后端返回的错误消息
+          message = response.data?.error || response.data?.message || '服务器内部错误'
           break
         case 502:
           message = '网关错误'
