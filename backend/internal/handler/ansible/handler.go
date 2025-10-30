@@ -48,10 +48,7 @@ func checkAdminPermission(c *gin.Context) bool {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/ansible/tasks [get]
 func (h *Handler) ListTasks(c *gin.Context) {
-	// 检查用户权限 (只有管理员能访问 Ansible 模块)
-	userRole, exists := c.Get("user_role")
-	if !exists || userRole.(string) != model.RoleAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can access Ansible module"})
+	if !checkAdminPermission(c) {
 		return
 	}
 
@@ -87,10 +84,7 @@ func (h *Handler) ListTasks(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/ansible/tasks/{id} [get]
 func (h *Handler) GetTask(c *gin.Context) {
-	// 检查用户权限
-	userRole, exists := c.Get("user_role")
-	if !exists || userRole.(string) != model.RoleAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can access Ansible module"})
+	if !checkAdminPermission(c) {
 		return
 	}
 
@@ -122,10 +116,7 @@ func (h *Handler) GetTask(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/ansible/tasks [post]
 func (h *Handler) CreateTask(c *gin.Context) {
-	// 检查用户权限
-	userRole, exists := c.Get("user_role")
-	if !exists || userRole.(string) != model.RoleAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can create Ansible tasks"})
+	if !checkAdminPermission(c) {
 		return
 	}
 
@@ -161,10 +152,7 @@ func (h *Handler) CreateTask(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/ansible/tasks/{id}/cancel [post]
 func (h *Handler) CancelTask(c *gin.Context) {
-	// 检查用户权限
-	userRole, exists := c.Get("user_role")
-	if !exists || userRole.(string) != model.RoleAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can cancel Ansible tasks"})
+	if !checkAdminPermission(c) {
 		return
 	}
 
@@ -198,10 +186,7 @@ func (h *Handler) CancelTask(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/ansible/tasks/{id}/retry [post]
 func (h *Handler) RetryTask(c *gin.Context) {
-	// 检查用户权限
-	userRole, exists := c.Get("user_role")
-	if !exists || userRole.(string) != model.RoleAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can retry Ansible tasks"})
+	if !checkAdminPermission(c) {
 		return
 	}
 
@@ -239,10 +224,7 @@ func (h *Handler) RetryTask(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/ansible/tasks/{id}/logs [get]
 func (h *Handler) GetTaskLogs(c *gin.Context) {
-	// 检查用户权限
-	userRole, exists := c.Get("user_role")
-	if !exists || userRole.(string) != model.RoleAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can view Ansible task logs"})
+	if !checkAdminPermission(c) {
 		return
 	}
 
@@ -277,10 +259,7 @@ func (h *Handler) GetTaskLogs(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/ansible/tasks/{id}/refresh [post]
 func (h *Handler) RefreshTaskStatus(c *gin.Context) {
-	// 检查用户权限
-	userRole, exists := c.Get("user_role")
-	if !exists || userRole.(string) != model.RoleAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can refresh Ansible task status"})
+	if !checkAdminPermission(c) {
 		return
 	}
 
@@ -311,10 +290,7 @@ func (h *Handler) RefreshTaskStatus(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/ansible/statistics [get]
 func (h *Handler) GetStatistics(c *gin.Context) {
-	// 检查用户权限
-	userRole, exists := c.Get("user_role")
-	if !exists || userRole.(string) != model.RoleAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can view Ansible statistics"})
+	if !checkAdminPermission(c) {
 		return
 	}
 
