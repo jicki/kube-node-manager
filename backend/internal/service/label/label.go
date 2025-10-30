@@ -120,8 +120,8 @@ func (s *Service) getClusterIDByName(clusterName string) (uint, error) {
 
 // UpdateNodeLabels 更新单个节点标签
 func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
-	// 获取当前节点信息
-	currentNode, err := s.k8sSvc.GetNode(req.ClusterName, req.NodeName)
+	// 获取当前节点信息，强制刷新缓存确保获取最新的标签
+	currentNode, err := s.k8sSvc.GetNodeWithCache(req.ClusterName, req.NodeName, true)
 	if err != nil {
 		s.logger.Errorf("Failed to get node %s in cluster %s: %v", req.NodeName, req.ClusterName, err)
 		var clusterID *uint
@@ -736,7 +736,8 @@ func (s *Service) ApplyTemplate(req ApplyTemplateRequest, userID uint) error {
 
 // GetLabelUsage 获取集群中标签使用情况
 func (s *Service) GetLabelUsage(clusterName string, userID uint) ([]LabelUsage, error) {
-	nodes, err := s.k8sSvc.ListNodes(clusterName)
+	// 强制刷新缓存，确保获取最新的标签信息
+	nodes, err := s.k8sSvc.ListNodesWithCache(clusterName, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}

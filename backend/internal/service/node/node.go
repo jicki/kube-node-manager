@@ -107,7 +107,8 @@ func NewService(logger *logger.Logger, k8sSvc *k8s.Service, auditSvc *audit.Serv
 
 // List 获取节点列表
 func (s *Service) List(req ListRequest, userID uint) ([]k8s.NodeInfo, error) {
-	nodes, err := s.k8sSvc.ListNodes(req.ClusterName)
+	// 强制刷新缓存，确保 Schedulable、Labels、Taints 等属性始终是最新的
+	nodes, err := s.k8sSvc.ListNodesWithCache(req.ClusterName, true)
 	if err != nil {
 		s.logger.Errorf("Failed to list nodes for cluster %s: %v", req.ClusterName, err)
 		// 尝试获取集群ID以正确记录审计日志
@@ -170,7 +171,8 @@ func (s *Service) List(req ListRequest, userID uint) ([]k8s.NodeInfo, error) {
 
 // Get 获取单个节点详情
 func (s *Service) Get(req GetRequest, userID uint) (*k8s.NodeInfo, error) {
-	node, err := s.k8sSvc.GetNode(req.ClusterName, req.NodeName)
+	// 强制刷新缓存，确保 Schedulable、Labels、Taints 等属性始终是最新的
+	node, err := s.k8sSvc.GetNodeWithCache(req.ClusterName, req.NodeName, true)
 	if err != nil {
 		s.logger.Errorf("Failed to get node %s for cluster %s: %v", req.NodeName, req.ClusterName, err)
 		s.auditSvc.Log(audit.LogRequest{
@@ -296,7 +298,8 @@ func (s *Service) Uncordon(req CordonRequest, userID uint) error {
 
 // GetSummary 获取节点摘要信息
 func (s *Service) GetSummary(clusterName string, userID uint) (*NodeSummary, error) {
-	nodes, err := s.k8sSvc.ListNodes(clusterName)
+	// 强制刷新缓存，确保 Schedulable 等属性统计准确
+	nodes, err := s.k8sSvc.ListNodesWithCache(clusterName, true)
 	if err != nil {
 		s.logger.Errorf("Failed to get node summary for cluster %s: %v", clusterName, err)
 		return nil, fmt.Errorf("failed to get nodes: %w", err)

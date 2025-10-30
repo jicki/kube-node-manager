@@ -156,8 +156,8 @@ func (s *Service) UpdateNodeTaints(req UpdateTaintsRequest, userID uint) error {
 		return fmt.Errorf("invalid taints: %w", err)
 	}
 
-	// 获取当前节点信息
-	currentNode, err := s.k8sSvc.GetNode(req.ClusterName, req.NodeName)
+	// 获取当前节点信息，强制刷新缓存确保获取最新的污点
+	currentNode, err := s.k8sSvc.GetNodeWithCache(req.ClusterName, req.NodeName, true)
 	if err != nil {
 		s.logger.Errorf("Failed to get node %s in cluster %s: %v", req.NodeName, req.ClusterName, err)
 		var clusterID *uint
@@ -753,7 +753,8 @@ func (s *Service) ApplyTemplate(req ApplyTemplateRequest, userID uint) error {
 
 // GetTaintUsage 获取集群中污点使用情况
 func (s *Service) GetTaintUsage(clusterName string, userID uint) ([]TaintUsage, error) {
-	nodes, err := s.k8sSvc.ListNodes(clusterName)
+	// 强制刷新缓存，确保获取最新的污点信息
+	nodes, err := s.k8sSvc.ListNodesWithCache(clusterName, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}
@@ -956,8 +957,8 @@ func (s *Service) RemoveTaint(clusterName, nodeName, taintKey string, userID uin
 // CopyNodeTaints 复制节点污点
 // 从源节点复制所有污点到目标节点，完全替代目标节点的现有污点
 func (s *Service) CopyNodeTaints(req CopyTaintsRequest, userID uint) error {
-	// 获取源节点信息
-	sourceNode, err := s.k8sSvc.GetNode(req.ClusterName, req.SourceNodeName)
+	// 获取源节点信息，强制刷新缓存确保获取最新的污点
+	sourceNode, err := s.k8sSvc.GetNodeWithCache(req.ClusterName, req.SourceNodeName, true)
 	if err != nil {
 		s.logger.Errorf("Failed to get source node %s in cluster %s: %v", req.SourceNodeName, req.ClusterName, err)
 		var clusterID *uint
@@ -977,8 +978,8 @@ func (s *Service) CopyNodeTaints(req CopyTaintsRequest, userID uint) error {
 		return fmt.Errorf("failed to get source node %s in cluster %s: %w", req.SourceNodeName, req.ClusterName, err)
 	}
 
-	// 验证目标节点存在
-	_, err = s.k8sSvc.GetNode(req.ClusterName, req.TargetNodeName)
+	// 验证目标节点存在，强制刷新缓存
+	_, err = s.k8sSvc.GetNodeWithCache(req.ClusterName, req.TargetNodeName, true)
 	if err != nil {
 		s.logger.Errorf("Failed to get target node %s in cluster %s: %v", req.TargetNodeName, req.ClusterName, err)
 		var clusterID *uint
@@ -1062,8 +1063,8 @@ type TaintCopyProcessor struct {
 }
 
 func (p *TaintCopyProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
-	// 验证目标节点存在
-	_, err := p.svc.k8sSvc.GetNode(p.req.ClusterName, nodeName)
+	// 验证目标节点存在，强制刷新缓存
+	_, err := p.svc.k8sSvc.GetNodeWithCache(p.req.ClusterName, nodeName, true)
 	if err != nil {
 		p.svc.logger.Errorf("Failed to get target node %s in cluster %s: %v", nodeName, p.req.ClusterName, err)
 		return fmt.Errorf("failed to get target node %s in cluster %s: %w", nodeName, p.req.ClusterName, err)
@@ -1114,8 +1115,8 @@ func (s *Service) BatchCopyTaintsWithProgress(req BatchCopyTaintsRequest, userID
 		}
 	}()
 
-	// 验证源节点存在并获取污点
-	sourceNode, err := s.k8sSvc.GetNode(req.ClusterName, req.SourceNodeName)
+	// 验证源节点存在并获取污点，强制刷新缓存
+	sourceNode, err := s.k8sSvc.GetNodeWithCache(req.ClusterName, req.SourceNodeName, true)
 	if err != nil {
 		s.logger.Errorf("Failed to get source node %s in cluster %s: %v", req.SourceNodeName, req.ClusterName, err)
 		var clusterID *uint
