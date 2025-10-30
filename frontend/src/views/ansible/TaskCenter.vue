@@ -187,7 +187,7 @@ import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
-import * as clusterAPI from '@/api/cluster'
+import clusterAPI from '@/api/cluster'
 
 // 数据
 const tasks = ref([])
@@ -261,8 +261,8 @@ const loadInventories = async () => {
 
 const loadClusters = async () => {
   try {
-    const res = await clusterAPI.listClusters()
-    clusters.value = res.data || []
+    const res = await clusterAPI.getClusters()
+    clusters.value = res.data?.clusters || []
   } catch (error) {
     console.error('加载集群失败:', error)
   }
