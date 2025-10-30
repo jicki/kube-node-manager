@@ -287,7 +287,16 @@ const handleGenerate = async () => {
     generateDialogVisible.value = false
     loadInventories()
   } catch (error) {
-    ElMessage.error('生成失败: ' + error.message)
+    const errorMsg = error.message || error.toString()
+    if (errorMsg.includes('duplicate key') || errorMsg.includes('name already exists')) {
+      ElMessage.error('生成失败：清单名称已存在，请使用其他名称')
+    } else if (errorMsg.includes('no nodes found')) {
+      ElMessage.error('生成失败：选中的集群没有可用节点')
+    } else if (errorMsg.includes('cluster not found')) {
+      ElMessage.error('生成失败：集群不存在或无法访问')
+    } else {
+      ElMessage.error('生成失败: ' + errorMsg)
+    }
   } finally {
     generating.value = false
   }
@@ -337,7 +346,14 @@ const handleSave = async () => {
     loadInventories()
   } catch (error) {
     console.error('保存清单失败:', error)
-    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
+    const errorMsg = error.message || error.toString()
+    if (errorMsg.includes('duplicate key') || errorMsg.includes('name already exists')) {
+      ElMessage.error('保存失败：清单名称已存在，请使用其他名称')
+    } else if (errorMsg.includes('invalid inventory content')) {
+      ElMessage.error('保存失败：清单内容格式错误，请检查 INI 格式')
+    } else {
+      ElMessage.error('保存失败: ' + (errorMsg || '未知错误'))
+    }
   } finally {
     saving.value = false
   }

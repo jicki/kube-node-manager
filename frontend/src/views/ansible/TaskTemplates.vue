@@ -61,12 +61,31 @@
           <el-input v-model="templateForm.tags" placeholder="多个标签用逗号分隔" :disabled="isViewMode" />
         </el-form-item>
         <el-form-item label="Playbook 内容" :required="!isViewMode">
+          <div style="margin-bottom: 8px;">
+            <el-text type="info" size="small">
+              Playbook 必须以 <code>- name:</code> 开头的数组格式，请参考以下示例
+            </el-text>
+          </div>
           <el-input 
             v-model="templateForm.playbook_content" 
             type="textarea" 
             :rows="15"
-            placeholder="请输入 Ansible Playbook YAML 内容&#10;&#10;示例：&#10;---&#10;- name: 示例 Playbook&#10;  hosts: all&#10;  tasks:&#10;    - name: Ping 测试&#10;      ping:" 
-            style="font-family: 'Courier New', monospace; font-size: 13px;"
+            placeholder="---
+- name: 示例 Playbook
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Ping 测试
+      ping:
+
+    - name: 执行命令
+      command: whoami
+      register: result
+
+    - name: 显示结果
+      debug:
+        var: result.stdout" 
+            style="font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px;"
             :disabled="isViewMode"
           />
         </el-form-item>
@@ -174,7 +193,22 @@ const handleSave = async () => {
     dialogVisible.value = false
     loadTemplates()
   } catch (error) {
-    ElMessage.error('保存失败: ' + error.message)
+    const errorMsg = error.message || error.toString()
+    if (errorMsg.includes('duplicate key') || errorMsg.includes('name already exists')) {
+      ElMessage.error('保存失败：模板名称已存在，请使用其他名称')
+    } else if (errorMsg.includes('playbook must be an array')) {
+      ElMessage.error({
+        message: 'Playbook 格式错误：必须以 "- name:" 开头的数组格式。请参考示例。',
+        duration: 5000
+      })
+    } else if (errorMsg.includes('invalid playbook')) {
+      ElMessage.error({
+        message: 'Playbook YAML 格式错误：' + errorMsg,
+        duration: 5000
+      })
+    } else {
+      ElMessage.error('保存失败: ' + errorMsg)
+    }
   } finally {
     saving.value = false
   }

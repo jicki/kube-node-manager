@@ -287,7 +287,16 @@ const handleSave = async () => {
     loadSSHKeys()
   } catch (error) {
     console.error('保存SSH密钥失败:', error)
-    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
+    const errorMsg = error.message || error.toString()
+    if (errorMsg.includes('duplicate key') || errorMsg.includes('name already exists')) {
+      ElMessage.error('保存失败：SSH密钥名称已存在，请使用其他名称')
+    } else if (errorMsg.includes('invalid private key')) {
+      ElMessage.error('保存失败：私钥格式不正确，请检查私钥内容')
+    } else if (errorMsg.includes('encryption failed')) {
+      ElMessage.error('保存失败：加密失败，请联系管理员')
+    } else {
+      ElMessage.error('保存失败: ' + (errorMsg || '未知错误'))
+    }
   } finally {
     saving.value = false
   }
