@@ -327,6 +327,50 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		anomalyReports.POST("/configs/:id/test", handlers.AnomalyReport.TestReportSend)
 		anomalyReports.POST("/configs/:id/run", handlers.AnomalyReport.RunReportNow)
 	}
+
+	// Ansible routes (Ansible 任务管理)
+	ansible := protected.Group("/ansible")
+	{
+		// 任务管理
+		ansible.GET("/tasks", handlers.Ansible.ListTasks)
+		ansible.GET("/tasks/:id", handlers.Ansible.GetTask)
+		ansible.POST("/tasks", handlers.Ansible.CreateTask)
+		ansible.POST("/tasks/:id/cancel", handlers.Ansible.CancelTask)
+		ansible.POST("/tasks/:id/retry", handlers.Ansible.RetryTask)
+		ansible.GET("/tasks/:id/logs", handlers.Ansible.GetTaskLogs)
+		ansible.POST("/tasks/:id/refresh", handlers.Ansible.RefreshTaskStatus)
+
+		// 统计信息
+		ansible.GET("/statistics", handlers.Ansible.GetStatistics)
+
+		// 模板管理
+		ansible.GET("/templates", handlers.AnsibleTemplate.ListTemplates)
+		ansible.GET("/templates/:id", handlers.AnsibleTemplate.GetTemplate)
+		ansible.POST("/templates", handlers.AnsibleTemplate.CreateTemplate)
+		ansible.PUT("/templates/:id", handlers.AnsibleTemplate.UpdateTemplate)
+		ansible.DELETE("/templates/:id", handlers.AnsibleTemplate.DeleteTemplate)
+		ansible.POST("/templates/validate", handlers.AnsibleTemplate.ValidateTemplate)
+
+		// 主机清单管理
+		ansible.GET("/inventories", handlers.AnsibleInventory.ListInventories)
+		ansible.GET("/inventories/:id", handlers.AnsibleInventory.GetInventory)
+		ansible.POST("/inventories", handlers.AnsibleInventory.CreateInventory)
+		ansible.PUT("/inventories/:id", handlers.AnsibleInventory.UpdateInventory)
+		ansible.DELETE("/inventories/:id", handlers.AnsibleInventory.DeleteInventory)
+		ansible.POST("/inventories/generate", handlers.AnsibleInventory.GenerateFromCluster)
+		ansible.POST("/inventories/:id/refresh", handlers.AnsibleInventory.RefreshInventory)
+
+		// SSH 密钥管理
+		ansible.GET("/ssh-keys", handlers.AnsibleSSHKey.List)
+		ansible.GET("/ssh-keys/:id", handlers.AnsibleSSHKey.Get)
+		ansible.POST("/ssh-keys", handlers.AnsibleSSHKey.Create)
+		ansible.PUT("/ssh-keys/:id", handlers.AnsibleSSHKey.Update)
+		ansible.DELETE("/ssh-keys/:id", handlers.AnsibleSSHKey.Delete)
+		ansible.POST("/ssh-keys/:id/test", handlers.AnsibleSSHKey.TestConnection)
+	}
+
+	// Ansible WebSocket (任务日志流)
+	api.GET("/ansible/tasks/:id/ws", handlers.AnsibleWebSocket.HandleTaskLogStream)
 }
 
 // gracefulShutdown 优雅关闭服务器

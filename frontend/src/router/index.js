@@ -112,6 +112,24 @@ const router = createRouter({
           name: 'AnalyticsReportSettings',
           component: () => import('@/views/analytics/ReportSettings.vue'),
           meta: { title: '分析报告配置', icon: 'DataAnalysis', requiresAuth: true, permission: 'admin' }
+        },
+        {
+          path: 'ansible-tasks',
+          name: 'AnsibleTasks',
+          component: () => import('@/views/ansible/TaskCenter.vue'),
+          meta: { title: 'Ansible任务', icon: 'Operation', requiresAuth: true }
+        },
+        {
+          path: 'ansible-templates',
+          name: 'AnsibleTemplates',
+          component: () => import('@/views/ansible/TaskTemplates.vue'),
+          meta: { title: '任务模板', icon: 'Document', requiresAuth: true }
+        },
+        {
+          path: 'ansible-inventories',
+          name: 'AnsibleInventories',
+          component: () => import('@/views/ansible/InventoryManage.vue'),
+          meta: { title: '主机清单', icon: 'List', requiresAuth: true }
         }
       ]
     },

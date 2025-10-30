@@ -1,6 +1,7 @@
 package handler
 
 import (
+	ansibleHandler "kube-node-manager/internal/handler/ansible"
 	"kube-node-manager/internal/handler/anomaly"
 	"kube-node-manager/internal/handler/audit"
 	"kube-node-manager/internal/handler/auth"
@@ -18,35 +19,45 @@ import (
 )
 
 type Handlers struct {
-	Auth          *auth.Handler
-	User          *user.Handler
-	Cluster       *cluster.Handler
-	Node          *node.Handler
-	Label         *label.Handler
-	Taint         *taint.Handler
-	Audit         *audit.Handler
-	Progress      *progress.Handler
-	Gitlab        *gitlab.Handler
-	Feishu        *feishu.Handler
-	Anomaly       *anomaly.Handler
-	AnomalyReport *anomaly.ReportHandler
-	WebSocket     *websocket.Handler
+	Auth              *auth.Handler
+	User              *user.Handler
+	Cluster           *cluster.Handler
+	Node              *node.Handler
+	Label             *label.Handler
+	Taint             *taint.Handler
+	Audit             *audit.Handler
+	Progress          *progress.Handler
+	Gitlab            *gitlab.Handler
+	Feishu            *feishu.Handler
+	Anomaly           *anomaly.Handler
+	AnomalyReport     *anomaly.ReportHandler
+	WebSocket         *websocket.Handler
+	Ansible           *ansibleHandler.Handler
+	AnsibleTemplate   *ansibleHandler.TemplateHandler
+	AnsibleInventory  *ansibleHandler.InventoryHandler
+	AnsibleSSHKey     *ansibleHandler.SSHKeyHandler
+	AnsibleWebSocket  *ansibleHandler.WebSocketHandler
 }
 
 func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
 	return &Handlers{
-		Auth:          auth.NewHandler(services.Auth, logger),
-		User:          user.NewHandler(services.User, logger),
-		Cluster:       cluster.NewHandler(services.Cluster, logger),
-		Node:          node.NewHandler(services.Node, logger),
-		Label:         label.NewHandler(services.Label, logger),
-		Taint:         taint.NewHandler(services.Taint, logger),
-		Audit:         audit.NewHandler(services.Audit, logger),
-		Progress:      progress.NewHandler(services.Progress, logger),
-		Gitlab:        gitlab.NewHandler(services.Gitlab, logger),
-		Feishu:        feishu.NewHandler(services.Feishu, services.Audit, logger),
-		Anomaly:       anomaly.NewHandler(services.Anomaly, services.Anomaly.GetCleanupService(), logger),
-		AnomalyReport: anomaly.NewReportHandler(services.AnomalyReport),
-		WebSocket:     websocket.NewHandler(services.WSHub, logger),
+		Auth:             auth.NewHandler(services.Auth, logger),
+		User:             user.NewHandler(services.User, logger),
+		Cluster:          cluster.NewHandler(services.Cluster, logger),
+		Node:             node.NewHandler(services.Node, logger),
+		Label:            label.NewHandler(services.Label, logger),
+		Taint:            taint.NewHandler(services.Taint, logger),
+		Audit:            audit.NewHandler(services.Audit, logger),
+		Progress:         progress.NewHandler(services.Progress, logger),
+		Gitlab:           gitlab.NewHandler(services.Gitlab, logger),
+		Feishu:           feishu.NewHandler(services.Feishu, services.Audit, logger),
+		Anomaly:          anomaly.NewHandler(services.Anomaly, services.Anomaly.GetCleanupService(), logger),
+		AnomalyReport:    anomaly.NewReportHandler(services.AnomalyReport),
+		WebSocket:        websocket.NewHandler(services.WSHub, logger),
+		Ansible:          ansibleHandler.NewHandler(services.Ansible, logger),
+		AnsibleTemplate:  ansibleHandler.NewTemplateHandler(services.Ansible.GetTemplateService(), logger),
+		AnsibleInventory: ansibleHandler.NewInventoryHandler(services.Ansible.GetInventoryService(), logger),
+		AnsibleSSHKey:    ansibleHandler.NewSSHKeyHandler(services.Ansible.GetSSHKeyService(), logger),
+		AnsibleWebSocket: ansibleHandler.NewWebSocketHandler(services.WSHub, logger),
 	}
 }

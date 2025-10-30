@@ -21,6 +21,11 @@ func AutoMigrate(db *gorm.DB) error {
 		&NodeAnomaly{},
 		&AnomalyReportConfig{},
 		&CacheEntry{},
+		&AnsibleTask{},
+		&AnsibleTemplate{},
+		&AnsibleLog{},
+		&AnsibleInventory{},
+		&AnsibleSSHKey{},
 	)
 }
 
