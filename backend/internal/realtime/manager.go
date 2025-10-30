@@ -1,14 +1,17 @@
 package realtime
 
 import (
+	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"kube-node-manager/internal/informer"
 	"kube-node-manager/internal/smartcache"
 	"kube-node-manager/internal/websocket"
 	"kube-node-manager/pkg/logger"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -58,6 +61,24 @@ func (m *Manager) RegisterCluster(clusterName string, clientset *kubernetes.Clie
 	m.mu.Lock()
 	m.clusterClients[clusterName] = clientset
 	m.mu.Unlock()
+
+	// 启动 Informer 前，先从 K8s API 获取初始数据并填充 SmartCache
+	// 这样可以确保在 Informer 完成同步前，用户也能看到数据
+	m.logger.Infof("Fetching initial node list for cluster %s", clusterName)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	nodeList, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		m.logger.Warningf("Failed to fetch initial nodes for cluster %s: %v", clusterName, err)
+		// 继续启动 Informer，即使初始加载失败
+	} else {
+		// 将节点添加到 SmartCache
+		for i := range nodeList.Items {
+			m.smartCache.SetNode(clusterName, &nodeList.Items[i])
+		}
+		m.logger.Infof("Initialized SmartCache with %d nodes for cluster %s", len(nodeList.Items), clusterName)
+	}
 
 	// 启动 Informer
 	if err := m.informerSvc.StartInformer(clusterName, clientset); err != nil {
