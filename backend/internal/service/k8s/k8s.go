@@ -28,7 +28,8 @@ type Service struct {
 	clients        map[string]*kubernetes.Clientset
 	metricsClients map[string]*metricsclientset.Clientset
 	mu             sync.RWMutex
-	cache          *cache.K8sCache // K8s API缓存层
+	cache          *cache.K8sCache // 旧的K8s API缓存层（仅用于非节点资源）
+	realtimeManager interface{} // 实时同步管理器（使用接口避免循环依赖）
 }
 
 // NodeInfo Kubernetes节点信息
@@ -109,12 +110,13 @@ type ClusterInfo struct {
 }
 
 // NewService 创建新的Kubernetes服务实例
-func NewService(logger *logger.Logger) *Service {
+func NewService(logger *logger.Logger, realtimeMgr interface{}) *Service {
 	return &Service{
-		logger:         logger,
-		clients:        make(map[string]*kubernetes.Clientset),
-		metricsClients: make(map[string]*metricsclientset.Clientset),
-		cache:          cache.NewK8sCache(logger),
+		logger:          logger,
+		clients:         make(map[string]*kubernetes.Clientset),
+		metricsClients:  make(map[string]*metricsclientset.Clientset),
+		cache:           cache.NewK8sCache(logger),
+		realtimeManager: realtimeMgr,
 	}
 }
 
@@ -172,6 +174,19 @@ func (s *Service) CreateClient(clusterName, kubeconfig string) error {
 		} else {
 			s.metricsClients[clusterName] = metricsClient
 			s.logger.Infof("Successfully created metrics client for cluster: %s", clusterName)
+		}
+	}
+
+	// 注册集群到实时同步管理器
+	if s.realtimeManager != nil {
+		type RealtimeManager interface {
+			RegisterCluster(clusterName string, clientset *kubernetes.Clientset) error
+		}
+		if rtMgr, ok := s.realtimeManager.(RealtimeManager); ok {
+			if err := rtMgr.RegisterCluster(clusterName, clientset); err != nil {
+				s.logger.Errorf("Failed to register cluster %s to realtime manager: %v", clusterName, err)
+				// 不返回错误，允许继续使用传统模式
+			}
 		}
 	}
 
@@ -258,6 +273,31 @@ func (s *Service) ListNodes(clusterName string) ([]NodeInfo, error) {
 
 // ListNodesWithCache 获取节点列表（可选择是否强制刷新缓存）
 func (s *Service) ListNodesWithCache(clusterName string, forceRefresh bool) ([]NodeInfo, error) {
+	// 尝试使用智能缓存（由 Informer 实时更新）
+	if s.realtimeManager != nil && !forceRefresh {
+		type SmartCacheProvider interface {
+			GetSmartCache() interface{}
+		}
+		if rtMgr, ok := s.realtimeManager.(SmartCacheProvider); ok {
+			smartCache := rtMgr.GetSmartCache()
+			if smartCache != nil {
+				type SmartCache interface {
+					ListNodes(clusterName string) ([]NodeInfo, error)
+				}
+				if sc, ok := smartCache.(SmartCache); ok {
+					nodes, err := sc.ListNodes(clusterName)
+					if err == nil && len(nodes) > 0 {
+						s.logger.Infof("Retrieved %d nodes from smart cache for cluster %s", len(nodes), clusterName)
+						return nodes, nil
+					}
+					// SmartCache 未就绪或无数据，回退到传统方式
+					s.logger.Infof("SmartCache not ready for cluster %s, falling back to API", clusterName)
+				}
+			}
+		}
+	}
+
+	// 传统模式：使用旧的缓存逻辑或直接从 API 获取
 	ctx := context.Background()
 
 	// 定义获取函数
@@ -364,6 +404,31 @@ func (s *Service) GetNode(clusterName, nodeName string) (*NodeInfo, error) {
 
 // GetNodeWithCache 获取单个节点信息（可选择是否强制刷新缓存）
 func (s *Service) GetNodeWithCache(clusterName, nodeName string, forceRefresh bool) (*NodeInfo, error) {
+	// 尝试使用智能缓存（由 Informer 实时更新）
+	if s.realtimeManager != nil && !forceRefresh {
+		type SmartCacheProvider interface {
+			GetSmartCache() interface{}
+		}
+		if rtMgr, ok := s.realtimeManager.(SmartCacheProvider); ok {
+			smartCache := rtMgr.GetSmartCache()
+			if smartCache != nil {
+				type SmartCache interface {
+					GetNode(clusterName, nodeName string) (*NodeInfo, error)
+				}
+				if sc, ok := smartCache.(SmartCache); ok {
+					node, err := sc.GetNode(clusterName, nodeName)
+					if err == nil && node != nil {
+						s.logger.Infof("Retrieved node %s from smart cache for cluster %s", nodeName, clusterName)
+						return node, nil
+					}
+					// SmartCache 未就绪或无数据，回退到传统方式
+					s.logger.Infof("SmartCache not ready for node %s/%s, falling back to API", clusterName, nodeName)
+				}
+			}
+		}
+	}
+
+	// 传统模式：使用旧的缓存逻辑或直接从 API 获取
 	ctx := context.Background()
 
 	// 定义获取函数
@@ -488,9 +553,7 @@ func (s *Service) UpdateNodeLabels(clusterName string, req LabelUpdateRequest) e
 			s.logger.Infof("Successfully updated labels for node %s in cluster %s", req.NodeName, clusterName)
 		}
 
-		// 清除缓存
-		s.cache.InvalidateNode(clusterName, req.NodeName)
-
+		// 注意：使用智能缓存 + Informer 后，缓存会自动更新，无需手动清除
 		return nil
 	}
 
@@ -593,9 +656,7 @@ func (s *Service) UpdateNodeTaints(clusterName string, req TaintUpdateRequest) e
 			s.logger.Infof("Successfully updated taints for node %s in cluster %s", req.NodeName, clusterName)
 		}
 
-		// 清除缓存
-		s.cache.InvalidateNode(clusterName, req.NodeName)
-
+		// 注意：使用智能缓存 + Informer 后，缓存会自动更新，无需手动清除
 		return nil
 	}
 
@@ -631,9 +692,7 @@ func (s *Service) CordonNode(clusterName, nodeName string) error {
 
 	s.logger.Infof("Successfully cordoned node %s in cluster %s", nodeName, clusterName)
 
-	// 清除缓存
-	s.cache.InvalidateNode(clusterName, nodeName)
-
+	// 注意：使用智能缓存 + Informer 后，缓存会自动更新，无需手动清除
 	return nil
 }
 
@@ -698,9 +757,7 @@ func (s *Service) CordonNodeWithReason(clusterName, nodeName, reason string) err
 		// 成功
 		s.logger.Infof("Successfully cordoned node %s in cluster %s with reason: %s (attempt %d/%d)", nodeName, clusterName, reason, attempt+1, maxRetries+1)
 
-		// 清除缓存
-		s.cache.InvalidateNode(clusterName, nodeName)
-
+		// 注意：使用智能缓存 + Informer 后，缓存会自动更新，无需手动清除
 		return nil
 	}
 
@@ -740,8 +797,7 @@ func (s *Service) UncordonNode(clusterName, nodeName string) error {
 		// 如果节点已经可调度，直接返回成功
 		if !node.Spec.Unschedulable {
 			s.logger.Infof("Node %s in cluster %s is already uncordoned", nodeName, clusterName)
-			// 清除缓存
-			s.cache.InvalidateNode(clusterName, nodeName)
+			// 注意：使用智能缓存 + Informer 后，缓存会自动更新，无需手动清除
 			return nil
 		}
 
@@ -769,9 +825,7 @@ func (s *Service) UncordonNode(clusterName, nodeName string) error {
 		// 成功
 		s.logger.Infof("Successfully uncordoned node %s in cluster %s (attempt %d/%d)", nodeName, clusterName, attempt+1, maxRetries+1)
 
-		// 清除缓存
-		s.cache.InvalidateNode(clusterName, nodeName)
-
+		// 注意：使用智能缓存 + Informer 后，缓存会自动更新，无需手动清除
 		return nil
 	}
 

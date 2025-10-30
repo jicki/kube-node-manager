@@ -159,6 +159,9 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 	// WebSocket 进度推送 (不需要中间件，在内部处理认证)
 	api.GET("/progress/ws", handlers.Progress.HandleWebSocket)
 
+	// WebSocket 节点实时同步 (节点状态实时推送)
+	api.GET("/nodes/ws", handlers.WebSocket.HandleWebSocket)
+
 	users := protected.Group("/users")
 	{
 		users.GET("", handlers.User.List)

@@ -6,6 +6,7 @@ import (
 
 	"kube-node-manager/internal/cache"
 	"kube-node-manager/internal/config"
+	"kube-node-manager/internal/realtime"
 	"kube-node-manager/internal/service/anomaly"
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/auth"
@@ -19,6 +20,7 @@ import (
 	"kube-node-manager/internal/service/progress"
 	"kube-node-manager/internal/service/taint"
 	"kube-node-manager/internal/service/user"
+	"kube-node-manager/internal/websocket"
 	"kube-node-manager/pkg/logger"
 
 	"gorm.io/gorm"
@@ -39,6 +41,8 @@ type Services struct {
 	Feishu        *feishu.Service
 	Anomaly       *anomaly.Service
 	AnomalyReport *anomaly.ReportService
+	Realtime      *realtime.Manager   // 实时同步管理器
+	WSHub         *websocket.Hub      // WebSocket Hub（导出供 handler 使用）
 }
 
 // clusterServiceAdapter 适配器，将 cluster.Service 适配为 feishu.ClusterServiceInterface
@@ -161,7 +165,13 @@ func (a *anomalyServiceAdapter) GetActiveAnomalies(clusterID *uint) (interface{}
 
 func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Services {
 	auditSvc := audit.NewService(db, logger)
-	k8sSvc := k8s.NewService(logger)
+	
+	// 创建实时同步管理器（必须在 k8s service 之前创建）
+	realtimeMgr := realtime.NewManager(logger)
+	realtimeMgr.Start()
+	logger.Info("Realtime Manager started successfully")
+	
+	k8sSvc := k8s.NewService(logger, realtimeMgr)
 	ldapSvc := ldap.NewService(logger, cfg.LDAP)
 	progressSvc := progress.NewService(logger)
 
@@ -251,5 +261,7 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 		Feishu:        feishuSvc,
 		Anomaly:       anomalySvc,
 		AnomalyReport: anomalyReportSvc,
+		Realtime:      realtimeMgr,
+		WSHub:         realtimeMgr.GetWebSocketHub(),
 	}
 }

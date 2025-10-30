@@ -12,6 +12,7 @@ import (
 	"kube-node-manager/internal/handler/progress"
 	"kube-node-manager/internal/handler/taint"
 	"kube-node-manager/internal/handler/user"
+	"kube-node-manager/internal/handler/websocket"
 	"kube-node-manager/internal/service"
 	"kube-node-manager/pkg/logger"
 )
@@ -29,6 +30,7 @@ type Handlers struct {
 	Feishu        *feishu.Handler
 	Anomaly       *anomaly.Handler
 	AnomalyReport *anomaly.ReportHandler
+	WebSocket     *websocket.Handler
 }
 
 func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
@@ -45,5 +47,6 @@ func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
 		Feishu:        feishu.NewHandler(services.Feishu, services.Audit, logger),
 		Anomaly:       anomaly.NewHandler(services.Anomaly, services.Anomaly.GetCleanupService(), logger),
 		AnomalyReport: anomaly.NewReportHandler(services.AnomalyReport),
+		WebSocket:     websocket.NewHandler(services.WSHub, logger),
 	}
 }
