@@ -284,15 +284,29 @@ const handleView = async (row) => {
   dialogTitle.value = '查看清单'
   try {
     const res = await ansibleAPI.getInventory(row.id)
-    Object.assign(inventoryForm, res.data)
+    console.log('清单详情响应:', res)
+    console.log('清单详情数据:', res.data)
+    // axios拦截器返回完整response，所以路径是: res.data.data
+    Object.assign(inventoryForm, res.data?.data || {})
     dialogVisible.value = true
   } catch (error) {
-    ElMessage.error('加载清单失败: ' + error.message)
+    console.error('加载清单失败:', error)
+    ElMessage.error('加载清单失败: ' + (error.message || '未知错误'))
   }
 }
 
 const handleEdit = async (row) => {
-  handleView(row)
+  dialogTitle.value = '编辑清单'
+  try {
+    const res = await ansibleAPI.getInventory(row.id)
+    console.log('编辑清单响应:', res)
+    // axios拦截器返回完整response，所以路径是: res.data.data
+    Object.assign(inventoryForm, res.data?.data || {})
+    dialogVisible.value = true
+  } catch (error) {
+    console.error('加载清单失败:', error)
+    ElMessage.error('加载清单失败: ' + (error.message || '未知错误'))
+  }
 }
 
 const handleRefresh = async (row) => {

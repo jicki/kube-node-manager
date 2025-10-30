@@ -223,10 +223,13 @@ const loadTasks = async () => {
   loading.value = true
   try {
     const res = await ansibleAPI.listTasks(queryParams)
-    tasks.value = res.data || []
-    total.value = res.total || 0
+    console.log('任务列表响应:', res)
+    // axios拦截器返回完整response，所以路径是: res.data.data 和 res.data.total
+    tasks.value = res.data?.data || []
+    total.value = res.data?.total || 0
   } catch (error) {
-    ElMessage.error('加载任务列表失败: ' + error.message)
+    console.error('加载任务列表失败:', error)
+    ElMessage.error('加载任务列表失败: ' + (error.message || '未知错误'))
   } finally {
     loading.value = false
   }
@@ -235,7 +238,8 @@ const loadTasks = async () => {
 const loadStatistics = async () => {
   try {
     const res = await ansibleAPI.getStatistics()
-    statistics.value = res.data || {}
+    // axios拦截器返回完整response，所以路径是: res.data.data
+    statistics.value = res.data?.data || {}
   } catch (error) {
     console.error('加载统计信息失败:', error)
   }
@@ -244,7 +248,8 @@ const loadStatistics = async () => {
 const loadTemplates = async () => {
   try {
     const res = await ansibleAPI.listTemplates({ page_size: 100 })
-    templates.value = res.data || []
+    // axios拦截器返回完整response，所以路径是: res.data.data
+    templates.value = res.data?.data || []
   } catch (error) {
     console.error('加载模板失败:', error)
   }
@@ -253,7 +258,8 @@ const loadTemplates = async () => {
 const loadInventories = async () => {
   try {
     const res = await ansibleAPI.listInventories({ page_size: 100 })
-    inventories.value = res.data || []
+    // axios拦截器返回完整response，所以路径是: res.data.data
+    inventories.value = res.data?.data || []
   } catch (error) {
     console.error('加载主机清单失败:', error)
   }
@@ -324,10 +330,13 @@ const handleViewLogs = async (row) => {
   logDialogVisible.value = true
   try {
     const res = await ansibleAPI.getTaskLogs(row.id, { limit: 5000 })
-    const logs = res.data || []
+    console.log('任务日志响应:', res)
+    // axios拦截器返回完整response，所以路径是: res.data.data
+    const logs = res.data?.data || []
     logContent.value = logs.map(log => log.content).join('\n')
   } catch (error) {
-    ElMessage.error('加载日志失败: ' + error.message)
+    console.error('加载日志失败:', error)
+    ElMessage.error('加载日志失败: ' + (error.message || '未知错误'))
   }
 }
 

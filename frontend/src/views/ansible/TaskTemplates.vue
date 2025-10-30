@@ -47,8 +47,8 @@
     <el-dialog 
       v-model="dialogVisible" 
       :title="dialogTitle" 
-      width="80%"
-      :fullscreen="true"
+      width="60%"
+      :close-on-click-modal="false"
     >
       <el-form :model="templateForm" label-width="120px">
         <el-form-item label="模板名称" required>
@@ -64,15 +64,17 @@
           <el-input 
             v-model="templateForm.playbook_content" 
             type="textarea" 
-            :rows="20"
-            placeholder="请输入 Ansible Playbook YAML 内容" 
-            style="font-family: monospace"
+            :rows="15"
+            placeholder="请输入 Ansible Playbook YAML 内容&#10;&#10;示例：&#10;---&#10;- name: 示例 Playbook&#10;  hosts: all&#10;  tasks:&#10;    - name: Ping 测试&#10;      ping:" 
+            style="font-family: 'Courier New', monospace; font-size: 13px;"
           />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
+        <div class="dialog-footer">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -109,10 +111,15 @@ const loadTemplates = async () => {
   loading.value = true
   try {
     const res = await ansibleAPI.listTemplates(queryParams)
-    templates.value = res.data || []
-    total.value = res.total || 0
+    console.log('模板列表响应:', res)
+    console.log('模板数据:', res.data)
+    // axios拦截器返回完整response，所以路径是: res.data.data 和 res.data.total
+    templates.value = res.data?.data || []
+    total.value = res.data?.total || 0
+    console.log('已加载模板:', templates.value.length, '个')
   } catch (error) {
-    ElMessage.error('加载模板失败: ' + error.message)
+    console.error('加载模板失败:', error)
+    ElMessage.error('加载模板失败: ' + (error.message || '未知错误'))
   } finally {
     loading.value = false
   }
@@ -202,6 +209,12 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 </style>
 
