@@ -69,9 +69,10 @@ func (h *Handler) ListTasks(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":  0,
-		"data":  tasks,
-		"total": total,
+		"code":    200,
+		"message": "Success",
+		"data":    tasks,
+		"total":   total,
 	})
 }
 
@@ -102,8 +103,9 @@ func (h *Handler) GetTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": task,
+		"code":    200,
+		"message": "Success",
+		"data":    task,
 	})
 }
 
@@ -137,9 +139,9 @@ func (h *Handler) CreateTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"data":    task,
+		"code":    200,
 		"message": "Task created and started successfully",
+		"data":    task,
 	})
 }
 
@@ -172,7 +174,7 @@ func (h *Handler) CancelTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
+		"code":    200,
 		"message": "Task cancelled successfully",
 	})
 }
@@ -207,9 +209,9 @@ func (h *Handler) RetryTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"data":    task,
+		"code":    200,
 		"message": "Task retried successfully",
+		"data":    task,
 	})
 }
 
@@ -245,8 +247,9 @@ func (h *Handler) GetTaskLogs(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": logs,
+		"code":    200,
+		"message": "Success",
+		"data":    logs,
 	})
 }
 
@@ -277,8 +280,9 @@ func (h *Handler) RefreshTaskStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": status,
+		"code":    200,
+		"message": "Success",
+		"data":    status,
 	})
 }
 
@@ -305,8 +309,9 @@ func (h *Handler) GetStatistics(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": stats,
+		"code":    200,
+		"message": "Success",
+		"data":    stats,
 	})
 }
 

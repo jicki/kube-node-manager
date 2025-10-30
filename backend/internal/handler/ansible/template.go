@@ -53,9 +53,10 @@ func (h *TemplateHandler) ListTemplates(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":  0,
-		"data":  templates,
-		"total": total,
+		"code":    200,
+		"message": "Success",
+		"data":    templates,
+		"total":   total,
 	})
 }
 
@@ -86,8 +87,9 @@ func (h *TemplateHandler) GetTemplate(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": template,
+		"code":    200,
+		"message": "Success",
+		"data":    template,
 	})
 }
 
@@ -121,9 +123,9 @@ func (h *TemplateHandler) CreateTemplate(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"data":    template,
+		"code":    200,
 		"message": "Template created successfully",
+		"data":    template,
 	})
 }
 
@@ -164,9 +166,9 @@ func (h *TemplateHandler) UpdateTemplate(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"data":    template,
+		"code":    200,
 		"message": "Template updated successfully",
+		"data":    template,
 	})
 }
 
@@ -199,7 +201,7 @@ func (h *TemplateHandler) DeleteTemplate(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
+		"code":    200,
 		"message": "Template deleted successfully",
 	})
 }
@@ -228,7 +230,7 @@ func (h *TemplateHandler) ValidateTemplate(c *gin.Context) {
 
 	if err := h.service.ValidatePlaybook(req.PlaybookContent); err != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"code":    1,
+			"code":    200,
 			"valid":   false,
 			"message": err.Error(),
 		})
@@ -236,7 +238,7 @@ func (h *TemplateHandler) ValidateTemplate(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
+		"code":    200,
 		"valid":   true,
 		"message": "Playbook is valid",
 	})

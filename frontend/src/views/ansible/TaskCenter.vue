@@ -262,10 +262,11 @@ const loadInventories = async () => {
 const loadClusters = async () => {
   try {
     const res = await clusterAPI.getClusters()
-    console.log('集群API响应:', res)
-    // 后端返回格式: { code: 200, message: "Success", data: { clusters: [...], total: 8 } }
-    clusters.value = res.data?.clusters || []
-    console.log('已加载集群:', clusters.value.length, '个')
+    console.log('集群API完整响应:', res)
+    console.log('响应数据:', res.data)
+    // axios拦截器返回完整response，所以路径是: res.data.data.clusters
+    clusters.value = res.data?.data?.clusters || []
+    console.log('已加载集群:', clusters.value.length, '个', clusters.value)
   } catch (error) {
     console.error('加载集群失败:', error)
     ElMessage.error('加载集群失败: ' + error.message)

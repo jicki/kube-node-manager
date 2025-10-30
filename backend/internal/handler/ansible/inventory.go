@@ -58,9 +58,10 @@ func (h *InventoryHandler) ListInventories(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":  0,
-		"data":  inventories,
-		"total": total,
+		"code":    200,
+		"message": "Success",
+		"data":    inventories,
+		"total":   total,
 	})
 }
 
@@ -91,8 +92,9 @@ func (h *InventoryHandler) GetInventory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": inventory,
+		"code":    200,
+		"message": "Success",
+		"data":    inventory,
 	})
 }
 
@@ -126,9 +128,9 @@ func (h *InventoryHandler) CreateInventory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"data":    inventory,
+		"code":    200,
 		"message": "Inventory created successfully",
+		"data":    inventory,
 	})
 }
 
@@ -169,9 +171,9 @@ func (h *InventoryHandler) UpdateInventory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"data":    inventory,
+		"code":    200,
 		"message": "Inventory updated successfully",
+		"data":    inventory,
 	})
 }
 
@@ -204,7 +206,7 @@ func (h *InventoryHandler) DeleteInventory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
+		"code":    200,
 		"message": "Inventory deleted successfully",
 	})
 }
@@ -239,9 +241,9 @@ func (h *InventoryHandler) GenerateFromCluster(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"data":    inventory,
+		"code":    200,
 		"message": "Inventory generated from cluster successfully",
+		"data":    inventory,
 	})
 }
 
@@ -275,9 +277,9 @@ func (h *InventoryHandler) RefreshInventory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"data":    inventory,
+		"code":    200,
 		"message": "Inventory refreshed successfully",
+		"data":    inventory,
 	})
 }
 

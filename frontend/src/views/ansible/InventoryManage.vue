@@ -178,10 +178,15 @@ const loadInventories = async () => {
   loading.value = true
   try {
     const res = await ansibleAPI.listInventories(queryParams)
-    inventories.value = res.data || []
-    total.value = res.total || 0
+    console.log('清单列表响应:', res)
+    console.log('清单数据:', res.data)
+    // axios拦截器返回完整response，所以路径是: res.data.data 和 res.data.total
+    inventories.value = res.data?.data || []
+    total.value = res.data?.total || 0
+    console.log('已加载清单:', inventories.value.length, '个')
   } catch (error) {
-    ElMessage.error('加载清单失败: ' + error.message)
+    console.error('加载清单失败:', error)
+    ElMessage.error('加载清单失败: ' + (error.message || '未知错误'))
   } finally {
     loading.value = false
   }
@@ -190,10 +195,11 @@ const loadInventories = async () => {
 const loadClusters = async () => {
   try {
     const res = await clusterAPI.getClusters()
-    console.log('集群API响应:', res)
-    // 后端返回格式: { code: 200, message: "Success", data: { clusters: [...], total: 8 } }
-    clusters.value = res.data?.clusters || []
-    console.log('已加载集群:', clusters.value.length, '个')
+    console.log('集群API完整响应:', res)
+    console.log('响应数据:', res.data)
+    // axios拦截器返回完整response，所以路径是: res.data.data.clusters
+    clusters.value = res.data?.data?.clusters || []
+    console.log('已加载集群:', clusters.value.length, '个', clusters.value)
   } catch (error) {
     console.error('加载集群失败:', error)
     ElMessage.error('加载集群失败: ' + error.message)

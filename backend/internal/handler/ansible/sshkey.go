@@ -54,9 +54,10 @@ func (h *SSHKeyHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":  0,
-		"data":  keys,
-		"total": total,
+		"code":    200,
+		"message": "Success",
+		"data":    keys,
+		"total":   total,
 	})
 }
 
@@ -87,8 +88,9 @@ func (h *SSHKeyHandler) Get(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": key,
+		"code":    200,
+		"message": "Success",
+		"data":    key,
 	})
 }
 
@@ -122,9 +124,9 @@ func (h *SSHKeyHandler) Create(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"data":    key,
+		"code":    200,
 		"message": "SSH key created successfully",
+		"data":    key,
 	})
 }
 
@@ -165,9 +167,9 @@ func (h *SSHKeyHandler) Update(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"data":    key,
+		"code":    200,
 		"message": "SSH key updated successfully",
+		"data":    key,
 	})
 }
 
@@ -200,7 +202,7 @@ func (h *SSHKeyHandler) Delete(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
+		"code":    200,
 		"message": "SSH key deleted successfully",
 	})
 }
@@ -236,7 +238,7 @@ func (h *SSHKeyHandler) TestConnection(c *gin.Context) {
 	if err := h.service.TestConnection(uint(id), req.Host); err != nil {
 		h.logger.Errorf("SSH connection test failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    1,
+			"code":    500,
 			"error":   err.Error(),
 			"message": "Connection test failed",
 		})
@@ -244,7 +246,7 @@ func (h *SSHKeyHandler) TestConnection(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
+		"code":    200,
 		"message": "Connection test successful",
 	})
 }
