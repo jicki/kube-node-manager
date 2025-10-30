@@ -250,12 +250,8 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	anomalyReportSvc := anomaly.NewReportService(db, logger, anomalySvc, reportEnabled)
 
 	// 创建 Ansible 服务
-	// 从配置或环境变量获取加密密钥
-	encryptionKey := cfg.EncryptionKey
-	if encryptionKey == "" {
-		// 尝试从环境变量获取
-		encryptionKey = os.Getenv("ANSIBLE_ENCRYPTION_KEY")
-	}
+	// 从环境变量获取加密密钥
+	encryptionKey := os.Getenv("ANSIBLE_ENCRYPTION_KEY")
 	ansibleSvc := ansible.NewService(db, logger, k8sSvc, realtimeMgr.GetWebSocketHub(), encryptionKey)
 
 	return &Services{

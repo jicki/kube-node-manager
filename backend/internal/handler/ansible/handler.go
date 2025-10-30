@@ -27,7 +27,7 @@ func NewHandler(service *ansible.Service, logger *logger.Logger) *Handler {
 // checkAdminPermission 检查管理员权限
 func checkAdminPermission(c *gin.Context) bool {
 	userRole, exists := c.Get("user_role")
-	if !exists || userRole.(string) != model.RoleAdmin {
+	if !exists || userRole != model.RoleAdmin {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can access Ansible module"})
 		return false
 	}
