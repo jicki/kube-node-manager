@@ -123,6 +123,29 @@
         </el-menu-item>
       </el-sub-menu>
 
+      <!-- Ansible 任务中心 (仅 admin 可见) -->
+      <el-sub-menu v-if="hasPermission('admin')" index="ansible">
+        <template #title>
+          <el-icon><Operation /></el-icon>
+          <span>Ansible</span>
+        </template>
+
+        <el-menu-item index="/ansible-tasks">
+          <el-icon><Operation /></el-icon>
+          <template #title>任务中心</template>
+        </el-menu-item>
+
+        <el-menu-item index="/ansible-templates">
+          <el-icon><Document /></el-icon>
+          <template #title>任务模板</template>
+        </el-menu-item>
+
+        <el-menu-item index="/ansible-inventories">
+          <el-icon><Menu /></el-icon>
+          <template #title>主机清单</template>
+        </el-menu-item>
+      </el-sub-menu>
+
       <!-- 系统配置 -->
       <el-sub-menu index="system-config">
         <template #title>
@@ -204,7 +227,10 @@ import {
   List,
   ChatDotSquare,
   ChatLineSquare,
-  DataAnalysis
+  DataAnalysis,
+  Operation,
+  Document,
+  Menu
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -232,7 +258,7 @@ const defaultOpeneds = computed(() => {
     openedMenus.push('node-management')
   }
 
-  if (['/clusters', '/audit', '/users', '/gitlab-settings', '/feishu-settings'].includes(path)) {
+  if (['/clusters', '/audit', '/users', '/gitlab-settings', '/feishu-settings', '/analytics-report-settings'].includes(path)) {
     openedMenus.push('system-config')
   }
 
@@ -242,6 +268,10 @@ const defaultOpeneds = computed(() => {
 
   if (['/feishu-groups'].includes(path)) {
     openedMenus.push('feishu')
+  }
+
+  if (['/ansible-tasks', '/ansible-templates', '/ansible-inventories'].includes(path)) {
+    openedMenus.push('ansible')
   }
 
   return openedMenus
