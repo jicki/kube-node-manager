@@ -388,15 +388,32 @@ const handleRefresh = async (row) => {
 
 const handleDelete = async (row) => {
   try {
-    await ElMessageBox.confirm('确定要删除此清单吗？', '提示', {
-      type: 'warning'
-    })
+    await ElMessageBox.confirm(
+      '确定要删除此清单吗？删除后无法恢复。',
+      '删除确认',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
     await ansibleAPI.deleteInventory(row.id)
     ElMessage.success('清单已删除')
     loadInventories()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败: ' + error.message)
+      const errorMsg = error.message || error.toString()
+      if (errorMsg.includes('tasks are using this inventory')) {
+        // 提取任务数量
+        const match = errorMsg.match(/(\d+) tasks/)
+        const taskCount = match ? match[1] : '若干'
+        ElMessage.error({
+          message: `无法删除：有 ${taskCount} 个任务正在使用此清单。请先删除这些任务后再试。`,
+          duration: 5000
+        })
+      } else {
+        ElMessage.error('删除失败: ' + errorMsg)
+      }
     }
   }
 }
