@@ -289,8 +289,8 @@ func (s *InventoryService) GenerateFromK8s(req model.GenerateInventoryRequest, u
 func (s *InventoryService) generateINIInventory(nodes []k8s.NodeInfo, clusterName string) string {
 	var builder strings.Builder
 
-	// 写入组头
-	builder.WriteString(fmt.Sprintf("[%s]\n", clusterName))
+	// 使用 [all] 组作为默认组
+	builder.WriteString("[all]\n")
 
 	// 写入主机
 	for _, node := range nodes {
@@ -309,8 +309,8 @@ func (s *InventoryService) generateINIInventory(nodes []k8s.NodeInfo, clusterNam
 		builder.WriteString(fmt.Sprintf("%s ansible_host=%s ansible_user=root\n", node.Name, ip))
 	}
 
-	// 写入变量组
-	builder.WriteString(fmt.Sprintf("\n[%s:vars]\n", clusterName))
+	// 写入变量组 [all:vars]
+	builder.WriteString("\n[all:vars]\n")
 	builder.WriteString("ansible_python_interpreter=/usr/bin/python3\n")
 	builder.WriteString("ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n")
 

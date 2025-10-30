@@ -97,6 +97,25 @@
             {{ clusters.length > 0 ? `共 ${clusters.length} 个集群` : '暂无集群数据，请先添加集群' }}
           </div>
         </el-form-item>
+        <el-form-item label="SSH 密钥">
+          <el-select 
+            v-model="generateForm.ssh_key_id" 
+            placeholder="选择 SSH 密钥（可选）" 
+            style="width: 100%"
+            clearable
+            filterable
+          >
+            <el-option 
+              v-for="key in sshKeys" 
+              :key="key.id" 
+              :label="`${key.name} (${key.username}@${key.type})`" 
+              :value="key.id" 
+            />
+          </el-select>
+          <div style="color: #999; font-size: 12px; margin-top: 5px;">
+            选择用于连接主机的 SSH 密钥，不选则使用默认密钥
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="generateDialogVisible = false">取消</el-button>
@@ -117,6 +136,26 @@
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="inventoryForm.description" type="textarea" :rows="3" placeholder="请输入描述" :disabled="isViewMode" />
+        </el-form-item>
+        <el-form-item label="SSH 密钥">
+          <el-select 
+            v-model="inventoryForm.ssh_key_id" 
+            placeholder="选择 SSH 密钥（可选）" 
+            style="width: 100%"
+            clearable
+            filterable
+            :disabled="isViewMode"
+          >
+            <el-option 
+              v-for="key in sshKeys" 
+              :key="key.id" 
+              :label="`${key.name} (${key.username}@${key.type})`" 
+              :value="key.id" 
+            />
+          </el-select>
+          <div style="color: #999; font-size: 12px; margin-top: 5px;">
+            选择用于连接主机的 SSH 密钥
+          </div>
         </el-form-item>
         <el-form-item label="清单内容" :required="!isViewMode">
           <el-input 
@@ -165,16 +204,19 @@ const inventoryForm = reactive({
   id: null,
   name: '',
   description: '',
-  content: ''
+  content: '',
+  ssh_key_id: null
 })
 
 const generateForm = reactive({
   name: '',
   description: '',
-  cluster_id: null
+  cluster_id: null,
+  ssh_key_id: null
 })
 
 const clusters = ref([])
+const sshKeys = ref([])
 
 const loadInventories = async () => {
   loading.value = true
@@ -208,14 +250,28 @@ const loadClusters = async () => {
   }
 }
 
+const loadSSHKeys = async () => {
+  try {
+    const res = await ansibleAPI.listSSHKeys({ page_size: 100 })
+    console.log('SSH密钥列表响应:', res)
+    // axios拦截器返回完整response，所以路径是: res.data.data
+    sshKeys.value = res.data?.data || []
+    console.log('已加载SSH密钥:', sshKeys.value.length, '个')
+  } catch (error) {
+    console.error('加载SSH密钥失败:', error)
+  }
+}
+
 const showGenerateDialog = () => {
   Object.assign(generateForm, {
     name: '',
     description: '',
-    cluster_id: null
+    cluster_id: null,
+    ssh_key_id: null
   })
   generateDialogVisible.value = true
   loadClusters()
+  loadSSHKeys()
 }
 
 const handleGenerate = async () => {
@@ -244,9 +300,11 @@ const showCreateDialog = () => {
     id: null,
     name: '',
     description: '',
-    content: ''
+    content: '',
+    ssh_key_id: null
   })
   dialogVisible.value = true
+  loadSSHKeys()
 }
 
 const handleSave = async () => {
@@ -261,7 +319,8 @@ const handleSave = async () => {
       name: inventoryForm.name,
       description: inventoryForm.description,
       source_type: 'manual',
-      content: inventoryForm.content
+      content: inventoryForm.content,
+      ssh_key_id: inventoryForm.ssh_key_id || null
     }
 
     if (inventoryForm.id) {
@@ -277,7 +336,8 @@ const handleSave = async () => {
     dialogVisible.value = false
     loadInventories()
   } catch (error) {
-    ElMessage.error('保存失败: ' + error.message)
+    console.error('保存清单失败:', error)
+    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
   } finally {
     saving.value = false
   }
@@ -293,6 +353,7 @@ const handleView = async (row) => {
     // axios拦截器返回完整response，所以路径是: res.data.data
     Object.assign(inventoryForm, res.data?.data || {})
     dialogVisible.value = true
+    loadSSHKeys() // 加载 SSH 密钥列表
   } catch (error) {
     console.error('加载清单失败:', error)
     ElMessage.error('加载清单失败: ' + (error.message || '未知错误'))
@@ -308,6 +369,7 @@ const handleEdit = async (row) => {
     // axios拦截器返回完整response，所以路径是: res.data.data
     Object.assign(inventoryForm, res.data?.data || {})
     dialogVisible.value = true
+    loadSSHKeys() // 加载 SSH 密钥列表
   } catch (error) {
     console.error('加载清单失败:', error)
     ElMessage.error('加载清单失败: ' + (error.message || '未知错误'))

@@ -169,14 +169,22 @@
     </el-dialog>
 
     <!-- 日志对话框 -->
-    <el-dialog v-model="logDialogVisible" title="任务日志" width="80%" :fullscreen="true">
+    <el-dialog 
+      v-model="logDialogVisible" 
+      title="任务日志" 
+      width="70%"
+      :close-on-click-modal="false"
+    >
       <div class="log-container">
-        <el-scrollbar height="600px">
-          <pre class="log-content">{{ logContent }}</pre>
+        <el-scrollbar max-height="500px">
+          <pre class="log-content">{{ logContent || '暂无日志' }}</pre>
         </el-scrollbar>
       </div>
       <template #footer>
-        <el-button @click="logDialogVisible = false">关闭</el-button>
+        <div class="dialog-footer">
+          <el-button @click="logDialogVisible = false">关闭</el-button>
+          <el-button type="primary" @click="copyLogs" v-if="logContent">复制日志</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -365,6 +373,27 @@ const handleRetry = async (row) => {
   }
 }
 
+const copyLogs = async () => {
+  try {
+    await navigator.clipboard.writeText(logContent.value)
+    ElMessage.success('日志已复制到剪贴板')
+  } catch (error) {
+    console.error('复制日志失败:', error)
+    // 降级方案：使用传统方法
+    const textArea = document.createElement('textarea')
+    textArea.value = logContent.value
+    document.body.appendChild(textArea)
+    textArea.select()
+    try {
+      document.execCommand('copy')
+      ElMessage.success('日志已复制到剪贴板')
+    } catch (err) {
+      ElMessage.error('复制失败，请手动复制')
+    }
+    document.body.removeChild(textArea)
+  }
+}
+
 const getStatusType = (status) => {
   const types = {
     pending: '',
@@ -431,20 +460,41 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .log-container {
-  background: #000;
-  color: #0f0;
-  padding: 20px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 16px;
   border-radius: 4px;
+  border: 1px solid #3e3e3e;
 }
 
 .log-content {
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 14px;
-  line-height: 1.6;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
   margin: 0;
   white-space: pre-wrap;
   word-wrap: break-word;
+  color: #d4d4d4;
+}
+
+/* 优化日志中不同类型的文本颜色 */
+.log-content :deep(.error) {
+  color: #f48771;
+}
+
+.log-content :deep(.success) {
+  color: #89d185;
+}
+
+.log-content :deep(.warning) {
+  color: #e5c07b;
 }
 </style>
 
