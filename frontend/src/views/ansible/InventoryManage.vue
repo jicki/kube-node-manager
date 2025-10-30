@@ -79,7 +79,13 @@
           <el-input v-model="generateForm.description" type="textarea" :rows="3" placeholder="请输入描述" />
         </el-form-item>
         <el-form-item label="选择集群" required>
-          <el-select v-model="generateForm.cluster_id" placeholder="选择集群" style="width: 100%">
+          <el-select 
+            v-model="generateForm.cluster_id" 
+            placeholder="选择集群" 
+            style="width: 100%"
+            clearable
+            filterable
+          >
             <el-option 
               v-for="cluster in clusters" 
               :key="cluster.id" 
@@ -87,6 +93,9 @@
               :value="cluster.id" 
             />
           </el-select>
+          <div style="color: #999; font-size: 12px; margin-top: 5px;">
+            {{ clusters.length > 0 ? `共 ${clusters.length} 个集群` : '暂无集群数据，请先添加集群' }}
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -99,8 +108,8 @@
     <el-dialog 
       v-model="dialogVisible" 
       :title="dialogTitle" 
-      width="80%"
-      :fullscreen="true"
+      width="60%"
+      :close-on-click-modal="false"
     >
       <el-form :model="inventoryForm" label-width="120px">
         <el-form-item label="清单名称" required>
@@ -113,14 +122,17 @@
           <el-input 
             v-model="inventoryForm.content" 
             type="textarea" 
-            :rows="20"
-            placeholder="请输入 Ansible Inventory 内容（INI 格式）" 
-            style="font-family: monospace"
+            :rows="15"
+            placeholder="请输入 Ansible Inventory 内容（INI 格式）&#10;&#10;示例：&#10;[webservers]&#10;192.168.1.10 ansible_user=root&#10;192.168.1.11 ansible_user=root&#10;&#10;[dbservers]&#10;192.168.1.20 ansible_user=root" 
+            style="font-family: 'Courier New', monospace; font-size: 13px;"
           />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">关闭</el-button>
+        <div class="dialog-footer">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -140,6 +152,7 @@ const dialogVisible = ref(false)
 const generateDialogVisible = ref(false)
 const dialogTitle = ref('')
 const generating = ref(false)
+const saving = ref(false)
 
 const queryParams = reactive({
   page: 1,
@@ -177,9 +190,13 @@ const loadInventories = async () => {
 const loadClusters = async () => {
   try {
     const res = await clusterAPI.getClusters()
+    console.log('集群API响应:', res)
+    // 后端返回格式: { code: 200, message: "Success", data: { clusters: [...], total: 8 } }
     clusters.value = res.data?.clusters || []
+    console.log('已加载集群:', clusters.value.length, '个')
   } catch (error) {
     console.error('加载集群失败:', error)
+    ElMessage.error('加载集群失败: ' + error.message)
   }
 }
 
@@ -221,6 +238,40 @@ const showCreateDialog = () => {
     content: ''
   })
   dialogVisible.value = true
+}
+
+const handleSave = async () => {
+  if (!inventoryForm.name || !inventoryForm.content) {
+    ElMessage.warning('请填写必填项')
+    return
+  }
+
+  saving.value = true
+  try {
+    const data = {
+      name: inventoryForm.name,
+      description: inventoryForm.description,
+      source_type: 'manual',
+      content: inventoryForm.content
+    }
+
+    if (inventoryForm.id) {
+      // 更新
+      await ansibleAPI.updateInventory(inventoryForm.id, data)
+      ElMessage.success('清单已更新')
+    } else {
+      // 创建
+      await ansibleAPI.createInventory(data)
+      ElMessage.success('清单已创建')
+    }
+    
+    dialogVisible.value = false
+    loadInventories()
+  } catch (error) {
+    ElMessage.error('保存失败: ' + error.message)
+  } finally {
+    saving.value = false
+  }
 }
 
 const handleView = async (row) => {
@@ -282,6 +333,12 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 </style>
 

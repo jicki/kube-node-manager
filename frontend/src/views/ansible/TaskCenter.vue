@@ -262,9 +262,13 @@ const loadInventories = async () => {
 const loadClusters = async () => {
   try {
     const res = await clusterAPI.getClusters()
+    console.log('集群API响应:', res)
+    // 后端返回格式: { code: 200, message: "Success", data: { clusters: [...], total: 8 } }
     clusters.value = res.data?.clusters || []
+    console.log('已加载集群:', clusters.value.length, '个')
   } catch (error) {
     console.error('加载集群失败:', error)
+    ElMessage.error('加载集群失败: ' + error.message)
   }
 }
 
