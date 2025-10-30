@@ -278,15 +278,8 @@ func (s *Service) BatchUpdateLabels(req BatchUpdateRequest, userID uint) error {
 func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID uint, taskID string) error {
 	s.logger.Infof("Starting batch update for %d nodes in cluster %s", len(req.NodeNames), req.ClusterName)
 
-	// 标记是否有成功的操作，用于决定是否清除缓存
-	hasSuccess := false
-	defer func() {
-		// 批量操作完成后清除缓存，确保前端能获取到最新数据
-		if hasSuccess {
-			s.k8sSvc.InvalidateClusterCache(req.ClusterName)
-			s.logger.Infof("Invalidated cache for cluster %s after batch label update", req.ClusterName)
-		}
-	}()
+	// 注意：使用 Informer + WebSocket 实时同步后，无需手动清除缓存
+	// Informer 会自动检测到节点变化并通过 WebSocket 推送给前端
 
 	// 如果提供了taskID，则使用进度推送
 	if taskID != "" && s.progressSvc != nil {
@@ -322,7 +315,6 @@ func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID u
 			})
 			return err
 		}
-		hasSuccess = true // 异步操作假定有成功
 	} else {
 		// 传统的顺序处理方式（向后兼容）
 		var errors []string
@@ -348,10 +340,6 @@ func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID u
 			if i < len(req.NodeNames)-1 {
 				time.Sleep(50 * time.Millisecond)
 			}
-		}
-
-		if successCount > 0 {
-			hasSuccess = true
 		}
 
 		if len(errors) > 0 {

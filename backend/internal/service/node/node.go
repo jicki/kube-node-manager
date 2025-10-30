@@ -522,14 +522,8 @@ func (s *Service) BatchCordon(req BatchNodeRequest, userID uint) (map[string]int
 	errors := make(map[string]string)
 	successful := make([]string, 0)
 
-	// 批量操作完成后清除缓存，确保前端能获取到最新数据
-	defer func() {
-		if len(successful) > 0 {
-			// 清除整个集群的缓存
-			s.k8sSvc.InvalidateClusterCache(req.ClusterName)
-			s.logger.Infof("Invalidated cache for cluster %s after batch cordon operation", req.ClusterName)
-		}
-	}()
+	// 注意：使用 Informer + WebSocket 实时同步后，无需手动清除缓存
+	// Informer 会自动检测到节点变化并通过 WebSocket 推送给前端
 
 	for _, nodeName := range req.Nodes {
 		cordonReq := CordonRequest{
@@ -575,14 +569,8 @@ func (s *Service) BatchUncordon(req BatchNodeRequest, userID uint) (map[string]i
 	errors := make(map[string]string)
 	successful := make([]string, 0)
 
-	// 批量操作完成后清除缓存，确保前端能获取到最新数据
-	defer func() {
-		if len(successful) > 0 {
-			// 清除整个集群的缓存
-			s.k8sSvc.InvalidateClusterCache(req.ClusterName)
-			s.logger.Infof("Invalidated cache for cluster %s after batch uncordon operation", req.ClusterName)
-		}
-	}()
+	// 注意：使用 Informer + WebSocket 实时同步后，无需手动清除缓存
+	// Informer 会自动检测到节点变化并通过 WebSocket 推送给前端
 
 	for _, nodeName := range req.Nodes {
 		uncordonReq := CordonRequest{
@@ -685,14 +673,8 @@ func (s *Service) BatchDrain(req BatchNodeRequest, userID uint) (map[string]inte
 
 	s.logger.Infof("User %d initiating batch drain operation on %d nodes in cluster %s", userID, len(req.Nodes), req.ClusterName)
 
-	// 批量操作完成后清除缓存，确保前端能获取到最新数据
-	defer func() {
-		if len(successful) > 0 {
-			// 清除整个集群的缓存
-			s.k8sSvc.InvalidateClusterCache(req.ClusterName)
-			s.logger.Infof("Invalidated cache for cluster %s after batch drain operation", req.ClusterName)
-		}
-	}()
+	// 注意：使用 Informer + WebSocket 实时同步后，无需手动清除缓存
+	// Informer 会自动检测到节点变化并通过 WebSocket 推送给前端
 
 	for _, nodeName := range req.Nodes {
 		drainReq := DrainRequest{
@@ -854,11 +836,8 @@ func (s *Service) BatchCordonWithProgress(req BatchNodeRequest, userID uint, tas
 		processor,
 	)
 
-	// 批量操作完成后清除缓存，确保前端能获取到最新数据
-	if err == nil {
-		s.k8sSvc.InvalidateClusterCache(req.ClusterName)
-		s.logger.Infof("Invalidated cache for cluster %s after batch cordon with progress", req.ClusterName)
-	}
+	// 注意：使用 Informer + WebSocket 实时同步后，无需手动清除缓存
+	// Informer 会自动检测到节点变化并通过 WebSocket 推送给前端
 
 	return err
 }
@@ -894,11 +873,8 @@ func (s *Service) BatchUncordonWithProgress(req BatchNodeRequest, userID uint, t
 		processor,
 	)
 
-	// 批量操作完成后清除缓存，确保前端能获取到最新数据
-	if err == nil {
-		s.k8sSvc.InvalidateClusterCache(req.ClusterName)
-		s.logger.Infof("Invalidated cache for cluster %s after batch uncordon with progress", req.ClusterName)
-	}
+	// 注意：使用 Informer + WebSocket 实时同步后，无需手动清除缓存
+	// Informer 会自动检测到节点变化并通过 WebSocket 推送给前端
 
 	return err
 }
@@ -934,11 +910,8 @@ func (s *Service) BatchDrainWithProgress(req BatchNodeRequest, userID uint, task
 		processor,
 	)
 
-	// 批量操作完成后清除缓存，确保前端能获取到最新数据
-	if err == nil {
-		s.k8sSvc.InvalidateClusterCache(req.ClusterName)
-		s.logger.Infof("Invalidated cache for cluster %s after batch drain with progress", req.ClusterName)
-	}
+	// 注意：使用 Informer + WebSocket 实时同步后，无需手动清除缓存
+	// Informer 会自动检测到节点变化并通过 WebSocket 推送给前端
 
 	return err
 }
