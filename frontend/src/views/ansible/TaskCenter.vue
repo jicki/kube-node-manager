@@ -202,30 +202,42 @@
     <el-dialog 
       v-model="logDialogVisible" 
       title="任务日志" 
-      width="70%"
+      width="80%"
       :close-on-click-modal="false"
     >
-      <div class="log-container">
-        <el-scrollbar max-height="500px">
-          <pre class="log-content">{{ logContent || '暂无日志' }}</pre>
-        </el-scrollbar>
+      <div style="height: 600px">
+        <LogViewer :logs="logContent" :realtime="false" />
       </div>
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="logDialogVisible = false">关闭</el-button>
-          <el-button type="primary" @click="copyLogs" v-if="logContent">复制日志</el-button>
         </div>
       </template>
     </el-dialog>
+
+    <!-- 环境和风险确认对话框 -->
+    <ConfirmDialog
+      v-if="confirmDialogVisible"
+      v-model="confirmDialogVisible"
+      ref="confirmDialogRef"
+      :title="confirmDialogProps.title"
+      :alert-title="confirmDialogProps.alertTitle"
+      :alert-description="confirmDialogProps.alertDescription"
+      :alert-type="'error'"
+      :details="confirmDialogProps.details"
+      @confirm="handleConfirmTask"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 import clusterAPI from '@/api/cluster'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import LogViewer from '@/components/LogViewer.vue'
 
 // 数据
 const tasks = ref([])
@@ -256,6 +268,11 @@ const templates = ref([])
 const inventories = ref([])
 const clusters = ref([])
 const logContent = ref('')
+
+// 环境和风险确认对话框
+const confirmDialogVisible = ref(false)
+const confirmDialogRef = ref(null)
+const pendingTaskData = ref(null)
 
 // 方法
 const loadTasks = async () => {
@@ -351,11 +368,31 @@ const handleCreate = async () => {
     return
   }
 
+  // 检查是否需要二次确认
+  const selectedInventory = inventories.value.find(inv => inv.id === taskForm.inventory_id)
+  const selectedTemplate = taskForm.template_id ? templates.value.find(tpl => tpl.id === taskForm.template_id) : null
+  
+  const isProduction = selectedInventory?.environment === 'production'
+  const isHighRisk = selectedTemplate?.risk_level === 'high'
+  
+  if (isProduction || isHighRisk) {
+    // 显示确认对话框
+    pendingTaskData.value = { ...taskForm }
+    confirmDialogVisible.value = true
+    return
+  }
+
+  // 直接执行
+  await executeTask(taskForm)
+}
+
+const executeTask = async (data) => {
   creating.value = true
   try {
-    await ansibleAPI.createTask(taskForm)
+    await ansibleAPI.createTask(data)
     ElMessage.success('任务已启动')
     createDialogVisible.value = false
+    confirmDialogVisible.value = false
     loadTasks()
     loadStatistics()
   } catch (error) {
@@ -364,6 +401,63 @@ const handleCreate = async () => {
     creating.value = false
   }
 }
+
+const handleConfirmTask = async () => {
+  if (!pendingTaskData.value) return
+  
+  if (confirmDialogRef.value) {
+    confirmDialogRef.value.setConfirming(true)
+  }
+  
+  await executeTask(pendingTaskData.value)
+  
+  if (confirmDialogRef.value) {
+    confirmDialogRef.value.setConfirming(false)
+  }
+}
+
+// 计算确认对话框属性
+const confirmDialogProps = computed(() => {
+  if (!pendingTaskData.value) return {}
+  
+  const selectedInventory = inventories.value.find(inv => inv.id === pendingTaskData.value.inventory_id)
+  const selectedTemplate = pendingTaskData.value.template_id 
+    ? templates.value.find(tpl => tpl.id === pendingTaskData.value.template_id) 
+    : null
+  
+  const isProduction = selectedInventory?.environment === 'production'
+  const isHighRisk = selectedTemplate?.risk_level === 'high'
+  
+  let title = '危险操作确认'
+  let alertTitle = ''
+  let alertDescription = ''
+  
+  if (isProduction && isHighRisk) {
+    alertTitle = '生产环境 + 高风险操作'
+    alertDescription = '您即将在生产环境执行高风险 Ansible 任务，此操作可能严重影响线上服务，请务必谨慎操作！'
+  } else if (isProduction) {
+    alertTitle = '生产环境操作'
+    alertDescription = '您即将在生产环境执行 Ansible 任务，此操作可能影响线上服务，请谨慎操作。'
+  } else if (isHighRisk) {
+    alertTitle = '高风险操作'
+    alertDescription = '此模板包含高风险操作（如删除、格式化等），执行前请仔细检查 Playbook 内容。'
+  }
+  
+  const details = {
+    '任务名称': pendingTaskData.value.name,
+    '主机清单': selectedInventory?.name || '-',
+    '环境': selectedInventory?.environment || '-',
+    '模板': selectedTemplate?.name || '直接执行',
+    '风险等级': selectedTemplate?.risk_level || '-'
+  }
+  
+  return {
+    title,
+    alertTitle,
+    alertDescription,
+    details
+  }
+})
 
 const handleViewLogs = async (row) => {
   logDialogVisible.value = true

@@ -235,6 +235,80 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 		e.logger.Infof("Task %d completed successfully", task.ID)
 	} else {
 		e.logger.Errorf("Task %d failed: %v", task.ID, errorMsg)
+		
+		// 检查是否需要重试
+		e.checkAndRetryTask(task)
+	}
+}
+
+// checkAndRetryTask 检查并重试失败的任务
+func (e *TaskExecutor) checkAndRetryTask(task *model.AnsibleTask) {
+	// 检查是否配置了重试策略
+	if task.RetryPolicy == nil || !task.RetryPolicy.RetryOnError {
+		return
+	}
+
+	// 检查是否达到最大重试次数
+	if task.RetryCount >= task.MaxRetries {
+		e.logger.Infof("Task %d reached maximum retry count (%d), no more retries", task.ID, task.MaxRetries)
+		return
+	}
+
+	// 如果设置了 MaxRetries，更新任务的 MaxRetries 字段
+	if task.MaxRetries == 0 && task.RetryPolicy.MaxRetries > 0 {
+		task.MaxRetries = task.RetryPolicy.MaxRetries
+	}
+
+	// 计算重试间隔
+	retryInterval := time.Duration(task.RetryPolicy.RetryInterval) * time.Second
+	if retryInterval == 0 {
+		retryInterval = 30 * time.Second // 默认30秒
+	}
+
+	e.logger.Infof("Task %d will be retried after %v (retry %d/%d)", 
+		task.ID, retryInterval, task.RetryCount+1, task.MaxRetries)
+
+	// 延迟后重试
+	time.AfterFunc(retryInterval, func() {
+		e.retryTask(task.ID)
+	})
+}
+
+// retryTask 重试任务
+func (e *TaskExecutor) retryTask(taskID uint) {
+	// 获取任务
+	var task model.AnsibleTask
+	if err := e.db.Preload("Inventory").First(&task, taskID).Error; err != nil {
+		e.logger.Errorf("Failed to get task %d for retry: %v", taskID, err)
+		return
+	}
+
+	// 更新重试次数
+	task.RetryCount++
+	task.Status = model.AnsibleTaskStatusPending
+	task.StartedAt = nil
+	task.FinishedAt = nil
+	task.ErrorMsg = ""
+	task.FullLog = ""
+	task.LogSize = 0
+
+	if err := e.db.Save(&task).Error; err != nil {
+		e.logger.Errorf("Failed to update task %d for retry: %v", taskID, err)
+		return
+	}
+
+	e.logger.Infof("Retrying task %d (attempt %d/%d)", taskID, task.RetryCount, task.MaxRetries)
+
+	// 执行任务
+	if err := e.ExecuteTask(taskID); err != nil {
+		e.logger.Errorf("Failed to execute retry for task %d: %v", taskID, err)
+		
+		// 更新任务状态为失败
+		task.Status = model.AnsibleTaskStatusFailed
+		task.ErrorMsg = err.Error()
+		if err := e.db.Save(&task).Error; err != nil {
+			e.logger.Errorf("Failed to update task status: %v", err)
+		}
 	}
 }
 

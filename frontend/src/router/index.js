@@ -136,6 +136,12 @@ const router = createRouter({
           name: 'AnsibleSSHKeys',
           component: () => import('@/views/ansible/SSHKeyManage.vue'),
           meta: { title: 'SSH 密钥', icon: 'Key', requiresAuth: true, permission: 'admin' }
+        },
+        {
+          path: 'ansible-schedules',
+          name: 'AnsibleSchedules',
+          component: () => import('@/views/ansible/ScheduleManage.vue'),
+          meta: { title: '定时任务', icon: 'Timer', requiresAuth: true }
         }
       ]
     },

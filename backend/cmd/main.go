@@ -72,6 +72,11 @@ func main() {
 	// 启动异常报告调度器
 	services.AnomalyReport.StartScheduler()
 
+	// 启动 Ansible 定时任务调度服务
+	if err := services.Ansible.GetScheduleService().Start(); err != nil {
+		logger.Error("Failed to start Ansible schedule service: " + err.Error())
+	}
+
 	router := gin.Default()
 
 	// 在生产模式下不需要CORS，因为前后端在同一域名下
@@ -369,6 +374,15 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.PUT("/ssh-keys/:id", handlers.AnsibleSSHKey.Update)
 		ansible.DELETE("/ssh-keys/:id", handlers.AnsibleSSHKey.Delete)
 		ansible.POST("/ssh-keys/:id/test", handlers.AnsibleSSHKey.TestConnection)
+
+		// 定时任务调度管理
+		ansible.GET("/schedules", handlers.AnsibleSchedule.ListSchedules)
+		ansible.GET("/schedules/:id", handlers.AnsibleSchedule.GetSchedule)
+		ansible.POST("/schedules", handlers.AnsibleSchedule.CreateSchedule)
+		ansible.PUT("/schedules/:id", handlers.AnsibleSchedule.UpdateSchedule)
+		ansible.DELETE("/schedules/:id", handlers.AnsibleSchedule.DeleteSchedule)
+		ansible.POST("/schedules/:id/toggle", handlers.AnsibleSchedule.ToggleSchedule)
+		ansible.POST("/schedules/:id/run-now", handlers.AnsibleSchedule.RunNow)
 	}
 
 	// Ansible WebSocket (任务日志流)
@@ -399,6 +413,11 @@ func gracefulShutdown(srv *http.Server, db *gorm.DB, logger *logger.Logger, serv
 	// 停止异常报告调度器
 	if services != nil && services.AnomalyReport != nil {
 		services.AnomalyReport.StopScheduler()
+	}
+
+	// 停止 Ansible 定时任务调度服务
+	if services != nil && services.Ansible != nil && services.Ansible.GetScheduleService() != nil {
+		services.Ansible.GetScheduleService().Stop()
 	}
 
 	// 关闭HTTP服务器

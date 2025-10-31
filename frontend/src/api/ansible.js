@@ -355,3 +355,79 @@ export function connectTaskLogStream(taskId, onMessage, onError) {
   return ws
 }
 
+// 定时任务调度 API
+
+/**
+ * 列出定时任务
+ */
+export function listSchedules(params) {
+  return request({
+    url: '/api/v1/ansible/schedules',
+    method: 'get',
+    params
+  })
+}
+
+/**
+ * 获取定时任务详情
+ */
+export function getSchedule(id) {
+  return request({
+    url: `/api/v1/ansible/schedules/${id}`,
+    method: 'get'
+  })
+}
+
+/**
+ * 创建定时任务
+ */
+export function createSchedule(data) {
+  return request({
+    url: '/api/v1/ansible/schedules',
+    method: 'post',
+    data
+  })
+}
+
+/**
+ * 更新定时任务
+ */
+export function updateSchedule(id, data) {
+  return request({
+    url: `/api/v1/ansible/schedules/${id}`,
+    method: 'put',
+    data
+  })
+}
+
+/**
+ * 删除定时任务
+ */
+export function deleteSchedule(id) {
+  return request({
+    url: `/api/v1/ansible/schedules/${id}`,
+    method: 'delete'
+  })
+}
+
+/**
+ * 启用/禁用定时任务
+ */
+export function toggleSchedule(id, enabled) {
+  return request({
+    url: `/api/v1/ansible/schedules/${id}/toggle`,
+    method: 'post',
+    data: { enabled }
+  })
+}
+
+/**
+ * 立即执行定时任务
+ */
+export function runScheduleNow(id) {
+  return request({
+    url: `/api/v1/ansible/schedules/${id}/run-now`,
+    method: 'post'
+  })
+}
+

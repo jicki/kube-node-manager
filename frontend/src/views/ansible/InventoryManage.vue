@@ -29,7 +29,14 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="cluster.name" label="集群" width="150" />
+        <el-table-column prop="cluster.name" label="集群" width="120" />
+        <el-table-column label="环境" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getEnvironmentType(row.environment)">
+              {{ getEnvironmentText(row.environment) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="主机数" width="100">
           <template #default="{ row }">
             {{ row.hosts_data?.total || 0 }}
@@ -97,6 +104,19 @@
             {{ clusters.length > 0 ? `共 ${clusters.length} 个集群` : '暂无集群数据，请先添加集群' }}
           </div>
         </el-form-item>
+        <el-form-item label="环境标签">
+          <el-select v-model="generateForm.environment" placeholder="选择环境" style="width: 100%">
+            <el-option label="开发环境" value="dev">
+              <span>开发环境 (Development)</span>
+            </el-option>
+            <el-option label="预发布环境" value="staging">
+              <span>预发布环境 (Staging)</span>
+            </el-option>
+            <el-option label="生产环境" value="production">
+              <span>生产环境 (Production) - 执行前需二次确认</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item label="SSH 密钥">
           <el-select 
             v-model="generateForm.ssh_key_id" 
@@ -136,6 +156,19 @@
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="inventoryForm.description" type="textarea" :rows="3" placeholder="请输入描述" :disabled="isViewMode" />
+        </el-form-item>
+        <el-form-item label="环境标签">
+          <el-select v-model="inventoryForm.environment" placeholder="选择环境" style="width: 100%" :disabled="isViewMode">
+            <el-option label="开发环境" value="dev">
+              <span>开发环境 (Development)</span>
+            </el-option>
+            <el-option label="预发布环境" value="staging">
+              <span>预发布环境 (Staging)</span>
+            </el-option>
+            <el-option label="生产环境" value="production">
+              <span>生产环境 (Production) - 执行前需二次确认</span>
+            </el-option>
+          </el-select>
         </el-form-item>
         <el-form-item label="SSH 密钥">
           <el-select 
@@ -205,6 +238,7 @@ const inventoryForm = reactive({
   name: '',
   description: '',
   content: '',
+  environment: 'dev',
   ssh_key_id: null
 })
 
@@ -212,6 +246,7 @@ const generateForm = reactive({
   name: '',
   description: '',
   cluster_id: null,
+  environment: 'dev',
   ssh_key_id: null
 })
 
@@ -267,6 +302,7 @@ const showGenerateDialog = () => {
     name: '',
     description: '',
     cluster_id: null,
+    environment: 'dev',
     ssh_key_id: null
   })
   generateDialogVisible.value = true
@@ -310,6 +346,7 @@ const showCreateDialog = () => {
     name: '',
     description: '',
     content: '',
+    environment: 'dev',
     ssh_key_id: null
   })
   dialogVisible.value = true
@@ -329,6 +366,7 @@ const handleSave = async () => {
       description: inventoryForm.description,
       source_type: 'manual',
       content: inventoryForm.content,
+      environment: inventoryForm.environment || 'dev',
       ssh_key_id: inventoryForm.ssh_key_id || null
     }
 
@@ -432,6 +470,24 @@ const handleDelete = async (row) => {
       }
     }
   }
+}
+
+const getEnvironmentType = (environment) => {
+  const typeMap = {
+    dev: '',
+    staging: 'warning',
+    production: 'danger'
+  }
+  return typeMap[environment] || 'info'
+}
+
+const getEnvironmentText = (environment) => {
+  const textMap = {
+    dev: '开发',
+    staging: '预发布',
+    production: '生产'
+  }
+  return textMap[environment] || environment || '未知'
 }
 
 const formatDate = (dateStr) => {

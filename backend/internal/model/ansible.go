@@ -121,6 +121,9 @@ type AnsibleTask struct {
 	FullLog          string            `json:"full_log" gorm:"type:text;comment:完整日志"`
 	LogSize          int64             `json:"log_size" gorm:"default:0;comment:日志大小(bytes)"`
 	ExtraVars        ExtraVars         `json:"extra_vars" gorm:"type:jsonb;comment:额外变量"`
+	RetryPolicy      *RetryPolicy      `json:"retry_policy" gorm:"type:jsonb;comment:重试策略"`
+	RetryCount       int               `json:"retry_count" gorm:"default:0;comment:当前重试次数"`
+	MaxRetries       int               `json:"max_retries" gorm:"default:0;comment:最大重试次数"`
 	CreatedAt        time.Time         `json:"created_at"`
 	UpdatedAt        time.Time         `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt    `json:"-" gorm:"index"`
@@ -205,6 +208,7 @@ type AnsibleTemplate struct {
 	PlaybookContent string         `json:"playbook_content" gorm:"type:text;not null;comment:Playbook内容"`
 	Variables       ExtraVars      `json:"variables" gorm:"type:jsonb;comment:变量定义"`
 	Tags            string         `json:"tags" gorm:"size:255;comment:标签(逗号分隔)"`
+	RiskLevel       string         `json:"risk_level" gorm:"size:20;default:'low';comment:风险等级(low/medium/high)"`
 	UserID          uint           `json:"user_id" gorm:"not null;index;comment:创建用户ID"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
@@ -247,6 +251,7 @@ type AnsibleInventory struct {
 	SSHKeyID    *uint               `json:"ssh_key_id" gorm:"index;comment:关联SSH密钥ID"`
 	Content     string              `json:"content" gorm:"type:text;not null;comment:清单内容(INI或YAML)"`
 	HostsData   HostsData           `json:"hosts_data" gorm:"type:jsonb;comment:结构化主机数据"`
+	Environment string              `json:"environment" gorm:"size:20;default:'dev';comment:环境标签(dev/staging/production)"`
 	UserID      uint                `json:"user_id" gorm:"not null;index;comment:创建用户ID"`
 	CreatedAt   time.Time           `json:"created_at"`
 	UpdatedAt   time.Time           `json:"updated_at"`
@@ -440,5 +445,97 @@ func (k *AnsibleSSHKey) ToResponse() *SSHKeyResponse {
 		CreatedAt:     k.CreatedAt,
 		UpdatedAt:     k.UpdatedAt,
 	}
+}
+
+// ======================== 定时任务调度 ========================
+
+// AnsibleSchedule 定时任务调度模型
+type AnsibleSchedule struct {
+	ID          uint           `json:"id" gorm:"primarykey"`
+	Name        string         `json:"name" gorm:"not null;size:255;comment:调度任务名称"`
+	Description string         `json:"description" gorm:"type:text;comment:调度任务描述"`
+	TemplateID  uint           `json:"template_id" gorm:"not null;index;comment:关联模板ID"`
+	InventoryID uint           `json:"inventory_id" gorm:"not null;index;comment:关联主机清单ID"`
+	ClusterID   *uint          `json:"cluster_id" gorm:"index;comment:关联集群ID"`
+	CronExpr    string         `json:"cron_expr" gorm:"not null;size:100;comment:Cron表达式"`
+	ExtraVars   ExtraVars      `json:"extra_vars" gorm:"type:jsonb;comment:额外变量"`
+	Enabled     bool           `json:"enabled" gorm:"default:true;index;comment:是否启用"`
+	LastRunAt   *time.Time     `json:"last_run_at" gorm:"comment:上次执行时间"`
+	NextRunAt   *time.Time     `json:"next_run_at" gorm:"index;comment:下次执行时间"`
+	RunCount    int            `json:"run_count" gorm:"default:0;comment:执行次数"`
+	UserID      uint           `json:"user_id" gorm:"not null;index;comment:创建用户ID"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+
+	// 关联
+	Template  *AnsibleTemplate  `json:"template,omitempty" gorm:"foreignKey:TemplateID"`
+	Inventory *AnsibleInventory `json:"inventory,omitempty" gorm:"foreignKey:InventoryID"`
+	Cluster   *Cluster          `json:"cluster,omitempty" gorm:"foreignKey:ClusterID"`
+	User      *User             `json:"user,omitempty" gorm:"foreignKey:UserID"`
+}
+
+// TableName 指定表名
+func (AnsibleSchedule) TableName() string {
+	return "ansible_schedules"
+}
+
+// ScheduleListRequest 调度列表请求
+type ScheduleListRequest struct {
+	Page      int    `json:"page" form:"page"`
+	PageSize  int    `json:"page_size" form:"page_size"`
+	Enabled   *bool  `json:"enabled" form:"enabled"`
+	ClusterID uint   `json:"cluster_id" form:"cluster_id"`
+	Keyword   string `json:"keyword" form:"keyword"`
+}
+
+// ScheduleCreateRequest 调度创建请求
+type ScheduleCreateRequest struct {
+	Name        string                 `json:"name" binding:"required"`
+	Description string                 `json:"description"`
+	TemplateID  uint                   `json:"template_id" binding:"required"`
+	InventoryID uint                   `json:"inventory_id" binding:"required"`
+	ClusterID   *uint                  `json:"cluster_id"`
+	CronExpr    string                 `json:"cron_expr" binding:"required"`
+	ExtraVars   map[string]interface{} `json:"extra_vars"`
+	Enabled     bool                   `json:"enabled"`
+}
+
+// ScheduleUpdateRequest 调度更新请求
+type ScheduleUpdateRequest struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	TemplateID  uint                   `json:"template_id"`
+	InventoryID uint                   `json:"inventory_id"`
+	ClusterID   *uint                  `json:"cluster_id"`
+	CronExpr    string                 `json:"cron_expr"`
+	ExtraVars   map[string]interface{} `json:"extra_vars"`
+	Enabled     *bool                  `json:"enabled"`
+}
+
+// ======================== 重试策略 ========================
+
+// RetryPolicy 重试策略
+type RetryPolicy struct {
+	MaxRetries    int  `json:"max_retries"`     // 最大重试次数
+	RetryInterval int  `json:"retry_interval"`  // 重试间隔（秒）
+	RetryOnError  bool `json:"retry_on_error"`  // 是否在错误时重试
+}
+
+// Scan 实现 sql.Scanner 接口
+func (rp *RetryPolicy) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return nil
+	}
+	return json.Unmarshal(bytes, rp)
+}
+
+// Value 实现 driver.Valuer 接口
+func (rp RetryPolicy) Value() (driver.Value, error) {
+	return json.Marshal(rp)
 }
 

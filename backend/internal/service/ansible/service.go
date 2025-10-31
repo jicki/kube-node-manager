@@ -18,6 +18,7 @@ type Service struct {
 	templateSvc  *TemplateService
 	inventorySvc *InventoryService
 	sshKeySvc    *SSHKeyService
+	scheduleSvc  *ScheduleService
 	executor     *TaskExecutor
 }
 
@@ -36,7 +37,7 @@ func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, wsHub i
 	templateSvc := NewTemplateService(db, logger)
 	executor := NewTaskExecutor(db, logger, inventorySvc, sshKeySvc, wsHub)
 
-	return &Service{
+	service := &Service{
 		db:           db,
 		logger:       logger,
 		templateSvc:  templateSvc,
@@ -44,6 +45,12 @@ func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, wsHub i
 		sshKeySvc:    sshKeySvc,
 		executor:     executor,
 	}
+
+	// 创建定时任务调度服务（需要依赖 service）
+	scheduleSvc := NewScheduleService(db, logger, service)
+	service.scheduleSvc = scheduleSvc
+
+	return service
 }
 
 // GetTemplateService 获取模板服务
@@ -64,6 +71,11 @@ func (s *Service) GetSSHKeyService() *SSHKeyService {
 // GetExecutor 获取执行器
 func (s *Service) GetExecutor() *TaskExecutor {
 	return s.executor
+}
+
+// GetScheduleService 获取定时任务服务
+func (s *Service) GetScheduleService() *ScheduleService {
+	return s.scheduleSvc
 }
 
 // CreateTask 创建并执行任务

@@ -11,21 +11,67 @@
         </div>
       </template>
 
+      <!-- 快速筛选 -->
+      <div style="margin-bottom: 16px">
+        <el-space wrap>
+          <el-text>快速筛选：</el-text>
+          <el-tag 
+            :type="queryParams.risk_level === '' ? 'primary' : ''" 
+            style="cursor: pointer"
+            @click="filterByRisk('')"
+          >
+            全部 ({{ total }})
+          </el-tag>
+          <el-tag 
+            type="success" 
+            :effect="queryParams.risk_level === 'low' ? 'dark' : 'plain'"
+            style="cursor: pointer"
+            @click="filterByRisk('low')"
+          >
+            低风险
+          </el-tag>
+          <el-tag 
+            type="warning" 
+            :effect="queryParams.risk_level === 'medium' ? 'dark' : 'plain'"
+            style="cursor: pointer"
+            @click="filterByRisk('medium')"
+          >
+            中风险
+          </el-tag>
+          <el-tag 
+            type="danger" 
+            :effect="queryParams.risk_level === 'high' ? 'dark' : 'plain'"
+            style="cursor: pointer"
+            @click="filterByRisk('high')"
+          >
+            高风险
+          </el-tag>
+        </el-space>
+      </div>
+
       <!-- 模板列表 -->
       <el-table :data="templates" v-loading="loading" style="width: 100%">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="模板名称" min-width="200" />
-        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="tags" label="标签" width="150" />
+        <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="tags" label="标签" width="120" />
+        <el-table-column label="风险等级" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getRiskLevelType(row.risk_level)">
+              {{ getRiskLevelText(row.risk_level) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="180">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" type="success" @click="handleClone(row)">克隆</el-button>
             <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -59,6 +105,19 @@
         </el-form-item>
         <el-form-item label="标签">
           <el-input v-model="templateForm.tags" placeholder="多个标签用逗号分隔" :disabled="isViewMode" />
+        </el-form-item>
+        <el-form-item label="风险等级">
+          <el-select v-model="templateForm.risk_level" placeholder="选择风险等级" :disabled="isViewMode" style="width: 100%">
+            <el-option label="低风险" value="low">
+              <span>低风险 - 读取/查询操作</span>
+            </el-option>
+            <el-option label="中风险" value="medium">
+              <span>中风险 - 配置变更/重启服务</span>
+            </el-option>
+            <el-option label="高风险" value="high">
+              <span>高风险 - 删除/格式化/破坏性操作</span>
+            </el-option>
+          </el-select>
         </el-form-item>
         <el-form-item label="Playbook 内容" :required="!isViewMode">
           <div style="margin-bottom: 8px;">
@@ -117,7 +176,8 @@ const isViewMode = ref(false) // 是否为查看模式（只读）
 
 const queryParams = reactive({
   page: 1,
-  page_size: 20
+  page_size: 20,
+  risk_level: ''
 })
 
 const templateForm = reactive({
@@ -155,6 +215,7 @@ const showCreateDialog = () => {
     name: '',
     description: '',
     tags: '',
+    risk_level: 'low',
     playbook_content: ''
   })
   dialogVisible.value = true
@@ -173,6 +234,28 @@ const handleEdit = (row) => {
   dialogTitle.value = '编辑模板'
   Object.assign(templateForm, row)
   dialogVisible.value = true
+}
+
+const handleClone = (row) => {
+  isEdit.value = false
+  isViewMode.value = false
+  dialogTitle.value = '克隆模板'
+  Object.assign(templateForm, {
+    id: null,
+    name: `${row.name} - 副本`,
+    description: row.description,
+    tags: row.tags,
+    risk_level: row.risk_level || 'low',
+    playbook_content: row.playbook_content
+  })
+  dialogVisible.value = true
+  ElMessage.info('请修改模板名称后保存')
+}
+
+const filterByRisk = (level) => {
+  queryParams.risk_level = level
+  queryParams.page = 1
+  loadTemplates()
 }
 
 const handleSave = async () => {
@@ -244,6 +327,24 @@ const handleDelete = async (row) => {
       }
     }
   }
+}
+
+const getRiskLevelType = (riskLevel) => {
+  const typeMap = {
+    low: 'success',
+    medium: 'warning',
+    high: 'danger'
+  }
+  return typeMap[riskLevel] || 'info'
+}
+
+const getRiskLevelText = (riskLevel) => {
+  const textMap = {
+    low: '低风险',
+    medium: '中风险',
+    high: '高风险'
+  }
+  return textMap[riskLevel] || riskLevel || '未知'
 }
 
 const formatDate = (dateStr) => {
