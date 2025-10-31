@@ -427,6 +427,7 @@ func (s *Service) validateTaskCreateRequest(req model.TaskCreateRequest) error {
 }
 
 // DeleteTask 删除单个任务
+// 删除时会级联删除所有关联的日志
 func (s *Service) DeleteTask(taskID uint, userID uint, username string) error {
 	// 获取任务
 	task, err := s.GetTask(taskID)
@@ -439,17 +440,27 @@ func (s *Service) DeleteTask(taskID uint, userID uint, username string) error {
 		return fmt.Errorf("cannot delete running or pending task")
 	}
 
-	// 删除任务（GORM 会级联删除关联的日志）
-	if err := s.db.Delete(task).Error; err != nil {
-		s.logger.Errorf("Failed to delete task %d: %v", taskID, err)
-		return fmt.Errorf("failed to delete task: %w", err)
-	}
+	// 开启事务处理
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 删除所有关联的日志
+		if err := tx.Where("task_id = ?", taskID).Delete(&model.AnsibleLog{}).Error; err != nil {
+			s.logger.Errorf("Failed to delete logs for task %d: %v", taskID, err)
+			return fmt.Errorf("failed to delete task logs: %w", err)
+		}
 
-	s.logger.Infof("Task %d (%s) deleted by user %s (ID: %d)", taskID, task.Name, username, userID)
-	return nil
+		// 2. 删除任务
+		if err := tx.Delete(task).Error; err != nil {
+			s.logger.Errorf("Failed to delete task %d: %v", taskID, err)
+			return fmt.Errorf("failed to delete task: %w", err)
+		}
+
+		s.logger.Infof("Task %d (%s) and its logs deleted by user %s (ID: %d)", taskID, task.Name, username, userID)
+		return nil
+	})
 }
 
 // DeleteTasks 批量删除任务
+// 删除时会级联删除所有关联的日志
 func (s *Service) DeleteTasks(taskIDs []uint, userID uint, username string) (int, []string, error) {
 	var successCount int
 	var errors []string
@@ -468,9 +479,24 @@ func (s *Service) DeleteTasks(taskIDs []uint, userID uint, username string) (int
 			continue
 		}
 
-		// 删除任务
-		if err := s.db.Delete(task).Error; err != nil {
-			s.logger.Errorf("Failed to delete task %d: %v", taskID, err)
+		// 开启事务处理
+		err = s.db.Transaction(func(tx *gorm.DB) error {
+			// 1. 删除所有关联的日志
+			if err := tx.Where("task_id = ?", taskID).Delete(&model.AnsibleLog{}).Error; err != nil {
+				s.logger.Errorf("Failed to delete logs for task %d: %v", taskID, err)
+				return fmt.Errorf("failed to delete task logs: %w", err)
+			}
+
+			// 2. 删除任务
+			if err := tx.Delete(task).Error; err != nil {
+				s.logger.Errorf("Failed to delete task %d: %v", taskID, err)
+				return fmt.Errorf("failed to delete task: %w", err)
+			}
+
+			return nil
+		})
+
+		if err != nil {
 			errors = append(errors, fmt.Sprintf("Task %d: %v", taskID, err))
 			continue
 		}
@@ -479,7 +505,7 @@ func (s *Service) DeleteTasks(taskIDs []uint, userID uint, username string) (int
 	}
 
 	if successCount > 0 {
-		s.logger.Infof("Deleted %d tasks by user %s (ID: %d)", successCount, username, userID)
+		s.logger.Infof("Deleted %d tasks and their logs by user %s (ID: %d)", successCount, username, userID)
 	}
 
 	return successCount, errors, nil

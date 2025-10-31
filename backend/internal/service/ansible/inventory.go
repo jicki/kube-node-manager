@@ -180,6 +180,7 @@ func (s *InventoryService) UpdateInventory(id uint, req model.InventoryUpdateReq
 }
 
 // DeleteInventory 删除主机清单
+// 删除时会将关联任务的 inventory_id 设置为 NULL
 func (s *InventoryService) DeleteInventory(id uint, userID uint) error {
 	var inventory model.AnsibleInventory
 
@@ -190,23 +191,25 @@ func (s *InventoryService) DeleteInventory(id uint, userID uint) error {
 		return fmt.Errorf("failed to get inventory: %w", err)
 	}
 
-	// 检查是否有关联的任务（排除已软删除的任务）
-	var taskCount int64
-	if err := s.db.Model(&model.AnsibleTask{}).Where("inventory_id = ? AND deleted_at IS NULL", id).Count(&taskCount).Error; err != nil {
-		return fmt.Errorf("failed to check related tasks: %w", err)
-	}
+	// 开启事务处理
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 将所有使用此清单的任务的 inventory_id 设置为 NULL
+		if err := tx.Model(&model.AnsibleTask{}).
+			Where("inventory_id = ?", id).
+			Update("inventory_id", nil).Error; err != nil {
+			s.logger.Errorf("Failed to update tasks for inventory %d: %v", id, err)
+			return fmt.Errorf("failed to update related tasks: %w", err)
+		}
 
-	if taskCount > 0 {
-		return fmt.Errorf("cannot delete inventory: %d tasks are using this inventory", taskCount)
-	}
+		// 2. 执行软删除
+		if err := tx.Delete(&inventory).Error; err != nil {
+			s.logger.Errorf("Failed to delete inventory %d: %v", id, err)
+			return fmt.Errorf("failed to delete inventory: %w", err)
+		}
 
-	if err := s.db.Delete(&inventory).Error; err != nil {
-		s.logger.Errorf("Failed to delete inventory %d: %v", id, err)
-		return fmt.Errorf("failed to delete inventory: %w", err)
-	}
-
-	s.logger.Infof("Successfully deleted inventory: %s (ID: %d) by user %d", inventory.Name, inventory.ID, userID)
-	return nil
+		s.logger.Infof("Successfully deleted inventory: %s (ID: %d) by user %d", inventory.Name, inventory.ID, userID)
+		return nil
+	})
 }
 
 // GenerateFromK8s 从 K8s 集群动态生成主机清单

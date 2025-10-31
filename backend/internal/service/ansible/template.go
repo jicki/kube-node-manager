@@ -171,6 +171,7 @@ func (s *TemplateService) UpdateTemplate(id uint, req model.TemplateUpdateReques
 }
 
 // DeleteTemplate 删除模板
+// 删除时会将关联任务的 template_id 设置为 NULL
 func (s *TemplateService) DeleteTemplate(id uint, userID uint) error {
 	var template model.AnsibleTemplate
 
@@ -181,23 +182,25 @@ func (s *TemplateService) DeleteTemplate(id uint, userID uint) error {
 		return fmt.Errorf("failed to get template: %w", err)
 	}
 
-	// 检查是否有关联的任务（排除已软删除的任务）
-	var taskCount int64
-	if err := s.db.Model(&model.AnsibleTask{}).Where("template_id = ? AND deleted_at IS NULL", id).Count(&taskCount).Error; err != nil {
-		return fmt.Errorf("failed to check related tasks: %w", err)
-	}
+	// 开启事务处理
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 将所有使用此模板的任务的 template_id 设置为 NULL
+		if err := tx.Model(&model.AnsibleTask{}).
+			Where("template_id = ?", id).
+			Update("template_id", nil).Error; err != nil {
+			s.logger.Errorf("Failed to update tasks for template %d: %v", id, err)
+			return fmt.Errorf("failed to update related tasks: %w", err)
+		}
 
-	if taskCount > 0 {
-		return fmt.Errorf("cannot delete template: %d tasks are using this template", taskCount)
-	}
+		// 2. 执行软删除
+		if err := tx.Delete(&template).Error; err != nil {
+			s.logger.Errorf("Failed to delete template %d: %v", id, err)
+			return fmt.Errorf("failed to delete template: %w", err)
+		}
 
-	if err := s.db.Delete(&template).Error; err != nil {
-		s.logger.Errorf("Failed to delete template %d: %v", id, err)
-		return fmt.Errorf("failed to delete template: %w", err)
-	}
-
-	s.logger.Infof("Successfully deleted template: %s (ID: %d) by user %d", template.Name, template.ID, userID)
-	return nil
+		s.logger.Infof("Successfully deleted template: %s (ID: %d) by user %d", template.Name, template.ID, userID)
+		return nil
+	})
 }
 
 // ValidatePlaybook 验证 playbook 语法

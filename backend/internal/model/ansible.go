@@ -125,10 +125,10 @@ type AnsibleTask struct {
 	UpdatedAt        time.Time         `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt    `json:"-" gorm:"index"`
 
-	// 关联
-	Template  *AnsibleTemplate  `json:"template,omitempty" gorm:"foreignKey:TemplateID"`
-	Cluster   *Cluster          `json:"cluster,omitempty" gorm:"foreignKey:ClusterID"`
-	Inventory *AnsibleInventory `json:"inventory,omitempty" gorm:"foreignKey:InventoryID"`
+	// 关联 - 删除模板/清单时将任务的外键设置为 NULL
+	Template  *AnsibleTemplate  `json:"template,omitempty" gorm:"foreignKey:TemplateID;constraint:OnDelete:SET NULL"`
+	Cluster   *Cluster          `json:"cluster,omitempty" gorm:"foreignKey:ClusterID;constraint:OnDelete:SET NULL"`
+	Inventory *AnsibleInventory `json:"inventory,omitempty" gorm:"foreignKey:InventoryID;constraint:OnDelete:SET NULL"`
 	User      *User             `json:"user,omitempty" gorm:"foreignKey:UserID"`
 }
 
@@ -228,8 +228,8 @@ type AnsibleLog struct {
 	LineNumber int            `json:"line_number" gorm:"comment:行号"`
 	CreatedAt  time.Time      `json:"created_at" gorm:"index"`
 
-	// 关联
-	Task *AnsibleTask `json:"task,omitempty" gorm:"foreignKey:TaskID"`
+	// 关联 - 删除任务时级联删除日志
+	Task *AnsibleTask `json:"task,omitempty" gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE"`
 }
 
 // TableName 指定表名
