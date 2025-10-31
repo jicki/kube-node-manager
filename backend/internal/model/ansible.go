@@ -200,7 +200,7 @@ func (t *AnsibleTask) UpdateStats(total, ok, failed, skipped int) {
 // AnsibleTemplate Ansible 任务模板模型
 type AnsibleTemplate struct {
 	ID              uint           `json:"id" gorm:"primarykey"`
-	Name            string         `json:"name" gorm:"not null;size:255;uniqueIndex;comment:模板名称"`
+	Name            string         `json:"name" gorm:"not null;size:255;comment:模板名称"` // 唯一索引由迁移文件创建
 	Description     string         `json:"description" gorm:"type:text;comment:模板描述"`
 	PlaybookContent string         `json:"playbook_content" gorm:"type:text;not null;comment:Playbook内容"`
 	Variables       ExtraVars      `json:"variables" gorm:"type:jsonb;comment:变量定义"`
@@ -240,7 +240,7 @@ func (AnsibleLog) TableName() string {
 // AnsibleInventory Ansible 主机清单模型
 type AnsibleInventory struct {
 	ID          uint                `json:"id" gorm:"primarykey"`
-	Name        string              `json:"name" gorm:"not null;size:255;uniqueIndex;comment:清单名称"`
+	Name        string              `json:"name" gorm:"not null;size:255;comment:清单名称"` // 唯一索引由迁移文件创建
 	Description string              `json:"description" gorm:"type:text;comment:清单描述"`
 	SourceType  InventorySourceType `json:"source_type" gorm:"size:50;comment:来源类型"`
 	ClusterID   *uint               `json:"cluster_id" gorm:"index;comment:关联集群ID(可选)"`
@@ -358,7 +358,7 @@ type GenerateInventoryRequest struct {
 // AnsibleSSHKey SSH 密钥模型
 type AnsibleSSHKey struct {
 	ID          uint           `json:"id" gorm:"primarykey"`
-	Name        string         `json:"name" gorm:"uniqueIndex;not null"`
+	Name        string         `json:"name" gorm:"not null"` // 唯一索引由迁移文件创建
 	Description string         `json:"description"`
 	Type        SSHKeyType     `json:"type" gorm:"not null"`                  // private_key 或 password
 	Username    string         `json:"username" gorm:"not null"`              // SSH 用户名
