@@ -28,7 +28,7 @@
       ref="editorContainer" 
       class="editor-wrapper"
       :class="{ 'fullscreen': isFullscreen }"
-      :style="{ height: computedHeight }"
+      :style="{ height: isFullscreen ? '100vh' : height }"
     >
       <vue-monaco-editor
         v-model:value="editorValue"
@@ -36,6 +36,7 @@
         :theme="theme"
         :options="editorOptions"
         @mount="handleMount"
+        style="height: 100%;"
       />
     </div>
   </div>
@@ -312,6 +313,12 @@ defineExpose({
 .editor-wrapper {
   flex: 1;
   overflow: hidden;
+  position: relative;
+  min-height: 300px;
+}
+
+.editor-wrapper > div {
+  height: 100%;
 }
 
 .editor-wrapper.fullscreen {
