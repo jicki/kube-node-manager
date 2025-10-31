@@ -5,6 +5,7 @@ import (
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/pkg/logger"
+	"strconv"
 	"strings"
 
 	"gorm.io/gorm"
@@ -101,6 +102,9 @@ func (s *InventoryService) CreateInventory(req model.InventoryCreateRequest, use
 		return nil, fmt.Errorf("invalid inventory content: %w", err)
 	}
 
+	// 解析清单内容，生成主机数据
+	hostsData := s.parseInventoryContent(req.Content)
+
 	inventory := &model.AnsibleInventory{
 		Name:        req.Name,
 		Description: req.Description,
@@ -108,7 +112,7 @@ func (s *InventoryService) CreateInventory(req model.InventoryCreateRequest, use
 		ClusterID:   req.ClusterID,
 		SSHKeyID:    req.SSHKeyID, // 关联 SSH 密钥
 		Content:     req.Content,
-		HostsData:   req.HostsData,
+		HostsData:   hostsData,
 		UserID:      userID,
 	}
 
@@ -117,7 +121,8 @@ func (s *InventoryService) CreateInventory(req model.InventoryCreateRequest, use
 		return nil, fmt.Errorf("failed to create inventory: %w", err)
 	}
 
-	s.logger.Infof("Successfully created inventory: %s (ID: %d) by user %d", inventory.Name, inventory.ID, userID)
+	s.logger.Infof("Successfully created inventory: %s (ID: %d) by user %d with %d hosts", 
+		inventory.Name, inventory.ID, userID, hostsData["total"])
 	return inventory, nil
 }
 
@@ -164,10 +169,9 @@ func (s *InventoryService) UpdateInventory(id uint, req model.InventoryUpdateReq
 			return nil, fmt.Errorf("invalid inventory content: %w", err)
 		}
 		inventory.Content = req.Content
-	}
-
-	if req.HostsData != nil {
-		inventory.HostsData = req.HostsData
+		
+		// 重新解析清单内容，更新主机数据
+		inventory.HostsData = s.parseInventoryContent(req.Content)
 	}
 
 	if err := s.db.Save(&inventory).Error; err != nil {
@@ -432,6 +436,97 @@ func (s *InventoryService) validateInventoryContent(content string) error {
 	}
 
 	return nil
+}
+
+// parseInventoryContent 解析 INI 格式的 inventory 内容，提取主机信息
+func (s *InventoryService) parseInventoryContent(content string) model.HostsData {
+	hostsData := make(model.HostsData)
+	hosts := make([]map[string]interface{}, 0)
+	hostSet := make(map[string]bool) // 用于去重
+
+	lines := strings.Split(content, "\n")
+	currentGroup := ""
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		// 跳过空行和注释
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// 检查是否是组定义
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			currentGroup = strings.Trim(line, "[]")
+			// 跳过变量组
+			if strings.Contains(currentGroup, ":") {
+				currentGroup = ""
+			}
+			continue
+		}
+
+		// 如果在组内，解析主机行
+		if currentGroup != "" {
+			// 提取主机名或 IP（可能包含变量）
+			// 格式可能是:
+			// hostname
+			// hostname ansible_host=ip ansible_user=root
+			// ip ansible_user=root
+			
+			parts := strings.Fields(line)
+			if len(parts) == 0 {
+				continue
+			}
+
+			hostIdentifier := parts[0]
+			
+			// 如果已经解析过这个主机，跳过
+			if hostSet[hostIdentifier] {
+				continue
+			}
+			hostSet[hostIdentifier] = true
+
+			// 解析主机变量
+			ansibleHost := hostIdentifier
+			ansibleUser := "root" // 默认用户
+			ansiblePort := 22     // 默认端口
+
+			// 解析变量
+			for i := 1; i < len(parts); i++ {
+				kv := strings.SplitN(parts[i], "=", 2)
+				if len(kv) == 2 {
+					key := strings.TrimSpace(kv[0])
+					value := strings.TrimSpace(kv[1])
+
+					switch key {
+					case "ansible_host":
+						ansibleHost = value
+					case "ansible_user":
+						ansibleUser = value
+					case "ansible_port":
+						if port, err := strconv.Atoi(value); err == nil {
+							ansiblePort = port
+						}
+					}
+				}
+			}
+
+			host := map[string]interface{}{
+				"name":         hostIdentifier,
+				"ip":           ansibleHost,
+				"ansible_user": ansibleUser,
+				"ansible_port": ansiblePort,
+				"group":        currentGroup,
+			}
+
+			hosts = append(hosts, host)
+		}
+	}
+
+	hostsData["hosts"] = hosts
+	hostsData["total"] = len(hosts)
+
+	return hostsData
 }
 
 // RefreshK8sInventory 刷新来自 K8s 的主机清单
