@@ -28,7 +28,7 @@
       ref="editorContainer" 
       class="editor-wrapper"
       :class="{ 'fullscreen': isFullscreen }"
-      :style="{ height: isFullscreen ? '100vh' : height }"
+      :style="editorContainerStyle"
     >
       <vue-monaco-editor
         v-model:value="editorValue"
@@ -36,7 +36,7 @@
         :theme="theme"
         :options="editorOptions"
         @mount="handleMount"
-        style="height: 100%;"
+        class="monaco-editor-inner"
       />
     </div>
   </div>
@@ -101,9 +101,15 @@ const computedHeight = computed(() => {
   return isFullscreen.value ? '100vh' : props.height
 })
 
+const editorContainerStyle = computed(() => ({
+  height: isFullscreen.value ? '100vh' : props.height,
+  width: '100%'
+}))
+
 const editorOptions = computed(() => ({
   automaticLayout: true,
   fontSize: 14,
+  lineHeight: 21,
   tabSize: 2,
   insertSpaces: true,
   wordWrap: 'on',
@@ -115,6 +121,9 @@ const editorOptions = computed(() => ({
   folding: true,
   lineNumbers: 'on',
   renderWhitespace: 'boundary',
+  glyphMargin: false,
+  contextmenu: true,
+  mouseWheelZoom: false,
   scrollbar: {
     vertical: 'visible',
     horizontal: 'visible',
@@ -130,6 +139,10 @@ const editorOptions = computed(() => ({
     other: true,
     comments: false,
     strings: true
+  },
+  padding: {
+    top: 10,
+    bottom: 10
   }
 }))
 
@@ -317,7 +330,8 @@ defineExpose({
   min-height: 300px;
 }
 
-.editor-wrapper > div {
+.monaco-editor-inner {
+  width: 100%;
   height: 100%;
 }
 
@@ -332,8 +346,13 @@ defineExpose({
 }
 
 :deep(.monaco-editor) {
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+:deep(.monaco-editor .overflow-guard) {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 /* 自定义滚动条 */
