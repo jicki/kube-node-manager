@@ -134,7 +134,7 @@ func (s *ScheduleService) executeSchedule(scheduleID uint) {
 
 	// 检查任务是否已启用
 	if !schedule.Enabled {
-		s.logger.Warnf("Schedule %d (%s) is disabled, skipping execution", scheduleID, schedule.Name)
+		s.logger.Warningf("Schedule %d (%s) is disabled, skipping execution", scheduleID, schedule.Name)
 		return
 	}
 
