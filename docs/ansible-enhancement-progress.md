@@ -178,11 +178,15 @@
 - ✅ 行号和列号显示
 - ✅ 只读模式支持
 - ✅ 完整的集成文档
+- ✅ 已集成到 `TaskTemplates.vue`（Playbook 内容编辑）
 
 **使用说明**：
 1. 运行 `npm install` 安装依赖
 2. 在需要的页面导入 `MonacoEditor` 组件
 3. 参考 `docs/monaco-editor-integration.md` 文档
+
+**已集成页面**：
+- ✅ 任务模板管理（TaskTemplates.vue）- Playbook 内容编辑器
 
 ### 五、测试和文档 ✅
 

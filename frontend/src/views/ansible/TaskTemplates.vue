@@ -93,7 +93,7 @@
     <el-dialog 
       v-model="dialogVisible" 
       :title="dialogTitle" 
-      width="60%"
+      width="80%"
       :close-on-click-modal="false"
     >
       <el-form :model="templateForm" label-width="120px">
@@ -125,27 +125,13 @@
               Playbook 必须以 <code>- name:</code> 开头的数组格式，请参考以下示例
             </el-text>
           </div>
-          <el-input 
-            v-model="templateForm.playbook_content" 
-            type="textarea" 
-            :rows="15"
-            placeholder="---
-- name: 示例 Playbook
-  hosts: all
-  gather_facts: yes
-  tasks:
-    - name: Ping 测试
-      ping:
-
-    - name: 执行命令
-      command: whoami
-      register: result
-
-    - name: 显示结果
-      debug:
-        var: result.stdout" 
-            style="font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 13px;"
-            :disabled="isViewMode"
+          <MonacoEditor
+            v-model="templateForm.playbook_content"
+            language="yaml"
+            theme="vs-dark"
+            height="500px"
+            :readonly="isViewMode"
+            :show-toolbar="!isViewMode"
           />
         </el-form-item>
       </el-form>
@@ -164,6 +150,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
+import MonacoEditor from '@/components/MonacoEditor.vue'
 
 const templates = ref([])
 const total = ref(0)

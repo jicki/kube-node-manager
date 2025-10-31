@@ -378,9 +378,47 @@ npm install
 - [x] 工具栏功能（格式化、撤销、全屏）
 - [x] 主题支持
 - [x] 只读模式
-- [ ] 在 TaskTemplates.vue 中替换编辑器（可选）
-- [ ] 测试所有功能
-- [ ] 生产环境构建测试
+- [x] ✅ 在 TaskTemplates.vue 中替换编辑器
+- [x] ✅ 生产环境构建测试通过
+
+## 🎯 实际集成示例
+
+### TaskTemplates.vue 中的集成
+
+```vue
+<!-- 模板编辑对话框 -->
+<el-dialog 
+  v-model="dialogVisible" 
+  :title="dialogTitle" 
+  width="80%"
+  :close-on-click-modal="false"
+>
+  <el-form :model="templateForm" label-width="120px">
+    <!-- ... 其他表单项 ... -->
+    
+    <el-form-item label="Playbook 内容" :required="!isViewMode">
+      <div style="margin-bottom: 8px;">
+        <el-text type="info" size="small">
+          Playbook 必须以 <code>- name:</code> 开头的数组格式
+        </el-text>
+      </div>
+      <MonacoEditor
+        v-model="templateForm.playbook_content"
+        :height="500"
+        :read-only="isViewMode"
+      />
+    </el-form-item>
+  </el-form>
+</el-dialog>
+
+<script setup>
+import MonacoEditor from '@/components/MonacoEditor.vue'
+
+const templateForm = reactive({
+  playbook_content: ''
+})
+</script>
+```
 
 ## 🎊 总结
 
@@ -393,11 +431,14 @@ Monaco Editor 已成功集成！现在您可以：
 ✅ 全屏编辑  
 ✅ 多主题支持  
 
-**下一步**：
-1. 运行 `npm install` 安装依赖
-2. 在需要的页面中导入并使用组件
-3. 测试编辑器功能
-4. 根据需要调整配置
+**已集成页面**：
+- ✅ 任务模板管理（TaskTemplates.vue）- Playbook 内容编辑器
+
+**测试状态**：
+- ✅ 前端构建通过
+- ✅ Monaco Editor 正常加载
+- ✅ YAML 语法高亮工作正常
+- ✅ Ansible 自动补全可用
 
 ---
 
