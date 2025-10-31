@@ -208,14 +208,14 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 		errorMsg = err.Error()
 	}
 
-	// 尝试解析统计信息（从日志中）
-	e.parseTaskStats(task)
-
-	// 保存完整日志到任务
+	// 先保存完整日志到任务（必须在 parseTaskStats 之前）
 	runningTask.LogMutex.Lock()
 	task.FullLog = runningTask.LogBuffer.String()
 	task.LogSize = runningTask.LogSize
 	runningTask.LogMutex.Unlock()
+
+	// 再解析统计信息（从 task.FullLog 中）
+	e.parseTaskStats(task)
 
 	// 标记任务完成
 	task.MarkCompleted(success, errorMsg)
@@ -631,7 +631,6 @@ func (e *TaskExecutor) parseTaskStats(task *model.AnsibleTask) {
 
 	if len(matches) == 0 {
 		e.logger.Warningf("Task %d: No host stats found in RECAP section", task.ID)
-		e.logger.Infof("Task %d RECAP content:\n%s", task.ID, recapText)
 		return
 	}
 
@@ -643,7 +642,6 @@ func (e *TaskExecutor) parseTaskStats(task *model.AnsibleTask) {
 
 	for _, match := range matches {
 		if len(match) >= 7 {
-			hostname := match[1]
 			ok, _ := strconv.Atoi(match[2])
 			unreachable, _ := strconv.Atoi(match[4])
 			failed, _ := strconv.Atoi(match[5])
@@ -653,9 +651,6 @@ func (e *TaskExecutor) parseTaskStats(task *model.AnsibleTask) {
 			totalFailed += failed
 			totalSkipped += skipped
 			totalUnreachable += unreachable
-			
-			e.logger.Infof("Task %d - Host %s: ok=%d, failed=%d, unreachable=%d, skipped=%d", 
-				task.ID, hostname, ok, failed, unreachable, skipped)
 		}
 	}
 
