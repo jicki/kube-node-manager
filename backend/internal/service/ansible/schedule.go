@@ -132,6 +132,12 @@ func (s *ScheduleService) executeSchedule(scheduleID uint) {
 		return
 	}
 
+	// 检查任务是否已启用
+	if !schedule.Enabled {
+		s.logger.Warnf("Schedule %d (%s) is disabled, skipping execution", scheduleID, schedule.Name)
+		return
+	}
+
 	// 检查模板和清单是否存在
 	if schedule.Template == nil {
 		s.logger.Errorf("Schedule %d: template not found", scheduleID)
