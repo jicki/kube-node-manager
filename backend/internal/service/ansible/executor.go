@@ -631,7 +631,7 @@ func (e *TaskExecutor) parseTaskStats(task *model.AnsibleTask) {
 
 	if len(matches) == 0 {
 		e.logger.Warningf("Task %d: No host stats found in RECAP section", task.ID)
-		e.logger.Debugf("Task %d RECAP content:\n%s", task.ID, recapText)
+		e.logger.Infof("Task %d RECAP content:\n%s", task.ID, recapText)
 		return
 	}
 
@@ -654,7 +654,7 @@ func (e *TaskExecutor) parseTaskStats(task *model.AnsibleTask) {
 			totalSkipped += skipped
 			totalUnreachable += unreachable
 			
-			e.logger.Debugf("Task %d - Host %s: ok=%d, failed=%d, unreachable=%d, skipped=%d", 
+			e.logger.Infof("Task %d - Host %s: ok=%d, failed=%d, unreachable=%d, skipped=%d", 
 				task.ID, hostname, ok, failed, unreachable, skipped)
 		}
 	}

@@ -177,7 +177,12 @@ func (s *Service) handleNodeUpdate(clusterName string, oldNode, newNode *corev1.
 		return
 	}
 
-	s.logger.Infof("Node updated: cluster=%s, node=%s, changes=%v", clusterName, newNode.Name, changes)
+	// 只对重要变化输出日志，减少日志噪音
+	// 重要变化：status、schedulable、taints
+	// 频繁但不重要的变化：annotations、labels（除非同时有其他重要变化）
+	if s.shouldLogUpdate(changes) {
+		s.logger.Infof("Node updated: cluster=%s, node=%s, changes=%v", clusterName, newNode.Name, changes)
+	}
 
 	event := NodeEvent{
 		Type:        EventTypeUpdate,
@@ -204,6 +209,24 @@ func (s *Service) handleNodeDelete(clusterName string, node *corev1.Node) {
 	}
 
 	s.notifyHandlers(event)
+}
+
+// shouldLogUpdate 判断是否应该输出节点更新日志
+// 只对重要变化输出日志，减少日志噪音
+func (s *Service) shouldLogUpdate(changes []string) bool {
+	// 重要变化：status、schedulable、taints、conditions
+	importantChanges := []string{"status", "schedulable", "taints", "conditions"}
+	
+	for _, change := range changes {
+		for _, important := range importantChanges {
+			if change == important {
+				return true
+			}
+		}
+	}
+	
+	// 如果只有 annotations 或 labels 变化，不输出日志
+	return false
 }
 
 // detectChanges 检测节点关键字段的变化

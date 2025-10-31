@@ -81,9 +81,7 @@ func (sc *SmartCache) handleNodeUpdate(event informer.NodeEvent) {
 		entry.Node = event.Node.DeepCopy()
 		entry.UpdatedAt = time.Now()
 		entry.mu.Unlock()
-
-		sc.logger.Infof("SmartCache: Updated node %s in cluster %s, changes=%v",
-			event.Node.Name, event.ClusterName, event.Changes)
+		// 日志已在 Informer 中输出，此处不再重复记录
 	} else {
 		// 如果缓存中不存在，则添加
 		sc.handleNodeAdd(event)
