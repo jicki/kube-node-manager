@@ -5,9 +5,17 @@
 -- 1. 修复 ansible_logs 表的外键约束
 -- ==========================================
 
--- 删除旧的外键约束
-ALTER TABLE IF EXISTS ansible_logs 
-DROP CONSTRAINT IF EXISTS fk_ansible_logs_task;
+-- 删除旧的外键约束（如果存在）
+DO $$ 
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_ansible_logs_task' 
+        AND table_name = 'ansible_logs'
+    ) THEN
+        ALTER TABLE ansible_logs DROP CONSTRAINT fk_ansible_logs_task;
+    END IF;
+END $$;
 
 -- 添加新的外键约束，删除任务时级联删除日志
 ALTER TABLE ansible_logs
@@ -21,8 +29,16 @@ ON DELETE CASCADE;
 -- ==========================================
 
 -- 2.1 Template 外键 - 删除模板时将任务的 template_id 设置为 NULL
-ALTER TABLE IF EXISTS ansible_tasks
-DROP CONSTRAINT IF EXISTS fk_ansible_tasks_template;
+DO $$ 
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_ansible_tasks_template' 
+        AND table_name = 'ansible_tasks'
+    ) THEN
+        ALTER TABLE ansible_tasks DROP CONSTRAINT fk_ansible_tasks_template;
+    END IF;
+END $$;
 
 ALTER TABLE ansible_tasks
 ADD CONSTRAINT fk_ansible_tasks_template
@@ -31,8 +47,16 @@ REFERENCES ansible_templates(id)
 ON DELETE SET NULL;
 
 -- 2.2 Inventory 外键 - 删除清单时将任务的 inventory_id 设置为 NULL
-ALTER TABLE IF EXISTS ansible_tasks
-DROP CONSTRAINT IF EXISTS fk_ansible_tasks_inventory;
+DO $$ 
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_ansible_tasks_inventory' 
+        AND table_name = 'ansible_tasks'
+    ) THEN
+        ALTER TABLE ansible_tasks DROP CONSTRAINT fk_ansible_tasks_inventory;
+    END IF;
+END $$;
 
 ALTER TABLE ansible_tasks
 ADD CONSTRAINT fk_ansible_tasks_inventory
@@ -41,8 +65,16 @@ REFERENCES ansible_inventories(id)
 ON DELETE SET NULL;
 
 -- 2.3 Cluster 外键 - 删除集群时将任务的 cluster_id 设置为 NULL
-ALTER TABLE IF EXISTS ansible_tasks
-DROP CONSTRAINT IF EXISTS fk_ansible_tasks_cluster;
+DO $$ 
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_ansible_tasks_cluster' 
+        AND table_name = 'ansible_tasks'
+    ) THEN
+        ALTER TABLE ansible_tasks DROP CONSTRAINT fk_ansible_tasks_cluster;
+    END IF;
+END $$;
 
 ALTER TABLE ansible_tasks
 ADD CONSTRAINT fk_ansible_tasks_cluster
@@ -55,8 +87,16 @@ ON DELETE SET NULL;
 -- ==========================================
 
 -- 3.1 Cluster 外键 - 删除集群时将清单的 cluster_id 设置为 NULL
-ALTER TABLE IF EXISTS ansible_inventories
-DROP CONSTRAINT IF EXISTS fk_ansible_inventories_cluster;
+DO $$ 
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_ansible_inventories_cluster' 
+        AND table_name = 'ansible_inventories'
+    ) THEN
+        ALTER TABLE ansible_inventories DROP CONSTRAINT fk_ansible_inventories_cluster;
+    END IF;
+END $$;
 
 ALTER TABLE ansible_inventories
 ADD CONSTRAINT fk_ansible_inventories_cluster
@@ -65,8 +105,16 @@ REFERENCES clusters(id)
 ON DELETE SET NULL;
 
 -- 3.2 SSH Key 外键 - 删除 SSH 密钥时阻止删除（保护性删除）
-ALTER TABLE IF EXISTS ansible_inventories
-DROP CONSTRAINT IF EXISTS fk_ansible_inventories_ssh_key;
+DO $$ 
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_ansible_inventories_ssh_key' 
+        AND table_name = 'ansible_inventories'
+    ) THEN
+        ALTER TABLE ansible_inventories DROP CONSTRAINT fk_ansible_inventories_ssh_key;
+    END IF;
+END $$;
 
 ALTER TABLE ansible_inventories
 ADD CONSTRAINT fk_ansible_inventories_ssh_key
