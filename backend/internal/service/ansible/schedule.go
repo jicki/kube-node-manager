@@ -243,6 +243,10 @@ func (s *ScheduleService) CreateSchedule(req model.ScheduleCreateRequest, userID
 			s.logger.Errorf("Failed to add schedule to cron: %v", err)
 			// 不返回错误，因为记录已创建
 		}
+		// 重新查询以获取更新后的 next_run_at
+		if err := s.db.First(schedule, schedule.ID).Error; err != nil {
+			s.logger.Errorf("Failed to refresh schedule after adding to cron: %v", err)
+		}
 	}
 
 	return schedule, nil

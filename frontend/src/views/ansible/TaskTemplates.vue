@@ -95,6 +95,8 @@
       :title="dialogTitle" 
       width="80%"
       :close-on-click-modal="false"
+      append-to-body
+      destroy-on-close
     >
       <el-form :model="templateForm" label-width="120px">
         <el-form-item label="模板名称" :required="!isViewMode">
@@ -126,6 +128,7 @@
             </el-text>
           </div>
           <MonacoEditor
+            ref="monacoEditorRef"
             v-model="templateForm.playbook_content"
             language="yaml"
             theme="vs-dark"
@@ -146,7 +149,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
@@ -160,6 +163,7 @@ const dialogTitle = ref('')
 const saving = ref(false)
 const isEdit = ref(false)
 const isViewMode = ref(false) // 是否为查看模式（只读）
+const monacoEditorRef = ref(null) // Monaco Editor 引用
 
 const queryParams = reactive({
   page: 1,
@@ -206,6 +210,17 @@ const showCreateDialog = () => {
     playbook_content: ''
   })
   dialogVisible.value = true
+  // 延迟触发编辑器布局更新
+  nextTick(() => {
+    setTimeout(() => {
+      if (monacoEditorRef.value) {
+        const editor = monacoEditorRef.value.getEditor()
+        if (editor) {
+          editor.layout()
+        }
+      }
+    }, 300)
+  })
 }
 
 const handleView = (row) => {
@@ -213,6 +228,17 @@ const handleView = (row) => {
   dialogTitle.value = '查看模板'
   Object.assign(templateForm, row)
   dialogVisible.value = true
+  // 延迟触发编辑器布局更新
+  nextTick(() => {
+    setTimeout(() => {
+      if (monacoEditorRef.value) {
+        const editor = monacoEditorRef.value.getEditor()
+        if (editor) {
+          editor.layout()
+        }
+      }
+    }, 300)
+  })
 }
 
 const handleEdit = (row) => {
@@ -221,6 +247,17 @@ const handleEdit = (row) => {
   dialogTitle.value = '编辑模板'
   Object.assign(templateForm, row)
   dialogVisible.value = true
+  // 延迟触发编辑器布局更新
+  nextTick(() => {
+    setTimeout(() => {
+      if (monacoEditorRef.value) {
+        const editor = monacoEditorRef.value.getEditor()
+        if (editor) {
+          editor.layout()
+        }
+      }
+    }, 300)
+  })
 }
 
 const handleClone = (row) => {
@@ -237,6 +274,17 @@ const handleClone = (row) => {
   })
   dialogVisible.value = true
   ElMessage.info('请修改模板名称后保存')
+  // 延迟触发编辑器布局更新
+  nextTick(() => {
+    setTimeout(() => {
+      if (monacoEditorRef.value) {
+        const editor = monacoEditorRef.value.getEditor()
+        if (editor) {
+          editor.layout()
+        }
+      }
+    }, 300)
+  })
 }
 
 const filterByRisk = (level) => {
