@@ -61,7 +61,7 @@ RUN go build -a -o main ./cmd
 
 # 最终运行阶段
 # FROM jicki/alpine:3.22-ansible
-FROM reg.deeproute.ai/deeproute-public/zzh/alpine:3.21-ansible
+FROM reg.deeproute.ai/deeproute-public/zzh/alpine:3.22-ansible
 
 WORKDIR /app
 
