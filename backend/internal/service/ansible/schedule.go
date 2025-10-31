@@ -503,8 +503,9 @@ func (s *ScheduleService) validateCronExpr(expr string) error {
 	// 规范化为 6 字段格式进行验证
 	normalized := s.normalizeCronExpr(expr)
 	
-	// 使用 cron 库验证
-	_, err := cron.ParseStandard(normalized)
+	// 使用带秒精度的 parser 验证（因为 s.cron 是用 WithSeconds() 创建的）
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	_, err := parser.Parse(normalized)
 	return err
 }
 

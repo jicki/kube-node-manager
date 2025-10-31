@@ -163,17 +163,131 @@
           </el-select>
         </el-form-item>
         <el-form-item label="Cron 表达式" prop="cron_expr">
-          <el-input v-model="scheduleForm.cron_expr" placeholder="例如: */5 * * * * (每5分钟) 或 0 */5 * * * * (每5分钟第0秒)">
-            <template #append>
-              <el-button @click="showCronHelp">帮助</el-button>
-            </template>
-          </el-input>
-          <div class="cron-preview" v-if="cronPreview">
-            <el-text type="info" size="small">{{ cronPreview }}</el-text>
+          <el-radio-group v-model="cronMode" style="margin-bottom: 12px;">
+            <el-radio-button label="simple">简单模式</el-radio-button>
+            <el-radio-button label="advanced">高级模式</el-radio-button>
+          </el-radio-group>
+
+          <!-- 简单模式 -->
+          <div v-if="cronMode === 'simple'" class="cron-simple-mode">
+            <el-form-item label="执行频率" style="margin-bottom: 12px;">
+              <el-select v-model="cronSimple.type" @change="updateCronFromSimple" style="width: 100%">
+                <el-option label="每分钟" value="everyMinute" />
+                <el-option label="每小时" value="everyHour" />
+                <el-option label="每天" value="everyDay" />
+                <el-option label="每周" value="everyWeek" />
+                <el-option label="每月" value="everyMonth" />
+                <el-option label="自定义间隔" value="interval" />
+              </el-select>
+            </el-form-item>
+
+            <!-- 自定义间隔 -->
+            <el-form-item v-if="cronSimple.type === 'interval'" label="间隔设置" style="margin-bottom: 12px;">
+              <el-row :gutter="12">
+                <el-col :span="8">
+                  <el-input-number 
+                    v-model="cronSimple.intervalValue" 
+                    :min="1" 
+                    :max="59"
+                    @change="updateCronFromSimple"
+                    style="width: 100%"
+                  />
+                </el-col>
+                <el-col :span="16">
+                  <el-select v-model="cronSimple.intervalUnit" @change="updateCronFromSimple" style="width: 100%">
+                    <el-option label="分钟" value="minute" />
+                    <el-option label="小时" value="hour" />
+                    <el-option label="天" value="day" />
+                  </el-select>
+                </el-col>
+              </el-row>
+            </el-form-item>
+
+            <!-- 每小时 - 选择分钟 -->
+            <el-form-item v-if="cronSimple.type === 'everyHour'" label="分钟" style="margin-bottom: 12px;">
+              <el-input-number 
+                v-model="cronSimple.minute" 
+                :min="0" 
+                :max="59"
+                @change="updateCronFromSimple"
+                style="width: 100%"
+              />
+            </el-form-item>
+
+            <!-- 每天 - 选择时间 -->
+            <el-form-item v-if="cronSimple.type === 'everyDay'" label="执行时间" style="margin-bottom: 12px;">
+              <el-time-picker
+                v-model="cronSimple.time"
+                format="HH:mm"
+                @change="updateCronFromSimple"
+                style="width: 100%"
+              />
+            </el-form-item>
+
+            <!-- 每周 - 选择星期和时间 -->
+            <div v-if="cronSimple.type === 'everyWeek'">
+              <el-form-item label="星期" style="margin-bottom: 12px;">
+                <el-select v-model="cronSimple.weekday" @change="updateCronFromSimple" style="width: 100%">
+                  <el-option label="星期一" :value="1" />
+                  <el-option label="星期二" :value="2" />
+                  <el-option label="星期三" :value="3" />
+                  <el-option label="星期四" :value="4" />
+                  <el-option label="星期五" :value="5" />
+                  <el-option label="星期六" :value="6" />
+                  <el-option label="星期日" :value="0" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="执行时间" style="margin-bottom: 12px;">
+                <el-time-picker
+                  v-model="cronSimple.time"
+                  format="HH:mm"
+                  @change="updateCronFromSimple"
+                  style="width: 100%"
+                />
+              </el-form-item>
+            </div>
+
+            <!-- 每月 - 选择日期和时间 -->
+            <div v-if="cronSimple.type === 'everyMonth'">
+              <el-form-item label="日期" style="margin-bottom: 12px;">
+                <el-input-number 
+                  v-model="cronSimple.dayOfMonth" 
+                  :min="1" 
+                  :max="31"
+                  @change="updateCronFromSimple"
+                  style="width: 100%"
+                />
+              </el-form-item>
+              <el-form-item label="执行时间" style="margin-bottom: 12px;">
+                <el-time-picker
+                  v-model="cronSimple.time"
+                  format="HH:mm"
+                  @change="updateCronFromSimple"
+                  style="width: 100%"
+                />
+              </el-form-item>
+            </div>
+
+            <!-- 生成的表达式预览 -->
+            <el-alert 
+              :title="'生成的 Cron 表达式: ' + scheduleForm.cron_expr" 
+              type="info" 
+              :closable="false"
+              style="margin-top: 12px;"
+            />
           </div>
-          <el-text type="info" size="small" style="display: block; margin-top: 8px;">
-            支持标准 5 字段格式（分 时 日 月 周）和扩展 6 字段格式（秒 分 时 日 月 周）
-          </el-text>
+
+          <!-- 高级模式 -->
+          <div v-else>
+            <el-input v-model="scheduleForm.cron_expr" placeholder="例如: */5 * * * * (每5分钟)">
+              <template #append>
+                <el-button @click="showCronHelp">帮助</el-button>
+              </template>
+            </el-input>
+            <el-text type="info" size="small" style="display: block; margin-top: 8px;">
+              支持标准 5 字段格式（分 时 日 月 周）和扩展 6 字段格式（秒 分 时 日 月 周）
+            </el-text>
+          </div>
         </el-form-item>
         <el-form-item label="启用状态">
           <el-switch v-model="scheduleForm.enabled" />
@@ -266,6 +380,20 @@ const scheduleForm = reactive({
   cluster_id: null,
   cron_expr: '',
   enabled: true
+})
+
+// Cron 表达式模式
+const cronMode = ref('simple')
+
+// 简单模式数据
+const cronSimple = reactive({
+  type: 'interval',
+  intervalValue: 5,
+  intervalUnit: 'minute',
+  minute: 0,
+  time: null,
+  weekday: 1,
+  dayOfMonth: 1
 })
 
 const templates = ref([])
@@ -376,9 +504,78 @@ const handleReset = () => {
   handleQuery()
 }
 
+// 从简单模式生成 Cron 表达式
+const updateCronFromSimple = () => {
+  let cron = ''
+  
+  switch (cronSimple.type) {
+    case 'everyMinute':
+      cron = '* * * * *'
+      break
+      
+    case 'everyHour':
+      cron = `${cronSimple.minute} * * * *`
+      break
+      
+    case 'everyDay':
+      if (cronSimple.time) {
+        const hour = cronSimple.time.getHours()
+        const minute = cronSimple.time.getMinutes()
+        cron = `${minute} ${hour} * * *`
+      } else {
+        cron = '0 0 * * *'
+      }
+      break
+      
+    case 'everyWeek':
+      if (cronSimple.time) {
+        const hour = cronSimple.time.getHours()
+        const minute = cronSimple.time.getMinutes()
+        cron = `${minute} ${hour} * * ${cronSimple.weekday}`
+      } else {
+        cron = `0 0 * * ${cronSimple.weekday}`
+      }
+      break
+      
+    case 'everyMonth':
+      if (cronSimple.time) {
+        const hour = cronSimple.time.getHours()
+        const minute = cronSimple.time.getMinutes()
+        cron = `${minute} ${hour} ${cronSimple.dayOfMonth} * *`
+      } else {
+        cron = `0 0 ${cronSimple.dayOfMonth} * *`
+      }
+      break
+      
+    case 'interval':
+      if (cronSimple.intervalUnit === 'minute') {
+        cron = `*/${cronSimple.intervalValue} * * * *`
+      } else if (cronSimple.intervalUnit === 'hour') {
+        cron = `0 */${cronSimple.intervalValue} * * *`
+      } else if (cronSimple.intervalUnit === 'day') {
+        cron = `0 0 */${cronSimple.intervalValue} * *`
+      }
+      break
+  }
+  
+  scheduleForm.cron_expr = cron
+}
+
 const showCreateDialog = () => {
   editingId.value = null
   resetForm()
+  // 初始化简单模式
+  cronMode.value = 'simple'
+  cronSimple.type = 'interval'
+  cronSimple.intervalValue = 5
+  cronSimple.intervalUnit = 'minute'
+  cronSimple.minute = 0
+  cronSimple.time = null
+  cronSimple.weekday = 1
+  cronSimple.dayOfMonth = 1
+  // 生成默认 cron 表达式
+  updateCronFromSimple()
+  
   dialogVisible.value = true
   loadTemplates()
   loadInventories()
@@ -543,6 +740,17 @@ onMounted(() => {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;
+}
+
+.cron-simple-mode {
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  margin-top: 12px;
+}
+
+.cron-simple-mode .el-form-item {
+  margin-bottom: 0;
 }
 </style>
 
