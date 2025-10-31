@@ -63,26 +63,6 @@ RUN go build -a -o main ./cmd
 # FROM jicki/alpine:3.22-ansible
 FROM reg.deeproute.ai/deeproute-public/zzh/alpine:3.21-ansible
 
-# 安装 Ansible 和必要的运行时包
-RUN apk --no-cache add \
-    ansible \
-    python3 \
-    py3-pip \
-    openssh-client \
-    sshpass \
-    ca-certificates \
-    tzdata && \
-    # 创建 Ansible 配置目录
-    mkdir -p /etc/ansible && \
-    # 配置 Ansible 默认设置
-    echo "[defaults]" > /etc/ansible/ansible.cfg && \
-    echo "host_key_checking = False" >> /etc/ansible/ansible.cfg && \
-    echo "timeout = 30" >> /etc/ansible/ansible.cfg && \
-    echo "gather_timeout = 30" >> /etc/ansible/ansible.cfg && \
-    echo "remote_tmp = /tmp/.ansible-\${USER}/tmp" >> /etc/ansible/ansible.cfg && \
-    # 清理缓存
-    rm -rf /var/cache/apk/*
-
 WORKDIR /app
 
 # 复制构建的二进制文件
