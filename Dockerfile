@@ -60,7 +60,8 @@ ENV GOOS=linux
 RUN go build -a -o main ./cmd
 
 # 最终运行阶段
-FROM reg.deeproute.ai/deeproute-public/zzh/alpine:3.21-plugin
+# FROM jicki/alpine:3.22-ansible
+FROM reg.deeproute.ai/deeproute-public/zzh/alpine:3.21-ansible
 
 # 安装 Ansible 和必要的运行时包
 RUN apk --no-cache add \
