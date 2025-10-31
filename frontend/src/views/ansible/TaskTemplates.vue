@@ -96,7 +96,7 @@
       width="80%"
       :close-on-click-modal="false"
       append-to-body
-      destroy-on-close
+      @opened="handleDialogOpened"
     >
       <el-form :model="templateForm" label-width="120px">
         <el-form-item label="模板名称" :required="!isViewMode">
@@ -197,6 +197,25 @@ const loadTemplates = async () => {
   }
 }
 
+// 对话框打开后的回调
+const handleDialogOpened = () => {
+  // 等待 DOM 完全渲染后触发编辑器布局更新
+  nextTick(() => {
+    setTimeout(() => {
+      if (monacoEditorRef.value) {
+        const editor = monacoEditorRef.value.getEditor()
+        if (editor) {
+          editor.layout()
+          // 强制刷新编辑器内容
+          editor.setValue(templateForm.playbook_content || '')
+          // 设置只读状态
+          editor.updateOptions({ readOnly: isViewMode.value })
+        }
+      }
+    }, 100)
+  })
+}
+
 const showCreateDialog = () => {
   isEdit.value = false
   isViewMode.value = false // 创建模式，可编辑
@@ -210,54 +229,35 @@ const showCreateDialog = () => {
     playbook_content: ''
   })
   dialogVisible.value = true
-  // 延迟触发编辑器布局更新
-  nextTick(() => {
-    setTimeout(() => {
-      if (monacoEditorRef.value) {
-        const editor = monacoEditorRef.value.getEditor()
-        if (editor) {
-          editor.layout()
-        }
-      }
-    }, 300)
-  })
 }
 
 const handleView = (row) => {
   isViewMode.value = true // 查看模式，只读
   dialogTitle.value = '查看模板'
-  Object.assign(templateForm, row)
-  dialogVisible.value = true
-  // 延迟触发编辑器布局更新
-  nextTick(() => {
-    setTimeout(() => {
-      if (monacoEditorRef.value) {
-        const editor = monacoEditorRef.value.getEditor()
-        if (editor) {
-          editor.layout()
-        }
-      }
-    }, 300)
+  Object.assign(templateForm, {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    tags: row.tags,
+    risk_level: row.risk_level || 'low',
+    playbook_content: row.playbook_content || ''
   })
+  dialogVisible.value = true
 }
 
 const handleEdit = (row) => {
   isEdit.value = true
   isViewMode.value = false // 编辑模式，可编辑
   dialogTitle.value = '编辑模板'
-  Object.assign(templateForm, row)
-  dialogVisible.value = true
-  // 延迟触发编辑器布局更新
-  nextTick(() => {
-    setTimeout(() => {
-      if (monacoEditorRef.value) {
-        const editor = monacoEditorRef.value.getEditor()
-        if (editor) {
-          editor.layout()
-        }
-      }
-    }, 300)
+  Object.assign(templateForm, {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    tags: row.tags,
+    risk_level: row.risk_level || 'low',
+    playbook_content: row.playbook_content || ''
   })
+  dialogVisible.value = true
 }
 
 const handleClone = (row) => {
@@ -270,21 +270,10 @@ const handleClone = (row) => {
     description: row.description,
     tags: row.tags,
     risk_level: row.risk_level || 'low',
-    playbook_content: row.playbook_content
+    playbook_content: row.playbook_content || ''
   })
   dialogVisible.value = true
   ElMessage.info('请修改模板名称后保存')
-  // 延迟触发编辑器布局更新
-  nextTick(() => {
-    setTimeout(() => {
-      if (monacoEditorRef.value) {
-        const editor = monacoEditorRef.value.getEditor()
-        if (editor) {
-          editor.layout()
-        }
-      }
-    }, 300)
-  })
 }
 
 const filterByRisk = (level) => {

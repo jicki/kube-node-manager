@@ -371,8 +371,18 @@ func (s *ScheduleService) UpdateSchedule(id uint, req model.ScheduleUpdateReques
 		if err := s.AddSchedule(schedule); err != nil {
 			s.logger.Errorf("Failed to update schedule in cron: %v", err)
 		}
+		// 重新查询以获取更新后的 next_run_at
+		schedule, err = s.GetSchedule(id)
+		if err != nil {
+			s.logger.Errorf("Failed to refresh schedule after update: %v", err)
+		}
 	} else {
 		s.RemoveSchedule(id)
+		// 清除 next_run_at
+		if err := s.db.Model(schedule).Update("next_run_at", nil).Error; err != nil {
+			s.logger.Errorf("Failed to clear next_run_at: %v", err)
+		}
+		schedule.NextRunAt = nil
 	}
 
 	s.logger.Infof("Updated schedule %d", id)
@@ -399,30 +409,39 @@ func (s *ScheduleService) DeleteSchedule(id uint) error {
 }
 
 // ToggleSchedule 启用/禁用定时任务
-func (s *ScheduleService) ToggleSchedule(id uint, enabled bool) error {
+func (s *ScheduleService) ToggleSchedule(id uint, enabled bool) (*model.AnsibleSchedule, error) {
 	schedule, err := s.GetSchedule(id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// 更新状态
 	if err := s.db.Model(schedule).Update("enabled", enabled).Error; err != nil {
-		return fmt.Errorf("failed to toggle schedule: %w", err)
+		return nil, fmt.Errorf("failed to toggle schedule: %w", err)
 	}
 
 	// 更新调度器
 	if enabled {
 		schedule.Enabled = true
 		if err := s.AddSchedule(schedule); err != nil {
-			return fmt.Errorf("failed to enable schedule in cron: %w", err)
+			return nil, fmt.Errorf("failed to enable schedule in cron: %w", err)
+		}
+		// 重新查询以获取更新后的 next_run_at
+		if err := s.db.Preload("Template").Preload("Inventory").Preload("Cluster").Preload("User").First(schedule, id).Error; err != nil {
+			s.logger.Errorf("Failed to refresh schedule after enabling: %v", err)
 		}
 		s.logger.Infof("Enabled schedule %d", id)
 	} else {
 		s.RemoveSchedule(id)
+		// 清除 next_run_at
+		if err := s.db.Model(schedule).Update("next_run_at", nil).Error; err != nil {
+			s.logger.Errorf("Failed to clear next_run_at: %v", err)
+		}
+		schedule.NextRunAt = nil
 		s.logger.Infof("Disabled schedule %d", id)
 	}
 
-	return nil
+	return schedule, nil
 }
 
 // RunNow 立即执行定时任务

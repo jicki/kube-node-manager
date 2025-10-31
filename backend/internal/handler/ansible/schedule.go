@@ -230,7 +230,8 @@ func (h *ScheduleHandler) ToggleSchedule(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.ToggleSchedule(uint(id), req.Enabled); err != nil {
+	schedule, err := h.service.ToggleSchedule(uint(id), req.Enabled)
+	if err != nil {
 		h.logger.Errorf("Failed to toggle schedule: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -244,6 +245,7 @@ func (h *ScheduleHandler) ToggleSchedule(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "Schedule " + status + " successfully",
+		"data":    schedule,
 	})
 }
 
