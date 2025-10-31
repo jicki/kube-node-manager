@@ -163,7 +163,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="Cron 表达式" prop="cron_expr">
-          <el-input v-model="scheduleForm.cron_expr" placeholder="例如: 0 * * * * (每小时执行)">
+          <el-input v-model="scheduleForm.cron_expr" placeholder="例如: */5 * * * * (每5分钟) 或 0 */5 * * * * (每5分钟第0秒)">
             <template #append>
               <el-button @click="showCronHelp">帮助</el-button>
             </template>
@@ -171,6 +171,9 @@
           <div class="cron-preview" v-if="cronPreview">
             <el-text type="info" size="small">{{ cronPreview }}</el-text>
           </div>
+          <el-text type="info" size="small" style="display: block; margin-top: 8px;">
+            支持标准 5 字段格式（分 时 日 月 周）和扩展 6 字段格式（秒 分 时 日 月 周）
+          </el-text>
         </el-form-item>
         <el-form-item label="启用状态">
           <el-switch v-model="scheduleForm.enabled" />
@@ -183,9 +186,17 @@
     </el-dialog>
 
     <!-- Cron 帮助对话框 -->
-    <el-dialog v-model="cronHelpVisible" title="Cron 表达式帮助" width="600px">
+    <el-dialog v-model="cronHelpVisible" title="Cron 表达式帮助" width="700px">
       <div class="cron-help">
-        <h4>标准 Cron 格式（5个字段）</h4>
+        <el-alert 
+          title="支持两种格式" 
+          type="info" 
+          description="标准 5 字段格式会自动转换为 6 字段格式，默认在第 0 秒执行" 
+          :closable="false"
+          style="margin-bottom: 20px"
+        />
+        
+        <h4>标准 Cron 格式（5个字段）- 推荐</h4>
         <pre>分 时 日 月 星期
 
 示例：
@@ -194,7 +205,17 @@
 0 0 * * 0     - 每周日午夜执行
 0 0 1 * *     - 每月1号午夜执行
 */5 * * * *   - 每5分钟执行
+*/1 * * * *   - 每1分钟执行
 0 9-17 * * 1-5 - 工作日9点到17点每小时执行</pre>
+
+        <h4 style="margin-top: 20px">扩展 Cron 格式（6个字段）- 支持秒级精度</h4>
+        <pre>秒 分 时 日 月 星期
+
+示例：
+0 0 * * * *   - 每小时整点执行
+0 */5 * * * * - 每5分钟执行
+*/30 * * * * * - 每30秒执行
+0 0 0 * * *   - 每天午夜执行</pre>
 
         <h4 style="margin-top: 20px">特殊表达式</h4>
         <pre>@hourly   - 每小时执行

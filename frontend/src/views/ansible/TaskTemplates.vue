@@ -95,8 +95,6 @@
       :title="dialogTitle" 
       width="80%"
       :close-on-click-modal="false"
-      append-to-body
-      @opened="handleDialogOpened"
     >
       <el-form :model="templateForm" label-width="120px">
         <el-form-item label="模板名称" :required="!isViewMode">
@@ -127,14 +125,13 @@
               Playbook 必须以 <code>- name:</code> 开头的数组格式，请参考以下示例
             </el-text>
           </div>
-          <MonacoEditor
-            ref="monacoEditorRef"
-            v-model="templateForm.playbook_content"
-            language="yaml"
-            theme="vs-dark"
-            height="500px"
-            :readonly="isViewMode"
-            :show-toolbar="!isViewMode"
+          <el-input 
+            v-model="templateForm.playbook_content" 
+            type="textarea" 
+            :rows="20"
+            placeholder="请输入 Ansible Playbook 内容（YAML 格式）&#10;&#10;示例：&#10;- name: 安装并启动 nginx&#10;  hosts: all&#10;  become: yes&#10;  tasks:&#10;    - name: 安装 nginx&#10;      apt:&#10;        name: nginx&#10;        state: present&#10;    - name: 启动 nginx&#10;      service:&#10;        name: nginx&#10;        state: started" 
+            style="font-family: 'Courier New', monospace; font-size: 13px;"
+            :disabled="isViewMode"
           />
         </el-form-item>
       </el-form>
@@ -149,11 +146,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick, watch } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
-import MonacoEditor from '@/components/MonacoEditor.vue'
 
 const templates = ref([])
 const total = ref(0)
@@ -163,7 +159,6 @@ const dialogTitle = ref('')
 const saving = ref(false)
 const isEdit = ref(false)
 const isViewMode = ref(false) // 是否为查看模式（只读）
-const monacoEditorRef = ref(null) // Monaco Editor 引用
 
 const queryParams = reactive({
   page: 1,
@@ -195,25 +190,6 @@ const loadTemplates = async () => {
   } finally {
     loading.value = false
   }
-}
-
-// 对话框打开后的回调
-const handleDialogOpened = () => {
-  // 等待 DOM 完全渲染后触发编辑器布局更新
-  nextTick(() => {
-    setTimeout(() => {
-      if (monacoEditorRef.value) {
-        const editor = monacoEditorRef.value.getEditor()
-        if (editor) {
-          editor.layout()
-          // 强制刷新编辑器内容
-          editor.setValue(templateForm.playbook_content || '')
-          // 设置只读状态
-          editor.updateOptions({ readOnly: isViewMode.value })
-        }
-      }
-    }, 100)
-  })
 }
 
 const showCreateDialog = () => {

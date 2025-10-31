@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/pkg/logger"
+	"strings"
 	"sync"
 	"time"
 
@@ -80,14 +81,11 @@ func (s *ScheduleService) AddSchedule(schedule *model.AnsibleSchedule) error {
 		delete(s.jobs, schedule.ID)
 	}
 
-	// 解析 Cron 表达式
-	_, err := cron.ParseStandard(schedule.CronExpr)
-	if err != nil {
-		return fmt.Errorf("invalid cron expression: %w", err)
-	}
+	// 规范化 Cron 表达式（支持 5 字段和 6 字段格式）
+	cronExpr := s.normalizeCronExpr(schedule.CronExpr)
 
-	// 添加定时任务
-	entryID, err := s.cron.AddFunc(schedule.CronExpr, func() {
+	// 添加定时任务（使用秒级精度的 cron）
+	entryID, err := s.cron.AddFunc(cronExpr, func() {
 		s.executeSchedule(schedule.ID)
 	})
 	if err != nil {
@@ -194,9 +192,8 @@ func (s *ScheduleService) CreateSchedule(req model.ScheduleCreateRequest, userID
 		return nil, fmt.Errorf("maximum number of active schedules (%d) reached", s.maxTasks)
 	}
 
-	// 验证 Cron 表达式
-	_, err := cron.ParseStandard(req.CronExpr)
-	if err != nil {
+	// 验证 Cron 表达式（支持标准 5 字段格式）
+	if err := s.validateCronExpr(req.CronExpr); err != nil {
 		return nil, fmt.Errorf("invalid cron expression: %w", err)
 	}
 
@@ -341,7 +338,7 @@ func (s *ScheduleService) UpdateSchedule(id uint, req model.ScheduleUpdateReques
 	}
 	if req.CronExpr != "" {
 		// 验证 Cron 表达式
-		if _, err := cron.ParseStandard(req.CronExpr); err != nil {
+		if err := s.validateCronExpr(req.CronExpr); err != nil {
 			return nil, fmt.Errorf("invalid cron expression: %w", err)
 		}
 		updates["cron_expr"] = req.CronExpr
@@ -463,5 +460,45 @@ func (s *ScheduleService) GetActiveSchedulesCount() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.jobs)
+}
+
+// normalizeCronExpr 规范化 Cron 表达式
+// 自动将标准 5 字段格式（分 时 日 月 周）转换为 6 字段格式（秒 分 时 日 月 周）
+func (s *ScheduleService) normalizeCronExpr(expr string) string {
+	// 移除首尾空格
+	expr = strings.TrimSpace(expr)
+	
+	// 分割字段
+	fields := strings.Fields(expr)
+	
+	// 如果是 5 字段格式（标准 cron），在前面添加 "0"（在第 0 秒执行）
+	if len(fields) == 5 {
+		return "0 " + expr
+	}
+	
+	// 如果已经是 6 字段格式，直接返回
+	return expr
+}
+
+// validateCronExpr 验证 Cron 表达式
+// 支持标准 5 字段格式和扩展 6 字段格式
+func (s *ScheduleService) validateCronExpr(expr string) error {
+	// 移除首尾空格
+	expr = strings.TrimSpace(expr)
+	
+	// 分割字段
+	fields := strings.Fields(expr)
+	
+	// 检查字段数量
+	if len(fields) != 5 && len(fields) != 6 {
+		return fmt.Errorf("cron expression must have 5 or 6 fields, got %d", len(fields))
+	}
+	
+	// 规范化为 6 字段格式进行验证
+	normalized := s.normalizeCronExpr(expr)
+	
+	// 使用 cron 库验证
+	_, err := cron.ParseStandard(normalized)
+	return err
 }
 

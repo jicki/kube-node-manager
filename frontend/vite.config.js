@@ -6,7 +6,6 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { fileURLToPath, URL } from 'node:url'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import monacoEditorPlugin from 'vite-plugin-monaco-editor'
 
 // 读取VERSION文件
 let version = 'dev'
@@ -27,10 +26,6 @@ export default defineConfig({
     }),
     Components({
       resolvers: [ElementPlusResolver()]
-    }),
-    monacoEditorPlugin({
-      // 只加载需要的语言以减小打包体积
-      languages: ['yaml', 'json', 'javascript', 'typescript', 'shell']
     })
   ],
   define: {
