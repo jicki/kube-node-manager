@@ -30,13 +30,12 @@
       :class="{ 'fullscreen': isFullscreen }"
       :style="{ height: computedHeight }"
     >
-      <monaco-editor
+      <vue-monaco-editor
         v-model:value="editorValue"
         :language="language"
         :theme="theme"
         :options="editorOptions"
         @mount="handleMount"
-        @change="handleChange"
       />
     </div>
   </div>
@@ -44,7 +43,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import MonacoEditor from '@monaco-editor/vue'
+import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { DocumentCopy, RefreshLeft, RefreshRight, FullScreen } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
@@ -160,11 +159,11 @@ const handleMount = (editor) => {
   emit('mounted', editor)
 }
 
-const handleChange = (value) => {
-  editorValue.value = value
-  emit('update:modelValue', value)
-  emit('change', value)
-}
+// 监听编辑器内容变化
+watch(editorValue, (newValue) => {
+  emit('update:modelValue', newValue)
+  emit('change', newValue)
+})
 
 const formatCode = () => {
   if (!editorInstance.value) return

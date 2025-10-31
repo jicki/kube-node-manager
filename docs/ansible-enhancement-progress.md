@@ -165,7 +165,7 @@
 #### 4.4 Monaco Editor 集成 ✅
 - ✅ 添加 npm 依赖到 `package.json`
   - `monaco-editor: ^0.44.0`
-  - `@monaco-editor/vue: ^4.6.0`
+  - `@guolao/vue-monaco-editor: ^1.3.1`
   - `vite-plugin-monaco-editor: ^1.1.0` (devDependencies)
 - ✅ 配置 `vite.config.js` 插件
 - ✅ 创建 `MonacoEditor.vue` 封装组件

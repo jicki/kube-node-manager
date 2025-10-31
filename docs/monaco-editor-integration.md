@@ -8,7 +8,7 @@
 {
   "dependencies": {
     "monaco-editor": "^0.44.0",
-    "@monaco-editor/vue": "^4.6.0"
+    "@guolao/vue-monaco-editor": "^1.3.1"
   },
   "devDependencies": {
     "vite-plugin-monaco-editor": "^1.1.0"
@@ -365,7 +365,7 @@ npm install
 ## 📚 更多资源
 
 - [Monaco Editor 官方文档](https://microsoft.github.io/monaco-editor/)
-- [@monaco-editor/vue 文档](https://github.com/imguolao/monaco-vue)
+- [@guolao/vue-monaco-editor 文档](https://github.com/imguolao/monaco-vue)
 - [vite-plugin-monaco-editor](https://github.com/vdesjs/vite-plugin-monaco-editor)
 - [Monaco Editor Playground](https://microsoft.github.io/monaco-editor/playground.html)
 
