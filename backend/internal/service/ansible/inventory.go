@@ -458,6 +458,22 @@ func (s *InventoryService) RefreshK8sInventory(id uint, userID uint) (*model.Ans
 		return nil, fmt.Errorf("cluster not found")
 	}
 
+	// 获取 SSH 密钥的用户名（如果清单关联了 SSH 密钥）
+	ansibleUser := "root" // 默认用户名
+	if inventory.SSHKeyID != nil {
+		var sshKey model.AnsibleSSHKey
+		if err := s.db.First(&sshKey, *inventory.SSHKeyID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				s.logger.Warningf("SSH key %d not found, using default user 'root'", *inventory.SSHKeyID)
+			} else {
+				s.logger.Errorf("Failed to get SSH key %d: %v", *inventory.SSHKeyID, err)
+			}
+		} else {
+			ansibleUser = sshKey.Username
+			s.logger.Infof("Refreshing inventory with SSH key username: %s", ansibleUser)
+		}
+	}
+
 	// 获取节点列表
 	nodes, err := s.k8sSvc.ListNodes(inventory.Cluster.Name)
 	if err != nil {
@@ -469,16 +485,17 @@ func (s *InventoryService) RefreshK8sInventory(id uint, userID uint) (*model.Ans
 		return nil, fmt.Errorf("no nodes found in cluster %s", inventory.Cluster.Name)
 	}
 
-	// 重新生成 inventory 内容
-	inventory.Content = s.generateINIInventory(nodes, inventory.Cluster.Name)
-	inventory.HostsData = s.generateHostsData(nodes)
+	// 重新生成 inventory 内容，使用从 SSH 密钥获取的用户名
+	inventory.Content = s.generateINIInventory(nodes, inventory.Cluster.Name, ansibleUser)
+	inventory.HostsData = s.generateHostsData(nodes, ansibleUser)
 
 	if err := s.db.Save(&inventory).Error; err != nil {
 		s.logger.Errorf("Failed to update inventory %d: %v", id, err)
 		return nil, fmt.Errorf("failed to update inventory: %w", err)
 	}
 
-	s.logger.Infof("Successfully refreshed K8s inventory: %s (ID: %d, %d nodes)", inventory.Name, inventory.ID, len(nodes))
+	s.logger.Infof("Successfully refreshed K8s inventory: %s (ID: %d, %d nodes, user: %s)", 
+		inventory.Name, inventory.ID, len(nodes), ansibleUser)
 	return &inventory, nil
 }
 
