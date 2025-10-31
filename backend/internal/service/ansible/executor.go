@@ -571,62 +571,116 @@ func (e *TaskExecutor) pushLogsToWebSocket(logs []*model.AnsibleLog) {
 
 // parseTaskStats 解析任务统计信息
 func (e *TaskExecutor) parseTaskStats(task *model.AnsibleTask) {
-	// 从最后的日志中查找统计信息
-	var logs []model.AnsibleLog
-	if err := e.db.Where("task_id = ?", task.ID).
-		Order("line_number DESC").
-		Limit(50).
-		Find(&logs).Error; err != nil {
-		e.logger.Warningf("Failed to get task logs for stats parsing: %v", err)
+	// 优先从完整日志中解析统计信息
+	logContent := task.FullLog
+	
+	// 如果 FullLog 为空，则尝试从数据库查询日志（向后兼容）
+	if logContent == "" {
+		var logs []model.AnsibleLog
+		if err := e.db.Where("task_id = ?", task.ID).
+			Order("line_number DESC").
+			Limit(50).
+			Find(&logs).Error; err != nil {
+			e.logger.Warningf("Failed to get task logs for stats parsing: %v", err)
+			return
+		}
+
+		// 构建日志内容
+		var logBuffer bytes.Buffer
+		for i := len(logs) - 1; i >= 0; i-- {
+			logBuffer.WriteString(logs[i].Content + "\n")
+		}
+		logContent = logBuffer.String()
+	}
+
+	if logContent == "" {
+		e.logger.Warningf("Task %d: No log content available for stats parsing", task.ID)
 		return
 	}
 
 	// 查找 PLAY RECAP 部分
+	lines := strings.Split(logContent, "\n")
 	var recapBuffer bytes.Buffer
 	inRecap := false
 
-	for i := len(logs) - 1; i >= 0; i-- {
-		line := logs[i].Content
-		
+	for _, line := range lines {
 		if strings.Contains(line, "PLAY RECAP") {
 			inRecap = true
 			continue
 		}
 
-		if inRecap {
+		if inRecap && strings.TrimSpace(line) != "" {
+			// 检查是否还在 RECAP 部分（通常 RECAP 后面会有空行或新的部分）
+			if strings.HasPrefix(line, "TASK") || strings.HasPrefix(line, "PLAY") {
+				break
+			}
 			recapBuffer.WriteString(line + "\n")
 		}
 	}
 
 	recapText := recapBuffer.String()
 	if recapText == "" {
+		e.logger.Warningf("Task %d: No RECAP section found in logs", task.ID)
 		return
 	}
 
 	// 解析统计信息
 	// 格式示例: hostname : ok=2 changed=1 unreachable=0 failed=0 skipped=0 rescued=0 ignored=0
-	re := regexp.MustCompile(`(\w+)\s*:\s*ok=(\d+)\s+changed=(\d+)\s+unreachable=(\d+)\s+failed=(\d+)\s+skipped=(\d+)`)
+	re := regexp.MustCompile(`(\S+)\s*:\s*ok=(\d+)\s+changed=(\d+)\s+unreachable=(\d+)\s+failed=(\d+)\s+skipped=(\d+)`)
 	matches := re.FindAllStringSubmatch(recapText, -1)
+
+	if len(matches) == 0 {
+		e.logger.Warningf("Task %d: No host stats found in RECAP section", task.ID)
+		e.logger.Debugf("Task %d RECAP content:\n%s", task.ID, recapText)
+		return
+	}
 
 	totalOk := 0
 	totalFailed := 0
 	totalSkipped := 0
+	totalUnreachable := 0
 	hostsTotal := len(matches)
 
 	for _, match := range matches {
 		if len(match) >= 7 {
+			hostname := match[1]
 			ok, _ := strconv.Atoi(match[2])
+			unreachable, _ := strconv.Atoi(match[4])
 			failed, _ := strconv.Atoi(match[5])
 			skipped, _ := strconv.Atoi(match[6])
 
 			totalOk += ok
 			totalFailed += failed
 			totalSkipped += skipped
+			totalUnreachable += unreachable
+			
+			e.logger.Debugf("Task %d - Host %s: ok=%d, failed=%d, unreachable=%d, skipped=%d", 
+				task.ID, hostname, ok, failed, unreachable, skipped)
 		}
 	}
 
+	// 成功的主机数 = 总主机数 - 失败主机数 - 不可达主机数
+	hostsOk := hostsTotal
+	hostsFailed := 0
+	
+	// 如果有任何 failed 或 unreachable 的任务，该主机被视为失败
+	for _, match := range matches {
+		if len(match) >= 7 {
+			unreachable, _ := strconv.Atoi(match[4])
+			failed, _ := strconv.Atoi(match[5])
+			
+			if unreachable > 0 || failed > 0 {
+				hostsFailed++
+				hostsOk--
+			}
+		}
+	}
+
+	e.logger.Infof("Task %d stats parsed: total=%d, ok=%d, failed=%d, skipped=%d", 
+		task.ID, hostsTotal, hostsOk, hostsFailed, totalSkipped)
+
 	// 更新任务统计
-	task.UpdateStats(hostsTotal, totalOk, totalFailed, totalSkipped)
+	task.UpdateStats(hostsTotal, hostsOk, hostsFailed, totalSkipped)
 }
 
 // handleTaskError 处理任务错误

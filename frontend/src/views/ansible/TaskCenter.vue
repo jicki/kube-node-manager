@@ -77,6 +77,11 @@
         <el-table-column type="selection" width="55" :selectable="canSelectTask" />
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="任务名称" min-width="200" />
+        <el-table-column label="创建用户" width="120">
+          <template #default="{ row }">
+            {{ row.user?.username || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)">
