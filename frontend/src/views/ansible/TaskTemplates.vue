@@ -50,24 +50,29 @@
       </div>
 
       <!-- 模板列表 -->
-      <el-table :data="templates" v-loading="loading" style="width: 100%">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="模板名称" min-width="200" />
+      <el-table 
+        :data="templates" 
+        v-loading="loading" 
+        style="width: 100%"
+        :default-sort="{ prop: 'id', order: 'descending' }"
+      >
+        <el-table-column prop="id" label="ID" width="80" align="center" />
+        <el-table-column prop="name" label="模板名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="tags" label="标签" width="120" />
-        <el-table-column label="风险等级" width="100">
+        <el-table-column prop="tags" label="标签" min-width="100" show-overflow-tooltip />
+        <el-table-column label="风险等级" min-width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="getRiskLevelType(row.risk_level)">
               {{ getRiskLevelText(row.risk_level) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="180">
+        <el-table-column prop="created_at" label="创建时间" min-width="160">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" min-width="280" fixed="right" align="center">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" type="primary" @click="handleEdit(row)">编辑</el-button>

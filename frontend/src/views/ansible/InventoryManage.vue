@@ -18,36 +18,41 @@
       </template>
 
       <!-- 清单列表 -->
-      <el-table :data="inventories" v-loading="loading" style="width: 100%">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="清单名称" min-width="200" />
-        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-        <el-table-column label="来源" width="120">
+      <el-table 
+        :data="inventories" 
+        v-loading="loading" 
+        style="width: 100%"
+        :default-sort="{ prop: 'id', order: 'descending' }"
+      >
+        <el-table-column prop="id" label="ID" width="80" align="center" />
+        <el-table-column prop="name" label="清单名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
+        <el-table-column label="来源" min-width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="row.source_type === 'k8s' ? 'success' : ''">
               {{ row.source_type === 'k8s' ? 'K8s集群' : '手动' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="cluster.name" label="集群" width="120" />
-        <el-table-column label="环境" width="100">
+        <el-table-column prop="cluster.name" label="集群" min-width="120" show-overflow-tooltip />
+        <el-table-column label="环境" min-width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="getEnvironmentType(row.environment)">
               {{ getEnvironmentText(row.environment) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="主机数" width="100">
+        <el-table-column label="主机数" min-width="90" align="center">
           <template #default="{ row }">
             {{ row.hosts_data?.total || 0 }}
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="180">
+        <el-table-column prop="created_at" label="创建时间" min-width="160">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="250" fixed="right">
+        <el-table-column label="操作" min-width="280" fixed="right" align="center">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" type="primary" @click="handleEdit(row)">编辑</el-button>

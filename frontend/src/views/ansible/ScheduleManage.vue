@@ -37,42 +37,47 @@
 
     <!-- 定时任务列表 -->
     <el-card style="margin-top: 20px">
-      <el-table :data="schedules" v-loading="loading" style="width: 100%">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="任务名称" min-width="200" />
-        <el-table-column label="Cron 表达式" width="150">
+      <el-table 
+        :data="schedules" 
+        v-loading="loading" 
+        style="width: 100%"
+        :default-sort="{ prop: 'id', order: 'descending' }"
+      >
+        <el-table-column prop="id" label="ID" width="80" align="center" />
+        <el-table-column prop="name" label="任务名称" min-width="150" show-overflow-tooltip />
+        <el-table-column label="Cron 表达式" min-width="120" align="center">
           <template #default="{ row }">
             <el-tag type="info">{{ row.cron_expr }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="模板" width="150">
+        <el-table-column label="模板" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.template?.name || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="清单" width="150">
+        <el-table-column label="清单" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.inventory?.name || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" min-width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'">
               {{ row.enabled ? '已启用' : '已禁用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="执行次数" width="100">
+        <el-table-column label="执行次数" min-width="90" align="center">
           <template #default="{ row }">
             {{ row.run_count || 0 }}
           </template>
         </el-table-column>
-        <el-table-column label="下次执行" width="180">
+        <el-table-column label="下次执行" min-width="160">
           <template #default="{ row }">
             {{ row.next_run_at ? formatDate(row.next_run_at) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="350" fixed="right">
+        <el-table-column label="操作" min-width="350" fixed="right" align="center">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button 
