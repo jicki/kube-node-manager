@@ -78,6 +78,7 @@ RUN apk --no-cache add \
     echo "host_key_checking = False" >> /etc/ansible/ansible.cfg && \
     echo "timeout = 30" >> /etc/ansible/ansible.cfg && \
     echo "gather_timeout = 30" >> /etc/ansible/ansible.cfg && \
+    echo "remote_tmp = /tmp/.ansible-\${USER}/tmp" >> /etc/ansible/ansible.cfg && \
     # 清理缓存
     rm -rf /var/cache/apk/*
 

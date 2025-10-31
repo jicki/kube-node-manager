@@ -402,6 +402,7 @@ func (e *TaskExecutor) buildAnsibleCommand(ctx context.Context, playbookFile, in
 	cmd.Env = append(os.Environ(),
 		"ANSIBLE_HOST_KEY_CHECKING=False",
 		"ANSIBLE_STDOUT_CALLBACK=default",
+		"ANSIBLE_REMOTE_TMP=/tmp/.ansible-${USER}/tmp", // 使用 /tmp 避免 home 目录权限问题
 	)
 
 	// 记录完整的命令（用于调试）
