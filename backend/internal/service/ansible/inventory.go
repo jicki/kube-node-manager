@@ -223,6 +223,22 @@ func (s *InventoryService) GenerateFromK8s(req model.GenerateInventoryRequest, u
 		return nil, fmt.Errorf("failed to get cluster: %w", err)
 	}
 
+	// 获取 SSH 密钥的用户名（如果指定了 SSH 密钥）
+	ansibleUser := "root" // 默认用户名
+	if req.SSHKeyID != nil {
+		var sshKey model.AnsibleSSHKey
+		if err := s.db.First(&sshKey, *req.SSHKeyID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				s.logger.Warningf("SSH key %d not found, using default user 'root'", *req.SSHKeyID)
+			} else {
+				s.logger.Errorf("Failed to get SSH key %d: %v", *req.SSHKeyID, err)
+			}
+		} else {
+			ansibleUser = sshKey.Username
+			s.logger.Infof("Using SSH key username: %s", ansibleUser)
+		}
+	}
+
 	// 获取节点列表
 	nodes, err := s.k8sSvc.ListNodes(cluster.Name)
 	if err != nil {
@@ -274,11 +290,11 @@ func (s *InventoryService) GenerateFromK8s(req model.GenerateInventoryRequest, u
 		return nil, fmt.Errorf("no nodes match the specified labels")
 	}
 
-	// 生成 inventory 内容（INI 格式）
-	content := s.generateINIInventory(filteredNodes, cluster.Name)
+	// 生成 inventory 内容（INI 格式），使用从 SSH 密钥获取的用户名
+	content := s.generateINIInventory(filteredNodes, cluster.Name, ansibleUser)
 
-	// 生成结构化主机数据
-	hostsData := s.generateHostsData(filteredNodes)
+	// 生成结构化主机数据，使用从 SSH 密钥获取的用户名
+	hostsData := s.generateHostsData(filteredNodes, ansibleUser)
 
 	// 检查名称是否重复
 	var count int64
@@ -307,13 +323,14 @@ func (s *InventoryService) GenerateFromK8s(req model.GenerateInventoryRequest, u
 		return nil, fmt.Errorf("failed to create inventory: %w", err)
 	}
 
-	s.logger.Infof("Successfully generated inventory from K8s cluster %s: %s (ID: %d, %d nodes)",
-		cluster.Name, inventory.Name, inventory.ID, len(filteredNodes))
+	s.logger.Infof("Successfully generated inventory from K8s cluster %s: %s (ID: %d, %d nodes, user: %s)",
+		cluster.Name, inventory.Name, inventory.ID, len(filteredNodes), ansibleUser)
 	return inventory, nil
 }
 
 // generateINIInventory 生成 INI 格式的 inventory 内容
-func (s *InventoryService) generateINIInventory(nodes []k8s.NodeInfo, clusterName string) string {
+// ansibleUser: Ansible 连接使用的用户名，从 SSH 密钥获取或默认为 root
+func (s *InventoryService) generateINIInventory(nodes []k8s.NodeInfo, clusterName string, ansibleUser string) string {
 	var builder strings.Builder
 
 	// 使用 [all] 组作为默认组
@@ -332,8 +349,8 @@ func (s *InventoryService) generateINIInventory(nodes []k8s.NodeInfo, clusterNam
 			continue
 		}
 
-		// 格式: hostname ansible_host=ip ansible_user=root
-		builder.WriteString(fmt.Sprintf("%s ansible_host=%s ansible_user=root\n", node.Name, ip))
+		// 格式: hostname ansible_host=ip ansible_user=<username>
+		builder.WriteString(fmt.Sprintf("%s ansible_host=%s ansible_user=%s\n", node.Name, ip, ansibleUser))
 	}
 
 	// 写入变量组 [all:vars]
@@ -345,7 +362,8 @@ func (s *InventoryService) generateINIInventory(nodes []k8s.NodeInfo, clusterNam
 }
 
 // generateHostsData 生成结构化主机数据
-func (s *InventoryService) generateHostsData(nodes []k8s.NodeInfo) model.HostsData {
+// ansibleUser: Ansible 连接使用的用户名，从 SSH 密钥获取或默认为 root
+func (s *InventoryService) generateHostsData(nodes []k8s.NodeInfo, ansibleUser string) model.HostsData {
 	hostsData := make(model.HostsData)
 	hosts := make([]map[string]interface{}, 0, len(nodes))
 
@@ -360,14 +378,15 @@ func (s *InventoryService) generateHostsData(nodes []k8s.NodeInfo) model.HostsDa
 		}
 
 		host := map[string]interface{}{
-			"name":        node.Name,
-			"ip":          ip,
-			"internal_ip": node.InternalIP,
-			"external_ip": node.ExternalIP,
-			"roles":       node.Roles,
-			"labels":      node.Labels,
-			"version":     node.Version,
-			"os":          node.OS,
+			"name":         node.Name,
+			"ip":           ip,
+			"internal_ip":  node.InternalIP,
+			"external_ip":  node.ExternalIP,
+			"roles":        node.Roles,
+			"labels":       node.Labels,
+			"version":      node.Version,
+			"os":           node.OS,
+			"ansible_user": ansibleUser, // 添加 ansible_user 信息
 		}
 
 		hosts = append(hosts, host)
