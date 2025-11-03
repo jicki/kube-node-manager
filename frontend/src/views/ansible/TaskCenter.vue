@@ -359,6 +359,46 @@
             />
           </el-select>
         </el-form-item>
+        
+        <!-- 必需变量输入 -->
+        <template v-if="selectedTemplate && selectedTemplate.required_vars && selectedTemplate.required_vars.length > 0">
+          <el-divider content-position="left">
+            <el-icon><Setting /></el-icon>
+            模板变量配置
+          </el-divider>
+          <el-alert
+            title="请提供以下必需变量"
+            type="info"
+            :closable="false"
+            style="margin-bottom: 16px"
+          >
+            <template #default>
+              该模板需要以下 {{ selectedTemplate.required_vars.length }} 个变量
+            </template>
+          </el-alert>
+          
+          <el-form-item 
+            v-for="varName in selectedTemplate.required_vars" 
+            :key="varName"
+            :label="varName"
+            :required="true"
+          >
+            <el-input 
+              v-model="taskForm.extra_vars[varName]" 
+              :placeholder="`请输入 ${varName} 的值`"
+            >
+              <template #prepend>
+                <el-icon><Key /></el-icon>
+              </template>
+            </el-input>
+            <div style="margin-top: 4px; color: #909399; font-size: 12px">
+              变量名: {{ varName }}
+            </div>
+          </el-form-item>
+          
+          <el-divider />
+        </template>
+        
         <el-form-item label="Dry Run 模式">
           <el-switch 
             v-model="taskForm.dry_run" 
@@ -487,7 +527,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine } from '@element-plus/icons-vue'
+import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine, Setting, Key } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 import clusterAPI from '@/api/cluster'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -517,6 +557,7 @@ const taskForm = reactive({
   template_id: null,
   cluster_id: null,
   inventory_id: null,
+  extra_vars: {},
   dry_run: false,
   batch_config: {
     enabled: false,
@@ -537,6 +578,12 @@ const templates = ref([])
 const inventories = ref([])
 const clusters = ref([])
 const logContent = ref('')
+
+// 计算属性：选中的模板
+const selectedTemplate = computed(() => {
+  if (!taskForm.template_id) return null
+  return templates.value.find(t => t.id === taskForm.template_id)
+})
 
 // 环境和风险确认对话框
 const confirmDialogVisible = ref(false)
@@ -724,6 +771,8 @@ const showCreateDialog = () => {
   loadTemplates()
   loadInventories()
   loadClusters()
+  // 重置表单
+  taskForm.extra_vars = {}
   // 重置分批执行状态
   batchEnabled.value = false
   batchStrategy.value = 'percent'

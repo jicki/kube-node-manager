@@ -3,6 +3,7 @@ package ansible
 import (
 	"fmt"
 	"kube-node-manager/internal/model"
+	ansibleUtil "kube-node-manager/pkg/ansible"
 	"kube-node-manager/pkg/logger"
 	"strings"
 
@@ -95,11 +96,16 @@ func (s *TemplateService) CreateTemplate(req model.TemplateCreateRequest, userID
 		return nil, fmt.Errorf("invalid playbook: %w", err)
 	}
 
+	// 自动提取必需变量
+	requiredVars := ansibleUtil.ExtractVariables(req.PlaybookContent)
+	s.logger.Infof("Extracted %d variables from playbook: %v", len(requiredVars), requiredVars)
+
 	template := &model.AnsibleTemplate{
 		Name:            req.Name,
 		Description:     req.Description,
 		PlaybookContent: req.PlaybookContent,
 		Variables:       req.Variables,
+		RequiredVars:    requiredVars,
 		Tags:            req.Tags,
 		UserID:          userID,
 	}
@@ -151,6 +157,11 @@ func (s *TemplateService) UpdateTemplate(id uint, req model.TemplateUpdateReques
 			return nil, fmt.Errorf("invalid playbook: %w", err)
 		}
 		template.PlaybookContent = req.PlaybookContent
+		
+		// 重新提取必需变量
+		requiredVars := ansibleUtil.ExtractVariables(req.PlaybookContent)
+		template.RequiredVars = requiredVars
+		s.logger.Infof("Re-extracted %d variables from playbook: %v", len(requiredVars), requiredVars)
 	}
 
 	if req.Variables != nil {

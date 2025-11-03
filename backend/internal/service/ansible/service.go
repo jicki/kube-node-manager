@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/k8s"
+	ansibleUtil "kube-node-manager/pkg/ansible"
 	"kube-node-manager/pkg/crypto"
 	"kube-node-manager/pkg/logger"
 	"time"
@@ -97,11 +98,13 @@ func (s *Service) CreateTask(req model.TaskCreateRequest, userID uint) (*model.A
 	playbookContent := req.PlaybookContent
 
 	// 如果指定了模板，使用模板内容
+	var template *model.AnsibleTemplate
 	if req.TemplateID != nil {
-		template, err := s.templateSvc.GetTemplate(*req.TemplateID)
+		t, err := s.templateSvc.GetTemplate(*req.TemplateID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get template: %w", err)
 		}
+		template = t
 
 		playbookContent = template.PlaybookContent
 
@@ -109,6 +112,15 @@ func (s *Service) CreateTask(req model.TaskCreateRequest, userID uint) (*model.A
 		if len(template.Variables) > 0 && len(req.ExtraVars) > 0 {
 			if err := s.templateSvc.ValidateTemplateVariables(*req.TemplateID, req.ExtraVars); err != nil {
 				return nil, fmt.Errorf("template variable validation failed: %w", err)
+			}
+		}
+		
+		// 验证必需变量是否都已提供
+		if len(template.RequiredVars) > 0 {
+			missingVars := s.validateRequiredVariables(template.RequiredVars, req.ExtraVars)
+			if len(missingVars) > 0 {
+				s.logger.Warningf("Task creation: missing required variables: %v", missingVars)
+				return nil, fmt.Errorf("missing required variables: %v", missingVars)
 			}
 		}
 	}
@@ -579,6 +591,11 @@ func (s *Service) validateTaskCreateRequest(req model.TaskCreateRequest) error {
 	}
 
 	return nil
+}
+
+// validateRequiredVariables 验证必需变量是否都已提供
+func (s *Service) validateRequiredVariables(requiredVars []string, providedVars model.ExtraVars) []string {
+	return ansibleUtil.ValidateVariables(requiredVars, providedVars)
 }
 
 // DeleteTask 删除单个任务
