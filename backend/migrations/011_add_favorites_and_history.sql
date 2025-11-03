@@ -1,5 +1,5 @@
+-- +migrate Up
 -- 添加收藏和历史记录表
--- Migration: 011_add_favorites_and_history
 
 -- 创建收藏表
 CREATE TABLE IF NOT EXISTS ansible_favorites (
@@ -58,3 +58,14 @@ COMMENT ON COLUMN ansible_task_history.use_count IS '使用次数';
 CREATE INDEX IF NOT EXISTS idx_ansible_task_history_user_id ON ansible_task_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_ansible_task_history_last_used_at ON ansible_task_history(last_used_at);
 
+-- +migrate Down
+-- 删除任务历史表
+DROP INDEX IF EXISTS idx_ansible_task_history_last_used_at;
+DROP INDEX IF EXISTS idx_ansible_task_history_user_id;
+DROP TABLE IF EXISTS ansible_task_history;
+
+-- 删除收藏表
+DROP INDEX IF EXISTS idx_ansible_favorites_unique;
+DROP INDEX IF EXISTS idx_ansible_favorites_deleted_at;
+DROP INDEX IF EXISTS idx_ansible_favorites_user_id;
+DROP TABLE IF EXISTS ansible_favorites;
