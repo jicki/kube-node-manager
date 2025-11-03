@@ -26,13 +26,18 @@ func NewVisualizationService(db *gorm.DB, logger *logger.Logger) *VisualizationS
 
 // GetTaskVisualization 获取任务执行可视化数据
 func (s *VisualizationService) GetTaskVisualization(taskID uint) (*model.TaskExecutionVisualization, error) {
+	s.logger.Infof("Fetching visualization data for task %d", taskID)
+	
 	var task model.AnsibleTask
-	if err := s.db.Preload("Inventory").First(&task, taskID).Error; err != nil {
+	if err := s.db.Preload("Inventory").Preload("PreflightChecks").First(&task, taskID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("task not found")
 		}
 		return nil, fmt.Errorf("failed to get task: %w", err)
 	}
+
+	s.logger.Infof("Task %d loaded: name=%s, status=%s, started=%v, finished=%v", 
+		task.ID, task.Name, task.Status, task.StartedAt, task.FinishedAt)
 
 	viz := &model.TaskExecutionVisualization{
 		TaskID:   task.ID,
@@ -42,9 +47,11 @@ func (s *VisualizationService) GetTaskVisualization(taskID uint) (*model.TaskExe
 
 	// 如果有执行时间线，直接使用
 	if task.ExecutionTimeline != nil && len(*task.ExecutionTimeline) > 0 {
+		s.logger.Infof("Using stored execution timeline with %d events", len(*task.ExecutionTimeline))
 		viz.Timeline = *task.ExecutionTimeline
 	} else {
 		// 否则，根据任务状态生成基本时间线
+		s.logger.Infof("Generating basic timeline for task %d", taskID)
 		viz.Timeline = s.generateBasicTimeline(&task)
 	}
 
@@ -53,15 +60,23 @@ func (s *VisualizationService) GetTaskVisualization(taskID uint) (*model.TaskExe
 		first := viz.Timeline[0]
 		last := viz.Timeline[len(viz.Timeline)-1]
 		viz.TotalDuration = int(last.Timestamp.Sub(first.Timestamp).Milliseconds())
+		s.logger.Infof("Total duration calculated from timeline: %dms", viz.TotalDuration)
 	} else if task.Duration > 0 {
 		viz.TotalDuration = task.Duration * 1000 // 转换为毫秒
+		s.logger.Infof("Total duration from task.Duration: %dms", viz.TotalDuration)
 	}
 
 	// 计算各阶段耗时分布
 	viz.PhaseDistribution = s.calculatePhaseDistribution(viz.Timeline)
+	if viz.PhaseDistribution != nil {
+		s.logger.Infof("Phase distribution: %v", viz.PhaseDistribution)
+	} else {
+		s.logger.Warningf("No phase distribution data available for task %d", taskID)
+	}
 
 	// 获取主机执行状态
 	viz.HostStatuses = s.extractHostStatuses(&task)
+	s.logger.Infof("Extracted %d host statuses", len(viz.HostStatuses))
 
 	return viz, nil
 }
@@ -95,8 +110,8 @@ func (s *VisualizationService) generateBasicTimeline(task *model.AnsibleTask) mo
 		})
 	}
 
-	// 执行开始事件
-	if task.StartedAt != nil {
+	// 执行开始事件（仅在任务已完成时添加）
+	if task.StartedAt != nil && task.FinishedAt != nil {
 		timeline = append(timeline, model.TaskExecutionEvent{
 			Phase:     model.PhaseExecuting,
 			Message:   "任务开始执行",
@@ -121,7 +136,7 @@ func (s *VisualizationService) generateBasicTimeline(task *model.AnsibleTask) mo
 			message = "任务执行失败"
 		} else {
 			phase = model.PhaseCompleted
-			message = "任务执行完成"
+			message = "任务执行成功"
 		}
 
 		timeline = append(timeline, model.TaskExecutionEvent{
@@ -132,18 +147,33 @@ func (s *VisualizationService) generateBasicTimeline(task *model.AnsibleTask) mo
 			SuccessCount: task.HostsOk,
 			FailCount:    task.HostsFailed,
 		})
-
-		// 计算最后一个事件的耗时
-		if len(timeline) > 1 {
-			timeline[len(timeline)-1].Duration = int(task.FinishedAt.Sub(*task.StartedAt).Milliseconds())
-		}
+	} else if task.StartedAt != nil {
+		// 任务还在执行中
+		timeline = append(timeline, model.TaskExecutionEvent{
+			Phase:     model.PhaseExecuting,
+			Message:   "任务执行中",
+			Timestamp: *task.StartedAt,
+			HostCount: task.HostsTotal,
+		})
 	}
 
 	// 计算每个事件的耗时
-	for i := 0; i < len(timeline)-1; i++ {
+	for i := 0; i < len(timeline); i++ {
 		if timeline[i].Duration == 0 {
-			timeline[i].Duration = int(timeline[i+1].Timestamp.Sub(timeline[i].Timestamp).Milliseconds())
+			// 如果不是最后一个事件，用下一个事件的时间戳计算
+			if i < len(timeline)-1 {
+				timeline[i].Duration = int(timeline[i+1].Timestamp.Sub(timeline[i].Timestamp).Milliseconds())
+			} else if task.FinishedAt != nil && task.StartedAt != nil {
+				// 最后一个事件，如果是完成事件，计算从开始到完成的耗时
+				timeline[i].Duration = int(task.FinishedAt.Sub(*task.StartedAt).Milliseconds())
+			}
 		}
+	}
+
+	s.logger.Infof("Generated basic timeline for task %d with %d events", task.ID, len(timeline))
+	for i, event := range timeline {
+		s.logger.Debugf("Event %d: phase=%s, duration=%dms, timestamp=%v", 
+			i, event.Phase, event.Duration, event.Timestamp)
 	}
 
 	return timeline
@@ -154,10 +184,20 @@ func (s *VisualizationService) calculatePhaseDistribution(timeline model.TaskExe
 	distribution := make(map[string]int)
 	
 	for _, event := range timeline {
-		phase := string(event.Phase)
-		distribution[phase] += event.Duration
+		// 只统计有耗时的事件，跳过 Duration 为 0 的事件
+		if event.Duration > 0 {
+			phase := string(event.Phase)
+			distribution[phase] += event.Duration
+		}
 	}
 	
+	// 如果没有任何耗时数据，返回 nil 而不是空 map
+	if len(distribution) == 0 {
+		s.logger.Infof("No phase distribution data for timeline with %d events", len(timeline))
+		return nil
+	}
+	
+	s.logger.Debugf("Phase distribution calculated: %v", distribution)
 	return distribution
 }
 

@@ -6,37 +6,41 @@
       <el-card class="header-card">
         <el-row :gutter="20">
           <el-col :span="6">
-            <el-statistic title="任务名称">
-              <template #default>
-                <span style="font-size: 16px; color: #409EFF">{{ visualization.task_name }}</span>
-              </template>
-            </el-statistic>
+            <div class="stat-card-item">
+              <div class="stat-label">任务名称</div>
+              <div class="stat-value" :title="visualization.task_name || '未命名'">
+                {{ visualization.task_name || '未命名任务' }}
+              </div>
+            </div>
           </el-col>
           <el-col :span="6">
-            <el-statistic 
-              title="总耗时" 
-              :value="formatDuration(visualization.total_duration)"
-            >
-              <template #prefix>
+            <div class="stat-card-item">
+              <div class="stat-label">
                 <el-icon><Clock /></el-icon>
-              </template>
-            </el-statistic>
+                总耗时
+              </div>
+              <div class="stat-value">
+                {{ formatDuration(visualization.total_duration) }}
+              </div>
+            </div>
           </el-col>
           <el-col :span="6">
-            <el-statistic title="执行状态">
-              <template #default>
-                <el-tag :type="getStatusType(visualization.status)">
+            <div class="stat-card-item">
+              <div class="stat-label">执行状态</div>
+              <div class="stat-value">
+                <el-tag :type="getStatusType(visualization.status)" size="large">
                   {{ getStatusText(visualization.status) }}
                 </el-tag>
-              </template>
-            </el-statistic>
+              </div>
+            </div>
           </el-col>
           <el-col :span="6">
-            <el-statistic 
-              title="执行阶段" 
-              :value="visualization.timeline.length"
-              suffix="个"
-            />
+            <div class="stat-card-item">
+              <div class="stat-label">执行阶段</div>
+              <div class="stat-value">
+                {{ visualization.timeline.length }} 个
+              </div>
+            </div>
           </el-col>
         </el-row>
       </el-card>
@@ -70,10 +74,14 @@
                     {{ event.message }}
                   </p>
                 </div>
-                <div style="text-align: right; min-width: 120px">
-                  <el-tag v-if="event.duration" type="info" effect="plain">
+                <div style="text-align: right; min-width: 140px">
+                  <el-tag v-if="event.duration && event.duration > 0" type="info" effect="plain" size="large">
+                    <el-icon><Timer /></el-icon>
+                    {{ formatDuration(event.duration) }}
+                  </el-tag>
+                  <el-tag v-else type="info" effect="plain" size="small">
                     <el-icon><Clock /></el-icon>
-                    {{ event.duration }}ms
+                    瞬时
                   </el-tag>
                   <div v-if="event.batch_number" style="margin-top: 8px">
                     <el-tag size="small" type="warning">
@@ -343,13 +351,28 @@ const getPhaseIconComponent = (phase) => {
 }
 
 const formatDuration = (ms) => {
-  if (!ms) return '0ms'
-  if (ms < 1000) return `${ms}ms`
+  if (!ms || ms === 0) return '0秒'
+  if (ms < 1000) return `${ms}毫秒`
+  
   const seconds = Math.floor(ms / 1000)
   if (seconds < 60) return `${seconds}秒`
+  
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
-  return `${minutes}分${remainingSeconds}秒`
+  
+  if (minutes < 60) {
+    return remainingSeconds > 0 
+      ? `${minutes}分${remainingSeconds}秒` 
+      : `${minutes}分钟`
+  }
+  
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  
+  if (remainingMinutes > 0) {
+    return `${hours}小时${remainingMinutes}分钟`
+  }
+  return `${hours}小时`
 }
 
 const formatTimestamp = (timestamp) => {
@@ -433,6 +456,28 @@ watch(() => chart, (newChart, oldChart) => {
 
 .header-card {
   margin-bottom: 20px;
+}
+
+.stat-card-item {
+  text-align: center;
+  padding: 12px;
+}
+
+.stat-card-item .stat-label {
+  font-size: 14px;
+  color: #909399;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.stat-card-item .stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  word-break: break-word;
 }
 
 .stat-item {
