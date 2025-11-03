@@ -81,18 +81,8 @@ func (s *FavoriteService) ListFavorites(userID uint, targetType string) ([]model
 		query = query.Where("target_type = ?", targetType)
 	}
 	
-	// 根据类型预加载关联数据
-	if targetType == "task" {
-		query = query.Preload("Task")
-	} else if targetType == "template" {
-		query = query.Preload("Template")
-	} else if targetType == "inventory" {
-		query = query.Preload("Inventory")
-	} else {
-		// 全部加载
-		query = query.Preload("Task").Preload("Template").Preload("Inventory")
-	}
-	
+	// 不使用 Preload，因为 TargetID 是动态引用
+	// 前端可以根据需要通过 target_type 和 target_id 单独获取详细信息
 	if err := query.Order("created_at DESC").Find(&favorites).Error; err != nil {
 		s.logger.Errorf("Failed to list favorites: %v", err)
 		return nil, fmt.Errorf("failed to list favorites: %w", err)

@@ -133,6 +133,10 @@
                 <el-icon style="margin-right: 4px"><View /></el-icon>
                 检查模式
               </el-tag>
+              <el-tag v-else size="small" type="primary" effect="plain">
+                <el-icon style="margin-right: 4px"><Setting /></el-icon>
+                正常模式
+              </el-tag>
               <el-tag v-if="history.batch_config?.enabled" size="small" type="warning">
                 分批执行
               </el-tag>
@@ -200,16 +204,23 @@
       >
         <el-table-column type="selection" width="55" :selectable="canSelectTask" />
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column label="任务名称" min-width="200">
+        <el-table-column label="任务名称" min-width="220">
           <template #default="{ row }">
             <div style="display: flex; align-items: center; gap: 8px">
               <el-icon v-if="row.dry_run" color="#67C23A" :size="18">
                 <View />
               </el-icon>
+              <el-icon v-else color="#409EFF" :size="18">
+                <Setting />
+              </el-icon>
               <span :style="{ color: row.dry_run ? '#67C23A' : '' }">{{ row.name }}</span>
               <el-tag v-if="row.dry_run" type="success" size="small" effect="dark">
                 <el-icon style="margin-right: 4px"><View /></el-icon>
-                检查模式
+                检查
+              </el-tag>
+              <el-tag v-else type="primary" size="small" effect="plain">
+                <el-icon style="margin-right: 4px"><Setting /></el-icon>
+                正常
               </el-tag>
             </div>
           </template>
@@ -503,22 +514,22 @@
         
         <el-form-item label="执行模式">
           <div style="width: 100%">
-            <el-radio-group v-model="taskForm.dry_run" style="width: 100%">
-              <el-radio :label="false" border style="width: 48%; margin-right: 4%">
-                <div style="display: flex; align-items: center; gap: 8px">
-                  <el-icon color="#409EFF"><Setting /></el-icon>
-                  <div>
-                    <div style="font-weight: bold">正常模式</div>
-                    <div style="font-size: 12px; color: #909399">实际执行并应用变更</div>
+            <el-radio-group v-model="taskForm.dry_run" style="width: 100%; display: flex; gap: 12px">
+              <el-radio :label="false" border style="flex: 1; height: auto; padding: 12px">
+                <div style="display: flex; align-items: flex-start; gap: 10px; width: 100%">
+                  <el-icon color="#409EFF" :size="20"><Setting /></el-icon>
+                  <div style="flex: 1">
+                    <div style="font-weight: bold; margin-bottom: 4px">正常模式</div>
+                    <div style="font-size: 12px; color: #909399; line-height: 1.4">实际执行并应用变更</div>
                   </div>
                 </div>
               </el-radio>
-              <el-radio :label="true" border style="width: 48%">
-                <div style="display: flex; align-items: center; gap: 8px">
-                  <el-icon color="#67C23A"><View /></el-icon>
-                  <div>
-                    <div style="font-weight: bold; color: #67C23A">检查模式 (Dry Run)</div>
-                    <div style="font-size: 12px; color: #909399">仅模拟执行，不实际变更</div>
+              <el-radio :label="true" border style="flex: 1; height: auto; padding: 12px">
+                <div style="display: flex; align-items: flex-start; gap: 10px; width: 100%">
+                  <el-icon color="#67C23A" :size="20"><View /></el-icon>
+                  <div style="flex: 1">
+                    <div style="font-weight: bold; color: #67C23A; margin-bottom: 4px">检查模式 (Dry Run)</div>
+                    <div style="font-size: 12px; color: #909399; line-height: 1.4">仅模拟执行，不实际变更</div>
                   </div>
                 </div>
               </el-radio>
