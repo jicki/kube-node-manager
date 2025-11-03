@@ -27,6 +27,10 @@ func AutoMigrate(db *gorm.DB) error {
 		&AnsibleInventory{},
 		&AnsibleSSHKey{},
 		&AnsibleSchedule{},
+		&AnsibleFavorite{},
+		&AnsibleTaskHistory{},
+		&AnsibleTag{},
+		&AnsibleTaskTag{},
 	)
 }
 
