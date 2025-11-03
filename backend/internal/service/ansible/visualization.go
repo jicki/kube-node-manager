@@ -29,7 +29,7 @@ func (s *VisualizationService) GetTaskVisualization(taskID uint) (*model.TaskExe
 	s.logger.Infof("Fetching visualization data for task %d", taskID)
 	
 	var task model.AnsibleTask
-	if err := s.db.Preload("Inventory").Preload("PreflightChecks").First(&task, taskID).Error; err != nil {
+	if err := s.db.Preload("Inventory").First(&task, taskID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("task not found")
 		}
