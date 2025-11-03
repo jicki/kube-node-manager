@@ -1,6 +1,7 @@
 <template>
   <div class="task-timeline-visualization" v-loading="loading">
-    <div v-if="!loading && visualization">
+    <!-- 有数据时显示 -->
+    <div v-if="!loading && visualization && visualization.timeline && visualization.timeline.length > 0">
       <!-- 时间线头部 -->
       <el-card class="header-card">
         <el-row :gutter="20">
@@ -138,7 +139,20 @@
       </el-card>
     </div>
     
-    <el-empty v-else-if="!loading && !visualization" description="暂无可视化数据" />
+    <!-- 无数据时显示 -->
+    <el-empty 
+      v-else-if="!loading && (!visualization || !visualization.timeline || visualization.timeline.length === 0)" 
+      description="暂无可视化数据"
+    >
+      <template #description>
+        <div>
+          <p>该任务暂无执行时间线数据</p>
+          <p style="font-size: 12px; color: #909399; margin-top: 8px">
+            可能原因：任务尚未执行或执行过程中未记录时间线
+          </p>
+        </div>
+      </template>
+    </el-empty>
   </div>
 </template>
 
@@ -173,24 +187,42 @@ const hasPhaseDistribution = computed(() => {
 
 // 加载可视化数据
 const loadVisualization = async () => {
-  if (!props.taskId) return
+  if (!props.taskId) {
+    console.warn('TaskTimelineVisualization: taskId is required')
+    return
+  }
   
   loading.value = true
+  visualization.value = null  // 重置数据
+  
   try {
+    console.log(`Loading visualization for task ${props.taskId}`)
     const response = await getTaskVisualization(props.taskId)
-    visualization.value = response.data.data
     
-    // 渲染图表（需要等待 DOM 更新）
-    if (hasPhaseDistribution.value) {
-      nextTick(() => {
+    console.log('Visualization response:', response)
+    
+    // 检查响应数据结构
+    if (response && response.data && response.data.code === 200) {
+      visualization.value = response.data.data
+      console.log('Visualization data:', visualization.value)
+      
+      // 渲染图表（需要等待 DOM 更新）
+      if (hasPhaseDistribution.value) {
+        await nextTick()
         renderChart()
-      })
+      }
+    } else {
+      console.warn('Invalid visualization response:', response)
+      ElMessage.warning('可视化数据格式不正确')
     }
   } catch (error) {
-    console.error('加载可视化数据失败:', error)
-    ElMessage.error('加载可视化数据失败: ' + (error.message || '未知错误'))
+    console.error('Failed to load visualization:', error)
+    ElMessage.error(`加载可视化数据失败: ${error.message || '未知错误'}`)
+    visualization.value = null
   } finally {
+    // 确保 loading 状态被重置
     loading.value = false
+    console.log('Loading complete, visualization:', visualization.value)
   }
 }
 

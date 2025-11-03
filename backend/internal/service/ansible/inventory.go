@@ -438,6 +438,59 @@ func (s *InventoryService) validateInventoryContent(content string) error {
 	return nil
 }
 
+// CountHosts 计算 Inventory 中的主机数量
+func (s *InventoryService) CountHosts(inventory *model.AnsibleInventory) int {
+	if inventory == nil || inventory.Content == "" {
+		return 0
+	}
+	
+	// 解析 INI 格式的 Inventory
+	lines := strings.Split(inventory.Content, "\n")
+	hostCount := 0
+	hostMap := make(map[string]bool) // 用于去重
+	inGroupSection := false
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		// 跳过空行和注释
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		
+		// 检查是否是组定义
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			inGroupSection = true
+			continue
+		}
+		
+		// 如果在组定义中，且不是变量定义（不包含 = ），则认为是主机
+		if inGroupSection {
+			// 跳过组变量定义
+			if strings.HasPrefix(line, "[") {
+				continue
+			}
+			
+			// 主机行可能包含变量，格式: hostname ansible_host=x.x.x.x ansible_user=root
+			// 我们只需要主机名（第一个单词）
+			fields := strings.Fields(line)
+			if len(fields) > 0 {
+				hostname := fields[0]
+				// 检查是否是变量定义（不以 : 开头，且不是纯变量行）
+				if !strings.Contains(hostname, "=") && hostname != "" {
+					hostMap[hostname] = true
+				}
+			}
+		}
+	}
+	
+	hostCount = len(hostMap)
+	s.logger.Infof("Inventory %d (%s): counted %d unique hosts", 
+		inventory.ID, inventory.Name, hostCount)
+	
+	return hostCount
+}
+
 // parseInventoryContent 解析 INI 格式的 inventory 内容，提取主机信息
 func (s *InventoryService) parseInventoryContent(content string) model.HostsData {
 	hostsData := make(model.HostsData)

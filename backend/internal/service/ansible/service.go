@@ -191,6 +191,19 @@ func (s *Service) CreateTask(req model.TaskCreateRequest, userID uint) (*model.A
 		priority = string(model.TaskPriorityMedium)
 	}
 	
+	// 获取主机总数（从 Inventory）
+	hostsTotal := 0
+	if req.InventoryID != nil {
+		inventory, err := s.inventorySvc.GetInventory(*req.InventoryID)
+		if err != nil {
+			s.logger.Warningf("Failed to get inventory %d: %v", *req.InventoryID, err)
+		} else {
+			hostsTotal = s.inventorySvc.CountHosts(inventory)
+			s.logger.Infof("Task %s: Inventory %d (%s) has %d hosts", 
+				req.Name, inventory.ID, inventory.Name, hostsTotal)
+		}
+	}
+	
 	now := time.Now()
 	
 	// 创建任务
@@ -208,14 +221,17 @@ func (s *Service) CreateTask(req model.TaskCreateRequest, userID uint) (*model.A
 		TimeoutSeconds:  req.TimeoutSeconds,
 		Priority:        priority,
 		QueuedAt:        &now,
+		HostsTotal:      hostsTotal, // 设置主机总数
 	}
 	
-	// 如果启用了分批执行，初始化批次状态
+	// 如果启用了分批执行，初始化批次状态并计算总批次数
 	if task.IsBatchEnabled() {
 		task.BatchStatus = "pending"
 		task.CurrentBatch = 0
-		s.logger.Infof("Task %s: Batch execution enabled - size: %d, percent: %d%%", 
-			task.Name, task.BatchConfig.BatchSize, task.BatchConfig.BatchPercent)
+		task.TotalBatches = model.CalculateTotalBatches(hostsTotal, task.BatchConfig)
+		s.logger.Infof("Task %s: Batch execution enabled - size: %d, percent: %d%%, hosts: %d, batches: %d", 
+			task.Name, task.BatchConfig.BatchSize, task.BatchConfig.BatchPercent, 
+			hostsTotal, task.TotalBatches)
 	}
 
 	if err := s.db.Create(task).Error; err != nil {

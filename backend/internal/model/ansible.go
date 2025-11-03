@@ -292,6 +292,34 @@ func (t *AnsibleTask) MarkBatchCompleted() {
 	t.UpdatedAt = time.Now()
 }
 
+// CalculateTotalBatches 计算总批次数
+func CalculateTotalBatches(hostsTotal int, config *BatchExecutionConfig) int {
+	if config == nil || !config.Enabled || hostsTotal == 0 {
+		return 0
+	}
+	
+	batchSize := 0
+	
+	// 优先使用固定数量
+	if config.BatchSize > 0 {
+		batchSize = config.BatchSize
+	} else if config.BatchPercent > 0 {
+		// 使用百分比计算
+		batchSize = (hostsTotal * config.BatchPercent) / 100
+		if batchSize < 1 {
+			batchSize = 1 // 至少1台主机
+		}
+	}
+	
+	if batchSize == 0 {
+		return 0
+	}
+	
+	// 向上取整：计算需要多少批次才能覆盖所有主机
+	totalBatches := (hostsTotal + batchSize - 1) / batchSize
+	return totalBatches
+}
+
 // AnsibleTemplate Ansible 任务模板模型
 type AnsibleTemplate struct {
 	ID              uint           `json:"id" gorm:"primarykey"`
