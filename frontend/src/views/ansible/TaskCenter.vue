@@ -350,7 +350,13 @@
           <el-input v-model="taskForm.name" placeholder="请输入任务名称" />
         </el-form-item>
         <el-form-item label="选择模板">
-          <el-select v-model="taskForm.template_id" placeholder="选择模板（可选）" clearable style="width: 100%">
+          <el-select 
+            v-model="taskForm.template_id" 
+            placeholder="选择模板（可选）" 
+            clearable 
+            style="width: 100%"
+            @change="loadEstimation"
+          >
             <el-option 
               v-for="template in templates" 
               :key="template.id" 
@@ -360,7 +366,12 @@
           </el-select>
         </el-form-item>
         <el-form-item label="主机清单" required>
-          <el-select v-model="taskForm.inventory_id" placeholder="选择主机清单" style="width: 100%">
+          <el-select 
+            v-model="taskForm.inventory_id" 
+            placeholder="选择主机清单" 
+            style="width: 100%"
+            @change="loadEstimation"
+          >
             <el-option 
               v-for="inventory in inventories" 
               :key="inventory.id" 
@@ -368,6 +379,25 @@
               :value="inventory.id" 
             />
           </el-select>
+        </el-form-item>
+        
+        <!-- 任务执行预估 -->
+        <el-form-item label="预估执行时间" v-if="estimation">
+          <el-alert 
+            :title="estimation.estimated_range"
+            :type="estimation.confidence === 'high' ? 'success' : estimation.confidence === 'medium' ? 'warning' : 'info'"
+            :closable="false"
+          >
+            <template #default>
+              <div style="margin-top: 8px; font-size: 13px">
+                <p><strong>平均时长:</strong> {{ formatEstimationDuration(estimation.avg_duration) }}</p>
+                <p><strong>历史范围:</strong> {{ formatEstimationDuration(estimation.min_duration) }} - {{ formatEstimationDuration(estimation.max_duration) }}</p>
+                <p><strong>成功率:</strong> {{ estimation.success_rate.toFixed(1) }}%</p>
+                <p><strong>样本数量:</strong> {{ estimation.sample_size }} 次</p>
+                <p><strong>置信度:</strong> {{ getConfidenceText(estimation.confidence) }}</p>
+              </div>
+            </template>
+          </el-alert>
         </el-form-item>
         <el-form-item label="集群">
           <el-select v-model="taskForm.cluster_id" placeholder="选择集群（可选）" clearable style="width: 100%">
@@ -719,6 +749,7 @@ const preflightDialogVisible = ref(false)
 const creating = ref(false)
 const preflightChecking = ref(false)
 const preflightResult = ref(null)
+const estimation = ref(null)
 
 const taskForm = reactive({
   name: '',
@@ -983,6 +1014,66 @@ const formatDuration = (seconds) => {
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
   return minutes > 0 ? `${hours}小时${minutes}分钟` : `${hours}小时`
+}
+
+// 格式化预估时长（支持小数秒）
+const formatEstimationDuration = (seconds) => {
+  if (!seconds) return '0秒'
+  if (seconds < 60) return `${Math.round(seconds)}秒`
+  if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60)
+    const secs = Math.round(seconds % 60)
+    return secs > 0 ? `${minutes}分钟${secs}秒` : `${minutes}分钟`
+  }
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  return minutes > 0 ? `${hours}小时${minutes}分钟` : `${hours}小时`
+}
+
+// 获取置信度文本
+const getConfidenceText = (confidence) => {
+  const textMap = {
+    'high': '高（数据充足，预估可靠）',
+    'medium': '中（数据适中，仅供参考）',
+    'low': '低（数据较少，仅供参考）'
+  }
+  return textMap[confidence] || '未知'
+}
+
+// 加载任务执行预估
+const loadEstimation = async () => {
+  // 重置预估数据
+  estimation.value = null
+  
+  // 需要模板ID或清单ID之一
+  if (!taskForm.template_id && !taskForm.inventory_id) {
+    return
+  }
+  
+  try {
+    let response
+    
+    if (taskForm.template_id && taskForm.inventory_id) {
+      // 有模板和清单，使用组合预估
+      response = await ansibleAPI.estimateByTemplateAndInventory(
+        taskForm.template_id, 
+        taskForm.inventory_id
+      )
+    } else if (taskForm.template_id) {
+      // 只有模板
+      response = await ansibleAPI.estimateByTemplate(taskForm.template_id)
+    } else if (taskForm.inventory_id) {
+      // 只有清单
+      response = await ansibleAPI.estimateByInventory(taskForm.inventory_id)
+    }
+    
+    if (response && response.data) {
+      estimation.value = response.data
+    }
+  } catch (error) {
+    // 预估失败不影响任务创建，静默处理
+    console.log('预估加载失败:', error)
+  }
 }
 
 // 监听策略和值的变化

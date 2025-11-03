@@ -549,3 +549,41 @@ export function getPreflightChecks(id) {
   })
 }
 
+// 任务执行预估 API
+
+/**
+ * 基于模板预估任务执行时间
+ */
+export function estimateByTemplate(templateId) {
+  return request({
+    url: '/api/v1/ansible/estimate/template',
+    method: 'get',
+    params: { template_id: templateId }
+  })
+}
+
+/**
+ * 基于清单预估任务执行时间
+ */
+export function estimateByInventory(inventoryId) {
+  return request({
+    url: '/api/v1/ansible/estimate/inventory',
+    method: 'get',
+    params: { inventory_id: inventoryId }
+  })
+}
+
+/**
+ * 基于模板和清单组合预估任务执行时间
+ */
+export function estimateByTemplateAndInventory(templateId, inventoryId) {
+  return request({
+    url: '/api/v1/ansible/estimate/combined',
+    method: 'get',
+    params: { 
+      template_id: templateId, 
+      inventory_id: inventoryId 
+    }
+  })
+}
+

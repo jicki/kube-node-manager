@@ -396,6 +396,11 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.GET("/recent-tasks", handlers.AnsibleFavorite.GetRecentTasks)
 		ansible.GET("/task-history/:id", handlers.AnsibleFavorite.GetTaskHistory)
 		ansible.DELETE("/task-history/:id", handlers.AnsibleFavorite.DeleteTaskHistory)
+		
+		// 任务执行预估
+		ansible.GET("/estimate/template", handlers.AnsibleEstimation.EstimateByTemplate)
+		ansible.GET("/estimate/inventory", handlers.AnsibleEstimation.EstimateByInventory)
+		ansible.GET("/estimate/combined", handlers.AnsibleEstimation.EstimateByTemplateAndInventory)
 	}
 
 	// Ansible WebSocket (任务日志流)

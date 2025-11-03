@@ -14,15 +14,16 @@ import (
 
 // Service Ansible 服务
 type Service struct {
-	db           *gorm.DB
-	logger       *logger.Logger
-	templateSvc  *TemplateService
-	inventorySvc *InventoryService
-	sshKeySvc    *SSHKeyService
-	scheduleSvc  *ScheduleService
-	favoriteSvc  *FavoriteService
-	preflightSvc *PreflightService
-	executor     *TaskExecutor
+	db            *gorm.DB
+	logger        *logger.Logger
+	templateSvc   *TemplateService
+	inventorySvc  *InventoryService
+	sshKeySvc     *SSHKeyService
+	scheduleSvc   *ScheduleService
+	favoriteSvc   *FavoriteService
+	preflightSvc  *PreflightService
+	estimationSvc *EstimationService
+	executor      *TaskExecutor
 }
 
 // NewService 创建 Ansible 服务实例
@@ -40,17 +41,19 @@ func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, wsHub i
 	templateSvc := NewTemplateService(db, logger)
 	favoriteSvc := NewFavoriteService(db, logger)
 	preflightSvc := NewPreflightService(db, logger, inventorySvc, sshKeySvc)
+	estimationSvc := NewEstimationService(db, logger)
 	executor := NewTaskExecutor(db, logger, inventorySvc, sshKeySvc, wsHub)
 
 	service := &Service{
-		db:           db,
-		logger:       logger,
-		templateSvc:  templateSvc,
-		inventorySvc: inventorySvc,
-		sshKeySvc:    sshKeySvc,
-		favoriteSvc:  favoriteSvc,
-		preflightSvc: preflightSvc,
-		executor:     executor,
+		db:            db,
+		logger:        logger,
+		templateSvc:   templateSvc,
+		inventorySvc:  inventorySvc,
+		sshKeySvc:     sshKeySvc,
+		favoriteSvc:   favoriteSvc,
+		preflightSvc:  preflightSvc,
+		estimationSvc: estimationSvc,
+		executor:      executor,
 	}
 
 	// 创建定时任务调度服务（需要依赖 service）
@@ -93,6 +96,11 @@ func (s *Service) GetFavoriteService() *FavoriteService {
 // GetPreflightService 获取前置检查服务
 func (s *Service) GetPreflightService() *PreflightService {
 	return s.preflightSvc
+}
+
+// GetEstimationService 获取任务预估服务
+func (s *Service) GetEstimationService() *EstimationService {
+	return s.estimationSvc
 }
 
 // CreateTask 创建并执行任务
