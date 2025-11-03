@@ -12,18 +12,58 @@
       </template>
       
       <!-- 统计卡片 -->
-      <el-row :gutter="20">
-        <el-col :span="6">
-          <el-statistic title="总任务数" :value="statistics.total_tasks || 0" />
+      <el-row :gutter="20" class="stats-row">
+        <el-col :xs="24" :sm="12" :md="6" :lg="6">
+          <div class="stat-card stat-card-primary">
+            <div class="stat-content">
+              <div class="stat-icon">
+                <el-icon><DocumentCopy /></el-icon>
+              </div>
+              <div class="stat-info">
+                <div class="stat-value">{{ statistics.total_tasks || 0 }}</div>
+                <div class="stat-label">总任务数</div>
+              </div>
+            </div>
+          </div>
         </el-col>
-        <el-col :span="6">
-          <el-statistic title="运行中" :value="statistics.running_tasks || 0" />
+        <el-col :xs="24" :sm="12" :md="6" :lg="6">
+          <div class="stat-card stat-card-warning">
+            <div class="stat-content">
+              <div class="stat-icon">
+                <el-icon><Loading /></el-icon>
+              </div>
+              <div class="stat-info">
+                <div class="stat-value">{{ statistics.running_tasks || 0 }}</div>
+                <div class="stat-label">运行中</div>
+              </div>
+            </div>
+          </div>
         </el-col>
-        <el-col :span="6">
-          <el-statistic title="成功" :value="statistics.status_counts?.success || 0" />
+        <el-col :xs="24" :sm="12" :md="6" :lg="6">
+          <div class="stat-card stat-card-success">
+            <div class="stat-content">
+              <div class="stat-icon">
+                <el-icon><CircleCheck /></el-icon>
+              </div>
+              <div class="stat-info">
+                <div class="stat-value">{{ statistics.status_counts?.success || 0 }}</div>
+                <div class="stat-label">成功</div>
+              </div>
+            </div>
+          </div>
         </el-col>
-        <el-col :span="6">
-          <el-statistic title="失败" :value="statistics.status_counts?.failed || 0" />
+        <el-col :xs="24" :sm="12" :md="6" :lg="6">
+          <div class="stat-card stat-card-danger">
+            <div class="stat-content">
+              <div class="stat-icon">
+                <el-icon><CircleClose /></el-icon>
+              </div>
+              <div class="stat-info">
+                <div class="stat-value">{{ statistics.status_counts?.failed || 0 }}</div>
+                <div class="stat-label">失败</div>
+              </div>
+            </div>
+          </div>
         </el-col>
       </el-row>
     </el-card>
@@ -233,7 +273,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 import clusterAPI from '@/api/cluster'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -654,6 +694,97 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* 统计卡片样式 */
+.stats-row {
+  margin-bottom: 0;
+}
+
+.stat-card {
+  padding: 20px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-left: 4px solid;
+  margin-bottom: 20px;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card-primary {
+  border-left-color: #409EFF;
+}
+
+.stat-card-success {
+  border-left-color: #67C23A;
+}
+
+.stat-card-warning {
+  border-left-color: #E6A23C;
+}
+
+.stat-card-danger {
+  border-left-color: #F56C6C;
+}
+
+.stat-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 28px;
+}
+
+.stat-card-primary .stat-icon {
+  background: rgba(64, 158, 255, 0.1);
+  color: #409EFF;
+}
+
+.stat-card-success .stat-icon {
+  background: rgba(103, 194, 58, 0.1);
+  color: #67C23A;
+}
+
+.stat-card-warning .stat-icon {
+  background: rgba(230, 162, 60, 0.1);
+  color: #E6A23C;
+}
+
+.stat-card-danger .stat-icon {
+  background: rgba(245, 108, 108, 0.1);
+  color: #F56C6C;
+}
+
+.stat-info {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #909399;
+  font-weight: 400;
 }
 
 .dialog-footer {
