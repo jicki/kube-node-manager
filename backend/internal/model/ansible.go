@@ -692,10 +692,8 @@ type AnsibleFavorite struct {
 	CreatedAt  time.Time      `json:"created_at"`
 	DeletedAt  gorm.DeletedAt `json:"-" gorm:"index"`
 	
-	// 关联（可选，用于预加载）
-	Task      *AnsibleTask      `json:"task,omitempty" gorm:"foreignKey:TargetID;constraint:OnDelete:CASCADE"`
-	Template  *AnsibleTemplate  `json:"template,omitempty" gorm:"foreignKey:TargetID;constraint:OnDelete:CASCADE"`
-	Inventory *AnsibleInventory `json:"inventory,omitempty" gorm:"foreignKey:TargetID;constraint:OnDelete:CASCADE"`
+	// 注意：不定义外键约束，因为 TargetID 是动态引用，根据 TargetType 指向不同的表
+	// 关联数据通过业务逻辑手动加载
 }
 
 // TableName 指定表名

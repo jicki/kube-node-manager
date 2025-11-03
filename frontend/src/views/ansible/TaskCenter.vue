@@ -129,7 +129,10 @@
             </div>
             
             <div class="recent-task-tags">
-              <el-tag v-if="history.dry_run" size="small" type="info">Dry Run</el-tag>
+              <el-tag v-if="history.dry_run" size="small" type="success" effect="dark">
+                <el-icon style="margin-right: 4px"><View /></el-icon>
+                检查模式
+              </el-tag>
               <el-tag v-if="history.batch_config?.enabled" size="small" type="warning">
                 分批执行
               </el-tag>
@@ -199,10 +202,16 @@
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column label="任务名称" min-width="200">
           <template #default="{ row }">
-            <span>{{ row.name }}</span>
-            <el-tag v-if="row.dry_run" type="info" size="small" style="margin-left: 8px">
-              Dry Run
-            </el-tag>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <el-icon v-if="row.dry_run" color="#67C23A" :size="18">
+                <View />
+              </el-icon>
+              <span :style="{ color: row.dry_run ? '#67C23A' : '' }">{{ row.name }}</span>
+              <el-tag v-if="row.dry_run" type="success" size="small" effect="dark">
+                <el-icon style="margin-right: 4px"><View /></el-icon>
+                检查模式
+              </el-tag>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="创建用户" width="120">
@@ -492,16 +501,41 @@
           <el-divider />
         </template>
         
-        <el-form-item label="Dry Run 模式">
-          <el-switch 
-            v-model="taskForm.dry_run" 
-            active-text="启用（检查模式，不实际执行变更）"
-            inactive-text="禁用"
-            style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
-          />
-          <div style="margin-top: 8px; color: #909399; font-size: 12px">
-            <el-icon><InfoFilled /></el-icon>
-            Dry Run 模式会模拟任务执行，显示将要进行的变更，但不会实际修改目标主机
+        <el-form-item label="执行模式">
+          <div style="width: 100%">
+            <el-radio-group v-model="taskForm.dry_run" style="width: 100%">
+              <el-radio :label="false" border style="width: 48%; margin-right: 4%">
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <el-icon color="#409EFF"><Setting /></el-icon>
+                  <div>
+                    <div style="font-weight: bold">正常模式</div>
+                    <div style="font-size: 12px; color: #909399">实际执行并应用变更</div>
+                  </div>
+                </div>
+              </el-radio>
+              <el-radio :label="true" border style="width: 48%">
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <el-icon color="#67C23A"><View /></el-icon>
+                  <div>
+                    <div style="font-weight: bold; color: #67C23A">检查模式 (Dry Run)</div>
+                    <div style="font-size: 12px; color: #909399">仅模拟执行，不实际变更</div>
+                  </div>
+                </div>
+              </el-radio>
+            </el-radio-group>
+            <el-alert 
+              v-if="taskForm.dry_run" 
+              type="success" 
+              :closable="false"
+              style="margin-top: 12px"
+            >
+              <template #default>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <el-icon><InfoFilled /></el-icon>
+                  <span>检查模式会模拟任务执行过程，显示将要进行的变更，但不会实际修改目标主机。适合用于验证 Playbook 和测试执行流程。</span>
+                </div>
+              </template>
+            </el-alert>
           </div>
         </el-form-item>
         
@@ -765,7 +799,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine, Setting, Key, Warning, QuestionFilled, Top, Bottom, Minus } from '@element-plus/icons-vue'
+import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine, Setting, Key, Warning, QuestionFilled, Top, Bottom, Minus, View } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 import clusterAPI from '@/api/cluster'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
