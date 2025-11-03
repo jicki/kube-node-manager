@@ -36,7 +36,7 @@ func NewManager(logger *logger.Logger) *Manager {
 		clusterClients: make(map[string]*kubernetes.Clientset),
 	}
 
-	// 注册事件处理器
+	// 注册节点事件处理器
 	// SmartCache 监听 Informer 事件
 	m.informerSvc.RegisterHandler(m.smartCache)
 
@@ -46,6 +46,13 @@ func NewManager(logger *logger.Logger) *Manager {
 	logger.Info("Realtime Manager initialized")
 
 	return m
+}
+
+// RegisterPodEventHandler 注册 Pod 事件处理器
+// 用于将 PodCountCache 注册到 Informer
+func (m *Manager) RegisterPodEventHandler(handler informer.PodEventHandler) {
+	m.informerSvc.RegisterPodHandler(handler)
+	m.logger.Infof("Registered Pod event handler: %T", handler)
 }
 
 // Start 启动管理器
@@ -80,10 +87,21 @@ func (m *Manager) RegisterCluster(clusterName string, clientset *kubernetes.Clie
 		m.logger.Infof("Initialized SmartCache with %d nodes for cluster %s", len(nodeList.Items), clusterName)
 	}
 
-	// 启动 Informer
+	// 启动节点 Informer
 	if err := m.informerSvc.StartInformer(clusterName, clientset); err != nil {
-		return fmt.Errorf("failed to start informer for cluster %s: %w", clusterName, err)
+		return fmt.Errorf("failed to start node informer for cluster %s: %w", clusterName, err)
 	}
+
+	// 启动 Pod Informer（异步，不阻塞节点 Informer）
+	// 如果失败只记录警告，不影响节点 Informer
+	go func() {
+		if err := m.informerSvc.StartPodInformer(clusterName); err != nil {
+			m.logger.Warningf("Failed to start Pod Informer for cluster %s: %v", clusterName, err)
+			m.logger.Info("Pod count will fall back to API query mode")
+		} else {
+			m.logger.Infof("Successfully started Pod Informer for cluster %s", clusterName)
+		}
+	}()
 
 	m.logger.Infof("Cluster registered: %s", clusterName)
 	return nil

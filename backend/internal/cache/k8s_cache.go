@@ -18,10 +18,15 @@ type K8sCache struct {
 	// 节点详情缓存: "cluster:node" -> CacheEntry[NodeInfo]
 	nodeDetailCache *sync.Map
 
+	// Pod数量缓存: cluster -> CacheEntry[map[string]int]
+	// 大规模集群优化：Pod数量查询很慢，使用独立缓存（5分钟TTL）
+	podCountCache *sync.Map
+
 	// 缓存配置
-	listCacheTTL   time.Duration // 列表缓存TTL（默认30s）
-	detailCacheTTL time.Duration // 详情缓存TTL（默认5min）
-	staleThreshold time.Duration // 过期但可用阈值（默认5min）
+	listCacheTTL     time.Duration // 列表缓存TTL（默认30s）
+	detailCacheTTL   time.Duration // 详情缓存TTL（默认5min）
+	podCountCacheTTL time.Duration // Pod数量缓存TTL（默认5min）
+	staleThreshold   time.Duration // 过期但可用阈值（默认5min）
 
 	logger *logger.Logger
 
@@ -41,13 +46,15 @@ type CacheEntry struct {
 // 多副本部署优化：使用较短的TTL减少副本间数据不一致窗口
 func NewK8sCache(logger *logger.Logger) *K8sCache {
 	return &K8sCache{
-		nodeListCache:   &sync.Map{},
-		nodeDetailCache: &sync.Map{},
-		listCacheTTL:    10 * time.Second, // 列表缓存10秒（多副本环境优化）
-		detailCacheTTL:  1 * time.Minute,  // 详情缓存1分钟（多副本环境优化）
-		staleThreshold:  2 * time.Minute,  // 过期阈值2分钟（异步刷新窗口）
-		logger:          logger,
-		refreshLocks:    &sync.Map{},
+		nodeListCache:    &sync.Map{},
+		nodeDetailCache:  &sync.Map{},
+		podCountCache:    &sync.Map{},
+		listCacheTTL:     10 * time.Second, // 列表缓存10秒（多副本环境优化）
+		detailCacheTTL:   1 * time.Minute,  // 详情缓存1分钟（多副本环境优化）
+		podCountCacheTTL: 5 * time.Minute,  // Pod数量缓存5分钟（大规模集群优化）
+		staleThreshold:   2 * time.Minute,  // 过期阈值2分钟（异步刷新窗口）
+		logger:           logger,
+		refreshLocks:     &sync.Map{},
 	}
 }
 
@@ -332,9 +339,120 @@ func (c *K8sCache) GetCacheStats() map[string]interface{} {
 	return stats
 }
 
+// GetPodCounts 获取Pod数量缓存（带异步刷新）
+// 大规模集群优化：
+// - <5min: 直接返回缓存（新鲜数据）
+// - 5min-10min: 返回缓存并异步刷新（过期但可用）
+// - >10min或无缓存: 返回空map并异步加载
+func (c *K8sCache) GetPodCounts(cluster string, nodeNames []string, fetchFunc func() map[string]int) map[string]int {
+	// 尝试从缓存获取
+	if cached, ok := c.podCountCache.Load(cluster); ok {
+		entry := cached.(*CacheEntry)
+		entry.mu.RLock()
+		age := time.Since(entry.UpdatedAt)
+		data := entry.Data
+		isRefreshing := entry.refreshing
+		entry.mu.RUnlock()
+
+		// 缓存新鲜，直接返回
+		if age < c.podCountCacheTTL {
+			if podCounts, ok := data.(map[string]int); ok {
+				c.logger.Debugf("Pod count cache hit: cluster=%s, age=%v", cluster, age)
+				return podCounts
+			}
+		}
+
+		// 缓存过期但在10分钟内，返回旧数据并异步刷新
+		if age < c.podCountCacheTTL*2 {
+			if podCounts, ok := data.(map[string]int); ok {
+				c.logger.Debugf("Pod count cache stale: cluster=%s, age=%v, async refresh", cluster, age)
+
+				// 触发异步刷新（如果未在刷新中）
+				if !isRefreshing {
+					go c.asyncRefreshPodCounts(cluster, fetchFunc)
+				}
+
+				return podCounts
+			}
+		}
+	}
+
+	// 缓存未命中或过期太久，异步加载并返回空map
+	c.logger.Infof("Pod count cache miss: cluster=%s, triggering async load", cluster)
+	go c.asyncRefreshPodCounts(cluster, fetchFunc)
+
+	// 返回空map，不阻塞节点列表查询
+	result := make(map[string]int)
+	for _, nodeName := range nodeNames {
+		result[nodeName] = 0
+	}
+	return result
+}
+
+// SetPodCounts 设置Pod数量缓存
+func (c *K8sCache) SetPodCounts(cluster string, podCounts map[string]int) {
+	entry := &CacheEntry{
+		Data:      podCounts,
+		UpdatedAt: time.Now(),
+	}
+	c.podCountCache.Store(cluster, entry)
+	c.logger.Infof("Pod count cache updated: cluster=%s, nodes=%d", cluster, len(podCounts))
+}
+
+// asyncRefreshPodCounts 异步刷新Pod数量缓存
+func (c *K8sCache) asyncRefreshPodCounts(cluster string, fetchFunc func() map[string]int) {
+	// 标记正在刷新
+	if cached, ok := c.podCountCache.Load(cluster); ok {
+		entry := cached.(*CacheEntry)
+		entry.mu.Lock()
+		if entry.refreshing {
+			entry.mu.Unlock()
+			c.logger.Debugf("Pod count cache already refreshing: cluster=%s", cluster)
+			return // 已经在刷新中
+		}
+		entry.refreshing = true
+		entry.mu.Unlock()
+	} else {
+		// 创建新条目并标记为刷新中
+		entry := &CacheEntry{
+			Data:       make(map[string]int),
+			UpdatedAt:  time.Now(),
+			refreshing: true,
+		}
+		c.podCountCache.Store(cluster, entry)
+	}
+
+	// 执行刷新
+	c.logger.Infof("Starting async pod count refresh for cluster: %s", cluster)
+	podCounts := fetchFunc()
+
+	// 更新缓存
+	if cached, ok := c.podCountCache.Load(cluster); ok {
+		entry := cached.(*CacheEntry)
+		entry.mu.Lock()
+		defer entry.mu.Unlock()
+
+		if len(podCounts) > 0 {
+			entry.Data = podCounts
+			entry.UpdatedAt = time.Now()
+			c.logger.Infof("Pod count cache async refreshed: cluster=%s, nodes=%d", cluster, len(podCounts))
+		} else {
+			c.logger.Warningf("Pod count cache async refresh returned empty: cluster=%s", cluster)
+		}
+		entry.refreshing = false
+	}
+}
+
+// InvalidatePodCounts 清除指定集群的Pod数量缓存
+func (c *K8sCache) InvalidatePodCounts(cluster string) {
+	c.podCountCache.Delete(cluster)
+	c.logger.Infof("Invalidated pod count cache for cluster: %s", cluster)
+}
+
 // Clear 清空所有缓存
 func (c *K8sCache) Clear() {
 	c.nodeListCache = &sync.Map{}
 	c.nodeDetailCache = &sync.Map{}
+	c.podCountCache = &sync.Map{}
 	c.logger.Info("K8s cache cleared")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"kube-node-manager/internal/cache"
+	"kube-node-manager/internal/podcache"
 	"kube-node-manager/pkg/logger"
 	"strconv"
 	"strings"
@@ -24,12 +25,13 @@ import (
 
 // Service Kubernetes客户端服务
 type Service struct {
-	logger         *logger.Logger
-	clients        map[string]*kubernetes.Clientset
-	metricsClients map[string]*metricsclientset.Clientset
-	mu             sync.RWMutex
-	cache          *cache.K8sCache // 旧的K8s API缓存层（仅用于非节点资源）
-	realtimeManager interface{} // 实时同步管理器（使用接口避免循环依赖）
+	logger          *logger.Logger
+	clients         map[string]*kubernetes.Clientset
+	metricsClients  map[string]*metricsclientset.Clientset
+	mu              sync.RWMutex
+	cache           *cache.K8sCache          // 旧的K8s API缓存层（仅用于非节点资源）
+	podCountCache   *podcache.PodCountCache  // 轻量级 Pod 统计缓存（基于 Informer）
+	realtimeManager interface{}              // 实时同步管理器（使用接口避免循环依赖）
 }
 
 // NodeInfo Kubernetes节点信息
@@ -116,8 +118,14 @@ func NewService(logger *logger.Logger, realtimeMgr interface{}) *Service {
 		clients:         make(map[string]*kubernetes.Clientset),
 		metricsClients:  make(map[string]*metricsclientset.Clientset),
 		cache:           cache.NewK8sCache(logger),
+		podCountCache:   podcache.NewPodCountCache(logger),
 		realtimeManager: realtimeMgr,
 	}
+}
+
+// GetPodCountCache 获取 Pod 统计缓存（供外部注册到 Informer）
+func (s *Service) GetPodCountCache() *podcache.PodCountCache {
+	return s.podCountCache
 }
 
 // CreateClient 根据kubeconfig创建Kubernetes客户端
@@ -1316,6 +1324,10 @@ func (s *Service) extractGPUResources(resources corev1.ResourceList) map[string]
 }
 
 // enrichNodesWithMetrics 为节点列表添加资源使用情况
+// 大规模集群优化（v3 - Pod Informer）：
+// - 优先使用 Pod Informer 缓存（实时，<1ms响应）
+// - 降级策略：Informer 未就绪时使用旧的分页查询+缓存方案
+// - CPU/内存指标保持同步获取（响应快）
 func (s *Service) enrichNodesWithMetrics(clusterName string, nodes []NodeInfo) {
 	metricsClient, err := s.getMetricsClient(clusterName)
 	if err != nil {
@@ -1340,14 +1352,13 @@ func (s *Service) enrichNodesWithMetrics(clusterName string, nodes []NodeInfo) {
 		metricsMap[metric.Name] = metric
 	}
 
-	// 批量获取所有节点的 Pod 数量（分页查询优化）
+	// 批量获取所有节点的 Pod 数量（优先使用 Informer）
 	nodeNames := make([]string, len(nodes))
 	for i := range nodes {
 		nodeNames[i] = nodes[i].Name
 	}
 	
-	// 对于超大规模集群，使用优化的分页查询
-	podCounts := s.getNodesPodCounts(clusterName, nodeNames)
+	podCounts := s.getPodCountsWithFallback(clusterName, nodeNames)
 
 	// 为每个节点添加使用情况
 	for i := range nodes {
@@ -1362,6 +1373,27 @@ func (s *Service) enrichNodesWithMetrics(clusterName string, nodes []NodeInfo) {
 	}
 
 	s.logger.Infof("Successfully enriched %d nodes with metrics for cluster %s", len(nodes), clusterName)
+}
+
+// getPodCountsWithFallback 获取 Pod 数量（带降级策略）
+// 优先级：Pod Informer 缓存 > 旧的分页查询+缓存方案
+func (s *Service) getPodCountsWithFallback(clusterName string, nodeNames []string) map[string]int {
+	// 策略1：尝试从 Pod Informer 缓存获取（最优，实时且快速）
+	if s.podCountCache != nil && s.podCountCache.IsReady(clusterName) {
+		podCounts := s.podCountCache.GetAllNodePodCounts(clusterName)
+		if len(podCounts) > 0 {
+			s.logger.Debugf("Using Pod Informer cache for cluster %s (fast path)", clusterName)
+			return podCounts
+		}
+	}
+
+	// 策略2：降级到旧的分页查询+缓存方案
+	s.logger.Debugf("Pod Informer not ready for cluster %s, falling back to paginated query", clusterName)
+	
+	fetchFunc := func() map[string]int {
+		return s.getNodesPodCounts(clusterName, nodeNames)
+	}
+	return s.cache.GetPodCounts(clusterName, nodeNames, fetchFunc)
 }
 
 // enrichNodeWithMetrics 为单个节点添加资源使用情况
@@ -1492,6 +1524,10 @@ func (s *Service) getNodePodCount(clusterName, nodeName string) (int, error) {
 }
 
 // getNodesPodCounts 批量获取多个节点的 Pod 数量（使用分页查询优化）
+// 大规模集群优化（v2）：
+// - 页面大小从 500 增加到 1000（减少请求次数）
+// - 单页超时从 30 秒增加到 60 秒（更宽松的超时策略）
+// - 支持 partial data 早期返回（遇到错误时返回已统计的部分结果）
 func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[string]int {
 	client, err := s.getClient(clusterName)
 	if err != nil {
@@ -1508,18 +1544,19 @@ func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[
 	}
 
 	// 使用分页查询，避免一次性加载大量 Pod 导致超时
-	// 每页获取 500 个 Pod（可根据实际情况调整）
-	const pageSize = 500
+	// 优化：页面大小从 500 增加到 1000，减少请求次数
+	const pageSize = 1000
 	continueToken := ""
 	totalPods := 0
 	pageCount := 0
+	maxPages := 50 // 最多查询 50 页（50k pods），避免无限循环
 
 	s.logger.Infof("Starting paginated pod count for cluster %s with %d nodes", clusterName, len(nodeNames))
 
-	for {
+	for pageCount < maxPages {
 		pageCount++
-		// 每次分页请求设置独立的超时
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		// 优化：每次分页请求超时从 30 秒增加到 60 秒
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 
 		podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 			Limit:    pageSize,
@@ -1529,7 +1566,11 @@ func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[
 
 		if err != nil {
 			s.logger.Warningf("Failed to list pods (page %d) for cluster %s: %v", pageCount, clusterName, err)
-			// 即使部分失败，也返回已统计的结果
+			// Partial data 策略：即使部分失败，也返回已统计的结果
+			if totalPods > 0 {
+				s.logger.Infof("Returning partial pod count data: cluster=%s, pods=%d, pages=%d", 
+					clusterName, totalPods, pageCount-1)
+			}
 			break
 		}
 
@@ -1551,6 +1592,11 @@ func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[
 			break
 		}
 		continueToken = podList.Continue
+	}
+
+	if pageCount >= maxPages {
+		s.logger.Warningf("Reached max pages limit (%d) for cluster %s, pod count may be incomplete", 
+			maxPages, clusterName)
 	}
 
 	s.logger.Infof("Completed paginated pod count for cluster %s: %d total active pods across %d pages", 

@@ -38,31 +38,55 @@ type NodeEventHandler interface {
 	OnNodeEvent(event NodeEvent)
 }
 
+// PodEvent Pod 事件类型
+type PodEvent struct {
+	Type        EventType    // 事件类型：Add/Update/Delete
+	ClusterName string       // 集群名称
+	Pod         *corev1.Pod  // Pod 对象
+	OldPod      *corev1.Pod  // 旧 Pod 对象（仅 Update 事件）
+	Timestamp   time.Time    // 事件时间
+}
+
+// PodEventHandler Pod 事件处理器接口
+type PodEventHandler interface {
+	OnPodEvent(event PodEvent)
+}
+
 // Service Informer 服务
 type Service struct {
-	logger   *logger.Logger
-	informers map[string]informers.SharedInformerFactory // cluster -> informer
-	stoppers map[string]chan struct{}                    // cluster -> stop channel
-	handlers []NodeEventHandler                          // 事件处理器列表
-	mu       sync.RWMutex
+	logger      *logger.Logger
+	informers   map[string]informers.SharedInformerFactory // cluster -> informer
+	stoppers    map[string]chan struct{}                   // cluster -> stop channel
+	handlers    []NodeEventHandler                         // 节点事件处理器列表
+	podHandlers []PodEventHandler                          // Pod 事件处理器列表
+	mu          sync.RWMutex
 }
 
 // NewService 创建 Informer 服务
 func NewService(logger *logger.Logger) *Service {
 	return &Service{
-		logger:    logger,
-		informers: make(map[string]informers.SharedInformerFactory),
-		stoppers:  make(map[string]chan struct{}),
-		handlers:  make([]NodeEventHandler, 0),
+		logger:      logger,
+		informers:   make(map[string]informers.SharedInformerFactory),
+		stoppers:    make(map[string]chan struct{}),
+		handlers:    make([]NodeEventHandler, 0),
+		podHandlers: make([]PodEventHandler, 0),
 	}
 }
 
-// RegisterHandler 注册事件处理器
+// RegisterHandler 注册节点事件处理器
 func (s *Service) RegisterHandler(handler NodeEventHandler) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.handlers = append(s.handlers, handler)
 	s.logger.Infof("Registered node event handler: %T", handler)
+}
+
+// RegisterPodHandler 注册 Pod 事件处理器
+func (s *Service) RegisterPodHandler(handler PodEventHandler) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.podHandlers = append(s.podHandlers, handler)
+	s.logger.Infof("Registered pod event handler: %T", handler)
 }
 
 // StartInformer 为指定集群启动 Informer
@@ -365,5 +389,113 @@ func (s *Service) GetInformerStatus() map[string]bool {
 		status[clusterName] = true
 	}
 	return status
+}
+
+// StartPodInformer 为指定集群启动 Pod Informer
+// 注意：必须在 StartInformer 之后调用，因为需要复用 SharedInformerFactory
+func (s *Service) StartPodInformer(clusterName string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 检查节点 Informer 是否已启动
+	factory, exists := s.informers[clusterName]
+	if !exists {
+		return fmt.Errorf("node informer not started for cluster %s, please call StartInformer first", clusterName)
+	}
+
+	// 获取 PodInformer（复用现有 factory）
+	podInformer := factory.Core().V1().Pods().Informer()
+
+	// 注册事件处理器
+	podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			pod := obj.(*corev1.Pod)
+			s.handlePodAdd(clusterName, pod)
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			oldPod := oldObj.(*corev1.Pod)
+			newPod := newObj.(*corev1.Pod)
+			s.handlePodUpdate(clusterName, oldPod, newPod)
+		},
+		DeleteFunc: func(obj interface{}) {
+			pod := obj.(*corev1.Pod)
+			s.handlePodDelete(clusterName, pod)
+		},
+	})
+
+	// 等待缓存同步
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	if !cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced) {
+		return fmt.Errorf("failed to sync pod cache for cluster %s", clusterName)
+	}
+
+	s.logger.Infof("Successfully started Pod Informer for cluster: %s", clusterName)
+
+	return nil
+}
+
+// handlePodAdd 处理 Pod 添加事件
+func (s *Service) handlePodAdd(clusterName string, pod *corev1.Pod) {
+	event := PodEvent{
+		Type:        EventTypeAdd,
+		ClusterName: clusterName,
+		Pod:         pod,
+		Timestamp:   time.Now(),
+	}
+
+	s.notifyPodHandlers(event)
+}
+
+// handlePodUpdate 处理 Pod 更新事件
+func (s *Service) handlePodUpdate(clusterName string, oldPod, newPod *corev1.Pod) {
+	// 只关注关键字段变化：nodeName、phase
+	if oldPod.Spec.NodeName == newPod.Spec.NodeName &&
+		oldPod.Status.Phase == newPod.Status.Phase {
+		return // 无关键变化，忽略
+	}
+
+	event := PodEvent{
+		Type:        EventTypeUpdate,
+		ClusterName: clusterName,
+		Pod:         newPod,
+		OldPod:      oldPod,
+		Timestamp:   time.Now(),
+	}
+
+	s.notifyPodHandlers(event)
+}
+
+// handlePodDelete 处理 Pod 删除事件
+func (s *Service) handlePodDelete(clusterName string, pod *corev1.Pod) {
+	event := PodEvent{
+		Type:        EventTypeDelete,
+		ClusterName: clusterName,
+		Pod:         pod,
+		Timestamp:   time.Now(),
+	}
+
+	s.notifyPodHandlers(event)
+}
+
+// notifyPodHandlers 通知所有注册的 Pod 事件处理器
+func (s *Service) notifyPodHandlers(event PodEvent) {
+	s.mu.RLock()
+	handlers := make([]PodEventHandler, len(s.podHandlers))
+	copy(handlers, s.podHandlers)
+	s.mu.RUnlock()
+
+	for _, handler := range handlers {
+		// 异步通知，避免阻塞
+		go func(h PodEventHandler) {
+			defer func() {
+				if r := recover(); r != nil {
+					s.logger.Errorf("Pod event handler panic: %v", r)
+				}
+			}()
+			h.OnPodEvent(event)
+		}(handler)
+	}
 }
 

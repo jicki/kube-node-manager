@@ -174,7 +174,13 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	realtimeMgr.Start()
 	logger.Info("Realtime Manager started successfully")
 	
+	// 创建 K8s 服务
 	k8sSvc := k8s.NewService(logger, realtimeMgr)
+	
+	// 注册 Pod 事件处理器（连接 PodCountCache 到 Informer）
+	// 这样 Informer 就能实时更新 Pod 统计数据
+	realtimeMgr.RegisterPodEventHandler(k8sSvc.GetPodCountCache())
+	logger.Info("Pod event handler registered successfully")
 	ldapSvc := ldap.NewService(logger, cfg.LDAP)
 	progressSvc := progress.NewService(logger)
 
