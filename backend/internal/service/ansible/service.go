@@ -159,6 +159,7 @@ func (s *Service) CreateTask(req model.TaskCreateRequest, userID uint) (*model.A
 		ExtraVars:       req.ExtraVars,
 		DryRun:          req.DryRun,
 		BatchConfig:     req.BatchConfig,
+		TimeoutSeconds:  req.TimeoutSeconds,
 	}
 	
 	// 如果启用了分批执行，初始化批次状态

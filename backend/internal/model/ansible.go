@@ -130,6 +130,8 @@ type AnsibleTask struct {
 	TotalBatches     int                    `json:"total_batches" gorm:"default:0;comment:总批次数"`
 	BatchStatus      string                 `json:"batch_status" gorm:"size:50;comment:批次状态(running/paused/completed)"`
 	PreflightChecks  *PreflightCheckResult  `json:"preflight_checks" gorm:"type:jsonb;comment:前置检查结果"`
+	TimeoutSeconds   int                    `json:"timeout_seconds" gorm:"default:0;comment:超时时间(秒),0表示不限制"`
+	IsTimedOut       bool                   `json:"is_timed_out" gorm:"default:false;comment:是否超时"`
 	CreatedAt        time.Time              `json:"created_at"`
 	UpdatedAt        time.Time              `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt         `json:"-" gorm:"index"`
@@ -317,6 +319,7 @@ type TaskCreateRequest struct {
 	ExtraVars       map[string]interface{} `json:"extra_vars"`
 	DryRun          bool                   `json:"dry_run"`       // 是否为检查模式（不实际执行变更）
 	BatchConfig     *BatchExecutionConfig  `json:"batch_config"`  // 分批执行配置
+	TimeoutSeconds  int                    `json:"timeout_seconds"` // 超时时间（秒），0表示不限制
 }
 
 // TemplateListRequest 模板列表请求

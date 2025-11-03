@@ -210,11 +210,16 @@
             {{ row.user?.username || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="120">
+        <el-table-column label="状态" width="150">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
-              {{ getStatusText(row.status) }}
-            </el-tag>
+            <div>
+              <el-tag :type="getStatusType(row.status)">
+                {{ getStatusText(row.status) }}
+              </el-tag>
+              <el-tag v-if="row.is_timed_out" type="warning" size="small" style="margin-left: 4px">
+                超时
+              </el-tag>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="进度" width="200">
@@ -245,9 +250,14 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column prop="duration" label="耗时" width="100">
+        <el-table-column prop="duration" label="耗时" width="150">
           <template #default="{ row }">
-            {{ row.duration ? `${row.duration}秒` : '-' }}
+            <div>
+              <span>{{ row.duration ? `${row.duration}秒` : '-' }}</span>
+              <div v-if="row.timeout_seconds > 0" style="font-size: 12px; color: #909399">
+                限制: {{ formatDuration(row.timeout_seconds) }}
+              </div>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="400" fixed="right">
@@ -483,6 +493,45 @@
             分批执行适用于大规模变更，可以先在少量主机上验证，再逐步推广到所有主机，降低风险
           </div>
         </template>
+        
+        <!-- 超时配置 -->
+        <el-divider />
+        <el-form-item label="执行超时">
+          <el-switch 
+            v-model="timeoutEnabled" 
+            active-text="启用超时控制"
+            inactive-text="不限制"
+            @change="handleTimeoutToggle"
+          />
+        </el-form-item>
+        
+        <el-form-item v-if="timeoutEnabled" label="超时时间" style="margin-left: 20px">
+          <el-input-number 
+            v-model="taskForm.timeout_seconds" 
+            :min="60" 
+            :max="86400"
+            :step="60"
+            style="width: 180px"
+          />
+          <span style="margin-left: 8px; color: #909399">
+            秒（{{ formatDuration(taskForm.timeout_seconds) }}）
+          </span>
+          <div style="margin-top: 8px; color: #909399; font-size: 12px">
+            <el-icon><InfoFilled /></el-icon>
+            任务执行超过此时间将被自动取消，防止任务无限期运行
+          </div>
+        </el-form-item>
+        
+        <!-- 常用超时选项 -->
+        <el-form-item v-if="timeoutEnabled" label="快速设置" style="margin-left: 20px">
+          <el-button-group>
+            <el-button size="small" @click="taskForm.timeout_seconds = 300">5分钟</el-button>
+            <el-button size="small" @click="taskForm.timeout_seconds = 600">10分钟</el-button>
+            <el-button size="small" @click="taskForm.timeout_seconds = 1800">30分钟</el-button>
+            <el-button size="small" @click="taskForm.timeout_seconds = 3600">1小时</el-button>
+            <el-button size="small" @click="taskForm.timeout_seconds = 7200">2小时</el-button>
+          </el-button-group>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
@@ -566,13 +615,17 @@ const taskForm = reactive({
     pause_after_batch: false,
     failure_threshold: 0,
     max_batch_fail_rate: 50
-  }
+  },
+  timeout_seconds: 1800  // 默认 30 分钟
 })
 
 // 分批执行相关状态
 const batchEnabled = ref(false)
 const batchStrategy = ref('percent') // 'size' 或 'percent'
 const batchValue = ref(20) // 批次大小或百分比值
+
+// 超时控制相关状态
+const timeoutEnabled = ref(false)
 
 const templates = ref([])
 const inventories = ref([])
@@ -792,6 +845,25 @@ const handleBatchToggle = (enabled) => {
       taskForm.batch_config.batch_percent = batchValue.value
     }
   }
+}
+
+// 超时控制切换
+const handleTimeoutToggle = (enabled) => {
+  if (!enabled) {
+    taskForm.timeout_seconds = 0
+  } else if (taskForm.timeout_seconds === 0) {
+    taskForm.timeout_seconds = 1800 // 默认 30 分钟
+  }
+}
+
+// 格式化时长显示
+const formatDuration = (seconds) => {
+  if (!seconds) return '不限制'
+  if (seconds < 60) return `${seconds}秒`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}分钟`
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  return minutes > 0 ? `${hours}小时${minutes}分钟` : `${hours}小时`
 }
 
 // 监听策略和值的变化

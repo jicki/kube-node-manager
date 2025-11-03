@@ -95,8 +95,18 @@ func (e *TaskExecutor) ExecuteTask(taskID uint) error {
 		return fmt.Errorf("task is not in pending status")
 	}
 
-	// 创建上下文
-	ctx, cancel := context.WithCancel(context.Background())
+	// 创建上下文（带超时控制）
+	var ctx context.Context
+	var cancel context.CancelFunc
+	
+	if task.TimeoutSeconds > 0 {
+		// 设置了超时时间
+		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(task.TimeoutSeconds)*time.Second)
+		e.logger.Infof("Task %d: timeout set to %d seconds", taskID, task.TimeoutSeconds)
+	} else {
+		// 没有设置超时时间
+		ctx, cancel = context.WithCancel(context.Background())
+	}
 
 	// 创建运行任务记录
 	runningTask := &RunningTask{
@@ -201,11 +211,22 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 	// 关闭日志通道
 	close(runningTask.LogChannel)
 
+	// 检查是否超时
+	isTimedOut := false
+	if ctx.Err() == context.DeadlineExceeded {
+		isTimedOut = true
+		e.logger.Warnf("Task %d exceeded timeout limit (%d seconds)", task.ID, task.TimeoutSeconds)
+	}
+
 	// 解析执行结果
 	success := err == nil
 	var errorMsg string
 	if err != nil {
-		errorMsg = err.Error()
+		if isTimedOut {
+			errorMsg = fmt.Sprintf("任务执行超时（超过 %d 秒）", task.TimeoutSeconds)
+		} else {
+			errorMsg = err.Error()
+		}
 	}
 
 	// 先保存完整日志到任务（必须在 parseTaskStats 之前）
@@ -216,6 +237,9 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 
 	// 再解析统计信息（从 task.FullLog 中）
 	e.parseTaskStats(task)
+
+	// 标记是否超时
+	task.IsTimedOut = isTimedOut
 
 	// 标记任务完成
 	task.MarkCompleted(success, errorMsg)
