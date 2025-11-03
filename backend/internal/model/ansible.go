@@ -866,3 +866,126 @@ type TaskExecutionVisualization struct {
 	PhaseDistribution map[string]int      `json:"phase_distribution"` // 各阶段耗时分布
 }
 
+// ============================================================================
+// DAG 工作流相关模型
+// ============================================================================
+
+// AnsibleWorkflow 工作流定义
+type AnsibleWorkflow struct {
+	ID          uint           `json:"id" gorm:"primarykey"`
+	Name        string         `json:"name" gorm:"not null;size:255;comment:工作流名称"`
+	Description string         `json:"description" gorm:"type:text;comment:工作流描述"`
+	DAG         *WorkflowDAG   `json:"dag" gorm:"type:jsonb;comment:DAG定义"`
+	UserID      uint           `json:"user_id" gorm:"not null;index;comment:创建用户ID"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+	
+	// 关联
+	User *User `json:"user,omitempty" gorm:"foreignKey:UserID"`
+}
+
+// TableName 指定表名
+func (AnsibleWorkflow) TableName() string {
+	return "ansible_workflows"
+}
+
+// WorkflowDAG DAG 定义
+type WorkflowDAG struct {
+	Nodes []WorkflowNode `json:"nodes"`
+	Edges []WorkflowEdge `json:"edges"`
+}
+
+// Scan 实现 sql.Scanner 接口
+func (dag *WorkflowDAG) Scan(value interface{}) error {
+	if value == nil {
+		*dag = WorkflowDAG{Nodes: []WorkflowNode{}, Edges: []WorkflowEdge{}}
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return nil
+	}
+	return json.Unmarshal(bytes, dag)
+}
+
+// Value 实现 driver.Valuer 接口
+func (dag WorkflowDAG) Value() (driver.Value, error) {
+	return json.Marshal(dag)
+}
+
+// WorkflowNode 工作流节点
+type WorkflowNode struct {
+	ID         string            `json:"id"`
+	Type       string            `json:"type"` // task/start/end
+	Label      string            `json:"label"`
+	TaskConfig *TaskCreateRequest `json:"task_config,omitempty"`
+	Position   Position          `json:"position"`
+}
+
+// Position 节点位置（用于UI展示）
+type Position struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+// WorkflowEdge 工作流边
+type WorkflowEdge struct {
+	ID        string `json:"id"`
+	Source    string `json:"source"`
+	Target    string `json:"target"`
+	Condition string `json:"condition,omitempty"` // 条件表达式
+}
+
+// AnsibleWorkflowExecution 工作流执行记录
+type AnsibleWorkflowExecution struct {
+	ID           uint           `json:"id" gorm:"primarykey"`
+	WorkflowID   uint           `json:"workflow_id" gorm:"not null;index;comment:工作流ID"`
+	Status       string         `json:"status" gorm:"size:50;default:'running';index;comment:执行状态"`
+	StartedAt    time.Time      `json:"started_at" gorm:"comment:开始时间"`
+	FinishedAt   *time.Time     `json:"finished_at" gorm:"comment:完成时间"`
+	ErrorMessage string         `json:"error_message" gorm:"type:text;comment:错误信息"`
+	UserID       uint           `json:"user_id" gorm:"not null;index;comment:执行用户ID"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	
+	// 关联
+	Workflow *AnsibleWorkflow `json:"workflow,omitempty" gorm:"foreignKey:WorkflowID"`
+	User     *User            `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	Tasks    []AnsibleTask    `json:"tasks,omitempty" gorm:"foreignKey:WorkflowExecutionID"`
+}
+
+// TableName 指定表名
+func (AnsibleWorkflowExecution) TableName() string {
+	return "ansible_workflow_executions"
+}
+
+// WorkflowCreateRequest 工作流创建请求
+type WorkflowCreateRequest struct {
+	Name        string       `json:"name" binding:"required"`
+	Description string       `json:"description"`
+	DAG         *WorkflowDAG `json:"dag" binding:"required"`
+}
+
+// WorkflowUpdateRequest 工作流更新请求
+type WorkflowUpdateRequest struct {
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	DAG         *WorkflowDAG `json:"dag"`
+}
+
+// WorkflowListRequest 工作流列表请求
+type WorkflowListRequest struct {
+	Page     int    `json:"page" form:"page"`
+	PageSize int    `json:"page_size" form:"page_size"`
+	Keyword  string `json:"keyword" form:"keyword"`
+}
+
+// WorkflowExecutionListRequest 工作流执行记录列表请求
+type WorkflowExecutionListRequest struct {
+	Page       int    `json:"page" form:"page"`
+	PageSize   int    `json:"page_size" form:"page_size"`
+	WorkflowID uint   `json:"workflow_id" form:"workflow_id"`
+	Status     string `json:"status" form:"status"`
+}
+

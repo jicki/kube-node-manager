@@ -31,6 +31,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&AnsibleTaskHistory{},
 		&AnsibleTag{},
 		&AnsibleTaskTag{},
+		&AnsibleWorkflow{},
+		&AnsibleWorkflowExecution{},
 	)
 }
 

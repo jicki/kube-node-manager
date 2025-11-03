@@ -132,6 +132,62 @@
             </el-option>
           </el-select>
         </el-form-item>
+        
+        <!-- 必需变量配置 -->
+        <el-form-item label="必需变量">
+          <div style="width: 100%">
+            <div style="margin-bottom: 12px">
+              <el-tag
+                v-for="varName in templateForm.required_vars"
+                :key="varName"
+                closable
+                :disable-transitions="false"
+                @close="handleRemoveRequiredVar(varName)"
+                style="margin-right: 8px; margin-bottom: 8px"
+                :type="isViewMode ? 'info' : 'primary'"
+              >
+                {{ varName }}
+              </el-tag>
+              <el-input
+                v-if="requiredVarInputVisible && !isViewMode"
+                ref="requiredVarInputRef"
+                v-model="requiredVarInputValue"
+                size="small"
+                style="width: 150px; margin-right: 8px"
+                placeholder="变量名"
+                @keyup.enter="handleAddRequiredVar"
+                @blur="handleAddRequiredVar"
+              />
+              <el-button
+                v-if="!requiredVarInputVisible && !isViewMode"
+                size="small"
+                @click="showRequiredVarInput"
+              >
+                + 添加必需变量
+              </el-button>
+            </div>
+            <el-alert
+              title="提示"
+              type="info"
+              :closable="false"
+              style="margin-top: 8px"
+            >
+              <template #default>
+                <div style="font-size: 12px; line-height: 1.6">
+                  <p style="margin: 0 0 4px 0">
+                    <el-icon style="vertical-align: middle"><InfoFilled /></el-icon>
+                    必需变量会在创建任务时要求用户提供，用于参数化 Playbook
+                  </p>
+                  <p style="margin: 0; color: #909399">
+                    示例：在 Playbook 中使用 <code>{{ "{{ app_version }}" }}</code>，
+                    则添加 <code>app_version</code> 为必需变量
+                  </p>
+                </div>
+              </template>
+            </el-alert>
+          </div>
+        </el-form-item>
+        
         <el-form-item label="Playbook 内容" :required="!isViewMode">
           <div style="margin-bottom: 8px;">
             <el-text type="info" size="small">
@@ -159,9 +215,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Star, StarFilled } from '@element-plus/icons-vue'
+import { Plus, Star, StarFilled, InfoFilled } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 
 const templates = ref([])
@@ -172,6 +228,11 @@ const dialogTitle = ref('')
 const saving = ref(false)
 const isEdit = ref(false)
 const isViewMode = ref(false) // 是否为查看模式（只读）
+
+// 必需变量输入相关
+const requiredVarInputVisible = ref(false)
+const requiredVarInputValue = ref('')
+const requiredVarInputRef = ref(null)
 
 const queryParams = reactive({
   page: 1,
@@ -184,7 +245,9 @@ const templateForm = reactive({
   name: '',
   description: '',
   tags: '',
-  playbook_content: ''
+  risk_level: 'low',
+  playbook_content: '',
+  required_vars: []
 })
 
 const loadTemplates = async () => {
@@ -242,6 +305,43 @@ const toggleFavorite = async (template) => {
   }
 }
 
+// 必需变量管理方法
+const showRequiredVarInput = () => {
+  requiredVarInputVisible.value = true
+  nextTick(() => {
+    requiredVarInputRef.value?.focus()
+  })
+}
+
+const handleAddRequiredVar = () => {
+  const varName = requiredVarInputValue.value.trim()
+  if (varName) {
+    // 检查是否已存在
+    if (!templateForm.required_vars.includes(varName)) {
+      // 验证变量名格式（只允许字母、数字和下划线）
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(varName)) {
+        ElMessage.warning('变量名只能包含字母、数字和下划线，且不能以数字开头')
+        return
+      }
+      templateForm.required_vars.push(varName)
+      ElMessage.success(`已添加变量: ${varName}`)
+    } else {
+      ElMessage.warning(`变量 ${varName} 已存在`)
+    }
+  }
+  requiredVarInputValue.value = ''
+  requiredVarInputVisible.value = false
+}
+
+const handleRemoveRequiredVar = (varName) => {
+  if (isViewMode.value) return
+  const index = templateForm.required_vars.indexOf(varName)
+  if (index !== -1) {
+    templateForm.required_vars.splice(index, 1)
+    ElMessage.info(`已移除变量: ${varName}`)
+  }
+}
+
 const showCreateDialog = () => {
   isEdit.value = false
   isViewMode.value = false // 创建模式，可编辑
@@ -252,7 +352,8 @@ const showCreateDialog = () => {
     description: '',
     tags: '',
     risk_level: 'low',
-    playbook_content: ''
+    playbook_content: '',
+    required_vars: []
   })
   dialogVisible.value = true
 }
@@ -266,7 +367,8 @@ const handleView = (row) => {
     description: row.description,
     tags: row.tags,
     risk_level: row.risk_level || 'low',
-    playbook_content: row.playbook_content || ''
+    playbook_content: row.playbook_content || '',
+    required_vars: row.required_vars || []
   })
   dialogVisible.value = true
 }
@@ -281,7 +383,8 @@ const handleEdit = (row) => {
     description: row.description,
     tags: row.tags,
     risk_level: row.risk_level || 'low',
-    playbook_content: row.playbook_content || ''
+    playbook_content: row.playbook_content || '',
+    required_vars: row.required_vars || []
   })
   dialogVisible.value = true
 }
@@ -296,7 +399,8 @@ const handleClone = (row) => {
     description: row.description,
     tags: row.tags,
     risk_level: row.risk_level || 'low',
-    playbook_content: row.playbook_content || ''
+    playbook_content: row.playbook_content || '',
+    required_vars: row.required_vars || []
   })
   dialogVisible.value = true
   ElMessage.info('请修改模板名称后保存')

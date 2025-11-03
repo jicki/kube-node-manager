@@ -7,6 +7,177 @@
 
 ---
 
+## [v2.22.12] - 2025-01-13
+
+### ✨ 新增功能
+
+#### 任务队列优化
+- **优先级队列系统**
+  - 支持三级优先级：高优先级（High）、中优先级（Medium）、低优先级（Low）
+  - 高优先级任务优先执行，低优先级任务在系统空闲时执行
+  - 添加任务入队时间（queued_at）和等待时长（wait_duration）跟踪
+  - 提供队列统计信息 API（`/api/v1/ansible/queue/stats`）
+  - 前端 UI 支持设置任务优先级，并在任务列表显示优先级图标和标签
+
+- **公平调度机制**
+  - 实现基于优先级的任务调度算法
+  - 支持按用户限制并发任务数，防止资源垄断
+  - 添加复合索引优化队列查询性能
+
+#### 任务标签系统
+- **标签管理**
+  - 支持创建、编辑、删除自定义标签
+  - 标签包含名称、颜色、描述等属性
+  - 为任务添加/移除标签，支持多标签关联
+  - 按标签筛选和分类任务
+
+- **批量操作**
+  - 批量为多个任务添加标签
+  - 批量移除任务标签
+  - 标签 API 端点：
+    - `POST /api/v1/ansible/tags` - 创建标签
+    - `GET /api/v1/ansible/tags` - 获取标签列表
+    - `PUT /api/v1/ansible/tags/:id` - 更新标签
+    - `DELETE /api/v1/ansible/tags/:id` - 删除标签
+    - `POST /api/v1/ansible/tags/batch` - 批量操作
+
+#### 任务执行可视化
+- **执行时间线**
+  - 详细记录任务执行的每个阶段：入队、前置检查、执行中、批次暂停、完成/失败/超时
+  - 记录每个阶段的耗时（毫秒级）
+  - 支持批次执行的时间线记录（包含批次号、主机数、成功/失败数）
+  - 提供阶段耗时分布统计
+
+- **主机级别状态跟踪**
+  - 定义 `HostExecutionStatus` 结构记录每台主机的执行状态
+  - 支持记录主机级别的开始时间、结束时间、耗时
+  - 为未来的主机级别可视化预留数据结构
+
+- **可视化数据服务**
+  - `VisualizationService` 提供完整的可视化数据处理
+  - API 端点：
+    - `GET /api/v1/ansible/tasks/:id/visualization` - 获取完整可视化数据
+    - `GET /api/v1/ansible/tasks/:id/timeline-summary` - 获取时间线摘要
+  - 前端可以基于这些数据实现执行流程图、时间线图表等
+
+### 🐛 Bug 修复
+
+#### 收藏功能外键约束错误
+- **问题**: 添加收藏时报错 `violates foreign key constraint "fk_ansible_favorites_inventory"`
+- **原因**: `AnsibleFavorite` 中的 `TargetID` 是动态引用字段，不应有固定外键约束
+- **修复**:
+  - 移除 `AnsibleFavorite` 模型中的外键关联定义
+  - 创建迁移脚本 `018_fix_favorites_foreign_keys.sql` 删除错误约束
+  - 添加复合索引 `idx_ansible_favorites_user_type_target` 优化查询
+  - 修复 `ListFavorites` 方法，移除不支持的 Preload 调用
+
+#### Dry Run 模式 UI 优化
+- **执行模式选择器样式修复**
+  - 修复文字显示不在框内的布局问题
+  - 改进为更直观的单选按钮组
+  - 使用 flex 布局确保内容对齐和等宽
+  - 添加详细的提示说明
+
+- **任务列表模式标识增强**
+  - 为所有任务添加执行模式标识（不仅限于 Dry Run）
+  - 正常模式：蓝色设置图标 + "正常"标签
+  - 检查模式：绿色眼睛图标 + "检查"标签
+  - 任务名称在检查模式下显示为绿色
+
+- **最近使用卡片模式标识**
+  - 在最近使用任务卡片中添加执行模式标签
+  - 统一使用图标和颜色主题
+  - 便于用户快速识别任务类型
+
+- **提交按钮动态文本**
+  - 正常模式显示"启动任务"
+  - 检查模式显示"检查任务"
+
+### 🔧 技术改进
+
+#### 后端
+- 添加 `QueueService` 处理任务队列管理和统计
+- 添加 `TagService` 处理标签 CRUD 和批量操作
+- 添加 `VisualizationService` 处理执行可视化数据
+- 集成所有新服务到主 Ansible 服务中
+- 修复多个 logger 方法调用（Debugf → Infof, Warnf → Warningf）
+- 在 `executor.go` 中创建内部 Sanitizer 以解决 Docker 构建问题
+- 修复 SSH Key 字段引用（AuthType → Type, SSHUser → Username）
+
+#### 数据库
+- 添加迁移 `015_add_task_priority.sql` - 任务优先级字段
+- 添加迁移 `016_add_task_tags.sql` - 标签系统表结构
+- 添加迁移 `017_add_execution_timeline.sql` - 执行时间线字段
+- 添加迁移 `018_fix_favorites_foreign_keys.sql` - 修复收藏外键约束
+- 更新 `AutoMigrate` 包含所有新模型
+
+#### 前端
+- 改进任务创建对话框的执行模式选择器
+- 优化任务列表的视觉展示
+- 统一最近使用卡片的标签样式
+- 添加 View 图标用于检查模式标识
+
+### 📝 数据模型
+
+#### 新增字段
+- `AnsibleTask`:
+  - `priority` (string) - 任务优先级
+  - `queued_at` (*time.Time) - 入队时间
+  - `wait_duration` (int) - 等待时长（秒）
+  - `execution_timeline` (*TaskExecutionTimeline) - 执行时间线
+  - `tags` ([]AnsibleTag) - 关联标签（多对多）
+
+#### 新增模型
+- `AnsibleTag` - 任务标签
+- `AnsibleTaskTag` - 任务标签关联表（多对多）
+- `TaskExecutionEvent` - 执行事件
+- `TaskExecutionTimeline` - 执行时间线（事件数组）
+- `HostExecutionStatus` - 主机执行状态
+- `TaskExecutionVisualization` - 可视化聚合数据
+
+#### 新增枚举
+- `TaskPriority` - 任务优先级（High/Medium/Low）
+- `ExecutionPhase` - 执行阶段（Queued/PreflightCheck/Executing/BatchPaused/Completed/Failed/Cancelled/Timeout）
+
+### 📚 文档
+
+- `docs/ansible-task-queue-optimization.md` - 任务队列优化详细文档
+- `docs/ansible-task-tagging.md` - 任务标签系统使用文档
+- `docs/ansible-task-visualization.md` - 任务执行可视化文档
+- `docs/bugfix-ui-improvements.md` - UI 改进和 Bug 修复说明
+- `docs/feature-summary-v2.22.12.md` - 功能完成总结
+- `scripts/fix_favorites_constraints.sql` - 数据库修复脚本
+
+### 🚀 部署说明
+
+1. **重新构建镜像**:
+   ```bash
+   make docker-build
+   ```
+
+2. **执行数据库修复**（重要）:
+   ```sql
+   ALTER TABLE ansible_favorites DROP CONSTRAINT IF EXISTS fk_ansible_favorites_task;
+   ALTER TABLE ansible_favorites DROP CONSTRAINT IF EXISTS fk_ansible_favorites_template;
+   ALTER TABLE ansible_favorites DROP CONSTRAINT IF EXISTS fk_ansible_favorites_inventory;
+   CREATE INDEX IF NOT EXISTS idx_ansible_favorites_user_type_target 
+     ON ansible_favorites(user_id, target_type, target_id);
+   ```
+
+3. **重新部署应用** - 自动执行数据库迁移
+
+### ⚠️ Breaking Changes
+
+无
+
+### 🔄 待实施功能
+
+- 智能变量推荐 - 基于历史数据推荐变量值
+- 执行器资源池 - 实现资源分配和管理
+- 分布式执行支持
+
+---
+
 ## [v2.16.5] - 2025-10-29
 
 ### 🐛 Bug 修复

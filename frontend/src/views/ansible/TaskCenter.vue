@@ -297,13 +297,14 @@
           <template #default="{ row }">
             <el-button size="small" @click="handleViewLogs(row)">查看日志</el-button>
             
-            <!-- 前置检查按钮 -->
+            <!-- 前置检查按钮（pending 或 failed 状态可执行） -->
             <el-button 
               size="small" 
               type="info" 
               @click="handlePreflightCheck(row)" 
-              v-if="row.status === 'pending'"
+              v-if="row.status === 'pending' || row.status === 'failed'"
             >
+              <el-icon><Checked /></el-icon>
               执行检查
             </el-button>
             
@@ -669,16 +670,37 @@
       </template>
     </el-dialog>
 
-    <!-- 日志对话框 -->
+    <!-- 任务详情对话框（日志和可视化） -->
     <el-dialog 
       v-model="logDialogVisible" 
-      title="任务日志" 
-      width="80%"
+      title="任务详情" 
+      width="85%"
       :close-on-click-modal="false"
     >
-      <div style="height: 600px">
-        <LogViewer :logs="logContent" :realtime="false" />
-      </div>
+      <el-tabs v-model="detailActiveTab" type="border-card">
+        <el-tab-pane label="执行日志" name="logs">
+          <template #label>
+            <span style="display: flex; align-items: center; gap: 6px">
+              <el-icon><Document /></el-icon>
+              执行日志
+            </span>
+          </template>
+          <div style="height: 600px">
+            <LogViewer :logs="logContent" :realtime="false" />
+          </div>
+        </el-tab-pane>
+        <el-tab-pane label="执行可视化" name="visualization">
+          <template #label>
+            <span style="display: flex; align-items: center; gap: 6px">
+              <el-icon><DataLine /></el-icon>
+              执行可视化
+            </span>
+          </template>
+          <div style="min-height: 600px; max-height: 80vh; overflow-y: auto">
+            <TaskTimelineVisualization v-if="currentTaskId" :task-id="currentTaskId" />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="logDialogVisible = false">关闭</el-button>
@@ -810,11 +832,12 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine, Setting, Key, Warning, QuestionFilled, Top, Bottom, Minus, View } from '@element-plus/icons-vue'
+import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine, Setting, Key, Warning, QuestionFilled, Top, Bottom, Minus, View, Checked } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 import clusterAPI from '@/api/cluster'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import LogViewer from '@/components/LogViewer.vue'
+import TaskTimelineVisualization from '@/components/ansible/TaskTimelineVisualization.vue'
 
 // 数据
 const tasks = ref([])
@@ -838,6 +861,8 @@ const creating = ref(false)
 const preflightChecking = ref(false)
 const preflightResult = ref(null)
 const estimation = ref(null)
+const detailActiveTab = ref('logs') // 任务详情对话框的活动 tab
+const currentTaskId = ref(null) // 当前查看的任务 ID
 
 const taskForm = reactive({
   name: '',
@@ -1284,6 +1309,8 @@ const confirmDialogProps = computed(() => {
 })
 
 const handleViewLogs = async (row) => {
+  currentTaskId.value = row.id // 设置当前任务 ID
+  detailActiveTab.value = 'logs' // 默认显示日志 tab
   logDialogVisible.value = true
   try {
     const res = await ansibleAPI.getTaskLogs(row.id, { full: true })
