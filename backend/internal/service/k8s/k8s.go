@@ -1340,11 +1340,13 @@ func (s *Service) enrichNodesWithMetrics(clusterName string, nodes []NodeInfo) {
 		metricsMap[metric.Name] = metric
 	}
 
-	// 批量获取所有节点的 Pod 数量
+	// 批量获取所有节点的 Pod 数量（分页查询优化）
 	nodeNames := make([]string, len(nodes))
 	for i := range nodes {
 		nodeNames[i] = nodes[i].Name
 	}
+	
+	// 对于超大规模集群，使用优化的分页查询
 	podCounts := s.getNodesPodCounts(clusterName, nodeNames)
 
 	// 为每个节点添加使用情况
@@ -1489,7 +1491,7 @@ func (s *Service) getNodePodCount(clusterName, nodeName string) (int, error) {
 	return nonTerminatedCount, nil
 }
 
-// getNodesPodCounts 批量获取多个节点的 Pod 数量
+// getNodesPodCounts 批量获取多个节点的 Pod 数量（使用分页查询优化）
 func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[string]int {
 	client, err := s.getClient(clusterName)
 	if err != nil {
@@ -1497,31 +1499,62 @@ func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[
 		return make(map[string]int)
 	}
 
-	// 针对大规模集群增加超时时间到 30 秒
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// 获取所有 Pods
-	podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		s.logger.Warningf("Failed to list pods for cluster %s: %v", clusterName, err)
-		return make(map[string]int)
-	}
-
-	// 统计每个节点的非终止 Pod 数量
+	// 初始化计数器
 	podCounts := make(map[string]int)
+	nodeSet := make(map[string]bool)
 	for _, node := range nodeNames {
 		podCounts[node] = 0
+		nodeSet[node] = true
 	}
 
-	for _, pod := range podList.Items {
-		// 只统计非终止状态的 Pod
-		if pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
-			if _, exists := podCounts[pod.Spec.NodeName]; exists {
-				podCounts[pod.Spec.NodeName]++
+	// 使用分页查询，避免一次性加载大量 Pod 导致超时
+	// 每页获取 500 个 Pod（可根据实际情况调整）
+	const pageSize = 500
+	continueToken := ""
+	totalPods := 0
+	pageCount := 0
+
+	s.logger.Infof("Starting paginated pod count for cluster %s with %d nodes", clusterName, len(nodeNames))
+
+	for {
+		pageCount++
+		// 每次分页请求设置独立的超时
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+		podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+			Limit:    pageSize,
+			Continue: continueToken,
+		})
+		cancel()
+
+		if err != nil {
+			s.logger.Warningf("Failed to list pods (page %d) for cluster %s: %v", pageCount, clusterName, err)
+			// 即使部分失败，也返回已统计的结果
+			break
+		}
+
+		// 统计此批次的 Pod
+		for _, pod := range podList.Items {
+			// 只统计非终止状态的 Pod
+			if pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
+				if nodeSet[pod.Spec.NodeName] {
+					podCounts[pod.Spec.NodeName]++
+					totalPods++
+				}
 			}
 		}
+
+		s.logger.Debugf("Processed page %d for cluster %s: %d pods in this page", pageCount, clusterName, len(podList.Items))
+
+		// 检查是否还有更多数据
+		if podList.Continue == "" {
+			break
+		}
+		continueToken = podList.Continue
 	}
+
+	s.logger.Infof("Completed paginated pod count for cluster %s: %d total active pods across %d pages", 
+		clusterName, totalPods, pageCount)
 
 	return podCounts
 }

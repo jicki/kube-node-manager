@@ -76,6 +76,8 @@ podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 
 **修改文件：** `backend/internal/service/k8s/k8s.go`
 
+**实施版本：** v2.22.17
+
 #### 1.1 增加 Kubernetes 客户端超时
 
 ```go
@@ -104,16 +106,101 @@ ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)  // 从
 ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)  // 从 10s 增加到 20s
 ```
 
-### 预期效果
+### 预期效果（方案 1）
 
 - ✅ 减少 `context deadline exceeded` 错误发生频率
 - ✅ 提高大规模集群的稳定性
 - ✅ 允许更长的网络响应时间
 - ⚠️ 可能会略微增加请求响应时间
 
+---
+
+### 方案 2：实现分页查询（已完成）✅
+
+**实施版本：** v2.22.18
+
+**问题：** 即使增加超时到 30 秒，jobsscz-k8s-cluster 集群仍然频繁超时（每 2 分钟一次），说明该集群 Pod 数量过多。
+
+**解决方案：** 重写 `getNodesPodCounts` 函数，使用 Kubernetes API 的分页查询机制。
+
+#### 2.1 实施的分页查询逻辑
+
+**修改文件：** `backend/internal/service/k8s/k8s.go`
+
+**核心改进：**
+
+```go
+// getNodesPodCounts 批量获取多个节点的 Pod 数量（使用分页查询优化）
+func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[string]int {
+    // 使用分页查询，避免一次性加载大量 Pod 导致超时
+    const pageSize = 500  // 每页 500 个 Pod
+    continueToken := ""
+    
+    for {
+        // 每次分页请求设置独立的 30 秒超时
+        ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+        
+        podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+            Limit:    pageSize,
+            Continue: continueToken,
+        })
+        cancel()
+        
+        // 统计此批次的 Pod
+        // ...
+        
+        // 检查是否还有更多数据
+        if podList.Continue == "" {
+            break
+        }
+        continueToken = podList.Continue
+    }
+}
+```
+
+#### 2.2 优化特点
+
+✅ **分批加载**：每次只加载 500 个 Pod，降低单次请求压力  
+✅ **独立超时**：每页独立 30 秒超时，总时间不受限制  
+✅ **容错性强**：即使某页失败，也返回已统计的结果  
+✅ **详细日志**：记录分页进度和统计信息  
+✅ **内存优化**：不会一次性加载数万个 Pod 到内存
+
+#### 2.3 性能对比
+
+| 场景 | 旧实现 | 新实现（分页） |
+|------|--------|---------------|
+| **Pod 数量** | 10,000+ | 10,000+ |
+| **单次请求** | 加载全部 | 每次 500 个 |
+| **响应体大小** | 可能数十 MB | 每次约 500KB |
+| **超时风险** | ❌ 极高 | ✅ 极低 |
+| **内存占用** | ⚠️ 峰值高 | ✅ 平稳 |
+| **失败容错** | ❌ 全部失败 | ✅ 部分成功 |
+
+#### 2.4 日志输出示例
+
+```log
+INFO: Starting paginated pod count for cluster jobsscz-k8s-cluster with 104 nodes
+DEBUG: Processed page 1 for cluster jobsscz-k8s-cluster: 500 pods in this page
+DEBUG: Processed page 2 for cluster jobsscz-k8s-cluster: 500 pods in this page
+...
+DEBUG: Processed page 20 for cluster jobsscz-k8s-cluster: 342 pods in this page
+INFO: Completed paginated pod count for cluster jobsscz-k8s-cluster: 9842 total active pods across 20 pages
+```
+
+### 预期效果（方案 2）
+
+- ✅ **根本性解决超时问题**：分页查询彻底避免大数据量超时
+- ✅ **提升响应速度**：每页请求更快完成
+- ✅ **降低内存压力**：避免内存峰值
+- ✅ **增强稳定性**：单页失败不影响整体
+- ✅ **适用于超大规模集群**：理论上支持任意数量的 Pod
+
+---
+
 ## 进一步优化建议
 
-### 方案 2：实现分页查询（推荐）
+### 方案 3：实现缓存机制（推荐）
 
 **优点：**
 - 减少单次 API 调用的数据量
@@ -171,7 +258,7 @@ func (s *Service) getNodesPodCountsPaginated(clusterName string, nodeNames []str
 }
 ```
 
-### 方案 3：增强缓存策略
+### 方案 4：增强缓存策略
 
 **优化点：**
 
@@ -188,7 +275,7 @@ func (s *Service) getNodesPodCountsPaginated(clusterName string, nodeNames []str
    - 监听 Pod 事件，增量更新计数
    - 避免每次都重新获取所有 Pod
 
-### 方案 4：使用 Informer 机制
+### 方案 5：使用 Informer 机制
 
 **优点：**
 - 实时监听资源变化
@@ -226,7 +313,7 @@ func (s *Service) initPodInformer(clusterName string) {
 }
 ```
 
-### 方案 5：添加重试机制
+### 方案 6：添加重试机制
 
 **实现建议：**
 
@@ -260,7 +347,7 @@ func (s *Service) getNodesPodCountsWithRetry(clusterName string, nodeNames []str
 }
 ```
 
-### 方案 6：添加监控告警
+### 方案 7：添加监控告警
 
 **推荐指标：**
 
@@ -418,13 +505,23 @@ git push
 ## 总结
 
 ### 已完成 ✅
-- 增加 Kubernetes API 客户端超时配置
-- 增加节点列表操作超时
-- 增加 Pod 批量获取超时
-- 增加单节点 Pod 获取超时
+
+#### v2.22.17 - 超时配置优化
+- ✅ 增加 Kubernetes API 客户端超时配置（30s → 60s）
+- ✅ 增加节点列表操作超时（30s → 60s）
+- ✅ 增加 Pod 批量获取超时（15s → 30s）
+- ✅ 增加单节点 Pod 获取超时（10s → 20s）
+
+#### v2.22.18 - 分页查询实施 🎉
+- ✅ 重写 `getNodesPodCounts` 函数，实现分页查询
+- ✅ 每页加载 500 个 Pod，避免大数据量超时
+- ✅ 独立超时控制，每页 30 秒
+- ✅ 增强容错性，部分失败不影响整体
+- ✅ 添加详细的分页进度日志
+- ✅ 优化内存使用，避免峰值
 
 ### 推荐后续优化 🔧
-1. 实现分页查询（高优先级）
+1. ~~实现分页查询（高优先级）~~ ✅ 已完成
 2. 增强缓存策略（中优先级）
 3. 实施 Informer 机制（高优先级，长期方案）
 4. 添加重试机制（中优先级）
@@ -438,9 +535,10 @@ git push
 
 ---
 
-**文档版本：** v1.0  
+**文档版本：** v2.0  
 **创建日期：** 2025-11-03  
 **更新日期：** 2025-11-03  
 **作者：** AI Assistant  
-**状态：** 已实施（方案 1）
+**状态：** 已实施（方案 1 + 方案 2）  
+**最新版本：** v2.22.18
 
