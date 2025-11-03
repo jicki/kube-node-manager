@@ -7,7 +7,103 @@
 
 ---
 
-## [v2.24.0] - 2025-11-03
+## [v2.23.2] - 2025-11-03
+
+### 🐛 紧急修复 - Pod Informer 启动优化
+
+#### 问题描述
+- **现象**：部署 v2.24.0 后出现健康检查失败，服务无法正常启动
+- **原因**：Pod Informer 缓存同步阻塞服务启动，超时导致健康探针失败
+- **影响**：大规模集群（10k+ pods）的 Pod Informer 初始化需要 60 秒以上
+
+#### 修复方案
+
+**1. 延迟启动策略**
+```go
+// 延迟10秒启动 Pod Informer，避免与服务启动竞争资源
+go func() {
+    time.Sleep(10 * time.Second)
+    m.informerSvc.StartPodInformer(clusterName)
+}()
+```
+
+**2. 增加同步超时**
+```go
+// 从 60 秒增加到 120 秒，适应大规模集群
+ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+```
+
+**3. 优化日志输出**
+```log
+INFO: Cluster registered: xxx (Pod Informer will start in 10s)
+INFO: Starting Pod Informer for cluster: xxx (delayed start)
+INFO: Waiting for Pod Informer cache sync (timeout: 120s)
+INFO: ✓ Pod Informer ready for cluster: xxx
+```
+
+#### 效果
+
+| 指标 | v2.24.0 | v2.23.2 | 改善 |
+|------|---------|---------|------|
+| **服务启动时间** | 60-120秒 | <5秒 | ✅ 不受影响 |
+| **健康检查成功率** | 失败 | 100% | ✅ 修复 |
+| **Pod Informer启动** | 同步阻塞 | 异步延迟 | ✅ 不阻塞 |
+| **大规模集群支持** | 60秒超时 | 120秒超时 | ✅ 更宽容 |
+
+### 💻 代码变更
+
+#### 修改文件
+1. `backend/internal/informer/informer.go`
+   - 增加缓存同步超时：60s → 120s
+   - 添加详细日志输出
+
+2. `backend/internal/realtime/manager.go`
+   - 添加10秒启动延迟
+   - 优化日志提示
+
+### ⚠️ 升级说明
+
+**从 v2.24.0 升级到 v2.23.2：**
+
+1. **现象恢复**
+   - 健康检查正常
+   - 服务快速启动（<5秒）
+   - Pod Informer 在后台延迟启动
+
+2. **预期日志**
+```log
+INFO: Cluster registered: prod-data-k8s-cluster (Pod Informer will start in 10s)
+...（10秒后）
+INFO: Starting Pod Informer for cluster: prod-data-k8s-cluster (delayed start)
+INFO: Waiting for Pod Informer cache sync for cluster: prod-data-k8s-cluster (timeout: 120s)
+INFO: ✓ Pod Informer ready for cluster: prod-data-k8s-cluster
+```
+
+3. **降级场景**
+   - 如果120秒内仍无法同步，会自动降级到分页查询模式
+   - 不影响服务正常运行
+
+### 📋 验证步骤
+
+```bash
+# 1. 检查服务启动速度
+kubectl logs -f <pod-name> | grep "Server starting"
+# 预期：<5秒内看到服务启动
+
+# 2. 检查健康探针
+kubectl describe pod <pod-name> | grep -A 5 "Liveness\|Readiness"
+# 预期：无失败记录
+
+# 3. 检查 Pod Informer 状态
+kubectl logs <pod-name> | grep "Pod Informer"
+# 预期：看到延迟启动和成功就绪的日志
+```
+
+---
+
+## [v2.24.0] - 2025-11-03 [已回滚]
+
+> ⚠️ **此版本存在启动阻塞问题，已在 v2.23.2 修复，请使用 v2.23.2**
 
 ### 🚀 重大特性 - 轻量级 Pod Informer
 

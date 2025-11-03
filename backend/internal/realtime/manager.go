@@ -92,18 +92,23 @@ func (m *Manager) RegisterCluster(clusterName string, clientset *kubernetes.Clie
 		return fmt.Errorf("failed to start node informer for cluster %s: %w", clusterName, err)
 	}
 
-	// 启动 Pod Informer（异步，不阻塞节点 Informer）
-	// 如果失败只记录警告，不影响节点 Informer
+	// 延迟启动 Pod Informer（避免启动时资源竞争）
+	// 在后台延迟10秒后启动，给系统一些时间完成初始化
 	go func() {
+		// 等待10秒，让服务先完全启动
+		time.Sleep(10 * time.Second)
+		
+		m.logger.Infof("Starting Pod Informer for cluster: %s (delayed start)", clusterName)
+		
 		if err := m.informerSvc.StartPodInformer(clusterName); err != nil {
 			m.logger.Warningf("Failed to start Pod Informer for cluster %s: %v", clusterName, err)
-			m.logger.Info("Pod count will fall back to API query mode")
+			m.logger.Infof("Pod count will fall back to API query mode for cluster %s", clusterName)
 		} else {
-			m.logger.Infof("Successfully started Pod Informer for cluster %s", clusterName)
+			m.logger.Infof("✓ Pod Informer ready for cluster: %s", clusterName)
 		}
 	}()
 
-	m.logger.Infof("Cluster registered: %s", clusterName)
+	m.logger.Infof("Cluster registered: %s (Pod Informer will start in 10s)", clusterName)
 	return nil
 }
 

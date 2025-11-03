@@ -423,12 +423,15 @@ func (s *Service) StartPodInformer(clusterName string) error {
 		},
 	})
 
-	// 等待缓存同步
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// 等待缓存同步（增加超时时间以适应大规模集群）
+	// 对于大规模集群（如10k+ pods），初始同步可能需要较长时间
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
+	s.logger.Infof("Waiting for Pod Informer cache sync for cluster: %s (timeout: 120s)", clusterName)
+
 	if !cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced) {
-		return fmt.Errorf("failed to sync pod cache for cluster %s", clusterName)
+		return fmt.Errorf("failed to sync pod cache for cluster %s within 120s (cluster may have too many pods)", clusterName)
 	}
 
 	s.logger.Infof("Successfully started Pod Informer for cluster: %s", clusterName)
