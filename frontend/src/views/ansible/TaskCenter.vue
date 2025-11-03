@@ -68,6 +68,87 @@
       </el-row>
     </el-card>
 
+    <!-- 最近使用任务 -->
+    <el-card style="margin-top: 20px" v-if="recentTasks.length > 0">
+      <template #header>
+        <div class="card-header">
+          <span>
+            <el-icon style="vertical-align: middle; margin-right: 4px"><Clock /></el-icon>
+            最近使用
+          </span>
+          <el-button text @click="loadRecentTasks">
+            <el-icon><Refresh /></el-icon>
+          </el-button>
+        </div>
+      </template>
+      
+      <el-row :gutter="12">
+        <el-col 
+          v-for="history in recentTasks" 
+          :key="history.id" 
+          :xs="24" :sm="12" :md="8" :lg="6"
+          style="margin-bottom: 12px"
+        >
+          <el-card shadow="hover" class="recent-task-card">
+            <div class="recent-task-header">
+              <el-text truncated>{{ history.task_name }}</el-text>
+              <el-dropdown trigger="click" @command="(cmd) => handleRecentTaskAction(cmd, history)">
+                <el-icon class="recent-task-more"><MoreFilled /></el-icon>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="rerun">
+                      <el-icon><RefreshRight /></el-icon>
+                      重新执行
+                    </el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>
+                      <el-icon><Delete /></el-icon>
+                      删除记录
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+            
+            <div class="recent-task-info">
+              <div class="info-item">
+                <el-icon><Document /></el-icon>
+                <span>{{ history.template?.name || '自定义 Playbook' }}</span>
+              </div>
+              <div class="info-item">
+                <el-icon><List /></el-icon>
+                <span>{{ history.inventory?.name || '-' }}</span>
+              </div>
+              <div class="info-item">
+                <el-icon><Calendar /></el-icon>
+                <span>{{ formatRecentTime(history.last_used_at) }}</span>
+              </div>
+              <div class="info-item">
+                <el-icon><DataLine /></el-icon>
+                <span>使用 {{ history.use_count }} 次</span>
+              </div>
+            </div>
+            
+            <div class="recent-task-tags">
+              <el-tag v-if="history.dry_run" size="small" type="info">Dry Run</el-tag>
+              <el-tag v-if="history.batch_config?.enabled" size="small" type="warning">
+                分批执行
+              </el-tag>
+            </div>
+            
+            <el-button 
+              type="primary" 
+              size="small" 
+              style="width: 100%; margin-top: 8px"
+              @click="rerunTask(history)"
+            >
+              <el-icon><RefreshRight /></el-icon>
+              快速执行
+            </el-button>
+          </el-card>
+        </el-col>
+      </el-row>
+    </el-card>
+
     <!-- 筛选器 -->
     <el-card style="margin-top: 20px">
       <el-form :inline="true" :model="queryParams">
@@ -376,7 +457,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled } from '@element-plus/icons-vue'
+import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 import clusterAPI from '@/api/cluster'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -388,6 +469,7 @@ const total = ref(0)
 const loading = ref(false)
 const statistics = ref({})
 const selectedTasks = ref([])
+const recentTasks = ref([])
 
 const queryParams = reactive({
   page: 1,
@@ -445,6 +527,105 @@ const loadTasks = async () => {
     ElMessage.error('加载任务列表失败: ' + (error.message || '未知错误'))
   } finally {
     loading.value = false
+  }
+}
+
+// 加载最近使用的任务
+const loadRecentTasks = async () => {
+  try {
+    const res = await ansibleAPI.getRecentTasks(6) // 显示最近6个
+    console.log('最近使用任务:', res)
+    recentTasks.value = res.data?.data || []
+  } catch (error) {
+    console.error('加载最近使用任务失败:', error)
+    // 不显示错误消息，静默失败
+  }
+}
+
+// 格式化最近使用时间
+const formatRecentTime = (dateStr) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diff = now - date
+  const seconds = Math.floor(diff / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+  
+  if (days > 0) return `${days} 天前`
+  if (hours > 0) return `${hours} 小时前`
+  if (minutes > 0) return `${minutes} 分钟前`
+  return '刚刚'
+}
+
+// 重新执行任务
+const rerunTask = (history) => {
+  // 填充表单数据
+  taskForm.name = history.task_name + ' (重新执行)'
+  taskForm.template_id = history.template_id || null
+  taskForm.inventory_id = history.inventory_id || null
+  taskForm.cluster_id = history.cluster_id || null
+  taskForm.playbook_content = history.playbook_content || ''
+  taskForm.extra_vars = history.extra_vars || {}
+  taskForm.dry_run = history.dry_run || false
+  taskForm.batch_config = history.batch_config || {
+    enabled: false,
+    batch_size: 0,
+    batch_percent: 20,
+    pause_after_batch: false,
+    failure_threshold: 5,
+    max_batch_fail_rate: 30
+  }
+  
+  // 同步分批执行UI状态
+  if (taskForm.batch_config.enabled) {
+    batchEnabled.value = true
+    if (taskForm.batch_config.batch_size > 0) {
+      batchStrategy.value = 'size'
+      batchValue.value = taskForm.batch_config.batch_size
+    } else if (taskForm.batch_config.batch_percent > 0) {
+      batchStrategy.value = 'percent'
+      batchValue.value = taskForm.batch_config.batch_percent
+    }
+  } else {
+    batchEnabled.value = false
+  }
+  
+  // 显示创建对话框
+  createDialogVisible.value = true
+  
+  // 如果有模板ID，需要加载模板内容
+  if (taskForm.template_id) {
+    loadTemplateContent()
+  }
+}
+
+// 处理最近使用任务的操作
+const handleRecentTaskAction = async (command, history) => {
+  if (command === 'rerun') {
+    rerunTask(history)
+  } else if (command === 'delete') {
+    try {
+      await ElMessageBox.confirm(
+        '确定要删除这条历史记录吗？',
+        '确认删除',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      )
+      
+      await ansibleAPI.deleteTaskHistory(history.id)
+      ElMessage.success('删除成功')
+      loadRecentTasks()
+    } catch (error) {
+      if (error !== 'cancel') {
+        console.error('删除历史记录失败:', error)
+        ElMessage.error('删除失败: ' + (error.message || '未知错误'))
+      }
+    }
   }
 }
 
@@ -587,6 +768,7 @@ const executeTask = async (data) => {
     confirmDialogVisible.value = false
     loadTasks()
     loadStatistics()
+    loadRecentTasks() // 刷新最近使用列表
   } catch (error) {
     ElMessage.error('启动任务失败: ' + error.message)
   } finally {
@@ -820,6 +1002,7 @@ let refreshTimer = null
 onMounted(() => {
   loadTasks()
   loadStatistics()
+  loadRecentTasks()
   
   // 每 5 秒自动刷新
   refreshTimer = setInterval(() => {
@@ -974,6 +1157,82 @@ onBeforeUnmount(() => {
 
 .log-content :deep(.warning) {
   color: #e5c07b;
+}
+
+/* 最近使用任务卡片样式 */
+.recent-task-card {
+  height: 100%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.recent-task-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.recent-task-card :deep(.el-card__body) {
+  padding: 16px;
+}
+
+.recent-task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #EBEEF5;
+}
+
+.recent-task-header .el-text {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.recent-task-more {
+  cursor: pointer;
+  font-size: 16px;
+  color: #909399;
+  transition: color 0.3s;
+}
+
+.recent-task-more:hover {
+  color: #409EFF;
+}
+
+.recent-task-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #606266;
+}
+
+.info-item .el-icon {
+  font-size: 14px;
+  color: #909399;
+}
+
+.info-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-task-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 24px;
 }
 </style>
 

@@ -52,8 +52,16 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" min-width="280" fixed="right" align="center">
+        <el-table-column label="操作" min-width="320" fixed="right" align="center">
           <template #default="{ row }">
+            <el-button 
+              size="small" 
+              :type="row.is_favorite ? 'warning' : ''" 
+              :icon="row.is_favorite ? Star : StarFilled"
+              @click="toggleFavorite(row)"
+            >
+              {{ row.is_favorite ? '已收藏' : '收藏' }}
+            </el-button>
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" type="primary" @click="handleEdit(row)">编辑</el-button>
             <el-button 
@@ -219,7 +227,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Download } from '@element-plus/icons-vue'
+import { Plus, Download, Star, StarFilled } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 import clusterAPI from '@/api/cluster'
 
@@ -268,11 +276,48 @@ const loadInventories = async () => {
     inventories.value = res.data?.data || []
     total.value = res.data?.total || 0
     console.log('已加载清单:', inventories.value.length, '个')
+    
+    // 加载收藏状态
+    await loadFavoriteStatus()
   } catch (error) {
     console.error('加载清单失败:', error)
     ElMessage.error('加载清单失败: ' + (error.message || '未知错误'))
   } finally {
     loading.value = false
+  }
+}
+
+// 加载收藏状态
+const loadFavoriteStatus = async () => {
+  try {
+    const res = await ansibleAPI.listFavorites('inventory')
+    const favoriteIds = new Set((res.data?.data || []).map(f => f.target_id))
+    inventories.value.forEach(inventory => {
+      inventory.is_favorite = favoriteIds.has(inventory.id)
+    })
+  } catch (error) {
+    console.error('加载收藏状态失败:', error)
+  }
+}
+
+// 切换收藏状态
+const toggleFavorite = async (inventory) => {
+  try {
+    if (inventory.is_favorite) {
+      await ansibleAPI.removeFavorite('inventory', inventory.id)
+      inventory.is_favorite = false
+      ElMessage.success('已取消收藏')
+    } else {
+      await ansibleAPI.addFavorite({
+        target_type: 'inventory',
+        target_id: inventory.id
+      })
+      inventory.is_favorite = true
+      ElMessage.success('收藏成功')
+    }
+  } catch (error) {
+    console.error('操作收藏失败:', error)
+    ElMessage.error('操作失败: ' + (error.message || '未知错误'))
   }
 }
 

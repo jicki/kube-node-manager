@@ -72,8 +72,16 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" min-width="280" fixed="right" align="center">
+        <el-table-column label="操作" min-width="320" fixed="right" align="center">
           <template #default="{ row }">
+            <el-button 
+              size="small" 
+              :type="row.is_favorite ? 'warning' : ''" 
+              :icon="row.is_favorite ? Star : StarFilled"
+              @click="toggleFavorite(row)"
+            >
+              {{ row.is_favorite ? '已收藏' : '收藏' }}
+            </el-button>
             <el-button size="small" @click="handleView(row)">查看</el-button>
             <el-button size="small" type="primary" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="success" @click="handleClone(row)">克隆</el-button>
@@ -153,7 +161,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Star, StarFilled } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 
 const templates = ref([])
@@ -189,11 +197,48 @@ const loadTemplates = async () => {
     templates.value = res.data?.data || []
     total.value = res.data?.total || 0
     console.log('已加载模板:', templates.value.length, '个')
+    
+    // 加载收藏状态
+    await loadFavoriteStatus()
   } catch (error) {
     console.error('加载模板失败:', error)
     ElMessage.error('加载模板失败: ' + (error.message || '未知错误'))
   } finally {
     loading.value = false
+  }
+}
+
+// 加载收藏状态
+const loadFavoriteStatus = async () => {
+  try {
+    const res = await ansibleAPI.listFavorites('template')
+    const favoriteIds = new Set((res.data?.data || []).map(f => f.target_id))
+    templates.value.forEach(template => {
+      template.is_favorite = favoriteIds.has(template.id)
+    })
+  } catch (error) {
+    console.error('加载收藏状态失败:', error)
+  }
+}
+
+// 切换收藏状态
+const toggleFavorite = async (template) => {
+  try {
+    if (template.is_favorite) {
+      await ansibleAPI.removeFavorite('template', template.id)
+      template.is_favorite = false
+      ElMessage.success('已取消收藏')
+    } else {
+      await ansibleAPI.addFavorite({
+        target_type: 'template',
+        target_id: template.id
+      })
+      template.is_favorite = true
+      ElMessage.success('收藏成功')
+    }
+  } catch (error) {
+    console.error('操作收藏失败:', error)
+    ElMessage.error('操作失败: ' + (error.message || '未知错误'))
   }
 }
 
