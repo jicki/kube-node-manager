@@ -46,6 +46,9 @@ type Handlers struct {
 }
 
 func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
+	// 先创建 Ansible 主 Handler
+	ansibleMainHandler := ansibleHandler.NewHandler(services.Ansible, logger)
+	
 	return &Handlers{
 		Auth:             auth.NewHandler(services.Auth, logger),
 		User:             user.NewHandler(services.User, logger),
@@ -60,12 +63,12 @@ func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
 		Anomaly:          anomaly.NewHandler(services.Anomaly, services.Anomaly.GetCleanupService(), logger),
 		AnomalyReport:    anomaly.NewReportHandler(services.AnomalyReport),
 		WebSocket:        websocket.NewHandler(services.WSHub, logger),
-		Ansible:          ansibleHandler.NewHandler(services.Ansible, logger),
+		Ansible:          ansibleMainHandler,
 		AnsibleTemplate:  ansibleHandler.NewTemplateHandler(services.Ansible.GetTemplateService(), logger),
 		AnsibleInventory: ansibleHandler.NewInventoryHandler(services.Ansible.GetInventoryService(), logger),
 		AnsibleSSHKey:    ansibleHandler.NewSSHKeyHandler(services.Ansible.GetSSHKeyService(), logger),
 		AnsibleSchedule:   ansibleHandler.NewScheduleHandler(services.Ansible.GetScheduleService(), logger),
-		AnsibleFavorite:   ansibleHandler.NewFavoriteHandler(services.Ansible, logger),
+		AnsibleFavorite:   ansibleHandler.NewFavoriteHandler(ansibleMainHandler),
 		AnsibleEstimation:    ansibleHandler.NewEstimationHandler(services.Ansible, logger),
 		AnsibleQueue:         ansibleHandler.NewQueueHandler(services.Ansible, logger),
 		AnsibleTag:           ansibleHandler.NewTagHandler(services.Ansible, logger),
