@@ -35,6 +35,12 @@ func checkAdminPermission(c *gin.Context) bool {
 	return true
 }
 
+// getUserID 获取当前用户ID
+func (h *Handler) getUserID(c *gin.Context) uint {
+	userID, _ := c.Get("user_id")
+	return userID.(uint)
+}
+
 // ListTasks 列出任务
 // @Summary 列出任务
 // @Tags Ansible

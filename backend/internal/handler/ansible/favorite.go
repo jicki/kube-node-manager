@@ -42,7 +42,7 @@ func (h *FavoriteHandler) AddFavorite(c *gin.Context) {
 		return
 	}
 	
-	favSvc := h.ansibleSvc.GetFavoriteService()
+	favSvc := h.service.GetFavoriteService()
 	if err := favSvc.AddFavorite(userID, req.TargetType, req.TargetID); err != nil {
 		if err.Error() == "already in favorites" {
 			c.JSON(http.StatusConflict, gin.H{"error": "已在收藏夹中"})
@@ -79,7 +79,7 @@ func (h *FavoriteHandler) RemoveFavorite(c *gin.Context) {
 		return
 	}
 	
-	favSvc := h.ansibleSvc.GetFavoriteService()
+	favSvc := h.service.GetFavoriteService()
 	if err := favSvc.RemoveFavorite(userID, targetType, uint(targetID)); err != nil {
 		if err.Error() == "favorite not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "收藏不存在"})
@@ -102,7 +102,7 @@ func (h *FavoriteHandler) ListFavorites(c *gin.Context) {
 	userID := h.getUserID(c)
 	targetType := c.Query("target_type")
 	
-	favSvc := h.ansibleSvc.GetFavoriteService()
+	favSvc := h.service.GetFavoriteService()
 	favorites, err := favSvc.ListFavorites(userID, targetType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -131,7 +131,7 @@ func (h *FavoriteHandler) GetRecentTasks(c *gin.Context) {
 		}
 	}
 	
-	favSvc := h.ansibleSvc.GetFavoriteService()
+	favSvc := h.service.GetFavoriteService()
 	history, err := favSvc.GetRecentTaskHistory(userID, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -159,7 +159,7 @@ func (h *FavoriteHandler) GetTaskHistory(c *gin.Context) {
 		return
 	}
 	
-	favSvc := h.ansibleSvc.GetFavoriteService()
+	favSvc := h.service.GetFavoriteService()
 	history, err := favSvc.GetTaskHistory(uint(id), userID)
 	if err != nil {
 		if err.Error() == "task history not found" {
@@ -188,7 +188,7 @@ func (h *FavoriteHandler) DeleteTaskHistory(c *gin.Context) {
 		return
 	}
 	
-	favSvc := h.ansibleSvc.GetFavoriteService()
+	favSvc := h.service.GetFavoriteService()
 	if err := favSvc.DeleteTaskHistory(uint(id), userID); err != nil {
 		if err.Error() == "task history not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "历史记录不存在"})
