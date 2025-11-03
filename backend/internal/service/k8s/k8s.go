@@ -1382,14 +1382,13 @@ func (s *Service) getPodCountsWithFallback(clusterName string, nodeNames []strin
 	if s.podCountCache != nil && s.podCountCache.IsReady(clusterName) {
 		podCounts := s.podCountCache.GetAllNodePodCounts(clusterName)
 		if len(podCounts) > 0 {
-			s.logger.Debugf("Using Pod Informer cache for cluster %s (fast path)", clusterName)
+			// 使用快速路径，不记录日志（避免日志噪音）
 			return podCounts
 		}
 	}
 
 	// 策略2：降级到旧的分页查询+缓存方案
-	s.logger.Debugf("Pod Informer not ready for cluster %s, falling back to paginated query", clusterName)
-	
+	// 注意：这是正常的降级行为（Informer未就绪或启动延迟期间），不记录日志
 	fetchFunc := func() map[string]int {
 		return s.getNodesPodCounts(clusterName, nodeNames)
 	}

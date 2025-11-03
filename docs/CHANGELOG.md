@@ -34,6 +34,9 @@ ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 ```
 
 **3. 优化日志输出**
+- 移除 DEBUG 级别的降级日志，避免 release 模式下的日志噪音
+- 降级行为（Informer未就绪时回退到分页查询）是正常预期行为，不需要记录
+- 只保留关键的 INFO 级别日志：
 ```log
 INFO: Cluster registered: xxx (Pod Informer will start in 10s)
 INFO: Starting Pod Informer for cluster: xxx (delayed start)
@@ -60,6 +63,10 @@ INFO: ✓ Pod Informer ready for cluster: xxx
 2. `backend/internal/realtime/manager.go`
    - 添加10秒启动延迟
    - 优化日志提示
+
+3. `backend/internal/service/k8s/k8s.go`
+   - 移除降级策略中的 DEBUG 日志
+   - 避免 release 模式下的日志噪音
 
 ### ⚠️ 升级说明
 
