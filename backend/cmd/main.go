@@ -347,6 +347,8 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.POST("/tasks/:id/pause-batch", handlers.Ansible.PauseBatch)
 		ansible.POST("/tasks/:id/continue-batch", handlers.Ansible.ContinueBatch)
 		ansible.POST("/tasks/:id/stop-batch", handlers.Ansible.StopBatch)
+		ansible.POST("/tasks/:id/preflight-checks", handlers.Ansible.RunPreflightChecks)
+		ansible.GET("/tasks/:id/preflight-checks", handlers.Ansible.GetPreflightChecks)
 		ansible.GET("/tasks/:id/logs", handlers.Ansible.GetTaskLogs)
 		ansible.POST("/tasks/:id/refresh", handlers.Ansible.RefreshTaskStatus)
 

@@ -527,3 +527,25 @@ export function deleteTaskHistory(id) {
   })
 }
 
+// 前置检查 API
+
+/**
+ * 执行前置检查
+ */
+export function runPreflightChecks(id) {
+  return request({
+    url: `/api/v1/ansible/tasks/${id}/preflight-checks`,
+    method: 'post'
+  })
+}
+
+/**
+ * 获取前置检查结果
+ */
+export function getPreflightChecks(id) {
+  return request({
+    url: `/api/v1/ansible/tasks/${id}/preflight-checks`,
+    method: 'get'
+  })
+}
+

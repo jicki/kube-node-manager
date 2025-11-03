@@ -129,6 +129,7 @@ type AnsibleTask struct {
 	CurrentBatch     int                    `json:"current_batch" gorm:"default:0;comment:当前执行批次"`
 	TotalBatches     int                    `json:"total_batches" gorm:"default:0;comment:总批次数"`
 	BatchStatus      string                 `json:"batch_status" gorm:"size:50;comment:批次状态(running/paused/completed)"`
+	PreflightChecks  *PreflightCheckResult  `json:"preflight_checks" gorm:"type:jsonb;comment:前置检查结果"`
 	CreatedAt        time.Time              `json:"created_at"`
 	UpdatedAt        time.Time              `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt         `json:"-" gorm:"index"`
@@ -590,6 +591,53 @@ func (bec *BatchExecutionConfig) Scan(value interface{}) error {
 // Value 实现 driver.Valuer 接口
 func (bec BatchExecutionConfig) Value() (driver.Value, error) {
 	return json.Marshal(bec)
+}
+
+// ======================== 前置检查 ========================
+
+// PreflightCheckResult 前置检查结果
+type PreflightCheckResult struct {
+	Status      string              `json:"status"`       // overall/pass/warning/fail
+	CheckedAt   time.Time           `json:"checked_at"`   // 检查时间
+	Duration    int                 `json:"duration"`     // 检查耗时（毫秒）
+	Checks      []PreflightCheck    `json:"checks"`       // 检查项列表
+	Summary     PreflightSummary    `json:"summary"`      // 检查摘要
+}
+
+// PreflightCheck 单个检查项
+type PreflightCheck struct {
+	Name        string    `json:"name"`         // 检查项名称
+	Category    string    `json:"category"`     // 类别（connectivity/resources/config）
+	Status      string    `json:"status"`       // pass/warning/fail
+	Message     string    `json:"message"`      // 检查结果消息
+	Details     string    `json:"details"`      // 详细信息
+	CheckedAt   time.Time `json:"checked_at"`   // 检查时间
+	Duration    int       `json:"duration"`     // 耗时（毫秒）
+}
+
+// PreflightSummary 检查摘要
+type PreflightSummary struct {
+	Total       int `json:"total"`        // 总检查项数
+	Passed      int `json:"passed"`       // 通过数
+	Warnings    int `json:"warnings"`     // 警告数
+	Failed      int `json:"failed"`       // 失败数
+}
+
+// Scan 实现 sql.Scanner 接口
+func (pcr *PreflightCheckResult) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return nil
+	}
+	return json.Unmarshal(bytes, pcr)
+}
+
+// Value 实现 driver.Valuer 接口
+func (pcr PreflightCheckResult) Value() (driver.Value, error) {
+	return json.Marshal(pcr)
 }
 
 // ======================== 收藏和快速操作 ========================

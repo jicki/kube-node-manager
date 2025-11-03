@@ -303,6 +303,67 @@ func (h *Handler) StopBatch(c *gin.Context) {
 	})
 }
 
+// RunPreflightChecks 执行前置检查
+// @Summary 执行前置检查
+// @Tags Ansible
+// @Param id path int true "任务ID"
+// @Success 200 {object} model.PreflightCheckResult
+// @Router /api/v1/ansible/tasks/{id}/preflight-checks [post]
+func (h *Handler) RunPreflightChecks(c *gin.Context) {
+	if !checkAdminPermission(c) {
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	preflightSvc := h.service.GetPreflightService()
+	result, err := preflightSvc.RunPreflightChecks(uint(id))
+	if err != nil {
+		h.logger.Errorf("Failed to run preflight checks: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"data": result,
+	})
+}
+
+// GetPreflightChecks 获取前置检查结果
+// @Summary 获取前置检查结果
+// @Tags Ansible
+// @Param id path int true "任务ID"
+// @Success 200 {object} model.PreflightCheckResult
+// @Router /api/v1/ansible/tasks/{id}/preflight-checks [get]
+func (h *Handler) GetPreflightChecks(c *gin.Context) {
+	if !checkAdminPermission(c) {
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	preflightSvc := h.service.GetPreflightService()
+	result, err := preflightSvc.GetPreflightChecks(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "前置检查结果不存在"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"data": result,
+	})
+}
+
 // GetTaskLogs 获取任务日志
 // @Summary 获取任务日志
 // @Tags Ansible

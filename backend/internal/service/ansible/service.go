@@ -21,6 +21,7 @@ type Service struct {
 	sshKeySvc    *SSHKeyService
 	scheduleSvc  *ScheduleService
 	favoriteSvc  *FavoriteService
+	preflightSvc *PreflightService
 	executor     *TaskExecutor
 }
 
@@ -38,6 +39,7 @@ func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, wsHub i
 	inventorySvc := NewInventoryService(db, logger, k8sSvc)
 	templateSvc := NewTemplateService(db, logger)
 	favoriteSvc := NewFavoriteService(db, logger)
+	preflightSvc := NewPreflightService(db, logger, inventorySvc, sshKeySvc)
 	executor := NewTaskExecutor(db, logger, inventorySvc, sshKeySvc, wsHub)
 
 	service := &Service{
@@ -47,6 +49,7 @@ func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, wsHub i
 		inventorySvc: inventorySvc,
 		sshKeySvc:    sshKeySvc,
 		favoriteSvc:  favoriteSvc,
+		preflightSvc: preflightSvc,
 		executor:     executor,
 	}
 
@@ -85,6 +88,11 @@ func (s *Service) GetScheduleService() *ScheduleService {
 // GetFavoriteService 获取收藏服务
 func (s *Service) GetFavoriteService() *FavoriteService {
 	return s.favoriteSvc
+}
+
+// GetPreflightService 获取前置检查服务
+func (s *Service) GetPreflightService() *PreflightService {
+	return s.preflightSvc
 }
 
 // CreateTask 创建并执行任务
