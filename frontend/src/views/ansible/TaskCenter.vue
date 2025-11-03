@@ -260,9 +260,19 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="400" fixed="right">
+        <el-table-column label="操作" width="480" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleViewLogs(row)">查看日志</el-button>
+            
+            <!-- 前置检查按钮 -->
+            <el-button 
+              size="small" 
+              type="info" 
+              @click="handlePreflightCheck(row)" 
+              v-if="row.status === 'pending'"
+            >
+              执行检查
+            </el-button>
             
             <!-- 批次控制按钮 -->
             <template v-if="row.status === 'running' && row.batch_config && row.batch_config.enabled">
@@ -558,6 +568,112 @@
       </template>
     </el-dialog>
 
+    <!-- 前置检查结果对话框 -->
+    <el-dialog 
+      v-model="preflightDialogVisible" 
+      title="前置检查结果" 
+      width="700px"
+      :close-on-click-modal="false"
+    >
+      <div v-if="preflightResult" style="padding: 10px">
+        <!-- 总体状态 -->
+        <el-alert 
+          :title="`总体状态: ${preflightResult.status === 'pass' ? '通过' : preflightResult.status === 'warning' ? '有警告' : '失败'}`"
+          :type="getCheckStatusType(preflightResult.status)"
+          :closable="false"
+          style="margin-bottom: 20px"
+        >
+          <template #default>
+            <div style="margin-top: 10px">
+              <p>检查时间: {{ new Date(preflightResult.checked_at).toLocaleString() }}</p>
+              <p>检查耗时: {{ preflightResult.duration }}ms</p>
+            </div>
+          </template>
+        </el-alert>
+
+        <!-- 检查摘要 -->
+        <el-card shadow="never" style="margin-bottom: 20px">
+          <template #header>
+            <span style="font-weight: bold">检查摘要</span>
+          </template>
+          <el-row :gutter="20">
+            <el-col :span="6">
+              <el-statistic title="总检查项" :value="preflightResult.summary.total" />
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="通过" :value="preflightResult.summary.passed" />
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="警告" :value="preflightResult.summary.warnings" />
+            </el-col>
+            <el-col :span="6">
+              <el-statistic title="失败" :value="preflightResult.summary.failed" />
+            </el-col>
+          </el-row>
+        </el-card>
+
+        <!-- 检查详情 -->
+        <div style="margin-top: 20px">
+          <h4 style="margin-bottom: 15px">检查详情</h4>
+          <el-timeline>
+            <el-timeline-item 
+              v-for="(check, index) in preflightResult.checks" 
+              :key="index"
+              :type="getCheckStatusType(check.status)"
+              :icon="getCheckStatusIcon(check.status)"
+            >
+              <el-card shadow="hover">
+                <template #header>
+                  <div style="display: flex; justify-content: space-between; align-items: center">
+                    <span style="font-weight: bold">{{ check.name }}</span>
+                    <el-tag :type="getCheckStatusType(check.status)" size="small">
+                      {{ check.status === 'pass' ? '通过' : check.status === 'warning' ? '警告' : '失败' }}
+                    </el-tag>
+                  </div>
+                </template>
+                <div>
+                  <p><strong>类别:</strong> {{ check.category }}</p>
+                  <p><strong>消息:</strong> {{ check.message }}</p>
+                  <p v-if="check.details"><strong>详情:</strong> {{ check.details }}</p>
+                  <p style="color: #909399; font-size: 12px">
+                    检查时间: {{ new Date(check.checked_at).toLocaleString() }} | 
+                    耗时: {{ check.duration }}ms
+                  </p>
+                </div>
+              </el-card>
+            </el-timeline-item>
+          </el-timeline>
+        </div>
+
+        <!-- 建议 -->
+        <el-alert 
+          v-if="preflightResult.status !== 'pass'"
+          title="建议"
+          type="info"
+          :closable="false"
+          style="margin-top: 20px"
+        >
+          <template #default>
+            <ul style="margin: 0; padding-left: 20px">
+              <li v-if="preflightResult.status === 'fail'">
+                请先修复失败的检查项，然后重新执行检查
+              </li>
+              <li v-if="preflightResult.status === 'warning'">
+                建议查看警告信息，评估风险后再决定是否执行任务
+              </li>
+              <li>您可以使用 Dry Run 模式进行更详细的测试</li>
+            </ul>
+          </template>
+        </el-alert>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="preflightDialogVisible = false">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- 环境和风险确认对话框 -->
     <ConfirmDialog
       v-if="confirmDialogVisible"
@@ -576,7 +692,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine, Setting, Key } from '@element-plus/icons-vue'
+import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine, Setting, Key, Warning, QuestionFilled } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 import clusterAPI from '@/api/cluster'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -599,7 +715,10 @@ const queryParams = reactive({
 
 const createDialogVisible = ref(false)
 const logDialogVisible = ref(false)
+const preflightDialogVisible = ref(false)
 const creating = ref(false)
+const preflightChecking = ref(false)
+const preflightResult = ref(null)
 
 const taskForm = reactive({
   name: '',
@@ -1088,6 +1207,52 @@ const handleStopBatch = async (row) => {
       ElMessage.error('停止失败: ' + (error.message || '未知错误'))
     }
   }
+}
+
+// 前置检查相关方法
+const handlePreflightCheck = async (row) => {
+  try {
+    preflightChecking.value = true
+    preflightResult.value = null
+    
+    const response = await ansibleAPI.runPreflightChecks(row.id)
+    preflightResult.value = response.data
+    preflightDialogVisible.value = true
+    
+    // 如果有失败或警告，提示用户
+    if (preflightResult.value.status === 'fail') {
+      ElMessage.warning('前置检查发现问题，请查看详情')
+    } else if (preflightResult.value.status === 'warning') {
+      ElMessage.warning('前置检查有警告，建议查看详情')
+    } else {
+      ElMessage.success('前置检查通过')
+    }
+  } catch (error) {
+    console.error('前置检查失败:', error)
+    ElMessage.error('前置检查失败: ' + (error.message || '未知错误'))
+  } finally {
+    preflightChecking.value = false
+  }
+}
+
+// 获取检查状态类型
+const getCheckStatusType = (status) => {
+  const statusMap = {
+    pass: 'success',
+    warning: 'warning',
+    fail: 'danger'
+  }
+  return statusMap[status] || ''
+}
+
+// 获取检查状态图标
+const getCheckStatusIcon = (status) => {
+  const iconMap = {
+    pass: 'CircleCheck',
+    warning: 'Warning',
+    fail: 'CircleClose'
+  }
+  return iconMap[status] || 'QuestionFilled'
 }
 
 const handleDelete = async (row) => {

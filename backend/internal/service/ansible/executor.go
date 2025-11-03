@@ -31,7 +31,8 @@ type TaskExecutor struct {
 	wsHub           interface{} // WebSocket Hub for log streaming
 	inventorySvc    *InventoryService
 	sshKeySvc       *SSHKeyService
-	workDir         string // 工作目录
+	workDir         string          // 工作目录
+	sanitizer       *logger.Sanitizer // 日志脱敏器
 }
 
 // RunningTask 正在执行的任务
@@ -65,6 +66,7 @@ func NewTaskExecutor(db *gorm.DB, logger *logger.Logger, inventorySvc *Inventory
 		inventorySvc:  inventorySvc,
 		sshKeySvc:     sshKeySvc,
 		workDir:       workDir,
+		sanitizer:     logger.NewSanitizer(), // 初始化日志脱敏器
 	}
 }
 
@@ -611,11 +613,14 @@ func (e *TaskExecutor) readOutput(reader io.Reader, runningTask *RunningTask, lo
 	for scanner.Scan() {
 		line := scanner.Text()
 		
+		// 对日志内容进行脱敏处理
+		sanitizedLine := e.sanitizer.Sanitize(line)
+		
 		// 创建日志记录
 		log := &model.AnsibleLog{
 			TaskID:     runningTask.TaskID,
 			LogType:    logType,
-			Content:    line,
+			Content:    sanitizedLine,
 			LineNumber: lineNumber,
 			CreatedAt:  time.Now(),
 		}
