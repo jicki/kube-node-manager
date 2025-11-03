@@ -9,6 +9,7 @@ import (
 
 type Logger struct {
 	info          *log.Logger
+	debug         *log.Logger
 	warning       *log.Logger
 	error         *log.Logger
 	structured    *StructuredLogger
@@ -21,6 +22,7 @@ func NewLogger() *Logger {
 
 	return &Logger{
 		info:          log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile),
+		debug:         log.New(os.Stdout, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile),
 		warning:       log.New(os.Stdout, "WARNING: ", log.Ldate|log.Ltime|log.Lshortfile),
 		error:         log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile),
 		structured:    NewStructuredLogger(useStructured),
@@ -41,6 +43,22 @@ func (l *Logger) Infof(format string, v ...interface{}) {
 		l.structured.Info(fmt.Sprintf(format, v...))
 	} else {
 		l.info.Printf(format, v...)
+	}
+}
+
+func (l *Logger) Debug(v ...interface{}) {
+	if l.useStructured {
+		l.structured.Debug(fmt.Sprint(v...))
+	} else {
+		l.debug.Println(v...)
+	}
+}
+
+func (l *Logger) Debugf(format string, v ...interface{}) {
+	if l.useStructured {
+		l.structured.Debug(fmt.Sprintf(format, v...))
+	} else {
+		l.debug.Printf(format, v...)
 	}
 }
 
