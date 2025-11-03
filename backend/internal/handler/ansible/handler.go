@@ -216,6 +216,93 @@ func (h *Handler) RetryTask(c *gin.Context) {
 	})
 }
 
+// PauseBatch 暂停批次执行
+// @Summary 暂停批次执行
+// @Tags Ansible
+// @Param id path int true "任务ID"
+// @Success 200
+// @Router /api/v1/ansible/tasks/{id}/pause-batch [post]
+func (h *Handler) PauseBatch(c *gin.Context) {
+	if !checkAdminPermission(c) {
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	if err := h.service.PauseBatchExecution(uint(id)); err != nil {
+		h.logger.Errorf("Failed to pause batch: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Batch execution paused",
+	})
+}
+
+// ContinueBatch 继续批次执行
+// @Summary 继续批次执行
+// @Tags Ansible
+// @Param id path int true "任务ID"
+// @Success 200
+// @Router /api/v1/ansible/tasks/{id}/continue-batch [post]
+func (h *Handler) ContinueBatch(c *gin.Context) {
+	if !checkAdminPermission(c) {
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	if err := h.service.ContinueBatchExecution(uint(id)); err != nil {
+		h.logger.Errorf("Failed to continue batch: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Batch execution continued",
+	})
+}
+
+// StopBatch 停止批次执行
+// @Summary 停止批次执行（停止所有剩余批次）
+// @Tags Ansible
+// @Param id path int true "任务ID"
+// @Success 200
+// @Router /api/v1/ansible/tasks/{id}/stop-batch [post]
+func (h *Handler) StopBatch(c *gin.Context) {
+	if !checkAdminPermission(c) {
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	if err := h.service.StopBatchExecution(uint(id)); err != nil {
+		h.logger.Errorf("Failed to stop batch: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Batch execution stopped",
+	})
+}
+
 // GetTaskLogs 获取任务日志
 // @Summary 获取任务日志
 // @Tags Ansible

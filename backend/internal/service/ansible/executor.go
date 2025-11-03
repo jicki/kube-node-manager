@@ -345,6 +345,45 @@ func (e *TaskExecutor) CancelTask(taskID uint) error {
 	return nil
 }
 
+// ContinueBatchExecution 继续批次执行
+func (e *TaskExecutor) ContinueBatchExecution(taskID uint) error {
+	// 获取任务
+	var task model.AnsibleTask
+	if err := e.db.First(&task, taskID).Error; err != nil {
+		return fmt.Errorf("failed to get task: %w", err)
+	}
+
+	// 检查批次配置
+	if !task.IsBatchEnabled() {
+		return fmt.Errorf("batch execution not enabled")
+	}
+
+	// 检查是否还有剩余批次
+	if task.CurrentBatch >= task.TotalBatches {
+		// 所有批次已完成
+		task.MarkBatchCompleted()
+		task.Status = model.AnsibleTaskStatusSuccess
+		finishedAt := time.Now()
+		task.FinishedAt = &finishedAt
+		duration := int(time.Since(*task.StartedAt).Seconds())
+		task.Duration = duration
+		
+		if err := e.db.Save(&task).Error; err != nil {
+			e.logger.Errorf("Failed to update task: %v", err)
+		}
+		
+		e.logger.Infof("Task %d: All batches completed", taskID)
+		return nil
+	}
+
+	e.logger.Infof("Task %d: Continuing to batch %d/%d", taskID, task.CurrentBatch, task.TotalBatches)
+	
+	// 注意：实际的批次执行逻辑在 ExecuteTask 中处理
+	// 这里只是记录日志，实际执行会在 ansible-playbook 命令中通过 serial 参数控制
+	
+	return nil
+}
+
 // IsTaskRunning 检查任务是否正在运行
 func (e *TaskExecutor) IsTaskRunning(taskID uint) bool {
 	e.mu.RLock()

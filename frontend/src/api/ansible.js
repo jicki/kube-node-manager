@@ -55,6 +55,36 @@ export function retryTask(id) {
 }
 
 /**
+ * 暂停批次执行
+ */
+export function pauseBatch(id) {
+  return request({
+    url: `/api/v1/ansible/tasks/${id}/pause-batch`,
+    method: 'post'
+  })
+}
+
+/**
+ * 继续批次执行
+ */
+export function continueBatch(id) {
+  return request({
+    url: `/api/v1/ansible/tasks/${id}/continue-batch`,
+    method: 'post'
+  })
+}
+
+/**
+ * 停止批次执行
+ */
+export function stopBatch(id) {
+  return request({
+    url: `/api/v1/ansible/tasks/${id}/stop-batch`,
+    method: 'post'
+  })
+}
+
+/**
  * 删除任务
  */
 export function deleteTask(id) {

@@ -250,17 +250,47 @@
             {{ row.duration ? `${row.duration}秒` : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column label="操作" width="400" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleViewLogs(row)">查看日志</el-button>
+            
+            <!-- 批次控制按钮 -->
+            <template v-if="row.status === 'running' && row.batch_config && row.batch_config.enabled">
+              <el-button 
+                size="small" 
+                type="warning" 
+                @click="handlePauseBatch(row)" 
+                v-if="row.batch_status === 'running'"
+              >
+                暂停批次
+              </el-button>
+              <el-button 
+                size="small" 
+                type="success" 
+                @click="handleContinueBatch(row)" 
+                v-if="row.batch_status === 'paused'"
+              >
+                继续批次
+              </el-button>
+              <el-button 
+                size="small" 
+                type="danger" 
+                @click="handleStopBatch(row)"
+              >
+                停止批次
+              </el-button>
+            </template>
+            
+            <!-- 普通取消按钮 -->
             <el-button 
               size="small" 
               type="warning" 
               @click="handleCancel(row)" 
-              v-if="row.status === 'running'"
+              v-if="row.status === 'running' && (!row.batch_config || !row.batch_config.enabled)"
             >
               取消
             </el-button>
+            
             <el-button 
               size="small" 
               type="primary" 
@@ -868,6 +898,74 @@ const handleRetry = async (row) => {
     loadTasks()
   } catch (error) {
     ElMessage.error('重试任务失败: ' + error.message)
+  }
+}
+
+// 批次控制方法
+const handlePauseBatch = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要暂停任务 "${row.name}" 的批次执行吗？当前批次完成后将暂停。`,
+      '暂停批次',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    await ansibleAPI.pauseBatch(row.id)
+    ElMessage.success('批次执行已暂停')
+    loadTasks()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('暂停失败: ' + (error.message || '未知错误'))
+    }
+  }
+}
+
+const handleContinueBatch = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要继续任务 "${row.name}" 的批次执行吗？将继续执行下一批次。`,
+      '继续批次',
+      {
+        confirmButtonText: '继续',
+        cancelButtonText: '取消',
+        type: 'success'
+      }
+    )
+    
+    await ansibleAPI.continueBatch(row.id)
+    ElMessage.success('批次执行已继续')
+    loadTasks()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('继续失败: ' + (error.message || '未知错误'))
+    }
+  }
+}
+
+const handleStopBatch = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要停止任务 "${row.name}" 的所有剩余批次吗？已完成的批次不会回滚，但剩余批次将不再执行。`,
+      '停止批次',
+      {
+        confirmButtonText: '停止',
+        cancelButtonText: '取消',
+        type: 'error'
+      }
+    )
+    
+    await ansibleAPI.stopBatch(row.id)
+    ElMessage.success('批次执行已停止')
+    loadTasks()
+    loadStatistics()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('停止失败: ' + (error.message || '未知错误'))
+    }
   }
 }
 

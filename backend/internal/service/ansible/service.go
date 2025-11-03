@@ -362,6 +362,123 @@ func (s *Service) RetryTask(taskID uint, userID uint) (*model.AnsibleTask, error
 	return newTask, nil
 }
 
+// PauseBatchExecution 暂停批次执行
+func (s *Service) PauseBatchExecution(taskID uint) error {
+	// 获取任务
+	task, err := s.GetTask(taskID)
+	if err != nil {
+		return err
+	}
+
+	// 检查任务状态
+	if task.Status != model.AnsibleTaskStatusRunning {
+		return fmt.Errorf("task is not running")
+	}
+
+	// 检查是否启用了分批执行
+	if !task.IsBatchEnabled() {
+		return fmt.Errorf("batch execution is not enabled for this task")
+	}
+
+	// 检查当前是否已经暂停
+	if task.IsBatchPaused() {
+		return fmt.Errorf("batch execution is already paused")
+	}
+
+	// 更新批次状态为暂停
+	task.BatchStatus = "paused"
+	if err := s.db.Save(task).Error; err != nil {
+		return fmt.Errorf("failed to pause batch execution: %w", err)
+	}
+
+	s.logger.Infof("Batch execution paused for task %d", taskID)
+	return nil
+}
+
+// ContinueBatchExecution 继续批次执行
+func (s *Service) ContinueBatchExecution(taskID uint) error {
+	// 获取任务
+	task, err := s.GetTask(taskID)
+	if err != nil {
+		return err
+	}
+
+	// 检查任务状态
+	if task.Status != model.AnsibleTaskStatusRunning {
+		return fmt.Errorf("task is not running")
+	}
+
+	// 检查是否启用了分批执行
+	if !task.IsBatchEnabled() {
+		return fmt.Errorf("batch execution is not enabled for this task")
+	}
+
+	// 检查当前是否已经暂停
+	if !task.IsBatchPaused() {
+		return fmt.Errorf("batch execution is not paused")
+	}
+
+	// 更新批次状态为运行中
+	task.BatchStatus = "running"
+	task.CurrentBatch++ // 移动到下一批次
+	if err := s.db.Save(task).Error; err != nil {
+		return fmt.Errorf("failed to continue batch execution: %w", err)
+	}
+
+	s.logger.Infof("Batch execution continued for task %d, moving to batch %d/%d", 
+		taskID, task.CurrentBatch, task.TotalBatches)
+	
+	// 触发执行器继续执行
+	go func() {
+		if err := s.executor.ContinueBatchExecution(taskID); err != nil {
+			s.logger.Errorf("Failed to continue batch execution for task %d: %v", taskID, err)
+		}
+	}()
+	
+	return nil
+}
+
+// StopBatchExecution 停止批次执行
+func (s *Service) StopBatchExecution(taskID uint) error {
+	// 获取任务
+	task, err := s.GetTask(taskID)
+	if err != nil {
+		return err
+	}
+
+	// 检查任务状态
+	if task.Status != model.AnsibleTaskStatusRunning {
+		return fmt.Errorf("task is not running")
+	}
+
+	// 检查是否启用了分批执行
+	if !task.IsBatchEnabled() {
+		return fmt.Errorf("batch execution is not enabled for this task")
+	}
+
+	// 更新批次状态为停止
+	task.BatchStatus = "stopped"
+	task.Status = model.AnsibleTaskStatusCancelled
+	finishedAt := time.Now()
+	task.FinishedAt = &finishedAt
+	duration := int(time.Since(*task.StartedAt).Seconds())
+	task.Duration = duration
+	
+	if err := s.db.Save(task).Error; err != nil {
+		return fmt.Errorf("failed to stop batch execution: %w", err)
+	}
+
+	s.logger.Infof("Batch execution stopped for task %d at batch %d/%d", 
+		taskID, task.CurrentBatch, task.TotalBatches)
+	
+	// 取消执行
+	if err := s.executor.CancelTask(taskID); err != nil {
+		s.logger.Errorf("Failed to cancel task executor: %v", err)
+	}
+	
+	return nil
+}
+
 // GetTaskStatus 获取任务状态
 func (s *Service) GetTaskStatus(taskID uint) (map[string]interface{}, error) {
 	task, err := s.GetTask(taskID)
