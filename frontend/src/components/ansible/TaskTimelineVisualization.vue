@@ -407,6 +407,28 @@ watch(() => chart, (newChart, oldChart) => {
 .task-timeline-visualization {
   padding: 20px;
   min-height: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+/* 限制 loading 图标的大小 */
+.task-timeline-visualization :deep(.el-loading-spinner) {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin-top: 0 !important;
+}
+
+.task-timeline-visualization :deep(.el-loading-spinner .circular) {
+  width: 42px !important;
+  height: 42px !important;
+}
+
+.task-timeline-visualization :deep(.el-loading-text) {
+  font-size: 14px;
+  margin-top: 10px;
 }
 
 .header-card {

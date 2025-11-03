@@ -954,7 +954,7 @@ const formatRecentTime = (dateStr) => {
 }
 
 // 重新执行任务
-const rerunTask = (history) => {
+const rerunTask = async (history) => {
   // 填充表单数据
   taskForm.name = history.task_name + ' (重新执行)'
   taskForm.template_id = history.template_id || null
@@ -986,6 +986,14 @@ const rerunTask = (history) => {
     batchEnabled.value = false
   }
   
+  // 确保模板和清单列表已加载
+  if (templates.value.length === 0) {
+    await loadTemplates()
+  }
+  if (inventories.value.length === 0) {
+    await loadInventories()
+  }
+  
   // 显示创建对话框
   createDialogVisible.value = true
   
@@ -993,6 +1001,9 @@ const rerunTask = (history) => {
   if (taskForm.template_id) {
     loadTemplateContent()
   }
+  
+  // 加载预估信息
+  loadEstimation()
 }
 
 // 处理最近使用任务的操作
