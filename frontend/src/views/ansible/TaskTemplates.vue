@@ -179,7 +179,7 @@
                     必需变量会在创建任务时要求用户提供，用于参数化 Playbook
                   </p>
                   <p style="margin: 0; color: #909399">
-                    示例：在 Playbook 中使用 <code>{{ "{{ app_version }}" }}</code>，
+                    示例：在 Playbook 中使用 <code v-text="'{{ app_version }}'"></code>，
                     则添加 <code>app_version</code> 为必需变量
                   </p>
                 </div>
