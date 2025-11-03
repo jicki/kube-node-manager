@@ -37,6 +37,7 @@ type Handlers struct {
 	AnsibleInventory  *ansibleHandler.InventoryHandler
 	AnsibleSSHKey     *ansibleHandler.SSHKeyHandler
 	AnsibleSchedule   *ansibleHandler.ScheduleHandler
+	AnsibleFavorite   *ansibleHandler.FavoriteHandler
 	AnsibleWebSocket  *ansibleHandler.WebSocketHandler
 }
 
@@ -60,6 +61,7 @@ func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
 		AnsibleInventory: ansibleHandler.NewInventoryHandler(services.Ansible.GetInventoryService(), logger),
 		AnsibleSSHKey:    ansibleHandler.NewSSHKeyHandler(services.Ansible.GetSSHKeyService(), logger),
 		AnsibleSchedule:  ansibleHandler.NewScheduleHandler(services.Ansible.GetScheduleService(), logger),
+		AnsibleFavorite:  ansibleHandler.NewFavoriteHandler(ansibleHandler.NewHandler(services.Ansible, logger)),
 		AnsibleWebSocket: ansibleHandler.NewWebSocketHandler(services.WSHub, logger),
 	}
 }

@@ -431,3 +431,69 @@ export function runScheduleNow(id) {
   })
 }
 
+// 收藏管理 API
+
+/**
+ * 添加收藏
+ */
+export function addFavorite(data) {
+  return request({
+    url: '/api/v1/ansible/favorites',
+    method: 'post',
+    data
+  })
+}
+
+/**
+ * 移除收藏
+ */
+export function removeFavorite(targetType, targetId) {
+  return request({
+    url: '/api/v1/ansible/favorites',
+    method: 'delete',
+    params: { target_type: targetType, target_id: targetId }
+  })
+}
+
+/**
+ * 列出收藏
+ */
+export function listFavorites(targetType) {
+  return request({
+    url: '/api/v1/ansible/favorites',
+    method: 'get',
+    params: { target_type: targetType }
+  })
+}
+
+/**
+ * 获取最近使用的任务
+ */
+export function getRecentTasks(limit = 10) {
+  return request({
+    url: '/api/v1/ansible/recent-tasks',
+    method: 'get',
+    params: { limit }
+  })
+}
+
+/**
+ * 获取任务历史详情
+ */
+export function getTaskHistory(id) {
+  return request({
+    url: `/api/v1/ansible/task-history/${id}`,
+    method: 'get'
+  })
+}
+
+/**
+ * 删除任务历史
+ */
+export function deleteTaskHistory(id) {
+  return request({
+    url: `/api/v1/ansible/task-history/${id}`,
+    method: 'delete'
+  })
+}
+

@@ -383,6 +383,14 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.DELETE("/schedules/:id", handlers.AnsibleSchedule.DeleteSchedule)
 		ansible.POST("/schedules/:id/toggle", handlers.AnsibleSchedule.ToggleSchedule)
 		ansible.POST("/schedules/:id/run-now", handlers.AnsibleSchedule.RunNow)
+		
+		// 收藏和快速操作
+		ansible.GET("/favorites", handlers.AnsibleFavorite.ListFavorites)
+		ansible.POST("/favorites", handlers.AnsibleFavorite.AddFavorite)
+		ansible.DELETE("/favorites", handlers.AnsibleFavorite.RemoveFavorite)
+		ansible.GET("/recent-tasks", handlers.AnsibleFavorite.GetRecentTasks)
+		ansible.GET("/task-history/:id", handlers.AnsibleFavorite.GetTaskHistory)
+		ansible.DELETE("/task-history/:id", handlers.AnsibleFavorite.DeleteTaskHistory)
 	}
 
 	// Ansible WebSocket (任务日志流)

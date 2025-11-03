@@ -591,3 +591,53 @@ func (bec BatchExecutionConfig) Value() (driver.Value, error) {
 	return json.Marshal(bec)
 }
 
+// ======================== 收藏和快速操作 ========================
+
+// AnsibleFavorite 收藏记录
+type AnsibleFavorite struct {
+	ID         uint           `json:"id" gorm:"primarykey"`
+	UserID     uint           `json:"user_id" gorm:"not null;index;comment:用户ID"`
+	TargetType string         `json:"target_type" gorm:"not null;size:50;comment:目标类型(task/template/inventory)"` // task/template/inventory
+	TargetID   uint           `json:"target_id" gorm:"not null;comment:目标ID"`
+	CreatedAt  time.Time      `json:"created_at"`
+	DeletedAt  gorm.DeletedAt `json:"-" gorm:"index"`
+	
+	// 关联（可选，用于预加载）
+	Task      *AnsibleTask      `json:"task,omitempty" gorm:"foreignKey:TargetID;constraint:OnDelete:CASCADE"`
+	Template  *AnsibleTemplate  `json:"template,omitempty" gorm:"foreignKey:TargetID;constraint:OnDelete:CASCADE"`
+	Inventory *AnsibleInventory `json:"inventory,omitempty" gorm:"foreignKey:TargetID;constraint:OnDelete:CASCADE"`
+}
+
+// TableName 指定表名
+func (AnsibleFavorite) TableName() string {
+	return "ansible_favorites"
+}
+
+// AnsibleTaskHistory 任务执行历史（用于快速重新执行）
+type AnsibleTaskHistory struct {
+	ID               uint           `json:"id" gorm:"primarykey"`
+	UserID           uint           `json:"user_id" gorm:"not null;index;comment:用户ID"`
+	TaskName         string         `json:"task_name" gorm:"size:255;comment:任务名称"`
+	TemplateID       *uint          `json:"template_id" gorm:"comment:模板ID"`
+	InventoryID      *uint          `json:"inventory_id" gorm:"comment:清单ID"`
+	ClusterID        *uint          `json:"cluster_id" gorm:"comment:集群ID"`
+	PlaybookContent  string         `json:"playbook_content" gorm:"type:text;comment:Playbook内容"`
+	ExtraVars        ExtraVars      `json:"extra_vars" gorm:"type:jsonb;comment:额外变量"`
+	DryRun           bool           `json:"dry_run" gorm:"default:false;comment:是否Dry Run"`
+	BatchConfig      *BatchExecutionConfig `json:"batch_config" gorm:"type:jsonb;comment:分批配置"`
+	LastUsedAt       time.Time      `json:"last_used_at" gorm:"index;comment:最后使用时间"`
+	UseCount         int            `json:"use_count" gorm:"default:1;comment:使用次数"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	
+	// 关联
+	Template  *AnsibleTemplate  `json:"template,omitempty" gorm:"foreignKey:TemplateID"`
+	Inventory *AnsibleInventory `json:"inventory,omitempty" gorm:"foreignKey:InventoryID"`
+	Cluster   *Cluster          `json:"cluster,omitempty" gorm:"foreignKey:ClusterID"`
+}
+
+// TableName 指定表名
+func (AnsibleTaskHistory) TableName() string {
+	return "ansible_task_history"
+}
+

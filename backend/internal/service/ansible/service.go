@@ -19,6 +19,7 @@ type Service struct {
 	inventorySvc *InventoryService
 	sshKeySvc    *SSHKeyService
 	scheduleSvc  *ScheduleService
+	favoriteSvc  *FavoriteService
 	executor     *TaskExecutor
 }
 
@@ -35,6 +36,7 @@ func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, wsHub i
 	sshKeySvc := NewSSHKeyService(db, logger, encryptor)
 	inventorySvc := NewInventoryService(db, logger, k8sSvc)
 	templateSvc := NewTemplateService(db, logger)
+	favoriteSvc := NewFavoriteService(db, logger)
 	executor := NewTaskExecutor(db, logger, inventorySvc, sshKeySvc, wsHub)
 
 	service := &Service{
@@ -43,6 +45,7 @@ func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, wsHub i
 		templateSvc:  templateSvc,
 		inventorySvc: inventorySvc,
 		sshKeySvc:    sshKeySvc,
+		favoriteSvc:  favoriteSvc,
 		executor:     executor,
 	}
 
@@ -76,6 +79,11 @@ func (s *Service) GetExecutor() *TaskExecutor {
 // GetScheduleService 获取定时任务服务
 func (s *Service) GetScheduleService() *ScheduleService {
 	return s.scheduleSvc
+}
+
+// GetFavoriteService 获取收藏服务
+func (s *Service) GetFavoriteService() *FavoriteService {
+	return s.favoriteSvc
 }
 
 // CreateTask 创建并执行任务
@@ -147,6 +155,14 @@ func (s *Service) CreateTask(req model.TaskCreateRequest, userID uint) (*model.A
 	}
 
 	s.logger.Infof("Created task: %s (ID: %d) by user %d", task.Name, task.ID, userID)
+	
+	// 添加到任务历史（用于快速重新执行）
+	go func() {
+		if err := s.favoriteSvc.AddOrUpdateTaskHistory(userID, task); err != nil {
+			s.logger.Errorf("Failed to add task history: %v", err)
+			// 历史记录失败不影响任务执行
+		}
+	}()
 
 	// 异步执行任务
 	go func() {
