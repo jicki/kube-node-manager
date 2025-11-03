@@ -131,8 +131,8 @@ func (s *Service) CreateClient(clusterName, kubeconfig string) error {
 		return fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
-	// 设置超时
-	config.Timeout = 30 * time.Second
+	// 设置超时 - 针对大规模集群增加超时时间
+	config.Timeout = 60 * time.Second
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
@@ -348,7 +348,8 @@ func (s *Service) fetchNodesFromAPI(clusterName string) ([]NodeInfo, error) {
 		return nil, fmt.Errorf("cluster connection not available for %s: %w", clusterName, err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// 针对大规模集群增加超时时间
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	nodeList, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -1463,7 +1464,8 @@ func (s *Service) getNodePodCount(clusterName, nodeName string) (int, error) {
 		return 0, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// 针对大规模集群增加超时时间到 20 秒
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	// 使用 FieldSelector 获取指定节点上的 Pods
@@ -1495,7 +1497,8 @@ func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[
 		return make(map[string]int)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	// 针对大规模集群增加超时时间到 30 秒
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// 获取所有 Pods

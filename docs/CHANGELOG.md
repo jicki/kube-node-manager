@@ -7,6 +7,40 @@
 
 ---
 
+## [v2.22.17] - 2025-11-03
+
+### 🐛 问题修复
+
+#### Kubernetes API 超时优化
+- **增加超时配置**
+  - Kubernetes 客户端超时从 30 秒增加到 60 秒
+  - 节点列表操作超时从 30 秒增加到 60 秒
+  - Pod 批量获取超时从 15 秒增加到 30 秒
+  - 单节点 Pod 获取超时从 10 秒增加到 20 秒
+  - 修复大规模集群（100+ 节点）频繁出现 `context deadline exceeded` 错误
+  - 特别优化 jobsscz-k8s-cluster 等大型集群的稳定性
+
+- **问题影响**
+  - 影响集群：jobsscz-k8s-cluster（104 节点，83 GPU 节点，872 GPU）
+  - 影响操作：列出 Pod、获取节点 Pod 数量、节点指标enrichment
+  - 错误类型：`context deadline exceeded`、`unexpected error when reading response body`
+
+### 📚 文档更新
+- 新增 `docs/kubernetes-api-timeout-fix.md` 详细分析文档
+  - 问题根源分析
+  - 已实施的解决方案
+  - 进一步优化建议（分页查询、Informer 机制、重试机制等）
+  - 集群健康检查建议
+  - 部署和回滚步骤
+
+### 🎯 改进建议
+- 推荐后续实施分页查询优化
+- 推荐使用 Informer 机制减少 API 调用
+- 建议添加重试机制和监控告警
+- 建议定期检查大型集群健康状况
+
+---
+
 ## [v2.22.12] - 2025-01-13
 
 ### ✨ 新增功能
