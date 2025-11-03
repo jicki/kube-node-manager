@@ -70,9 +70,6 @@ func (pc *PodCountCache) handlePodAdd(event informer.PodEvent) {
 
 	// 记录 Pod 到节点的映射
 	pc.podToNode.Store(makeKey(cluster, podUID), nodeName)
-
-	pc.logger.Debugf("Pod added: cluster=%s, pod=%s/%s, node=%s",
-		cluster, event.Pod.Namespace, event.Pod.Name, nodeName)
 }
 
 // handlePodDelete 处理 Pod 删除事件
@@ -85,9 +82,6 @@ func (pc *PodCountCache) handlePodDelete(event informer.PodEvent) {
 	if nodeNameInterface, ok := pc.podToNode.LoadAndDelete(key); ok {
 		nodeName := nodeNameInterface.(string)
 		pc.decrementPodCount(cluster, nodeName)
-
-		pc.logger.Debugf("Pod deleted: cluster=%s, pod=%s/%s, node=%s",
-			cluster, event.Pod.Namespace, event.Pod.Name, nodeName)
 	}
 }
 
@@ -118,9 +112,6 @@ func (pc *PodCountCache) handlePodUpdate(event informer.PodEvent) {
 		if newNodeName != "" && !isTerminated(newPhase) {
 			pc.incrementPodCount(cluster, newNodeName)
 			pc.podToNode.Store(key, newNodeName)
-
-			pc.logger.Debugf("Pod scheduled: cluster=%s, pod=%s/%s, node=%s",
-				cluster, event.Pod.Namespace, event.Pod.Name, newNodeName)
 		}
 	}
 
@@ -129,9 +120,6 @@ func (pc *PodCountCache) handlePodUpdate(event informer.PodEvent) {
 		if nodeNameInterface, ok := pc.podToNode.LoadAndDelete(key); ok {
 			nodeName := nodeNameInterface.(string)
 			pc.decrementPodCount(cluster, nodeName)
-
-			pc.logger.Debugf("Pod terminated: cluster=%s, pod=%s/%s, node=%s, phase=%s",
-				cluster, event.Pod.Namespace, event.Pod.Name, nodeName, newPhase)
 		}
 	}
 }

@@ -357,7 +357,6 @@ func (c *K8sCache) GetPodCounts(cluster string, nodeNames []string, fetchFunc fu
 		// 缓存新鲜，直接返回
 		if age < c.podCountCacheTTL {
 			if podCounts, ok := data.(map[string]int); ok {
-				c.logger.Debugf("Pod count cache hit: cluster=%s, age=%v", cluster, age)
 				return podCounts
 			}
 		}
@@ -365,8 +364,6 @@ func (c *K8sCache) GetPodCounts(cluster string, nodeNames []string, fetchFunc fu
 		// 缓存过期但在10分钟内，返回旧数据并异步刷新
 		if age < c.podCountCacheTTL*2 {
 			if podCounts, ok := data.(map[string]int); ok {
-				c.logger.Debugf("Pod count cache stale: cluster=%s, age=%v, async refresh", cluster, age)
-
 				// 触发异步刷新（如果未在刷新中）
 				if !isRefreshing {
 					go c.asyncRefreshPodCounts(cluster, fetchFunc)
@@ -407,7 +404,6 @@ func (c *K8sCache) asyncRefreshPodCounts(cluster string, fetchFunc func() map[st
 		entry.mu.Lock()
 		if entry.refreshing {
 			entry.mu.Unlock()
-			c.logger.Debugf("Pod count cache already refreshing: cluster=%s", cluster)
 			return // 已经在刷新中
 		}
 		entry.refreshing = true

@@ -1584,8 +1584,6 @@ func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[
 			}
 		}
 
-		s.logger.Debugf("Processed page %d for cluster %s: %d pods in this page", pageCount, clusterName, len(podList.Items))
-
 		// 检查是否还有更多数据
 		if podList.Continue == "" {
 			break

@@ -34,9 +34,14 @@ ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 ```
 
 **3. 优化日志输出**
-- 移除 DEBUG 级别的降级日志，避免 release 模式下的日志噪音
-- 降级行为（Informer未就绪时回退到分页查询）是正常预期行为，不需要记录
-- 只保留关键的 INFO 级别日志：
+- 全面清理高频 DEBUG 日志，避免 release 模式下的日志噪音
+- 移除的日志包括：
+  - Pod Informer 降级策略日志
+  - 分页查询进度日志（每页记录）
+  - Pod 缓存命中/过期日志（每次查询）
+  - Pod 事件处理日志（add/delete/scheduled/terminated）
+- 降级和缓存命中是正常预期行为，不需要记录
+- 只保留关键的 INFO 级别日志（启动、错误、Pod迁移等）：
 ```log
 INFO: Cluster registered: xxx (Pod Informer will start in 10s)
 INFO: Starting Pod Informer for cluster: xxx (delayed start)
@@ -52,6 +57,7 @@ INFO: ✓ Pod Informer ready for cluster: xxx
 | **健康检查成功率** | 失败 | 100% | ✅ 修复 |
 | **Pod Informer启动** | 同步阻塞 | 异步延迟 | ✅ 不阻塞 |
 | **大规模集群支持** | 60秒超时 | 120秒超时 | ✅ 更宽容 |
+| **日志噪音** | 大量DEBUG | 清爽简洁 | ✅ 消除噪音 |
 
 ### 💻 代码变更
 
@@ -65,8 +71,15 @@ INFO: ✓ Pod Informer ready for cluster: xxx
    - 优化日志提示
 
 3. `backend/internal/service/k8s/k8s.go`
-   - 移除降级策略中的 DEBUG 日志
-   - 避免 release 模式下的日志噪音
+   - 移除降级策略的 DEBUG 日志
+   - 移除分页查询进度的 DEBUG 日志
+
+4. `backend/internal/cache/k8s_cache.go`
+   - 移除缓存命中/过期的 DEBUG 日志（3处）
+
+5. `backend/internal/podcache/pod_count_cache.go`
+   - 移除 Pod 事件的 DEBUG 日志（4处）
+   - 保留 Pod 迁移的 INFO 日志
 
 ### ⚠️ 升级说明
 
