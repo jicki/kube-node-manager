@@ -121,12 +121,17 @@ type AnsibleTask struct {
 	FullLog          string            `json:"full_log" gorm:"type:text;comment:完整日志"`
 	LogSize          int64             `json:"log_size" gorm:"default:0;comment:日志大小(bytes)"`
 	ExtraVars        ExtraVars         `json:"extra_vars" gorm:"type:jsonb;comment:额外变量"`
-	RetryPolicy      *RetryPolicy      `json:"retry_policy" gorm:"type:jsonb;comment:重试策略"`
-	RetryCount       int               `json:"retry_count" gorm:"default:0;comment:当前重试次数"`
-	MaxRetries       int               `json:"max_retries" gorm:"default:0;comment:最大重试次数"`
-	CreatedAt        time.Time         `json:"created_at"`
-	UpdatedAt        time.Time         `json:"updated_at"`
-	DeletedAt        gorm.DeletedAt    `json:"-" gorm:"index"`
+	RetryPolicy      *RetryPolicy           `json:"retry_policy" gorm:"type:jsonb;comment:重试策略"`
+	RetryCount       int                    `json:"retry_count" gorm:"default:0;comment:当前重试次数"`
+	MaxRetries       int                    `json:"max_retries" gorm:"default:0;comment:最大重试次数"`
+	DryRun           bool                   `json:"dry_run" gorm:"default:false;comment:是否为检查模式(Dry Run)"`
+	BatchConfig      *BatchExecutionConfig  `json:"batch_config" gorm:"type:jsonb;comment:分批执行配置"`
+	CurrentBatch     int                    `json:"current_batch" gorm:"default:0;comment:当前执行批次"`
+	TotalBatches     int                    `json:"total_batches" gorm:"default:0;comment:总批次数"`
+	BatchStatus      string                 `json:"batch_status" gorm:"size:50;comment:批次状态(running/paused/completed)"`
+	CreatedAt        time.Time              `json:"created_at"`
+	UpdatedAt        time.Time              `json:"updated_at"`
+	DeletedAt        gorm.DeletedAt         `json:"-" gorm:"index"`
 
 	// 关联 - 删除模板/清单时将任务的外键设置为 NULL
 	Template  *AnsibleTemplate  `json:"template,omitempty" gorm:"foreignKey:TemplateID;constraint:OnDelete:SET NULL"`
@@ -197,6 +202,22 @@ func (t *AnsibleTask) UpdateStats(total, ok, failed, skipped int) {
 	t.HostsOk = ok
 	t.HostsFailed = failed
 	t.HostsSkipped = skipped
+	t.UpdatedAt = time.Now()
+}
+
+// IsBatchEnabled 检查是否启用分批执行
+func (t *AnsibleTask) IsBatchEnabled() bool {
+	return t.BatchConfig != nil && t.BatchConfig.Enabled
+}
+
+// IsBatchPaused 检查批次是否暂停
+func (t *AnsibleTask) IsBatchPaused() bool {
+	return t.BatchStatus == "paused"
+}
+
+// MarkBatchCompleted 标记批次完成
+func (t *AnsibleTask) MarkBatchCompleted() {
+	t.BatchStatus = "completed"
 	t.UpdatedAt = time.Now()
 }
 
@@ -286,12 +307,14 @@ type TaskListRequest struct {
 
 // TaskCreateRequest 任务创建请求
 type TaskCreateRequest struct {
-	Name            string            `json:"name" binding:"required"`
-	TemplateID      *uint             `json:"template_id"`
-	ClusterID       *uint             `json:"cluster_id"`
-	InventoryID     *uint             `json:"inventory_id"`
-	PlaybookContent string            `json:"playbook_content"`
+	Name            string                 `json:"name" binding:"required"`
+	TemplateID      *uint                  `json:"template_id"`
+	ClusterID       *uint                  `json:"cluster_id"`
+	InventoryID     *uint                  `json:"inventory_id"`
+	PlaybookContent string                 `json:"playbook_content"`
 	ExtraVars       map[string]interface{} `json:"extra_vars"`
+	DryRun          bool                   `json:"dry_run"`       // 是否为检查模式（不实际执行变更）
+	BatchConfig     *BatchExecutionConfig  `json:"batch_config"`  // 分批执行配置
 }
 
 // TemplateListRequest 模板列表请求
@@ -537,5 +560,34 @@ func (rp *RetryPolicy) Scan(value interface{}) error {
 // Value 实现 driver.Valuer 接口
 func (rp RetryPolicy) Value() (driver.Value, error) {
 	return json.Marshal(rp)
+}
+
+// ======================== 分批执行配置 ========================
+
+// BatchExecutionConfig 分批执行配置
+type BatchExecutionConfig struct {
+	Enabled          bool   `json:"enabled"`            // 是否启用分批执行
+	BatchSize        int    `json:"batch_size"`         // 每批主机数量（与 BatchPercent 二选一）
+	BatchPercent     int    `json:"batch_percent"`      // 每批主机百分比（0-100）
+	PauseAfterBatch  bool   `json:"pause_after_batch"`  // 每批执行后是否暂停等待确认
+	FailureThreshold int    `json:"failure_threshold"`  // 失败阈值（失败主机数超过此值则停止）
+	MaxBatchFailRate int    `json:"max_batch_fail_rate"` // 单批最大失败率（0-100，超过则停止）
+}
+
+// Scan 实现 sql.Scanner 接口
+func (bec *BatchExecutionConfig) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return nil
+	}
+	return json.Unmarshal(bytes, bec)
+}
+
+// Value 实现 driver.Valuer 接口
+func (bec BatchExecutionConfig) Value() (driver.Value, error) {
+	return json.Marshal(bec)
 }
 

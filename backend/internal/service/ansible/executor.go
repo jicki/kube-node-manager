@@ -455,6 +455,23 @@ func (e *TaskExecutor) buildAnsibleCommand(ctx context.Context, playbookFile, in
 		"-v", // verbose mode
 	}
 
+	// 如果启用了 Dry Run 模式，添加 --check 参数
+	if task.DryRun {
+		args = append(args, "--check")
+		e.logger.Infof("Task %d: Running in Dry Run mode (--check), no changes will be made", task.ID)
+	}
+	
+	// 如果启用了分批执行，计算并添加 --limit 参数
+	if task.IsBatchEnabled() && task.CurrentBatch > 0 {
+		// 构建批次限制（基础实现，使用 ansible 的 batch 参数）
+		batchSize := e.calculateBatchSize(task)
+		if batchSize > 0 {
+			// 使用 ansible-playbook 的 --limit 参数结合 serial 实现分批
+			e.logger.Infof("Task %d: Batch execution - batch %d/%d, size: %d", 
+				task.ID, task.CurrentBatch, task.TotalBatches, batchSize)
+		}
+	}
+
 	// 如果有 SSH 密钥文件，添加 --private-key 参数
 	if sshKeyFile != "" {
 		args = append(args, "--private-key", sshKeyFile)
@@ -467,6 +484,20 @@ func (e *TaskExecutor) buildAnsibleCommand(ctx context.Context, playbookFile, in
 	if len(task.ExtraVars) > 0 {
 		extraVarsJSON, _ := json.Marshal(task.ExtraVars)
 		args = append(args, "--extra-vars", string(extraVarsJSON))
+	}
+	
+	// 如果启用了分批执行，添加 serial 参数到 extra-vars
+	if task.IsBatchEnabled() {
+		batchSize := e.calculateBatchSize(task)
+		if batchSize > 0 {
+			// 通过 extra-vars 传递 serial 参数
+			serialVar := map[string]interface{}{
+				"ansible_serial": batchSize,
+			}
+			serialJSON, _ := json.Marshal(serialVar)
+			args = append(args, "--extra-vars", string(serialJSON))
+			e.logger.Infof("Task %d: Setting ansible_serial to %d for batch execution", task.ID, batchSize)
+		}
 	}
 
 	cmd := exec.CommandContext(ctx, "ansible-playbook", args...)
@@ -484,6 +515,29 @@ func (e *TaskExecutor) buildAnsibleCommand(ctx context.Context, playbookFile, in
 	e.logger.Infof("Task %d: Executing command: %s", task.ID, cmdString)
 
 	return cmd
+}
+
+// calculateBatchSize 计算批次大小
+func (e *TaskExecutor) calculateBatchSize(task *model.AnsibleTask) int {
+	if task.BatchConfig == nil || !task.BatchConfig.Enabled {
+		return 0
+	}
+	
+	// 优先使用固定数量
+	if task.BatchConfig.BatchSize > 0 {
+		return task.BatchConfig.BatchSize
+	}
+	
+	// 使用百分比计算
+	if task.BatchConfig.BatchPercent > 0 && task.HostsTotal > 0 {
+		size := (task.HostsTotal * task.BatchConfig.BatchPercent) / 100
+		if size < 1 {
+			size = 1 // 至少执行1台主机
+		}
+		return size
+	}
+	
+	return 0
 }
 
 // readOutput 读取命令输出

@@ -116,7 +116,14 @@
       >
         <el-table-column type="selection" width="55" :selectable="canSelectTask" />
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="任务名称" min-width="200" />
+        <el-table-column label="任务名称" min-width="200">
+          <template #default="{ row }">
+            <span>{{ row.name }}</span>
+            <el-tag v-if="row.dry_run" type="info" size="small" style="margin-left: 8px">
+              Dry Run
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="创建用户" width="120">
           <template #default="{ row }">
             {{ row.user?.username || '-' }}
@@ -129,16 +136,26 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="进度" width="150">
+        <el-table-column label="进度" width="200">
           <template #default="{ row }">
             <div v-if="row.status === 'running'">
               <el-progress 
                 :percentage="calculateProgress(row)" 
                 :status="row.hosts_failed > 0 ? 'exception' : 'success'" 
               />
+              <!-- 显示批次信息 -->
+              <div v-if="row.batch_config && row.batch_config.enabled" style="font-size: 12px; color: #909399; margin-top: 4px">
+                批次: {{ row.current_batch }}/{{ row.total_batches }}
+                <el-tag v-if="row.batch_status === 'paused'" type="warning" size="small" style="margin-left: 4px">
+                  已暂停
+                </el-tag>
+              </div>
             </div>
             <div v-else-if="row.status === 'success' || row.status === 'failed'">
               {{ row.hosts_ok }}/{{ row.hosts_total }} 成功
+              <div v-if="row.batch_config && row.batch_config.enabled" style="font-size: 12px; color: #909399">
+                (分{{ row.total_batches }}批执行)
+              </div>
             </div>
           </template>
         </el-table-column>
@@ -231,10 +248,96 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="Dry Run 模式">
+          <el-switch 
+            v-model="taskForm.dry_run" 
+            active-text="启用（检查模式，不实际执行变更）"
+            inactive-text="禁用"
+            style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
+          />
+          <div style="margin-top: 8px; color: #909399; font-size: 12px">
+            <el-icon><InfoFilled /></el-icon>
+            Dry Run 模式会模拟任务执行，显示将要进行的变更，但不会实际修改目标主机
+          </div>
+        </el-form-item>
+        
+        <!-- 分批执行配置 -->
+        <el-form-item label="分批执行">
+          <el-switch 
+            v-model="batchEnabled" 
+            active-text="启用（金丝雀/灰度发布）"
+            inactive-text="禁用"
+            @change="handleBatchToggle"
+          />
+        </el-form-item>
+        
+        <!-- 分批执行详细配置 -->
+        <template v-if="batchEnabled">
+          <el-form-item label="批次策略" style="margin-left: 20px">
+            <el-radio-group v-model="batchStrategy">
+              <el-radio label="size">固定数量</el-radio>
+              <el-radio label="percent">百分比</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          
+          <el-form-item 
+            :label="batchStrategy === 'size' ? '每批主机数' : '每批百分比'" 
+            style="margin-left: 20px"
+          >
+            <el-input-number 
+              v-model="batchValue" 
+              :min="1" 
+              :max="batchStrategy === 'size' ? 100 : 100"
+              :step="1"
+              style="width: 180px"
+            />
+            <span style="margin-left: 8px; color: #909399">
+              {{ batchStrategy === 'size' ? '台' : '%' }}
+            </span>
+          </el-form-item>
+          
+          <el-form-item label="执行控制" style="margin-left: 20px">
+            <el-checkbox v-model="taskForm.batch_config.pause_after_batch">
+              每批执行后暂停，等待手动确认
+            </el-checkbox>
+          </el-form-item>
+          
+          <el-form-item label="失败阈值" style="margin-left: 20px">
+            <el-input-number 
+              v-model="taskForm.batch_config.failure_threshold" 
+              :min="0" 
+              :max="100"
+              style="width: 180px"
+            />
+            <span style="margin-left: 8px; color: #909399">
+              失败主机数超过此值则停止执行
+            </span>
+          </el-form-item>
+          
+          <el-form-item label="单批失败率" style="margin-left: 20px">
+            <el-input-number 
+              v-model="taskForm.batch_config.max_batch_fail_rate" 
+              :min="0" 
+              :max="100"
+              :step="5"
+              style="width: 180px"
+            />
+            <span style="margin-left: 8px; color: #909399">
+              % （单批失败率超过此值则停止）
+            </span>
+          </el-form-item>
+          
+          <div style="margin-left: 20px; padding: 12px; background: #f0f9ff; border-left: 3px solid #409eff; color: #606266; font-size: 13px">
+            <el-icon><InfoFilled /></el-icon>
+            分批执行适用于大规模变更，可以先在少量主机上验证，再逐步推广到所有主机，降低风险
+          </div>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreate" :loading="creating">启动任务</el-button>
+        <el-button type="primary" @click="handleCreate" :loading="creating">
+          {{ taskForm.dry_run ? '检查任务' : '启动任务' }}
+        </el-button>
       </template>
     </el-dialog>
 
@@ -271,9 +374,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 import clusterAPI from '@/api/cluster'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -301,8 +404,22 @@ const taskForm = reactive({
   name: '',
   template_id: null,
   cluster_id: null,
-  inventory_id: null
+  inventory_id: null,
+  dry_run: false,
+  batch_config: {
+    enabled: false,
+    batch_size: 0,
+    batch_percent: 20,
+    pause_after_batch: false,
+    failure_threshold: 0,
+    max_batch_fail_rate: 50
+  }
 })
+
+// 分批执行相关状态
+const batchEnabled = ref(false)
+const batchStrategy = ref('percent') // 'size' 或 'percent'
+const batchValue = ref(20) // 批次大小或百分比值
 
 const templates = ref([])
 const inventories = ref([])
@@ -396,7 +513,42 @@ const showCreateDialog = () => {
   loadTemplates()
   loadInventories()
   loadClusters()
+  // 重置分批执行状态
+  batchEnabled.value = false
+  batchStrategy.value = 'percent'
+  batchValue.value = 20
 }
+
+// 处理分批执行开关
+const handleBatchToggle = (enabled) => {
+  taskForm.batch_config.enabled = enabled
+  if (enabled) {
+    // 根据策略设置批次大小
+    if (batchStrategy.value === 'size') {
+      taskForm.batch_config.batch_size = batchValue.value
+      taskForm.batch_config.batch_percent = 0
+    } else {
+      taskForm.batch_config.batch_size = 0
+      taskForm.batch_config.batch_percent = batchValue.value
+    }
+  }
+}
+
+// 监听策略和值的变化
+const updateBatchConfig = () => {
+  if (!batchEnabled.value) return
+  
+  if (batchStrategy.value === 'size') {
+    taskForm.batch_config.batch_size = batchValue.value
+    taskForm.batch_config.batch_percent = 0
+  } else {
+    taskForm.batch_config.batch_size = 0
+    taskForm.batch_config.batch_percent = batchValue.value
+  }
+}
+
+// 监听批次策略和值的变化
+watch([batchStrategy, batchValue], updateBatchConfig)
 
 const handleCreate = async () => {
   if (!taskForm.name) {

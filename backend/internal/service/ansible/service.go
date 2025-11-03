@@ -129,6 +129,16 @@ func (s *Service) CreateTask(req model.TaskCreateRequest, userID uint) (*model.A
 		UserID:          userID,
 		PlaybookContent: playbookContent,
 		ExtraVars:       req.ExtraVars,
+		DryRun:          req.DryRun,
+		BatchConfig:     req.BatchConfig,
+	}
+	
+	// 如果启用了分批执行，初始化批次状态
+	if task.IsBatchEnabled() {
+		task.BatchStatus = "pending"
+		task.CurrentBatch = 0
+		s.logger.Infof("Task %s: Batch execution enabled - size: %d, percent: %d%%", 
+			task.Name, task.BatchConfig.BatchSize, task.BatchConfig.BatchPercent)
 	}
 
 	if err := s.db.Create(task).Error; err != nil {
