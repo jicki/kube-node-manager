@@ -118,7 +118,7 @@ func (s *QueueService) GetNextTask(maxConcurrentPerUser int) (*model.AnsibleTask
 	for _, task := range pendingTasks {
 		// 公平调度：如果用户已达到并发上限，跳过该用户的任务
 		if maxConcurrentPerUser > 0 && userRunningCount[task.UserID] >= maxConcurrentPerUser {
-			s.logger.Debugf("User %d has reached max concurrent tasks (%d), skipping task %d", 
+			s.logger.Infof("User %d has reached max concurrent tasks (%d), skipping task %d", 
 				task.UserID, maxConcurrentPerUser, task.ID)
 			continue
 		}

@@ -230,7 +230,7 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 	isTimedOut := false
 	if ctx.Err() == context.DeadlineExceeded {
 		isTimedOut = true
-		e.logger.Warnf("Task %d exceeded timeout limit (%d seconds)", task.ID, task.TimeoutSeconds)
+		e.logger.Warningf("Task %d exceeded timeout limit (%d seconds)", task.ID, task.TimeoutSeconds)
 	}
 
 	// 解析执行结果
@@ -240,7 +240,7 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 		if isTimedOut {
 			errorMsg = fmt.Sprintf("任务执行超时（超过 %d 秒）", task.TimeoutSeconds)
 		} else {
-			errorMsg = err.Error()
+		errorMsg = err.Error()
 		}
 	}
 

@@ -188,12 +188,10 @@ func (s *TagService) AddTagsToTask(taskID uint, tagIDs []uint) error {
 				TaskID: taskID,
 				TagID:  tagID,
 			}
-			// 如果关联已存在，忽略错误
+			// 如果关联已存在，忽略错误（可能是唯一约束冲突）
 			if err := tx.Create(&taskTag).Error; err != nil {
-				// 检查是否是唯一约束冲突
-				if !gorm.IsRecordNotFoundError(err) {
-					s.logger.Debugf("Tag %d already exists for task %d, skipping", tagID, taskID)
-				}
+				s.logger.Infof("Tag %d may already exist for task %d, skipping: %v", tagID, taskID, err)
+				// 继续处理下一个标签
 			}
 		}
 		return nil
@@ -252,7 +250,7 @@ func (s *TagService) BatchAddTagsToTasks(taskIDs []uint, tagIDs []uint) error {
 				// 如果关联已存在，忽略错误
 				if err := tx.Create(&taskTag).Error; err != nil {
 					// 继续处理下一个
-					s.logger.Debugf("Tag %d already exists for task %d, skipping", tagID, taskID)
+					s.logger.Infof("Tag %d may already exist for task %d, skipping: %v", tagID, taskID, err)
 				}
 			}
 		}

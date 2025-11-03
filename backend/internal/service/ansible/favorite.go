@@ -161,7 +161,7 @@ func (s *FavoriteService) AddOrUpdateTaskHistory(userID uint, task *model.Ansibl
 		}
 	}
 	
-	s.logger.Debugf("Updated task history for user %d", userID)
+	s.logger.Infof("Updated task history for user %d", userID)
 	return nil
 }
 

@@ -113,13 +113,9 @@ func (s *PreflightService) checkInventory(inventory *model.AnsibleInventory) mod
 		check.Status = "fail"
 		check.Message = "主机清单内容为空"
 		check.Details = "请确保清单中至少包含一个主机"
-	} else if inventory.HostCount == 0 {
-		check.Status = "warning"
-		check.Message = "主机清单中没有主机"
-		check.Details = "清单配置可能存在问题，建议检查"
 	} else {
 		check.Status = "pass"
-		check.Message = fmt.Sprintf("主机清单正常，包含 %d 个主机", inventory.HostCount)
+		check.Message = "主机清单配置正常"
 		check.Details = fmt.Sprintf("清单名称: %s, 来源: %s", inventory.Name, inventory.SourceType)
 	}
 
@@ -145,7 +141,7 @@ func (s *PreflightService) checkSSHConnectivity(task *model.AnsibleTask) model.P
 		return check
 	}
 
-	sshKey, err := s.sshKeySvc.GetSSHKey(*task.Inventory.SSHKeyID)
+	sshKey, err := s.sshKeySvc.GetDecryptedByID(*task.Inventory.SSHKeyID)
 	if err != nil {
 		check.Status = "fail"
 		check.Message = "SSH 密钥不存在"
