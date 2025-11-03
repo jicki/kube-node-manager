@@ -109,6 +109,30 @@ func (hd HostsData) Value() (driver.Value, error) {
 	return json.Marshal(hd)
 }
 
+// StringArray 字符串数组类型（用于 JSONB）
+type StringArray []string
+
+// Scan 实现 sql.Scanner 接口
+func (sa *StringArray) Scan(value interface{}) error {
+	if value == nil {
+		*sa = make(StringArray, 0)
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return nil
+	}
+	return json.Unmarshal(bytes, sa)
+}
+
+// Value 实现 driver.Valuer 接口
+func (sa StringArray) Value() (driver.Value, error) {
+	if sa == nil {
+		return json.Marshal([]string{})
+	}
+	return json.Marshal(sa)
+}
+
 // AnsibleTask Ansible 任务模型
 type AnsibleTask struct {
 	ID               uint              `json:"id" gorm:"primarykey"`
@@ -145,6 +169,12 @@ type AnsibleTask struct {
 	QueuedAt         *time.Time             `json:"queued_at" gorm:"comment:入队时间"`
 	WaitDuration     int                    `json:"wait_duration" gorm:"default:0;comment:等待时长(秒)"`
 	ExecutionTimeline *TaskExecutionTimeline `json:"execution_timeline" gorm:"type:jsonb;comment:执行时间线"`
+	
+	// 工作流相关字段
+	WorkflowExecutionID *uint       `json:"workflow_execution_id" gorm:"index;comment:工作流执行ID"`
+	DependsOn           StringArray `json:"depends_on" gorm:"type:jsonb;comment:依赖的节点ID列表"`
+	NodeID              string      `json:"node_id" gorm:"size:50;comment:工作流节点ID"`
+	
 	CreatedAt        time.Time              `json:"created_at"`
 	UpdatedAt        time.Time              `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt         `json:"-" gorm:"index"`
@@ -155,6 +185,7 @@ type AnsibleTask struct {
 	Inventory *AnsibleInventory `json:"inventory,omitempty" gorm:"foreignKey:InventoryID;constraint:OnDelete:SET NULL"`
 	User      *User             `json:"user,omitempty" gorm:"foreignKey:UserID"`
 	Tags      []AnsibleTag      `json:"tags,omitempty" gorm:"many2many:ansible_task_tags;"`
+	WorkflowExecution *AnsibleWorkflowExecution `json:"workflow_execution,omitempty" gorm:"foreignKey:WorkflowExecutionID;constraint:OnDelete:SET NULL"`
 }
 
 // TableName 指定表名
