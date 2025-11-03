@@ -471,6 +471,46 @@ watch(() => chart, (newChart, oldChart) => {
   padding: 16px;
 }
 
+/* 限制所有图标的大小 */
+:deep(.el-icon) {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+:deep(.el-card__header .el-icon) {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
+:deep(.el-statistic__head .el-icon) {
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+}
+
+/* 限制时间线卡片中的图标 */
+:deep(.el-timeline-item .el-card h4 .el-icon),
+:deep(.el-timeline-item .el-card h4 svg) {
+  width: 18px !important;
+  height: 18px !important;
+  font-size: 18px !important;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* 限制所有SVG元素的尺寸 */
+:deep(svg) {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+:deep(.el-icon svg) {
+  width: 1em;
+  height: 1em;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .task-timeline-visualization {
