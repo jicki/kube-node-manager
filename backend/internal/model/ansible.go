@@ -52,6 +52,15 @@ const (
 	SSHAuthTypePassword SSHAuthType = "password" // 使用密码认证
 )
 
+// TaskPriority 任务优先级
+type TaskPriority string
+
+const (
+	TaskPriorityHigh   TaskPriority = "high"   // 高优先级
+	TaskPriorityMedium TaskPriority = "medium" // 中优先级（默认）
+	TaskPriorityLow    TaskPriority = "low"    // 低优先级
+)
+
 // ExtraVars 额外变量类型（用于 JSON 序列化）
 type ExtraVars map[string]interface{}
 
@@ -132,6 +141,10 @@ type AnsibleTask struct {
 	PreflightChecks  *PreflightCheckResult  `json:"preflight_checks" gorm:"type:jsonb;comment:前置检查结果"`
 	TimeoutSeconds   int                    `json:"timeout_seconds" gorm:"default:0;comment:超时时间(秒),0表示不限制"`
 	IsTimedOut       bool                   `json:"is_timed_out" gorm:"default:false;comment:是否超时"`
+	Priority         string                 `json:"priority" gorm:"size:20;default:'medium';index;comment:任务优先级(high/medium/low)"`
+	QueuedAt         *time.Time             `json:"queued_at" gorm:"comment:入队时间"`
+	WaitDuration     int                    `json:"wait_duration" gorm:"default:0;comment:等待时长(秒)"`
+	ExecutionTimeline *TaskExecutionTimeline `json:"execution_timeline" gorm:"type:jsonb;comment:执行时间线"`
 	CreatedAt        time.Time              `json:"created_at"`
 	UpdatedAt        time.Time              `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt         `json:"-" gorm:"index"`
@@ -141,6 +154,7 @@ type AnsibleTask struct {
 	Cluster   *Cluster          `json:"cluster,omitempty" gorm:"foreignKey:ClusterID;constraint:OnDelete:SET NULL"`
 	Inventory *AnsibleInventory `json:"inventory,omitempty" gorm:"foreignKey:InventoryID;constraint:OnDelete:SET NULL"`
 	User      *User             `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	Tags      []AnsibleTag      `json:"tags,omitempty" gorm:"many2many:ansible_task_tags;"`
 }
 
 // TableName 指定表名
@@ -211,6 +225,29 @@ func (t *AnsibleTask) UpdateStats(total, ok, failed, skipped int) {
 // IsBatchEnabled 检查是否启用分批执行
 func (t *AnsibleTask) IsBatchEnabled() bool {
 	return t.BatchConfig != nil && t.BatchConfig.Enabled
+}
+
+// AddExecutionEvent 添加执行事件到时间线
+func (t *AnsibleTask) AddExecutionEvent(phase ExecutionPhase, message string, details map[string]interface{}) {
+	if t.ExecutionTimeline == nil {
+		timeline := make(TaskExecutionTimeline, 0)
+		t.ExecutionTimeline = &timeline
+	}
+	
+	event := TaskExecutionEvent{
+		Phase:     phase,
+		Message:   message,
+		Timestamp: time.Now(),
+		Details:   details,
+	}
+	
+	// 计算上一个事件的耗时
+	if len(*t.ExecutionTimeline) > 0 {
+		lastEvent := &(*t.ExecutionTimeline)[len(*t.ExecutionTimeline)-1]
+		lastEvent.Duration = int(event.Timestamp.Sub(lastEvent.Timestamp).Milliseconds())
+	}
+	
+	*t.ExecutionTimeline = append(*t.ExecutionTimeline, event)
 }
 
 // IsBatchPaused 检查批次是否暂停
@@ -320,6 +357,7 @@ type TaskCreateRequest struct {
 	DryRun          bool                   `json:"dry_run"`       // 是否为检查模式（不实际执行变更）
 	BatchConfig     *BatchExecutionConfig  `json:"batch_config"`  // 分批执行配置
 	TimeoutSeconds  int                    `json:"timeout_seconds"` // 超时时间（秒），0表示不限制
+	Priority        string                 `json:"priority"`        // 任务优先级（high/medium/low），默认medium
 }
 
 // TemplateListRequest 模板列表请求
@@ -691,5 +729,142 @@ type AnsibleTaskHistory struct {
 // TableName 指定表名
 func (AnsibleTaskHistory) TableName() string {
 	return "ansible_task_history"
+}
+
+// AnsibleTag 任务标签模型
+type AnsibleTag struct {
+	ID          uint           `json:"id" gorm:"primarykey"`
+	Name        string         `json:"name" gorm:"not null;size:50;uniqueIndex;comment:标签名称"`
+	Color       string         `json:"color" gorm:"size:20;default:'#409EFF';comment:标签颜色"`
+	Description string         `json:"description" gorm:"size:255;comment:标签描述"`
+	UserID      uint           `json:"user_id" gorm:"not null;index;comment:创建用户ID"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+	
+	// 关联
+	User  *User          `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	Tasks []AnsibleTask  `json:"tasks,omitempty" gorm:"many2many:ansible_task_tags;"`
+}
+
+// TableName 指定表名
+func (AnsibleTag) TableName() string {
+	return "ansible_tags"
+}
+
+// AnsibleTaskTag 任务标签关联表
+type AnsibleTaskTag struct {
+	TaskID    uint      `json:"task_id" gorm:"primarykey"`
+	TagID     uint      `json:"tag_id" gorm:"primarykey"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// TableName 指定表名
+func (AnsibleTaskTag) TableName() string {
+	return "ansible_task_tags"
+}
+
+// TagCreateRequest 标签创建请求
+type TagCreateRequest struct {
+	Name        string `json:"name" binding:"required"`
+	Color       string `json:"color"`
+	Description string `json:"description"`
+}
+
+// TagUpdateRequest 标签更新请求
+type TagUpdateRequest struct {
+	Name        string `json:"name"`
+	Color       string `json:"color"`
+	Description string `json:"description"`
+}
+
+// TagListRequest 标签列表请求
+type TagListRequest struct {
+	Page     int    `json:"page" form:"page"`
+	PageSize int    `json:"page_size" form:"page_size"`
+	Keyword  string `json:"keyword" form:"keyword"`
+}
+
+// BatchTagOperationRequest 批量标签操作请求
+type BatchTagOperationRequest struct {
+	TaskIDs []uint `json:"task_ids" binding:"required"`
+	TagIDs  []uint `json:"tag_ids" binding:"required"`
+	Action  string `json:"action" binding:"required,oneof=add remove"` // add: 添加标签, remove: 移除标签
+}
+
+// ExecutionPhase 任务执行阶段
+type ExecutionPhase string
+
+const (
+	PhaseQueued         ExecutionPhase = "queued"          // 入队等待
+	PhasePreflightCheck ExecutionPhase = "preflight_check" // 前置检查
+	PhaseExecuting      ExecutionPhase = "executing"       // 执行中
+	PhaseBatchPaused    ExecutionPhase = "batch_paused"    // 批次暂停
+	PhaseCompleted      ExecutionPhase = "completed"       // 已完成
+	PhaseFailed         ExecutionPhase = "failed"          // 失败
+	PhaseCancelled      ExecutionPhase = "cancelled"       // 已取消
+	PhaseTimeout        ExecutionPhase = "timeout"         // 超时
+)
+
+// TaskExecutionEvent 任务执行事件
+type TaskExecutionEvent struct {
+	Phase       ExecutionPhase `json:"phase"`        // 执行阶段
+	Message     string         `json:"message"`      // 事件消息
+	Timestamp   time.Time      `json:"timestamp"`    // 事件时间
+	Duration    int            `json:"duration"`     // 阶段耗时（毫秒）
+	BatchNumber int            `json:"batch_number"` // 批次号（如果适用）
+	HostCount   int            `json:"host_count"`   // 主机数量
+	SuccessCount int           `json:"success_count"` // 成功数量
+	FailCount   int            `json:"fail_count"`   // 失败数量
+	Details     map[string]interface{} `json:"details"` // 额外详情
+}
+
+// TaskExecutionTimeline 任务执行时间线
+type TaskExecutionTimeline []TaskExecutionEvent
+
+// Scan 实现 sql.Scanner 接口
+func (t *TaskExecutionTimeline) Scan(value interface{}) error {
+	if value == nil {
+		*t = make(TaskExecutionTimeline, 0)
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return nil
+	}
+	return json.Unmarshal(bytes, t)
+}
+
+// Value 实现 driver.Valuer 接口
+func (t TaskExecutionTimeline) Value() (driver.Value, error) {
+	if t == nil {
+		return json.Marshal([]TaskExecutionEvent{})
+	}
+	return json.Marshal(t)
+}
+
+// HostExecutionStatus 主机执行状态
+type HostExecutionStatus struct {
+	HostName     string    `json:"host_name"`      // 主机名
+	Status       string    `json:"status"`         // 状态（ok/failed/skipped/unreachable）
+	StartTime    time.Time `json:"start_time"`     // 开始时间
+	EndTime      time.Time `json:"end_time"`       // 结束时间
+	Duration     int       `json:"duration"`       // 执行时长（毫秒）
+	TasksOk      int       `json:"tasks_ok"`       // 成功任务数
+	TasksFailed  int       `json:"tasks_failed"`   // 失败任务数
+	TasksSkipped int       `json:"tasks_skipped"`  // 跳过任务数
+	Changed      bool      `json:"changed"`        // 是否有变更
+	ErrorMessage string    `json:"error_message"`  // 错误信息
+}
+
+// TaskExecutionVisualization 任务执行可视化数据
+type TaskExecutionVisualization struct {
+	TaskID          uint                  `json:"task_id"`
+	TaskName        string                `json:"task_name"`
+	Status          string                `json:"status"`
+	Timeline        TaskExecutionTimeline `json:"timeline"`         // 执行时间线
+	HostStatuses    []HostExecutionStatus `json:"host_statuses"`    // 主机状态列表
+	TotalDuration   int                   `json:"total_duration"`   // 总耗时（毫秒）
+	PhaseDistribution map[string]int      `json:"phase_distribution"` // 各阶段耗时分布
 }
 

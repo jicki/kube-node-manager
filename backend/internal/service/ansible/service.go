@@ -14,16 +14,19 @@ import (
 
 // Service Ansible 服务
 type Service struct {
-	db            *gorm.DB
-	logger        *logger.Logger
-	templateSvc   *TemplateService
-	inventorySvc  *InventoryService
-	sshKeySvc     *SSHKeyService
-	scheduleSvc   *ScheduleService
-	favoriteSvc   *FavoriteService
-	preflightSvc  *PreflightService
-	estimationSvc *EstimationService
-	executor      *TaskExecutor
+	db              *gorm.DB
+	logger          *logger.Logger
+	templateSvc     *TemplateService
+	inventorySvc    *InventoryService
+	sshKeySvc       *SSHKeyService
+	scheduleSvc     *ScheduleService
+	favoriteSvc     *FavoriteService
+	preflightSvc    *PreflightService
+	estimationSvc   *EstimationService
+	queueSvc        *QueueService
+	tagSvc          *TagService
+	visualizationSvc *VisualizationService
+	executor        *TaskExecutor
 }
 
 // NewService 创建 Ansible 服务实例
@@ -42,18 +45,24 @@ func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, wsHub i
 	favoriteSvc := NewFavoriteService(db, logger)
 	preflightSvc := NewPreflightService(db, logger, inventorySvc, sshKeySvc)
 	estimationSvc := NewEstimationService(db, logger)
+	queueSvc := NewQueueService(db, logger)
+	tagSvc := NewTagService(db, logger)
+	visualizationSvc := NewVisualizationService(db, logger)
 	executor := NewTaskExecutor(db, logger, inventorySvc, sshKeySvc, wsHub)
 
 	service := &Service{
-		db:            db,
-		logger:        logger,
-		templateSvc:   templateSvc,
-		inventorySvc:  inventorySvc,
-		sshKeySvc:     sshKeySvc,
-		favoriteSvc:   favoriteSvc,
-		preflightSvc:  preflightSvc,
-		estimationSvc: estimationSvc,
-		executor:      executor,
+		db:              db,
+		logger:          logger,
+		templateSvc:     templateSvc,
+		inventorySvc:    inventorySvc,
+		sshKeySvc:       sshKeySvc,
+		favoriteSvc:     favoriteSvc,
+		preflightSvc:    preflightSvc,
+		estimationSvc:   estimationSvc,
+		queueSvc:        queueSvc,
+		tagSvc:          tagSvc,
+		visualizationSvc: visualizationSvc,
+		executor:        executor,
 	}
 
 	// 创建定时任务调度服务（需要依赖 service）
@@ -101,6 +110,21 @@ func (s *Service) GetPreflightService() *PreflightService {
 // GetEstimationService 获取任务预估服务
 func (s *Service) GetEstimationService() *EstimationService {
 	return s.estimationSvc
+}
+
+// GetQueueService 获取任务队列服务
+func (s *Service) GetQueueService() *QueueService {
+	return s.queueSvc
+}
+
+// GetTagService 获取标签服务
+func (s *Service) GetTagService() *TagService {
+	return s.tagSvc
+}
+
+// GetVisualizationService 获取可视化服务
+func (s *Service) GetVisualizationService() *VisualizationService {
+	return s.visualizationSvc
 }
 
 // CreateTask 创建并执行任务
@@ -155,6 +179,20 @@ func (s *Service) CreateTask(req model.TaskCreateRequest, userID uint) (*model.A
 		return nil, fmt.Errorf("invalid playbook: %w", err)
 	}
 
+	// 设置任务优先级（默认为 medium）
+	priority := req.Priority
+	if priority == "" {
+		priority = string(model.TaskPriorityMedium)
+	}
+	// 验证优先级有效性
+	if priority != string(model.TaskPriorityHigh) && 
+	   priority != string(model.TaskPriorityMedium) && 
+	   priority != string(model.TaskPriorityLow) {
+		priority = string(model.TaskPriorityMedium)
+	}
+	
+	now := time.Now()
+	
 	// 创建任务
 	task := &model.AnsibleTask{
 		Name:            req.Name,
@@ -168,6 +206,8 @@ func (s *Service) CreateTask(req model.TaskCreateRequest, userID uint) (*model.A
 		DryRun:          req.DryRun,
 		BatchConfig:     req.BatchConfig,
 		TimeoutSeconds:  req.TimeoutSeconds,
+		Priority:        priority,
+		QueuedAt:        &now,
 	}
 	
 	// 如果启用了分批执行，初始化批次状态

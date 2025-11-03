@@ -133,10 +133,23 @@ func (e *TaskExecutor) ExecuteTask(taskID uint) error {
 
 // executeTaskAsync 异步执行任务
 func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.AnsibleTask, runningTask *RunningTask) {
+	// 添加执行开始事件
+	task.AddExecutionEvent(model.PhaseExecuting, "任务开始执行", map[string]interface{}{
+		"dry_run": task.DryRun,
+		"batch_enabled": task.IsBatchEnabled(),
+	})
+	
 	// 标记任务开始
 	task.MarkStarted()
 	if err := e.db.Save(task).Error; err != nil {
 		e.logger.Errorf("Failed to mark task as started: %v", err)
+	}
+	
+	// 更新任务等待时长
+	queueSvc := NewQueueService(e.db, e.logger)
+	if err := queueSvc.UpdateWaitDuration(task.ID); err != nil {
+		e.logger.Errorf("Failed to update wait duration for task %d: %v", task.ID, err)
+		// 等待时长更新失败不影响任务执行，继续执行
 	}
 
 	// 创建临时文件
@@ -239,6 +252,28 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 
 	// 再解析统计信息（从 task.FullLog 中）
 	e.parseTaskStats(task)
+
+	// 添加完成事件
+	var phase model.ExecutionPhase
+	var message string
+	if isTimedOut {
+		phase = model.PhaseTimeout
+		message = "任务执行超时"
+	} else if success {
+		phase = model.PhaseCompleted
+		message = "任务执行成功"
+	} else {
+		phase = model.PhaseFailed
+		message = "任务执行失败"
+	}
+	
+	task.AddExecutionEvent(phase, message, map[string]interface{}{
+		"hosts_total":   task.HostsTotal,
+		"hosts_ok":      task.HostsOk,
+		"hosts_failed":  task.HostsFailed,
+		"hosts_skipped": task.HostsSkipped,
+		"error_msg":     errorMsg,
+	})
 
 	// 标记是否超时
 	task.IsTimedOut = isTimedOut

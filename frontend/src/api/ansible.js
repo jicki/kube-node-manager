@@ -587,3 +587,37 @@ export function estimateByTemplateAndInventory(templateId, inventoryId) {
   })
 }
 
+// 任务队列统计 API
+
+/**
+ * 获取任务队列统计信息
+ */
+export function getQueueStats() {
+  return request({
+    url: '/api/v1/ansible/queue/stats',
+    method: 'get'
+  })
+}
+
+// 任务执行可视化 API
+
+/**
+ * 获取任务执行可视化数据
+ */
+export function getTaskVisualization(id) {
+  return request({
+    url: `/api/v1/ansible/tasks/${id}/visualization`,
+    method: 'get'
+  })
+}
+
+/**
+ * 获取任务时间线摘要
+ */
+export function getTaskTimelineSummary(id) {
+  return request({
+    url: `/api/v1/ansible/tasks/${id}/timeline-summary`,
+    method: 'get'
+  })
+}
+

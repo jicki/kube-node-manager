@@ -222,6 +222,19 @@
             </div>
           </template>
         </el-table-column>
+        <el-table-column label="优先级" width="100">
+          <template #default="{ row }">
+            <el-tag 
+              :type="row.priority === 'high' ? 'danger' : row.priority === 'medium' ? 'warning' : 'info'"
+              size="small"
+            >
+              <el-icon v-if="row.priority === 'high'"><Top /></el-icon>
+              <el-icon v-else-if="row.priority === 'low'"><Bottom /></el-icon>
+              <el-icon v-else><Minus /></el-icon>
+              {{ row.priority === 'high' ? '高' : row.priority === 'medium' ? '中' : '低' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="进度" width="200">
           <template #default="{ row }">
             <div v-if="row.status === 'running'">
@@ -408,6 +421,36 @@
               :value="cluster.id" 
             />
           </el-select>
+        </el-form-item>
+        
+        <el-form-item label="任务优先级">
+          <el-select v-model="taskForm.priority" placeholder="选择任务优先级" style="width: 100%">
+            <el-option label="高优先级" value="high">
+              <span style="float: left">
+                <el-icon color="#F56C6C"><Top /></el-icon>
+                高优先级
+              </span>
+              <span style="float: right; color: #8492a6; font-size: 13px">优先执行</span>
+            </el-option>
+            <el-option label="中优先级" value="medium">
+              <span style="float: left">
+                <el-icon color="#E6A23C"><Minus /></el-icon>
+                中优先级
+              </span>
+              <span style="float: right; color: #8492a6; font-size: 13px">默认</span>
+            </el-option>
+            <el-option label="低优先级" value="low">
+              <span style="float: left">
+                <el-icon color="#909399"><Bottom /></el-icon>
+                低优先级
+              </span>
+              <span style="float: right; color: #8492a6; font-size: 13px">空闲时执行</span>
+            </el-option>
+          </el-select>
+          <div style="margin-top: 8px; color: #909399; font-size: 12px">
+            <el-icon><InfoFilled /></el-icon>
+            高优先级任务会优先执行，低优先级任务会在系统空闲时执行
+          </div>
         </el-form-item>
         
         <!-- 必需变量输入 -->
@@ -722,7 +765,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine, Setting, Key, Warning, QuestionFilled } from '@element-plus/icons-vue'
+import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine, Setting, Key, Warning, QuestionFilled, Top, Bottom, Minus } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
 import clusterAPI from '@/api/cluster'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -766,7 +809,8 @@ const taskForm = reactive({
     failure_threshold: 0,
     max_batch_fail_rate: 50
   },
-  timeout_seconds: 1800  // 默认 30 分钟
+  timeout_seconds: 1800,  // 默认 30 分钟
+  priority: 'medium'       // 任务优先级（high/medium/low）
 })
 
 // 分批执行相关状态

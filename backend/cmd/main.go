@@ -401,6 +401,20 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.GET("/estimate/template", handlers.AnsibleEstimation.EstimateByTemplate)
 		ansible.GET("/estimate/inventory", handlers.AnsibleEstimation.EstimateByInventory)
 		ansible.GET("/estimate/combined", handlers.AnsibleEstimation.EstimateByTemplateAndInventory)
+		
+		// 任务队列统计
+		ansible.GET("/queue/stats", handlers.AnsibleQueue.GetQueueStats)
+		
+		// 标签管理
+		ansible.POST("/tags", handlers.AnsibleTag.CreateTag)
+		ansible.GET("/tags", handlers.AnsibleTag.ListTags)
+		ansible.PUT("/tags/:id", handlers.AnsibleTag.UpdateTag)
+		ansible.DELETE("/tags/:id", handlers.AnsibleTag.DeleteTag)
+		ansible.POST("/tags/batch", handlers.AnsibleTag.BatchTagOperation)
+		
+		// 任务执行可视化
+		ansible.GET("/tasks/:id/visualization", handlers.AnsibleVisualization.GetTaskVisualization)
+		ansible.GET("/tasks/:id/timeline-summary", handlers.AnsibleVisualization.GetTaskTimelineSummary)
 	}
 
 	// Ansible WebSocket (任务日志流)
