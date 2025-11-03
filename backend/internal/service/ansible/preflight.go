@@ -151,11 +151,11 @@ func (s *PreflightService) checkSSHConnectivity(task *model.AnsibleTask) model.P
 	}
 
 	// 简单检查：验证 SSH 密钥类型
-	if sshKey.AuthType == "password" {
+	if sshKey.Type == model.SSHKeyTypePassword {
 		check.Status = "pass"
 		check.Message = "SSH 密码认证已配置"
-		check.Details = fmt.Sprintf("SSH 用户: %s", sshKey.SSHUser)
-	} else if sshKey.AuthType == "key" {
+		check.Details = fmt.Sprintf("SSH 用户: %s", sshKey.Username)
+	} else if sshKey.Type == model.SSHKeyTypePrivateKey {
 		if sshKey.PrivateKey == "" {
 			check.Status = "fail"
 			check.Message = "SSH 私钥为空"
@@ -164,12 +164,12 @@ func (s *PreflightService) checkSSHConnectivity(task *model.AnsibleTask) model.P
 			check.Status = "pass"
 			check.Message = "SSH 密钥认证已配置"
 			check.Details = fmt.Sprintf("SSH 用户: %s, 密钥长度: %d bytes", 
-				sshKey.SSHUser, len(sshKey.PrivateKey))
+				sshKey.Username, len(sshKey.PrivateKey))
 		}
 	} else {
 		check.Status = "warning"
 		check.Message = "未知的 SSH 认证类型"
-		check.Details = fmt.Sprintf("认证类型: %s", sshKey.AuthType)
+		check.Details = fmt.Sprintf("认证类型: %s", sshKey.Type)
 	}
 
 	check.Duration = int(time.Since(startTime).Milliseconds())

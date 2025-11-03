@@ -32,7 +32,30 @@ type TaskExecutor struct {
 	inventorySvc    *InventoryService
 	sshKeySvc       *SSHKeyService
 	workDir         string          // 工作目录
-	sanitizer       *logger.Sanitizer // 日志脱敏器
+	sanitizer       *Sanitizer // 日志脱敏器
+}
+
+// Sanitizer 日志脱敏器
+type Sanitizer struct {
+	patterns []*regexp.Regexp
+}
+
+// NewSanitizer 创建脱敏器实例
+func NewSanitizer() *Sanitizer {
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)(password|passwd|pwd|secret|token|apikey|api_key|auth_token|bearer)\s*[:=]\s*['"]?([^\s'"]+)['"]?`),
+		regexp.MustCompile(`(?s)-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----.*?-----END (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----`),
+	}
+	return &Sanitizer{patterns: patterns}
+}
+
+// Sanitize 对输入字符串进行脱敏处理
+func (s *Sanitizer) Sanitize(input string) string {
+	output := input
+	for _, pattern := range s.patterns {
+		output = pattern.ReplaceAllString(output, "***REDACTED***")
+	}
+	return output
 }
 
 // RunningTask 正在执行的任务
@@ -66,7 +89,7 @@ func NewTaskExecutor(db *gorm.DB, logger *logger.Logger, inventorySvc *Inventory
 		inventorySvc:  inventorySvc,
 		sshKeySvc:     sshKeySvc,
 		workDir:       workDir,
-		sanitizer:     logger.NewSanitizer(), // 初始化日志脱敏器
+		sanitizer:     NewSanitizer(), // 初始化日志脱敏器
 	}
 }
 
