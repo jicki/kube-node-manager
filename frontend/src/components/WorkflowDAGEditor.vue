@@ -21,6 +21,19 @@
     </div>
 
     <div class="canvas" ref="canvasRef" @click="handleCanvasClick">
+      <!-- 临时调试面板 -->
+      <div style="position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border: 2px solid red; z-index: 100; font-size: 12px; max-width: 400px;">
+        <div><strong>调试信息：</strong></div>
+        <div>画布尺寸: {{ canvasRef?.offsetWidth }}x{{ canvasRef?.offsetHeight }}</div>
+        <div>节点总数: {{ dag.nodes.length }}</div>
+        <div>边总数: {{ dag.edges.length }}</div>
+        <div v-for="(node, idx) in dag.nodes" :key="node.id" style="margin-top: 5px; border-top: 1px solid #eee; padding-top: 5px;">
+          <div>节点{{ idx }}: {{ node.label }} ({{ node.type }})</div>
+          <div>位置: [{{ node.position.x }}, {{ node.position.y }}]</div>
+          <div>ID: {{ node.id }}</div>
+        </div>
+      </div>
+      
       <svg class="canvas-svg" width="100%" height="100%">
         <!-- 绘制边 -->
         <g v-for="edge in dag.edges" :key="edge.id">
@@ -279,11 +292,17 @@ watch(
 
 // 添加节点
 const addNode = (type) => {
+  console.log('=== addNode called, type:', type)
+  console.log('Current nodes count:', dag.nodes.length)
+  
   const id = `node-${Date.now()}`
   
   // 查找 start 和 end 节点
   const startNode = dag.nodes.find(n => n.type === 'start')
   const endNode = dag.nodes.find(n => n.type === 'end')
+  
+  console.log('startNode:', startNode)
+  console.log('endNode:', endNode)
   
   // 计算新节点的位置（在 start 和 end 之间）
   const taskNodes = dag.nodes.filter(n => n.type === 'task')
