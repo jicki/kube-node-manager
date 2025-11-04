@@ -262,19 +262,22 @@ func (s *VisualizationService) calculatePhaseDistribution(timeline model.TaskExe
 	distribution := make(map[string]int)
 	
 	for i, event := range timeline {
-		// 统计有耗时的事件
+		phase := string(event.Phase)
+		// 统计所有事件，即使 Duration 为 0
+		// Duration 为 0 的事件（如瞬时完成）也应该被统计，至少显示 1ms
 		if event.Duration > 0 {
-			phase := string(event.Phase)
 			distribution[phase] += event.Duration
 			s.logger.Debugf("Event %d: phase=%s, duration=%dms", i, phase, event.Duration)
 		} else {
-			s.logger.Debugf("Event %d: phase=%s, duration=0 (skipped)", i, event.Phase)
+			// 为 Duration 为 0 的事件分配 1ms，确保在饼图中可见
+			distribution[phase] += 1
+			s.logger.Debugf("Event %d: phase=%s, duration=0 (assigned 1ms for visualization)", i, event.Phase)
 		}
 	}
 	
 	// 如果没有任何耗时数据，返回 nil 而不是空 map
 	if len(distribution) == 0 {
-		s.logger.Warningf("No phase distribution data for timeline with %d events (all durations are 0)", len(timeline))
+		s.logger.Warningf("No phase distribution data for timeline with %d events", len(timeline))
 		return nil
 	}
 	
@@ -292,8 +295,9 @@ func (s *VisualizationService) parseAndEnrichTimeline(timeline *model.TaskExecut
 	s.logger.Infof("Parsing TASK phases from log for task %d, log size: %d bytes", task.ID, len(task.FullLog))
 	
 	// 查找所有 TASK 行
-	// 格式: TASK [task name] ******************
-	taskRegex := regexp.MustCompile(`^TASK\s+\[([^\]]+)\]`)
+	// 格式: [stdout] TASK [task name] ******************
+	// 或者: TASK [task name] ******************
+	taskRegex := regexp.MustCompile(`(?:\[stdout\]\s+)?TASK\s+\[([^\]]+)\]`)
 	
 	lines := strings.Split(task.FullLog, "\n")
 	s.logger.Debugf("Total log lines: %d", len(lines))
