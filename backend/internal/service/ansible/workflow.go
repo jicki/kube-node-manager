@@ -235,3 +235,71 @@ func (s *WorkflowService) ListWorkflowExecutions(userID uint, req *model.Workflo
 	return executions, total, nil
 }
 
+// GetCompletedWorkflowStatus 获取已完成工作流的节点状态
+func (s *WorkflowService) GetCompletedWorkflowStatus(executionID uint, userID uint) (map[string]string, error) {
+	// 验证执行记录存在且有权访问
+	var execution model.AnsibleWorkflowExecution
+	if err := s.db.Where("id = ? AND user_id = ?", executionID, userID).
+		Preload("Workflow").
+		First(&execution).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("执行记录不存在或无权访问")
+		}
+		return nil, fmt.Errorf("查询执行记录失败: %w", err)
+	}
+
+	// 如果还在运行中，返回空（应该从运行时获取）
+	if execution.Status == "running" || execution.Status == "pending" {
+		return nil, nil
+	}
+
+	// 获取所有关联的任务
+	var tasks []model.AnsibleTask
+	if err := s.db.Where("workflow_execution_id = ?", executionID).
+		Find(&tasks).Error; err != nil {
+		s.logger.Errorf("Failed to get workflow tasks: %v", err)
+		return nil, fmt.Errorf("查询工作流任务失败: %w", err)
+	}
+
+	// 构建节点状态映射
+	nodeStatus := make(map[string]string)
+	for _, task := range tasks {
+		// 将任务状态映射到节点状态
+		switch task.Status {
+		case model.AnsibleTaskStatusSuccess:
+			nodeStatus[task.NodeID] = "success"
+		case model.AnsibleTaskStatusFailed:
+			nodeStatus[task.NodeID] = "failed"
+		case model.AnsibleTaskStatusRunning:
+			nodeStatus[task.NodeID] = "running"
+		case model.AnsibleTaskStatusPending:
+			nodeStatus[task.NodeID] = "pending"
+		default:
+			nodeStatus[task.NodeID] = "pending"
+		}
+	}
+
+	// 如果有 DAG 信息，补充开始和结束节点的状态
+	if execution.Workflow != nil && execution.Workflow.DAG != nil {
+		for _, node := range execution.Workflow.DAG.Nodes {
+			if node.Type == "start" || node.Type == "end" {
+				// 如果工作流已完成，开始和结束节点都标记为成功
+				if execution.Status == "success" {
+					nodeStatus[node.ID] = "success"
+				} else if execution.Status == "failed" {
+					// 开始节点成功，结束节点失败
+					if node.Type == "start" {
+						nodeStatus[node.ID] = "success"
+					} else {
+						nodeStatus[node.ID] = "failed"
+					}
+				} else if execution.Status == "cancelled" {
+					nodeStatus[node.ID] = "cancelled"
+				}
+			}
+		}
+	}
+
+	return nodeStatus, nil
+}
+

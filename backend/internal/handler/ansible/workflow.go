@@ -361,10 +361,22 @@ func (h *WorkflowHandler) GetWorkflowExecutionStatus(c *gin.Context) {
 		return
 	}
 
-	status := h.workflowExecutor.GetWorkflowExecutionStatus(uint(id))
-	if status == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "执行记录不存在或已完成"})
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
 		return
+	}
+
+	// 先尝试从运行中的工作流获取状态
+	status := h.workflowExecutor.GetWorkflowExecutionStatus(uint(id))
+	
+	// 如果不在运行中，则从数据库中获取已完成的状态
+	if status == nil {
+		status, err = h.workflowService.GetCompletedWorkflowStatus(uint(id), userID.(uint))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

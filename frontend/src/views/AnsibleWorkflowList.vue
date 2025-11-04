@@ -34,12 +34,12 @@
           <el-tag size="small" type="info">{{ row.dag?.edges?.length || 0 }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="created_at" label="创建时间" width="160" show-overflow-tooltip>
+      <el-table-column prop="created_at" label="创建时间" min-width="180" show-overflow-tooltip>
         <template #default="{ row }">
           {{ formatTime(row.created_at) }}
         </template>
       </el-table-column>
-      <el-table-column prop="updated_at" label="更新时间" width="160" show-overflow-tooltip>
+      <el-table-column prop="updated_at" label="更新时间" min-width="180" show-overflow-tooltip>
         <template #default="{ row }">
           {{ formatTime(row.updated_at) }}
         </template>

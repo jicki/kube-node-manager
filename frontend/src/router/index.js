@@ -150,6 +150,12 @@ const router = createRouter({
           meta: { title: '工作流管理', icon: 'Share', requiresAuth: true }
         },
         {
+          path: 'ansible/workflow-executions',
+          name: 'AnsibleWorkflowExecutionList',
+          component: () => import('@/views/AnsibleWorkflowExecutionList.vue'),
+          meta: { title: '工作流执行监控', requiresAuth: true }
+        },
+        {
           path: 'ansible/workflows/create',
           name: 'AnsibleWorkflowCreate',
           component: () => import('@/views/AnsibleWorkflowEditor.vue'),
