@@ -189,11 +189,22 @@ const loadExecution = async () => {
   loading.value = true
   try {
     const executionId = parseInt(route.params.id)
+    console.log('Loading execution:', executionId)
     const response = await getWorkflowExecution(executionId)
-    execution.value = response.data
+    console.log('Execution response:', response)
+    
+    // 从响应中提取数据
+    execution.value = response.data.data || response.data
+    console.log('Execution data:', execution.value)
+    console.log('Workflow:', execution.value?.workflow)
+    console.log('DAG:', execution.value?.workflow?.dag)
+    console.log('Tasks:', execution.value?.tasks)
     
     // 如果正在运行，加载实时状态
     if (execution.value.status === 'running') {
+      await refreshStatus()
+    } else {
+      // 已完成的执行，也尝试加载最终状态
       await refreshStatus()
     }
   } catch (error) {
@@ -209,10 +220,12 @@ const refreshStatus = async () => {
   try {
     const executionId = parseInt(route.params.id)
     const response = await getWorkflowExecutionStatus(executionId)
-    nodeStatus.value = response.data.node_status || {}
+    console.log('Status response:', response)
+    nodeStatus.value = response.data?.node_status || response.data?.data?.node_status || {}
+    console.log('Node status:', nodeStatus.value)
   } catch (error) {
-    // 忽略错误（可能是执行已完成）
-    console.log('Status refresh skipped:', error.response?.status)
+    // 已完成的工作流可能返回错误，这是正常的
+    console.log('Status refresh skipped:', error.response?.status, error.response?.data)
   }
 }
 

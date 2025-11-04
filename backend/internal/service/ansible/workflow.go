@@ -175,9 +175,12 @@ func (s *WorkflowService) ListWorkflows(userID uint, req *model.WorkflowListRequ
 func (s *WorkflowService) GetWorkflowExecution(id uint, userID uint) (*model.AnsibleWorkflowExecution, error) {
 	var execution model.AnsibleWorkflowExecution
 	
+	// 加载执行记录，包括工作流和任务
 	if err := s.db.Where("id = ? AND user_id = ?", id, userID).
-		Preload("Workflow").
-		Preload("Tasks").
+		Preload("Workflow"). // 预加载工作流（包括 DAG）
+		Preload("Tasks", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at ASC") // 按创建时间排序任务
+		}).
 		First(&execution).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("工作流执行不存在或无权访问")
@@ -186,11 +189,19 @@ func (s *WorkflowService) GetWorkflowExecution(id uint, userID uint) (*model.Ans
 		return nil, fmt.Errorf("获取工作流执行失败: %w", err)
 	}
 
+	// 确保 Workflow.DAG 被正确加载
+	if execution.Workflow != nil {
+		s.logger.Infof("Loaded workflow execution %d with workflow %d (DAG nodes: %d)", 
+			execution.ID, 
+			execution.Workflow.ID, 
+			len(execution.Workflow.DAG.Nodes))
+	}
+
 	return &execution, nil
 }
 
 // ListWorkflowExecutions 查询工作流执行列表
-func (s *WorkflowService) ListWorkflowExecutions(userID uint, req *model.WorkflowExecutionListRequest) ([]model.AnsibleWorkflowExecution, int64, error) {
+func (s *WorkflowService) ListWorkflowExecutions(userID uint, req *model.WorkflowExecutionListRequest) ([]map[string]interface{}, int64, error) {
 	// 设置默认分页参数
 	page := req.Page
 	if page < 1 {
@@ -232,7 +243,54 @@ func (s *WorkflowService) ListWorkflowExecutions(userID uint, req *model.Workflo
 		return nil, 0, fmt.Errorf("查询执行记录列表失败: %w", err)
 	}
 
-	return executions, total, nil
+	// 为每个执行计算任务统计
+	result := make([]map[string]interface{}, 0, len(executions))
+	for _, execution := range executions {
+		// 查询该执行的所有任务
+		var tasks []model.AnsibleTask
+		s.db.Where("workflow_execution_id = ?", execution.ID).Find(&tasks)
+
+		// 统计任务状态
+		totalTasks := len(tasks)
+		completedTasks := 0
+		failedTasks := 0
+		for _, task := range tasks {
+			if task.Status == model.AnsibleTaskStatusSuccess {
+				completedTasks++
+			} else if task.Status == model.AnsibleTaskStatusFailed {
+				failedTasks++
+			}
+		}
+
+		// 计算耗时（秒）
+		var duration int64
+		if execution.FinishedAt != nil {
+			duration = int64(execution.FinishedAt.Sub(execution.StartedAt).Seconds())
+		} else if execution.Status == "running" {
+			duration = int64(time.Since(execution.StartedAt).Seconds())
+		}
+
+		// 构建返回数据
+		execData := map[string]interface{}{
+			"id":              execution.ID,
+			"workflow_id":     execution.WorkflowID,
+			"status":          execution.Status,
+			"started_at":      execution.StartedAt,
+			"finished_at":     execution.FinishedAt,
+			"error_message":   execution.ErrorMessage,
+			"user_id":         execution.UserID,
+			"created_at":      execution.CreatedAt,
+			"updated_at":      execution.UpdatedAt,
+			"workflow":        execution.Workflow,
+			"total_tasks":     totalTasks,
+			"completed_tasks": completedTasks,
+			"failed_tasks":    failedTasks,
+			"duration":        duration,
+		}
+		result = append(result, execData)
+	}
+
+	return result, total, nil
 }
 
 // GetCompletedWorkflowStatus 获取已完成工作流的节点状态
