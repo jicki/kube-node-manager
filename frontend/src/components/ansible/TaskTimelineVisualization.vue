@@ -187,7 +187,7 @@
                 style="margin-bottom: 16px"
               >
                 <div class="phase-stat-card">
-                  <div class="phase-stat-label">{{ getPhaseLabel(phase) }}</div>
+                  <div class="phase-stat-label">{{ getDetailedPhaseLabel(phase) }}</div>
                   <div class="phase-stat-value">{{ formatDuration(duration) }}</div>
                   <div class="phase-stat-percent">
                     {{ calculatePercentage(duration) }}%
@@ -372,7 +372,7 @@ const renderChart = () => {
   // 准备数据并排序（按耗时从大到小）
   const data = Object.entries(visualization.value.phase_distribution || {})
     .map(([name, value]) => ({
-      name: getPhaseLabel(name),
+      name: getDetailedPhaseLabel(name), // 使用详细标签，包含 TASK 名称
       value: value,
       rawPhase: name
     }))
@@ -511,6 +511,41 @@ const getPhaseLabel = (phase) => {
   return labels[phase] || phase
 }
 
+// 获取详细的阶段标签（包含 TASK 名称）
+const getDetailedPhaseLabel = (phase) => {
+  const labels = {
+    'queued': '⏰ 入队等待',
+    'preflight_check': '🔍 前置检查',
+    'executing': '⚙️ 执行中',
+    'batch_paused': '⏸️ 批次暂停',
+    'completed': '✅ 已完成',
+    'failed': '❌ 执行失败',
+    'cancelled': '🚫 已取消',
+    'timeout': '⏱️ 执行超时'
+  }
+  
+  // 处理动态 TASK 阶段 (task_1, task_2, etc.)
+  if (phase && phase.startsWith('task_')) {
+    // 从时间线中查找对应的任务名称
+    if (visualization.value?.timeline) {
+      const event = visualization.value.timeline.find(e => e.phase === phase)
+      if (event && event.details && event.details.task_name) {
+        return `📋 ${event.details.task_name}`
+      }
+      // 如果有 message 字段，从中提取任务名称
+      if (event && event.message) {
+        const match = event.message.match(/执行任务:\s*(.+)/)
+        if (match && match[1]) {
+          return `📋 ${match[1]}`
+        }
+      }
+    }
+    return '📋 任务执行'
+  }
+  
+  return labels[phase] || phase
+}
+
 const getPhaseType = (phase) => {
   const types = {
     'queued': 'info',
@@ -634,6 +669,20 @@ onMounted(() => {
 
 watch(() => props.taskId, () => {
   loadVisualization()
+})
+
+// 监听 phase distribution 变化，自动渲染图表
+watch(() => hasPhaseDistribution.value, (newValue) => {
+  console.log('hasPhaseDistribution changed:', newValue)
+  if (newValue) {
+    // 确保 DOM 已更新
+    nextTick(() => {
+      setTimeout(() => {
+        console.log('Auto-rendering chart after hasPhaseDistribution became true')
+        renderChart()
+      }, 150)
+    })
+  }
 })
 
 // 清理
