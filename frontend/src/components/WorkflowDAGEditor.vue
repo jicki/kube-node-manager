@@ -21,16 +21,7 @@
     </div>
 
     <div class="canvas" ref="canvasRef" @click="handleCanvasClick">
-      <!-- 调试信息 -->
-      <div style="position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border: 1px solid #ccc; z-index: 1000; font-size: 12px;">
-        <div>节点数量: {{ dag.nodes.length }}</div>
-        <div>边数量: {{ dag.edges.length }}</div>
-        <div v-for="(node, index) in dag.nodes" :key="node.id" style="margin-top: 5px;">
-          节点{{index}}: {{ node.label }} ({{ node.type }}) at [{{ node.position.x }}, {{ node.position.y }}]
-        </div>
-      </div>
-      
-      <svg width="100%" height="100%">
+      <svg class="canvas-svg" width="100%" height="100%">
         <!-- 绘制边 -->
         <g v-for="edge in dag.edges" :key="edge.id">
           <path
@@ -174,7 +165,7 @@ const initializeDAG = () => {
   const initialNodes = props.modelValue?.nodes || []
   const initialEdges = props.modelValue?.edges || []
   
-  // 如果没有节点，添加开始和结束节点
+  // 如果没有节点，添加开始和结束节点，并创建它们之间的连接
   if (initialNodes.length === 0) {
     return {
       nodes: [
@@ -182,16 +173,22 @@ const initializeDAG = () => {
           id: 'start',
           type: 'start',
           label: '开始',
-          position: { x: 100, y: 50 }
+          position: { x: 250, y: 50 }
         },
         {
           id: 'end',
           type: 'end',
           label: '结束',
-          position: { x: 100, y: 400 }
+          position: { x: 250, y: 450 }
         }
       ],
-      edges: []
+      edges: [
+        {
+          id: 'edge-start-end',
+          source: 'start',
+          target: 'end'
+        }
+      ]
     }
   }
   
@@ -283,18 +280,82 @@ watch(
 // 添加节点
 const addNode = (type) => {
   const id = `node-${Date.now()}`
+  
+  // 查找 start 和 end 节点
+  const startNode = dag.nodes.find(n => n.type === 'start')
+  const endNode = dag.nodes.find(n => n.type === 'end')
+  
+  // 计算新节点的位置（在 start 和 end 之间）
+  const taskNodes = dag.nodes.filter(n => n.type === 'task')
+  const yOffset = 100 + (taskNodes.length * 120)
+  
   const node = {
     id,
     type,
-    label: type === 'start' ? '开始' : type === 'end' ? '结束' : '新任务',
-    position: { x: 100 + dag.nodes.length * 50, y: 100 + dag.nodes.length * 30 },
+    label: type === 'start' ? '开始' : type === 'end' ? '结束' : `任务 ${taskNodes.length + 1}`,
+    position: { 
+      x: 250, 
+      y: yOffset
+    },
     task_config: type === 'task' ? {
       name: '',
       inventory_id: null,
       playbook_content: ''
     } : undefined
   }
+  
+  // 添加节点
   dag.nodes.push(node)
+  
+  // 如果是任务节点，自动创建连接
+  if (type === 'task' && startNode && endNode) {
+    // 移除 start -> end 的直接连接（如果存在）
+    const directEdgeIndex = dag.edges.findIndex(
+      e => e.source === 'start' && e.target === 'end'
+    )
+    if (directEdgeIndex !== -1) {
+      dag.edges.splice(directEdgeIndex, 1)
+    }
+    
+    // 如果是第一个任务节点，创建 start -> task -> end
+    if (taskNodes.length === 0) {
+      dag.edges.push({
+        id: `edge-start-${id}`,
+        source: 'start',
+        target: id
+      })
+      dag.edges.push({
+        id: `edge-${id}-end`,
+        source: id,
+        target: 'end'
+      })
+    } else {
+      // 如果已有任务节点，插入到最后一个任务节点和end之间
+      const lastTaskNode = taskNodes[taskNodes.length - 1]
+      
+      // 移除最后一个任务到end的边
+      const lastToEndIndex = dag.edges.findIndex(
+        e => e.source === lastTaskNode.id && e.target === 'end'
+      )
+      if (lastToEndIndex !== -1) {
+        dag.edges.splice(lastToEndIndex, 1)
+      }
+      
+      // 创建新的连接：lastTask -> newTask -> end
+      dag.edges.push({
+        id: `edge-${lastTaskNode.id}-${id}`,
+        source: lastTaskNode.id,
+        target: id
+      })
+      dag.edges.push({
+        id: `edge-${id}-end`,
+        source: id,
+        target: 'end'
+      })
+    }
+    
+    ElMessage.success('任务节点已添加，请双击节点配置任务详情')
+  }
 }
 
 // 切换连线模式
@@ -525,15 +586,8 @@ const saveDAG = () => {
 
 // 初始化
 onMounted(() => {
-  console.log('=== WorkflowDAGEditor mounted ===')
-  console.log('props.modelValue:', props.modelValue)
-  console.log('dag.nodes count:', dag.nodes.length)
-  console.log('dag.nodes:', JSON.stringify(dag.nodes, null, 2))
-  console.log('dag.edges:', JSON.stringify(dag.edges, null, 2))
-  
-  // 强制触发一次更新
+  // 强制触发一次更新，确保父组件接收初始状态
   if (dag.nodes.length > 0) {
-    console.log('Emitting initial update to parent')
     emit('update:modelValue', { 
       nodes: [...dag.nodes], 
       edges: [...dag.edges] 
@@ -575,21 +629,22 @@ onMounted(() => {
   background-size: 20px 20px;
 }
 
-.dag-editor .canvas svg {
+.dag-editor .canvas .canvas-svg {
   position: absolute;
   top: 0;
   left: 0;
   pointer-events: none;
+  z-index: 1;
 }
 
-.dag-editor .canvas svg path {
+.dag-editor .canvas .canvas-svg path {
   pointer-events: stroke;
   cursor: pointer;
   transition: stroke 0.2s;
 }
 
-.dag-editor .canvas svg path:hover,
-.dag-editor .canvas svg path.selected {
+.dag-editor .canvas .canvas-svg path:hover,
+.dag-editor .canvas .canvas-svg path.selected {
   stroke: #409eff;
   stroke-width: 3;
 }
@@ -603,6 +658,7 @@ onMounted(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   cursor: move;
   transition: all 0.2s;
+  z-index: 10;
 }
 
 .dag-editor .canvas .node:hover {

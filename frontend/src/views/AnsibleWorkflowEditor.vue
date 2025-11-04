@@ -38,7 +38,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createWorkflow, getWorkflow, updateWorkflow } from '@/api/workflow'
@@ -62,16 +62,6 @@ const form = reactive({
     edges: []
   }
 })
-
-// 监听 form.dag 变化
-watch(
-  () => form.dag,
-  (newVal) => {
-    console.log('Parent: form.dag changed:', newVal)
-    console.log('Parent: nodes count:', newVal?.nodes?.length)
-  },
-  { deep: true }
-)
 
 const rules = {
   name: [
