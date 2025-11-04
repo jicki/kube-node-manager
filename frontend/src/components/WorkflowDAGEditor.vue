@@ -165,6 +165,11 @@ const initializeDAG = () => {
   const initialNodes = props.modelValue?.nodes || []
   const initialEdges = props.modelValue?.edges || []
   
+  console.log('🚀 [DAG Editor] 初始化')
+  console.log('  - props.modelValue:', props.modelValue)
+  console.log('  - initialNodes.length:', initialNodes.length)
+  console.log('  - initialEdges.length:', initialEdges.length)
+  
   // 如果没有节点，添加开始和结束节点，并创建它们之间的连接
   if (initialNodes.length === 0) {
     console.log('✅ [DAG Editor] 创建默认工作流（开始->结束）')
@@ -195,8 +200,8 @@ const initializeDAG = () => {
   
   console.log(`✅ [DAG Editor] 加载现有工作流: ${initialNodes.length}个节点, ${initialEdges.length}条边`)
   return {
-    nodes: initialNodes,
-    edges: initialEdges
+    nodes: [...initialNodes],
+    edges: [...initialEdges]
   }
 }
 
@@ -247,24 +252,28 @@ watch(
   (newValue) => {
     if (syncing.value) return
     
+    console.log('🔄 [DAG Editor] watch triggered, newValue:', newValue)
+    
     if (newValue && (newValue.nodes || newValue.edges)) {
-      // 只在有实际数据且与当前不同时更新
-      const nodesChanged = JSON.stringify(newValue.nodes) !== JSON.stringify(dag.nodes)
-      const edgesChanged = JSON.stringify(newValue.edges) !== JSON.stringify(dag.edges)
+      // 检查是否有节点数据
+      const hasNodesData = newValue.nodes && newValue.nodes.length > 0
+      const hasEdgesData = newValue.edges && newValue.edges.length > 0
       
-      if (nodesChanged || edgesChanged) {
+      console.log('  - hasNodesData:', hasNodesData, '(', newValue.nodes?.length, '个)')
+      console.log('  - hasEdgesData:', hasEdgesData, '(', newValue.edges?.length, '条)')
+      console.log('  - 当前 dag.nodes:', dag.nodes.length)
+      console.log('  - 当前 dag.edges:', dag.edges.length)
+      
+      // 如果父组件传入的数据有节点（包括已有工作流的完整数据），则使用父组件的数据
+      if (hasNodesData || hasEdgesData) {
         syncing.value = true
         
-        // 如果父组件传入的数据有节点（包括已有工作流的完整数据），则使用父组件的数据
-        // 只有当父组件传入空数组时，才保留子组件已初始化的默认数据
-        const hasNodesData = newValue.nodes && newValue.nodes.length > 0
-        const hasEdgesData = newValue.edges && newValue.edges.length > 0
-        
         if (hasNodesData) {
-          console.log(`📥 [DAG Editor] 接收父组件数据: ${newValue.nodes.length}个节点, ${newValue.edges?.length || 0}条边`)
+          console.log(`✅ [DAG Editor] 更新节点: ${newValue.nodes.length}个`)
           dag.nodes = [...newValue.nodes]
         }
         if (hasEdgesData) {
+          console.log(`✅ [DAG Editor] 更新边: ${newValue.edges.length}条`)
           dag.edges = [...newValue.edges]
         }
         
@@ -272,7 +281,7 @@ watch(
       }
     }
   },
-  { deep: true, immediate: false }
+  { deep: true, immediate: true }  // 改为 immediate: true，确保首次加载时也触发
 )
 
 // 监听 DAG 变化，同步到父组件
