@@ -59,6 +59,12 @@ func (s *VisualizationService) GetTaskVisualization(taskID uint) (*model.TaskExe
 		viz.Timeline = s.generateBasicTimeline(&task)
 	}
 
+	// 解析日志中的 TASK 阶段并添加到时间线（如果有日志）
+	// 必须在计算 PhaseDistribution 之前执行，因为这会修改 Timeline
+	if task.FullLog != "" && len(viz.Timeline) > 0 {
+		s.parseAndEnrichTimeline(&viz.Timeline, &task)
+	}
+
 	// 计算总耗时
 	if len(viz.Timeline) > 0 {
 		first := viz.Timeline[0]
@@ -70,17 +76,12 @@ func (s *VisualizationService) GetTaskVisualization(taskID uint) (*model.TaskExe
 		s.logger.Infof("Total duration from task.Duration: %dms", viz.TotalDuration)
 	}
 
-	// 计算各阶段耗时分布
+	// 计算各阶段耗时分布（必须在 parseAndEnrichTimeline 之后）
 	viz.PhaseDistribution = s.calculatePhaseDistribution(viz.Timeline)
 	if viz.PhaseDistribution != nil {
 		s.logger.Infof("Phase distribution: %v", viz.PhaseDistribution)
 	} else {
 		s.logger.Warningf("No phase distribution data available for task %d", taskID)
-	}
-
-	// 解析日志中的 TASK 阶段并添加到时间线（如果有日志）
-	if task.FullLog != "" && len(viz.Timeline) > 0 {
-		s.parseAndEnrichTimeline(&viz.Timeline, &task)
 	}
 
 	// 获取主机执行状态
