@@ -54,7 +54,11 @@ func (h *WorkflowHandler) CreateWorkflow(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, workflow)
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Success",
+		"data":    workflow,
+	})
 }
 
 // GetWorkflow 获取工作流详情
@@ -84,7 +88,11 @@ func (h *WorkflowHandler) GetWorkflow(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, workflow)
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Success",
+		"data":    workflow,
+	})
 }
 
 // UpdateWorkflow 更新工作流
@@ -122,7 +130,11 @@ func (h *WorkflowHandler) UpdateWorkflow(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, workflow)
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Success",
+		"data":    workflow,
+	})
 }
 
 // DeleteWorkflow 删除工作流
@@ -151,7 +163,10 @@ func (h *WorkflowHandler) DeleteWorkflow(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "工作流删除成功"})
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "工作流删除成功",
+	})
 }
 
 // ListWorkflows 查询工作流列表
@@ -183,6 +198,8 @@ func (h *WorkflowHandler) ListWorkflows(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"code":      200,
+		"message":   "Success",
 		"workflows": workflows,
 		"total":     total,
 		"page":      req.Page,
@@ -217,7 +234,11 @@ func (h *WorkflowHandler) ExecuteWorkflow(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, execution)
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Success",
+		"data":    execution,
+	})
 }
 
 // GetWorkflowExecution 获取工作流执行详情
@@ -247,7 +268,11 @@ func (h *WorkflowHandler) GetWorkflowExecution(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, execution)
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "Success",
+		"data":    execution,
+	})
 }
 
 // ListWorkflowExecutions 查询工作流执行列表
@@ -280,6 +305,8 @@ func (h *WorkflowHandler) ListWorkflowExecutions(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"code":       200,
+		"message":    "Success",
 		"executions": executions,
 		"total":      total,
 		"page":       req.Page,
@@ -313,7 +340,10 @@ func (h *WorkflowHandler) CancelWorkflowExecution(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "工作流执行已取消"})
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "工作流执行已取消",
+	})
 }
 
 // GetWorkflowExecutionStatus 获取工作流执行状态
@@ -337,6 +367,10 @@ func (h *WorkflowHandler) GetWorkflowExecutionStatus(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"node_status": status})
+	c.JSON(http.StatusOK, gin.H{
+		"code":        200,
+		"message":     "Success",
+		"node_status": status,
+	})
 }
 

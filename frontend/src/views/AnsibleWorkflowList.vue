@@ -97,8 +97,8 @@ const loadWorkflows = async () => {
       page_size: pageSize.value,
       keyword: searchKeyword.value
     })
-    workflows.value = response.workflows || []
-    total.value = response.total || 0
+    workflows.value = response.data.workflows || []
+    total.value = response.data.total || 0
   } catch (error) {
     console.error('Failed to load workflows:', error)
     ElMessage.error(error.response?.data?.error || '加载工作流列表失败')
@@ -160,8 +160,8 @@ const handleExecute = async (workflow) => {
     )
 
     const response = await executeWorkflow(workflow.id)
-    ElMessage.success(`工作流开始执行，执行 ID: ${response.id}`)
-    router.push(`/ansible/workflow-executions/${response.id}`)
+    ElMessage.success(`工作流开始执行，执行 ID: ${response.data.id}`)
+    router.push(`/ansible/workflow-executions/${response.data.id}`)
   } catch (error) {
     if (error !== 'cancel') {
       console.error('Failed to execute workflow:', error)

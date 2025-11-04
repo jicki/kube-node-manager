@@ -74,7 +74,7 @@ const rules = {
 const loadInventories = async () => {
   try {
     const response = await listInventories({ page: 1, page_size: 100 })
-    inventories.value = response.data || []
+    inventories.value = response.data.data || []
   } catch (error) {
     console.error('Failed to load inventories:', error)
   }
@@ -83,7 +83,8 @@ const loadInventories = async () => {
 // 加载工作流详情
 const loadWorkflow = async () => {
   try {
-    const workflow = await getWorkflow(workflowId.value)
+    const response = await getWorkflow(workflowId.value)
+    const workflow = response.data
     form.name = workflow.name
     form.description = workflow.description
     form.dag = workflow.dag || { nodes: [], edges: [] }

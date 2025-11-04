@@ -189,7 +189,8 @@ const loadExecution = async () => {
   loading.value = true
   try {
     const executionId = parseInt(route.params.id)
-    execution.value = await getWorkflowExecution(executionId)
+    const response = await getWorkflowExecution(executionId)
+    execution.value = response.data
     
     // 如果正在运行，加载实时状态
     if (execution.value.status === 'running') {
@@ -208,7 +209,7 @@ const refreshStatus = async () => {
   try {
     const executionId = parseInt(route.params.id)
     const response = await getWorkflowExecutionStatus(executionId)
-    nodeStatus.value = response.node_status || {}
+    nodeStatus.value = response.data.node_status || {}
   } catch (error) {
     // 忽略错误（可能是执行已完成）
     console.log('Status refresh skipped:', error.response?.status)
