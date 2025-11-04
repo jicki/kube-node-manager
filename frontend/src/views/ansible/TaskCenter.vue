@@ -718,7 +718,11 @@
             </span>
           </template>
           <div style="min-height: 600px; max-height: 80vh; overflow-y: auto">
-            <TaskTimelineVisualization v-if="currentTaskId" :task-id="currentTaskId" />
+            <TaskTimelineVisualization 
+              v-if="currentTaskId" 
+              ref="visualizationRef"
+              :task-id="currentTaskId" 
+            />
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -851,7 +855,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, DocumentCopy, Loading, CircleCheck, CircleClose, InfoFilled, Clock, MoreFilled, RefreshRight, Delete, Document, List, Calendar, DataLine, Setting, Key, Warning, QuestionFilled, Top, Bottom, Minus, View, Checked } from '@element-plus/icons-vue'
 import * as ansibleAPI from '@/api/ansible'
@@ -885,6 +889,7 @@ const estimation = ref(null)
 const detailActiveTab = ref('logs') // 任务详情对话框的活动 tab
 const currentTaskId = ref(null) // 当前查看的任务 ID
 const currentTask = ref(null) // 当前查看的任务完整信息
+const visualizationRef = ref(null) // 可视化组件的引用
 
 const taskForm = reactive({
   name: '',
@@ -1615,6 +1620,20 @@ const formatDate = (dateStr) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
 }
+
+// 监听 Tab 切换，当切换到可视化 Tab 时刷新图表
+watch(detailActiveTab, (newTab) => {
+  console.log('Detail tab changed to:', newTab)
+  if (newTab === 'visualization') {
+    // 使用 nextTick 确保 DOM 完全更新
+    nextTick(() => {
+      setTimeout(() => {
+        console.log('Triggering chart refresh after tab switch')
+        visualizationRef.value?.refreshChart()
+      }, 300)
+    })
+  }
+})
 
 // 生命周期
 let refreshTimer = null

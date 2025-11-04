@@ -256,7 +256,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { 
   Clock, DataLine, CircleCheck, CircleClose, Loading as LoadingIcon, 
@@ -273,16 +273,43 @@ const props = defineProps({
   }
 })
 
+// 暴露给父组件的方法
+defineExpose({
+  refreshChart: () => {
+    console.log('refreshChart called from parent')
+    if (hasPhaseDistribution.value && chartRef.value) {
+      renderChartTimer = setTimeout(() => {
+        renderChart()
+      }, 200)
+    }
+  }
+})
+
 const loading = ref(false)
 const visualization = ref(null)
 const chartRef = ref(null)
 let chart = null
+let renderChartTimer = null // 防抖定时器
+let isRendering = ref(false) // 是否正在渲染
 
 // 计算属性：是否有阶段分布数据
 const hasPhaseDistribution = computed(() => {
   return visualization.value?.phase_distribution && 
     Object.keys(visualization.value.phase_distribution).length > 0
 })
+
+// 清理 ECharts 实例
+const disposeChart = () => {
+  if (chart) {
+    console.log('Disposing existing chart instance')
+    try {
+      chart.dispose()
+    } catch (error) {
+      console.error('Error disposing chart:', error)
+    }
+    chart = null
+  }
+}
 
 // 加载可视化数据
 const loadVisualization = async () => {
@@ -293,6 +320,7 @@ const loadVisualization = async () => {
   
   loading.value = true
   visualization.value = null  // 重置数据
+  disposeChart() // 清理旧的图表实例
   
   try {
     console.log(`Loading visualization for task ${props.taskId}`)
@@ -305,15 +333,9 @@ const loadVisualization = async () => {
       visualization.value = response.data.data
       console.log('Visualization data:', visualization.value)
       
-      // 渲染图表（需要等待 DOM 更新）
+      // 不在这里直接渲染，而是让 watch 来触发渲染
       if (hasPhaseDistribution.value) {
-        console.log('Has phase distribution, preparing to render chart')
-        // 使用 setTimeout 确保 DOM 完全渲染
-        await nextTick()
-        setTimeout(() => {
-          console.log('Calling renderChart after timeout')
-          renderChart()
-        }, 100)
+        console.log('Has phase distribution, will render via watch')
       } else {
         console.warn('No phase distribution data available')
       }
@@ -332,13 +354,33 @@ const loadVisualization = async () => {
   }
 }
 
-// 渲染饼图
+// 渲染饼图（带防抖）
 const renderChart = () => {
+  // 防抖：清除之前的定时器
+  if (renderChartTimer) {
+    clearTimeout(renderChartTimer)
+    renderChartTimer = null
+  }
+  
+  // 防止重复渲染
+  if (isRendering.value) {
+    console.log('Chart is already rendering, skipping')
+    return
+  }
+  
   console.log('renderChart called', {
     hasChartRef: !!chartRef.value,
     hasPhaseDistribution: hasPhaseDistribution.value,
-    phaseDistribution: visualization.value?.phase_distribution
+    phaseDistribution: visualization.value?.phase_distribution,
+    loading: loading.value
   })
+  
+  // 如果正在加载，则延迟渲染
+  if (loading.value) {
+    console.log('Still loading, deferring chart render')
+    renderChartTimer = setTimeout(() => renderChart(), 200)
+    return
+  }
   
   if (!hasPhaseDistribution.value) {
     console.warn('No phase distribution data')
@@ -349,24 +391,47 @@ const renderChart = () => {
     console.warn('chartRef.value is null, will retry after nextTick')
     // 使用 nextTick 确保 DOM 已更新
     nextTick(() => {
-      if (chartRef.value) {
-        console.log('chartRef available after nextTick, retrying')
-        renderChart()
-      } else {
-        console.error('chartRef still null after nextTick')
-      }
+      renderChartTimer = setTimeout(() => {
+        if (chartRef.value) {
+          console.log('chartRef available after nextTick, retrying')
+          renderChart()
+        } else {
+          console.error('chartRef still null after nextTick')
+        }
+      }, 100)
     })
     return
   }
   
-  if (!chart) {
-    console.log('Initializing echarts')
-    try {
-      chart = echarts.init(chartRef.value)
-    } catch (error) {
-      console.error('Failed to initialize echarts:', error)
-      return
+  // 检查元素是否可见
+  const rect = chartRef.value.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) {
+    console.warn('Chart container has zero size, will retry', rect)
+    renderChartTimer = setTimeout(() => renderChart(), 200)
+    return
+  }
+  
+  isRendering.value = true
+  
+  try {
+    // 清理旧实例
+    if (chart) {
+      console.log('Disposing old chart before re-init')
+      try {
+        chart.dispose()
+      } catch (e) {
+        console.warn('Error disposing old chart:', e)
+      }
+      chart = null
     }
+    
+    // 创建新实例
+    console.log('Initializing echarts with container size:', rect.width, rect.height)
+    chart = echarts.init(chartRef.value)
+  } catch (error) {
+    console.error('Failed to initialize echarts:', error)
+    isRendering.value = false
+    return
   }
   
   // 准备数据并排序（按耗时从大到小）
@@ -476,17 +541,28 @@ const renderChart = () => {
   }
   
   console.log('Setting chart option')
-  chart.setOption(option, true)
-  console.log('Chart rendered successfully')
+  try {
+    chart.setOption(option, true)
+    console.log('Chart rendered successfully')
+  } catch (error) {
+    console.error('Failed to set chart option:', error)
+    isRendering.value = false
+    return
+  }
   
   // 清理旧的事件监听器
   const resizeHandler = () => {
-    chart?.resize()
+    if (chart && !chart.isDisposed()) {
+      chart.resize()
+    }
   }
   
   // 响应式处理
   window.removeEventListener('resize', resizeHandler)
   window.addEventListener('resize', resizeHandler)
+  
+  // 渲染完成
+  isRendering.value = false
 }
 
 // 辅助方法
@@ -664,31 +740,50 @@ const calculatePercentage = (duration) => {
 }
 
 onMounted(() => {
+  console.log('TaskTimelineVisualization mounted')
   loadVisualization()
 })
 
-watch(() => props.taskId, () => {
-  loadVisualization()
+onBeforeUnmount(() => {
+  console.log('TaskTimelineVisualization unmounting, cleaning up')
+  
+  // 清理定时器
+  if (renderChartTimer) {
+    clearTimeout(renderChartTimer)
+    renderChartTimer = null
+  }
+  
+  // 清理图表实例
+  disposeChart()
+  
+  // 移除事件监听
+  window.removeEventListener('resize', null)
 })
 
-// 监听 phase distribution 变化，自动渲染图表
-watch(() => hasPhaseDistribution.value, (newValue) => {
-  console.log('hasPhaseDistribution changed:', newValue)
-  if (newValue) {
-    // 确保 DOM 已更新
-    nextTick(() => {
-      setTimeout(() => {
-        console.log('Auto-rendering chart after hasPhaseDistribution became true')
-        renderChart()
-      }, 150)
-    })
+watch(() => props.taskId, (newId, oldId) => {
+  if (newId !== oldId) {
+    console.log('Task ID changed:', oldId, '->', newId)
+    loadVisualization()
   }
 })
 
-// 清理
-watch(() => chart, (newChart, oldChart) => {
-  if (oldChart && !newChart) {
-    oldChart.dispose()
+// 监听 phase distribution 变化，自动渲染图表
+watch(() => hasPhaseDistribution.value, (newValue, oldValue) => {
+  console.log('hasPhaseDistribution changed:', oldValue, '->', newValue)
+  if (newValue && !oldValue) {
+    // 只在从 false 变为 true 时触发
+    console.log('Phase distribution became available, scheduling chart render')
+    // 确保 DOM 已更新并且不在 loading 状态
+    nextTick(() => {
+      if (!loading.value) {
+        renderChartTimer = setTimeout(() => {
+          console.log('Auto-rendering chart after hasPhaseDistribution became true')
+          renderChart()
+        }, 300) // 增加延迟确保 DOM 稳定
+      } else {
+        console.log('Still loading, will retry when loading completes')
+      }
+    })
   }
 })
 </script>
