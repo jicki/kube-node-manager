@@ -386,9 +386,9 @@
           </el-col>
           <el-col :span="12">
             <el-statistic 
-              title="异常率" 
-              :value="selectedNodeHealth.total_anomalies > 0 ? ((selectedNodeHealth.active_anomalies / selectedNodeHealth.total_anomalies) * 100) : 0" 
-              :precision="1"
+              title="不可用率" 
+              :value="100 - selectedNodeHealth.availability" 
+              :precision="2"
               suffix="%"
             />
           </el-col>
