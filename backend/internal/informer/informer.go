@@ -3,12 +3,14 @@ package informer
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"kube-node-manager/pkg/logger"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -57,6 +59,7 @@ type Service struct {
 	logger      *logger.Logger
 	informers   map[string]informers.SharedInformerFactory // cluster -> informer
 	stoppers    map[string]chan struct{}                   // cluster -> stop channel
+	clients     map[string]*kubernetes.Clientset           // cluster -> clientset (用于自动清理操作)
 	handlers    []NodeEventHandler                         // 节点事件处理器列表
 	podHandlers []PodEventHandler                          // Pod 事件处理器列表
 	mu          sync.RWMutex
@@ -68,6 +71,7 @@ func NewService(logger *logger.Logger) *Service {
 		logger:      logger,
 		informers:   make(map[string]informers.SharedInformerFactory),
 		stoppers:    make(map[string]chan struct{}),
+		clients:     make(map[string]*kubernetes.Clientset),
 		handlers:    make([]NodeEventHandler, 0),
 		podHandlers: make([]PodEventHandler, 0),
 	}
@@ -143,6 +147,7 @@ func (s *Service) StartInformer(clusterName string, clientset *kubernetes.Client
 	}
 
 	s.informers[clusterName] = factory
+	s.clients[clusterName] = clientset
 	s.logger.Infof("Successfully started Informer for cluster: %s", clusterName)
 
 	return nil
@@ -157,6 +162,7 @@ func (s *Service) StopInformer(clusterName string) {
 		close(stopCh)
 		delete(s.informers, clusterName)
 		delete(s.stoppers, clusterName)
+		delete(s.clients, clusterName)
 		s.logger.Infof("Stopped Informer for cluster: %s", clusterName)
 	}
 }
@@ -173,6 +179,7 @@ func (s *Service) StopAll() {
 
 	s.informers = make(map[string]informers.SharedInformerFactory)
 	s.stoppers = make(map[string]chan struct{})
+	s.clients = make(map[string]*kubernetes.Clientset)
 	s.logger.Info("Stopped all Informers")
 }
 
@@ -200,6 +207,10 @@ func (s *Service) handleNodeUpdate(clusterName string, oldNode, newNode *corev1.
 	if len(changes) == 0 {
 		return
 	}
+
+	// 自动清理遗留的 annotations：当节点从 Unschedulable 变为 Schedulable 时
+	// 检查是否存在我们的 annotations，如果存在则自动清理
+	s.autoCleanOrphanedAnnotations(clusterName, oldNode, newNode)
 
 	// 只对重要变化输出日志，减少日志噪音
 	// 重要变化：status、schedulable、taints
@@ -500,5 +511,117 @@ func (s *Service) notifyPodHandlers(event PodEvent) {
 			h.OnPodEvent(event)
 		}(handler)
 	}
+}
+
+// autoCleanOrphanedAnnotations 自动清理遗留的 annotations
+// 当检测到节点从 Unschedulable 变为 Schedulable 时，如果存在我们的 annotations，则自动清理
+// 这解决了使用原生 kubectl uncordon 命令时不会清理自定义 annotations 的问题
+func (s *Service) autoCleanOrphanedAnnotations(clusterName string, oldNode, newNode *corev1.Node) {
+	// 只在节点从 Unschedulable 变为 Schedulable 时检查
+	if !oldNode.Spec.Unschedulable || newNode.Spec.Unschedulable {
+		return // 不是 uncordon 操作，跳过
+	}
+
+	// 检查是否存在我们的 annotations
+	hasAnnotations := false
+	if newNode.Annotations != nil {
+		_, hasReasonAnnotation := newNode.Annotations["deeproute.cn/kube-node-mgr"]
+		_, hasTimestampAnnotation := newNode.Annotations["deeproute.cn/kube-node-mgr-timestamp"]
+		hasAnnotations = hasReasonAnnotation || hasTimestampAnnotation
+	}
+
+	// 如果没有我们的 annotations，无需清理
+	if !hasAnnotations {
+		return
+	}
+
+	// 获取集群的 clientset
+	s.mu.RLock()
+	clientset, exists := s.clients[clusterName]
+	s.mu.RUnlock()
+
+	if !exists {
+		s.logger.Warningf("Cannot clean annotations for node %s: clientset not found for cluster %s", newNode.Name, clusterName)
+		return
+	}
+
+	// 异步清理，避免阻塞 informer 事件处理
+	go s.cleanNodeAnnotations(clusterName, newNode.Name, clientset)
+}
+
+// cleanNodeAnnotations 清理节点上遗留的 kube-node-mgr annotations
+func (s *Service) cleanNodeAnnotations(clusterName, nodeName string, clientset *kubernetes.Clientset) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 使用重试机制处理资源冲突
+	maxRetries := 3
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// 指数退避
+			backoff := time.Duration(100*(1<<uint(attempt-1))) * time.Millisecond
+			time.Sleep(backoff)
+		}
+
+		// 重新获取节点（获取最新的 ResourceVersion）
+		node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+		if err != nil {
+			s.logger.Errorf("Failed to get node %s for annotation cleanup: %v", nodeName, err)
+			return
+		}
+
+		// 再次检查节点是否可调度（可能在重试期间状态又变了）
+		if node.Spec.Unschedulable {
+			s.logger.Infof("Node %s is cordoned again, skipping annotation cleanup", nodeName)
+			return
+		}
+
+		// 检查 annotations 是否还存在
+		if node.Annotations == nil {
+			return // 已经被清理了
+		}
+
+		_, hasReason := node.Annotations["deeproute.cn/kube-node-mgr"]
+		_, hasTimestamp := node.Annotations["deeproute.cn/kube-node-mgr-timestamp"]
+
+		if !hasReason && !hasTimestamp {
+			return // 已经被清理了
+		}
+
+		// 删除遗留的 annotations
+		needsUpdate := false
+		if hasReason {
+			delete(node.Annotations, "deeproute.cn/kube-node-mgr")
+			needsUpdate = true
+		}
+		if hasTimestamp {
+			delete(node.Annotations, "deeproute.cn/kube-node-mgr-timestamp")
+			needsUpdate = true
+		}
+
+		if !needsUpdate {
+			return
+		}
+
+		// 更新节点
+		_, err = clientset.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
+		if err != nil {
+			// 检查是否是资源冲突错误
+			if strings.Contains(err.Error(), "the object has been modified") ||
+				strings.Contains(err.Error(), "Operation cannot be fulfilled") {
+				s.logger.Warningf("Resource conflict when cleaning annotations for node %s (attempt %d/%d): %v", nodeName, attempt+1, maxRetries+1, err)
+				continue // 重试
+			}
+			// 其他错误
+			s.logger.Errorf("Failed to clean annotations for node %s: %v", nodeName, err)
+			return
+		}
+
+		// 成功
+		s.logger.Infof("✓ Auto-cleaned orphaned annotations for node %s in cluster %s (uncordoned via kubectl)", nodeName, clusterName)
+		return
+	}
+
+	s.logger.Errorf("Failed to clean annotations for node %s after %d attempts", nodeName, maxRetries+1)
 }
 

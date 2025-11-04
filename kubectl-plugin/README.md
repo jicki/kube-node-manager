@@ -236,6 +236,10 @@ node2    SchedulingDisabled        系统升级     2024-01-15 10:30:00
 3. 插件会自动添加以下 annotations：
    - `deeproute.cn/kube-node-mgr`: Cordon 原因
    - `deeproute.cn/kube-node-mgr-timestamp`: 操作时间
+4. **自动清理机制**：
+   - 如果使用 `kubectl node_mgr cordon` 进行 cordon，建议也使用 `kubectl node_mgr uncordon` 进行 uncordon
+   - 如果混用原生 `kubectl uncordon`，系统会自动检测并清理遗留的 annotations（需要 backend 服务运行）
+   - 详见：[自动清理 Annotations 功能文档](../docs/auto-cleanup-annotations.md)
 
 ## 故障排除
 

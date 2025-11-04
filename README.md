@@ -2,7 +2,7 @@
 
 # 🚀 Kubernetes 节点管理器
 
-[![Version](https://img.shields.io/badge/version-v2.27.0-blue.svg)](https://github.com/your-repo/kube-node-manager)
+[![Version](https://img.shields.io/badge/version-v2.28.0-blue.svg)](https://github.com/your-repo/kube-node-manager)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue.svg)](https://golang.org/)
 [![Vue Version](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org/)

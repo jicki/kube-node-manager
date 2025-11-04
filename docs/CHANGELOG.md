@@ -7,6 +7,163 @@
 
 ---
 
+## [v2.28.0] - 2025-11-04
+
+### ✨ 新功能 - 自动清理遗留 Annotations
+
+#### 功能描述
+
+实现了智能的自动清理机制，解决使用原生 `kubectl uncordon` 命令时遗留的 kube-node-manager annotations 问题。
+
+#### 问题背景
+
+**场景**：
+1. 使用 `kubectl node_mgr cordon node1 --reason "维护"` 进行 cordon
+   - 系统添加 annotations：`deeproute.cn/kube-node-mgr` 和 `deeproute.cn/kube-node-mgr-timestamp`
+2. 使用原生 `kubectl uncordon node1` 进行 uncordon
+   - 原生命令只设置 `Unschedulable=false`，不会清理自定义 annotations
+3. **问题**：annotations 遗留在节点上，造成状态不一致
+
+**影响**：
+- UI 显示混淆：显示旧的 cordon 原因和时间戳
+- 审计日志不一致：uncordon 操作没有被记录
+- 状态判断错误：系统可能误判节点状态
+
+#### 解决方案
+
+**实现机制**：
+- 在 Informer 的节点更新事件中添加自动检测和清理逻辑
+- 事件驱动，不过度检测（只在节点状态变化时触发）
+- 异步执行，不阻塞 Informer 事件处理
+- 带重试机制，处理资源冲突（最多重试 3 次，指数退避）
+
+**触发条件**（必须同时满足）：
+- 节点从 `Unschedulable=true` 变为 `Unschedulable=false`
+- 节点存在 `deeproute.cn/kube-node-mgr*` annotations
+
+**代码示例**：
+```go
+// 在 handleNodeUpdate 中检测
+if oldNode.Spec.Unschedulable && !newNode.Spec.Unschedulable {
+    // 检查是否存在我们的 annotations
+    if hasAnnotations("deeproute.cn/kube-node-mgr*") {
+        // 异步清理
+        go cleanNodeAnnotations(clusterName, nodeName, clientset)
+    }
+}
+```
+
+#### 使用场景
+
+**场景 1：混用工具（自动清理）**
+```bash
+kubectl node_mgr cordon node1 --reason "系统维护"
+kubectl uncordon node1  # 使用原生 kubectl
+# ✅ 系统自动清理 annotations
+# 日志：✓ Auto-cleaned orphaned annotations for node node1
+```
+
+**场景 2：标准流程（无需清理）**
+```bash
+kubectl node_mgr cordon node1 --reason "系统维护"
+kubectl node_mgr uncordon node1  # 使用 kube-node-manager
+# ✅ 标准流程已清理，不会触发自动清理
+```
+
+**场景 3：纯原生 kubectl（不会触发）**
+```bash
+kubectl cordon node1
+kubectl uncordon node1
+# ✅ 没有我们的 annotations，不会触发清理
+```
+
+#### 技术细节
+
+**修改文件**：
+- `backend/internal/informer/informer.go`
+  - 添加 `clients` map 存储集群 clientset
+  - 添加 `autoCleanOrphanedAnnotations()` 方法：检测逻辑
+  - 添加 `cleanNodeAnnotations()` 方法：清理执行
+  - 更新 `handleNodeUpdate()`：集成清理逻辑
+
+**安全检查**：
+```go
+// 1. 重新获取节点状态（使用最新 ResourceVersion）
+node := Get(nodeName)
+
+// 2. 再次检查节点是否可调度（可能状态又变了）
+if node.Spec.Unschedulable {
+    return // 跳过清理
+}
+
+// 3. 检查 annotations 是否还存在
+if !hasAnnotations() {
+    return // 已经被清理
+}
+
+// 4. 执行清理
+delete(node.Annotations, "deeproute.cn/kube-node-mgr")
+delete(node.Annotations, "deeproute.cn/kube-node-mgr-timestamp")
+```
+
+**重试机制**：
+```go
+maxRetries := 3
+for attempt := 0; attempt <= maxRetries; attempt++ {
+    if attempt > 0 {
+        // 指数退避：100ms, 200ms, 400ms
+        backoff := time.Duration(100*(1<<uint(attempt-1))) * time.Millisecond
+        time.Sleep(backoff)
+    }
+    
+    // 重新获取节点并更新
+    node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+    // ... 更新逻辑
+}
+```
+
+#### 性能影响
+
+- **内存**：增加 clientset 引用存储（每个集群一个）
+- **CPU**：事件驱动，不会增加持续负担
+- **网络**：只在需要清理时发起 API 请求（极少发生）
+
+#### 日志输出
+
+**成功**：
+```
+INFO: ✓ Auto-cleaned orphaned annotations for node node1 in cluster cluster1 (uncordoned via kubectl)
+```
+
+**重试**：
+```
+WARNING: Resource conflict when cleaning annotations for node node1 (attempt 2/4): the object has been modified
+```
+
+**失败**：
+```
+ERROR: Failed to clean annotations for node node1 after 4 attempts
+```
+
+#### 兼容性
+
+- ✅ 向后兼容：不影响现有功能
+- ✅ 工具兼容：支持混用原生 kubectl 和 kube-node-manager
+- ✅ 版本兼容：适用于所有支持的 Kubernetes 版本
+
+#### 文档
+
+- 新增：[自动清理 Annotations 功能文档](./auto-cleanup-annotations.md)
+- 更新：[Informer 实现文档](../backend/internal/informer/)
+
+#### 最佳实践
+
+1. **推荐**：统一使用 kube-node-manager 工具进行 cordon/uncordon
+2. **保障**：即使混用工具，系统也会自动清理遗留的 annotations
+3. **监控**：关注日志中的自动清理记录，了解工具使用情况
+
+---
+
 ## [v2.23.2] - 2025-11-03
 
 ### 🐛 紧急修复 - Pod Informer 启动优化
