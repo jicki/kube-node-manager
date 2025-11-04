@@ -78,7 +78,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listWorkflows, deleteWorkflow, executeWorkflow } from '@/api/workflow'
-import { formatTime } from '@/utils/time'
+import { formatTime } from '@/utils/format'
 
 const router = useRouter()
 const workflows = ref([])

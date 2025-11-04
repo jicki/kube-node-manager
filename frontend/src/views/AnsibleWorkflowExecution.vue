@@ -174,7 +174,7 @@ import {
   getWorkflowExecutionStatus,
   cancelWorkflowExecution 
 } from '@/api/workflow'
-import { formatTime } from '@/utils/time'
+import { formatTime } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
