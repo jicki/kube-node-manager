@@ -165,13 +165,10 @@ const initializeDAG = () => {
   const initialNodes = props.modelValue?.nodes || []
   const initialEdges = props.modelValue?.edges || []
   
-  console.log('🔄 [initializeDAG] 初始化DAG')
-  console.log('  - initialNodes:', initialNodes)
-  console.log('  - initialEdges:', initialEdges)
-  
   // 如果没有节点，添加开始和结束节点，并创建它们之间的连接
   if (initialNodes.length === 0) {
-    const defaultDAG = {
+    console.log('✅ [DAG Editor] 创建默认工作流（开始->结束）')
+    return {
       nodes: [
         {
           id: 'start',
@@ -194,11 +191,9 @@ const initializeDAG = () => {
         }
       ]
     }
-    console.log('✅ [initializeDAG] 创建默认DAG:', defaultDAG)
-    return defaultDAG
   }
   
-  console.log('✅ [initializeDAG] 使用现有数据')
+  console.log(`✅ [DAG Editor] 加载现有工作流: ${initialNodes.length}个节点, ${initialEdges.length}条边`)
   return {
     nodes: initialNodes,
     edges: initialEdges
@@ -206,7 +201,6 @@ const initializeDAG = () => {
 }
 
 const dag = reactive(initializeDAG())
-console.log('📊 [初始状态] dag.nodes:', dag.nodes.length, 'dag.edges:', dag.edges.length)
 
 // 工具栏状态
 const connectionMode = ref(false)
@@ -260,13 +254,20 @@ watch(
       
       if (nodesChanged || edgesChanged) {
         syncing.value = true
-        // 如果父组件传入空数组，不要覆盖已初始化的数据
-        if (newValue.nodes && newValue.nodes.length > 0) {
+        
+        // 如果父组件传入的数据有节点（包括已有工作流的完整数据），则使用父组件的数据
+        // 只有当父组件传入空数组时，才保留子组件已初始化的默认数据
+        const hasNodesData = newValue.nodes && newValue.nodes.length > 0
+        const hasEdgesData = newValue.edges && newValue.edges.length > 0
+        
+        if (hasNodesData) {
+          console.log(`📥 [DAG Editor] 接收父组件数据: ${newValue.nodes.length}个节点, ${newValue.edges?.length || 0}条边`)
           dag.nodes = [...newValue.nodes]
         }
-        if (newValue.edges && newValue.edges.length > 0) {
+        if (hasEdgesData) {
           dag.edges = [...newValue.edges]
         }
+        
         syncing.value = false
       }
     }
@@ -280,17 +281,11 @@ watch(
   (newDag) => {
     if (syncing.value) return
     
-    console.log('📤 [watch dag] DAG变化，同步到父组件')
-    console.log('  - nodes:', newDag.nodes.length)
-    console.log('  - edges:', newDag.edges.length)
-    
     syncing.value = true
-    const updateData = { 
+    emit('update:modelValue', { 
       nodes: [...newDag.nodes], 
       edges: [...newDag.edges] 
-    }
-    console.log('  - 发送数据:', updateData)
-    emit('update:modelValue', updateData)
+    })
     syncing.value = false
   },
   { deep: true }
@@ -298,10 +293,6 @@ watch(
 
 // 添加节点
 const addNode = (type) => {
-  console.log(`➕ [addNode] 添加 ${type} 节点`)
-  console.log('  - 当前节点数:', dag.nodes.length)
-  console.log('  - 当前边数:', dag.edges.length)
-  
   const id = `node-${Date.now()}`
   
   // 查找 start 和 end 节点
@@ -376,10 +367,6 @@ const addNode = (type) => {
         target: 'end'
       })
     }
-    
-    console.log('✅ [addNode] 节点添加完成')
-    console.log('  - 最终节点数:', dag.nodes.length)
-    console.log('  - 最终边数:', dag.edges.length)
     
     ElMessage.success('任务节点已添加，请双击节点配置任务详情')
   }

@@ -1,0 +1,7 @@
+---
+- name: Ping Nodes
+  hosts: all
+  become: true
+  tasks:
+    - name: Ping test
+      ping:

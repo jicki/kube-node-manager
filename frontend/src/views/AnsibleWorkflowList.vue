@@ -19,29 +19,29 @@
 
     <el-table :data="workflows" v-loading="loading" stripe>
       <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="name" label="工作流名称" min-width="200" />
+      <el-table-column prop="name" label="工作流名称" min-width="200" show-overflow-tooltip />
       <el-table-column prop="description" label="描述" min-width="250" show-overflow-tooltip />
-      <el-table-column label="节点数" width="100">
+      <el-table-column label="节点数" width="80" align="center">
         <template #default="{ row }">
           <el-tag size="small">{{ row.dag?.nodes?.length || 0 }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="边数" width="100">
+      <el-table-column label="边数" width="80" align="center">
         <template #default="{ row }">
           <el-tag size="small" type="info">{{ row.dag?.edges?.length || 0 }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="created_at" label="创建时间" width="180">
+      <el-table-column prop="created_at" label="创建时间" width="160" show-overflow-tooltip>
         <template #default="{ row }">
           {{ formatTime(row.created_at) }}
         </template>
       </el-table-column>
-      <el-table-column prop="updated_at" label="更新时间" width="180">
+      <el-table-column prop="updated_at" label="更新时间" width="160" show-overflow-tooltip>
         <template #default="{ row }">
           {{ formatTime(row.updated_at) }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="280" fixed="right">
+      <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
           <el-button size="small" type="success" icon="el-icon-video-play" @click="handleExecute(row)">
             执行

@@ -83,13 +83,26 @@ const loadInventories = async () => {
 // 加载工作流详情
 const loadWorkflow = async () => {
   try {
+    console.log('📥 [loadWorkflow] 加载工作流详情, ID:', workflowId.value)
     const response = await getWorkflow(workflowId.value)
+    console.log('📥 [loadWorkflow] 服务器响应:', response)
     const workflow = response.data
+    console.log('📥 [loadWorkflow] 工作流数据:', workflow)
+    console.log('📥 [loadWorkflow] DAG数据:', workflow.dag)
+    
     form.name = workflow.name
     form.description = workflow.description
-    form.dag = workflow.dag || { nodes: [], edges: [] }
+    // 确保 dag 对象包含完整的节点和边信息
+    form.dag = {
+      nodes: workflow.dag?.nodes || [],
+      edges: workflow.dag?.edges || []
+    }
+    
+    console.log('✅ [loadWorkflow] 已设置 form.dag:', form.dag)
+    console.log('  - nodes:', form.dag.nodes.length)
+    console.log('  - edges:', form.dag.edges.length)
   } catch (error) {
-    console.error('Failed to load workflow:', error)
+    console.error('❌ [loadWorkflow] 加载失败:', error)
     ElMessage.error(error.response?.data?.error || '加载工作流失败')
     router.back()
   }

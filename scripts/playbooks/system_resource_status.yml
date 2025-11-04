@@ -1,0 +1,24 @@
+---
+- name: Collect system resource status
+  hosts: all
+  become: true
+  tasks:
+    - name: Get load average, CPU, and memory usage
+      ansible.builtin.shell: |
+        echo "=== Host: $(hostname) ==="
+        echo "--- Uptime & Load Average ---"
+        uptime
+        echo
+        echo "--- CPU Usage ---"
+        top -b -n1 | head -n 5
+        echo
+        echo "--- Memory Usage ---"
+        free -h
+        echo
+        echo "--- Disk Usage ---"
+        df -hT | grep -E "^/dev"
+      register: top_info
+
+    - name: Show resource info
+      ansible.builtin.debug:
+        msg: "{{ top_info.stdout_lines }}"
