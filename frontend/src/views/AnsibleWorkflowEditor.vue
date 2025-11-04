@@ -85,10 +85,15 @@ const loadWorkflow = async () => {
   try {
     console.log('📥 [loadWorkflow] 加载工作流详情, ID:', workflowId.value)
     const response = await getWorkflow(workflowId.value)
-    console.log('📥 [loadWorkflow] 服务器响应:', response)
-    const workflow = response.data
+    console.log('📥 [loadWorkflow] 完整响应:', response)
+    console.log('📥 [loadWorkflow] response.data:', response.data)
+    
+    // 修复：正确访问嵌套的 data 属性
+    const workflow = response.data.data || response.data
     console.log('📥 [loadWorkflow] 工作流数据:', workflow)
     console.log('📥 [loadWorkflow] DAG数据:', workflow.dag)
+    console.log('📥 [loadWorkflow] DAG.nodes:', workflow.dag?.nodes)
+    console.log('📥 [loadWorkflow] DAG.edges:', workflow.dag?.edges)
     
     form.name = workflow.name
     form.description = workflow.description
