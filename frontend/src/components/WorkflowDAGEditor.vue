@@ -9,6 +9,7 @@
           </el-button>
           <el-button size="small" icon="el-icon-delete" @click="deleteSelected">删除选中</el-button>
         </el-button-group>
+        <el-tag style="margin-left: 15px;">节点数: {{ dag.nodes.length }}</el-tag>
         <el-alert
           title="提示：双击节点可以配置任务详情，配置完整后节点边框会变为实线"
           type="info"
@@ -20,6 +21,15 @@
     </div>
 
     <div class="canvas" ref="canvasRef" @click="handleCanvasClick">
+      <!-- 调试信息 -->
+      <div style="position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border: 1px solid #ccc; z-index: 1000; font-size: 12px;">
+        <div>节点数量: {{ dag.nodes.length }}</div>
+        <div>边数量: {{ dag.edges.length }}</div>
+        <div v-for="(node, index) in dag.nodes" :key="node.id" style="margin-top: 5px;">
+          节点{{index}}: {{ node.label }} ({{ node.type }}) at [{{ node.position.x }}, {{ node.position.y }}]
+        </div>
+      </div>
+      
       <svg width="100%" height="100%">
         <!-- 绘制边 -->
         <g v-for="edge in dag.edges" :key="edge.id">
@@ -159,10 +169,39 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'save'])
 
-const dag = reactive({
-  nodes: props.modelValue?.nodes || [],
-  edges: props.modelValue?.edges || []
-})
+// 初始化 DAG 数据
+const initializeDAG = () => {
+  const initialNodes = props.modelValue?.nodes || []
+  const initialEdges = props.modelValue?.edges || []
+  
+  // 如果没有节点，添加开始和结束节点
+  if (initialNodes.length === 0) {
+    return {
+      nodes: [
+        {
+          id: 'start',
+          type: 'start',
+          label: '开始',
+          position: { x: 100, y: 50 }
+        },
+        {
+          id: 'end',
+          type: 'end',
+          label: '结束',
+          position: { x: 100, y: 400 }
+        }
+      ],
+      edges: []
+    }
+  }
+  
+  return {
+    nodes: initialNodes,
+    edges: initialEdges
+  }
+}
+
+const dag = reactive(initializeDAG())
 
 // 工具栏状态
 const connectionMode = ref(false)
@@ -200,11 +239,43 @@ const editFormRules = {
   ]
 }
 
+// 标记是否正在同步，避免循环更新
+const syncing = ref(false)
+
+// 监听 props.modelValue 变化，更新 DAG
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    if (syncing.value) return
+    
+    if (newValue && (newValue.nodes || newValue.edges)) {
+      // 只在有实际数据且与当前不同时更新
+      const nodesChanged = JSON.stringify(newValue.nodes) !== JSON.stringify(dag.nodes)
+      const edgesChanged = JSON.stringify(newValue.edges) !== JSON.stringify(dag.edges)
+      
+      if (nodesChanged || edgesChanged) {
+        syncing.value = true
+        if (newValue.nodes) dag.nodes = [...newValue.nodes]
+        if (newValue.edges) dag.edges = [...newValue.edges]
+        syncing.value = false
+      }
+    }
+  },
+  { deep: true, immediate: false }
+)
+
 // 监听 DAG 变化，同步到父组件
 watch(
   dag,
   (newDag) => {
-    emit('update:modelValue', { ...newDag })
+    if (syncing.value) return
+    
+    syncing.value = true
+    emit('update:modelValue', { 
+      nodes: [...newDag.nodes], 
+      edges: [...newDag.edges] 
+    })
+    syncing.value = false
   },
   { deep: true }
 )
@@ -454,22 +525,19 @@ const saveDAG = () => {
 
 // 初始化
 onMounted(() => {
-  // 确保至少有开始和结束节点
-  if (dag.nodes.length === 0) {
-    dag.nodes.push(
-      {
-        id: 'start',
-        type: 'start',
-        label: '开始',
-        position: { x: 100, y: 50 }
-      },
-      {
-        id: 'end',
-        type: 'end',
-        label: '结束',
-        position: { x: 100, y: 400 }
-      }
-    )
+  console.log('=== WorkflowDAGEditor mounted ===')
+  console.log('props.modelValue:', props.modelValue)
+  console.log('dag.nodes count:', dag.nodes.length)
+  console.log('dag.nodes:', JSON.stringify(dag.nodes, null, 2))
+  console.log('dag.edges:', JSON.stringify(dag.edges, null, 2))
+  
+  // 强制触发一次更新
+  if (dag.nodes.length > 0) {
+    console.log('Emitting initial update to parent')
+    emit('update:modelValue', { 
+      nodes: [...dag.nodes], 
+      edges: [...dag.edges] 
+    })
   }
 })
 </script>
