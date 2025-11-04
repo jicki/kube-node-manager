@@ -2,14 +2,14 @@
 
 # 🚀 Kubernetes 节点管理器
 
-[![Version](https://img.shields.io/badge/version-v2.9.8-blue.svg)](https://github.com/your-repo/kube-node-manager)
+[![Version](https://img.shields.io/badge/version-v2.27.0-blue.svg)](https://github.com/your-repo/kube-node-manager)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue.svg)](https://golang.org/)
 [![Vue Version](https://img.shields.io/badge/vue-3.x-brightgreen.svg)](https://vuejs.org/)
 
 **一个功能强大的企业级 Kubernetes 节点管理平台**
 
-支持多集群管理、节点标签和污点批量操作、飞书机器人集成、GitLab Runner 管理等功能
+支持多集群管理、节点标签和污点批量操作、Ansible 自动化运维、飞书机器人集成、GitLab Runner 管理等功能
 
 [功能特性](#-功能特性) • [快速开始](#-快速开始) • [部署方式](#-部署方式) • [文档](#-文档) • [贡献指南](#-贡献指南)
 
@@ -20,10 +20,16 @@
 ## 📖 目录
 
 - [功能特性](#-功能特性)
+  - [核心功能](#核心功能)
+  - [Ansible 自动化运维](#-ansible-自动化运维)
+  - [技术特性](#技术特性)
 - [技术架构](#️-技术架构)
 - [快速开始](#-快速开始)
 - [部署方式](#-部署方式)
 - [使用指南](#-使用指南)
+  - [Ansible 自动化运维使用](#ansible-自动化运维使用)
+  - [飞书机器人使用](#飞书机器人使用)
+  - [kubectl 插件使用](#kubectl-插件使用)
 - [项目结构](#-项目结构)
 - [开发指南](#-开发指南)
 - [文档](#-文档)
@@ -68,6 +74,26 @@
 - **Runner 配置** - 统一管理 GitLab Runner 配置和部署
 - **Token 管理** - 安全管理 GitLab Runner Token
 - **批量创建** - 支持批量创建和配置 Runner
+
+#### 🤖 Ansible 自动化运维
+- **任务管理** - 创建、执行、取消、重试 Ansible Playbook 任务
+- **模板管理** - Playbook 模板复用，支持变量定义和必需参数验证
+- **主机清单** - 手动创建或从 K8s 集群自动生成主机清单
+- **SSH 密钥管理** - 统一管理 SSH 私钥和密码，支持加密存储
+- **定时任务** - 基于 Cron 表达式的定时任务调度
+- **工作流编排** - DAG 有向无环图工作流，支持任务依赖和条件执行
+- **分批执行** - 按批次执行任务，支持暂停/继续/停止控制
+- **前置检查** - 执行前的连接性、资源和配置检查
+- **Dry Run 模式** - 检查模式运行，不实际执行变更
+- **实时日志** - WebSocket 实时推送任务执行日志
+- **任务队列** - 优先级队列管理，支持高/中/低优先级
+- **执行可视化** - 任务执行时间线和主机状态可视化展示
+- **收藏功能** - 收藏常用模板、清单和任务配置
+- **快速重执行** - 基于历史记录快速创建新任务
+- **标签管理** - 任务分类标签，支持批量标签操作
+- **超时控制** - 任务执行超时自动终止
+- **重试策略** - 失败自动重试和重试间隔配置
+- **执行统计** - 任务执行统计和成功率分析
 
 #### 🔧 kubectl 插件
 - **kubectl-node_mgr 插件** - 扩展 kubectl 命令行工具
@@ -159,6 +185,10 @@ Vue 3.x
 │  │ ┌─────────┐ ┌─────────┐ ┌──────────┐          │    │
 │  │ │GitLab   │ │审计日志  │ │健康检查  │          │    │
 │  │ └─────────┘ └─────────┘ └──────────┘          │    │
+│  │ ┌──────────────────────────────────┐          │    │
+│  │ │      Ansible 自动化运维           │          │    │
+│  │ │  任务 | 模板 | 清单 | 工作流     │          │    │
+│  │ └──────────────────────────────────┘          │    │
 │  └────────────────────────────────────────────────┘    │
 └───────────┬─────────────┬──────────────┬───────────────┘
             │             │              │
@@ -279,6 +309,19 @@ kube-node-manager/
 │   │   │   ├── label/         # 标签管理
 │   │   │   ├── taint/         # 污点管理
 │   │   │   ├── user/          # 用户管理
+│   │   │   ├── ansible/       # Ansible 模块处理器
+│   │   │   │   ├── handler.go          # 任务管理接口
+│   │   │   │   ├── template.go         # 模板管理接口
+│   │   │   │   ├── inventory.go        # 清单管理接口
+│   │   │   │   ├── sshkey.go           # SSH 密钥接口
+│   │   │   │   ├── schedule.go         # 定时任务接口
+│   │   │   │   ├── workflow.go         # 工作流接口
+│   │   │   │   ├── queue.go            # 队列管理接口
+│   │   │   │   ├── favorite.go         # 收藏功能接口
+│   │   │   │   ├── tag.go              # 标签管理接口
+│   │   │   │   ├── estimation.go       # 执行估算接口
+│   │   │   │   ├── visualization.go    # 可视化接口
+│   │   │   │   └── websocket.go        # WebSocket 日志流
 │   │   │   ├── feishu/        # 飞书集成
 │   │   │   ├── gitlab/        # GitLab 集成
 │   │   │   ├── audit/         # 审计日志
@@ -287,6 +330,22 @@ kube-node-manager/
 │   │   │   ├── auth/          # 认证服务
 │   │   │   ├── cluster/       # 集群服务
 │   │   │   ├── k8s/           # Kubernetes 客户端
+│   │   │   ├── ansible/       # Ansible 自动化服务
+│   │   │   │   ├── service.go          # 服务主入口
+│   │   │   │   ├── executor.go         # 任务执行器
+│   │   │   │   ├── template.go         # 模板管理
+│   │   │   │   ├── inventory.go        # 主机清单管理
+│   │   │   │   ├── sshkey.go           # SSH 密钥管理
+│   │   │   │   ├── schedule.go         # 定时任务调度
+│   │   │   │   ├── queue.go            # 任务队列管理
+│   │   │   │   ├── workflow.go         # 工作流服务
+│   │   │   │   ├── workflow_executor.go # 工作流执行器
+│   │   │   │   ├── workflow_validator.go # DAG 验证器
+│   │   │   │   ├── preflight.go        # 前置检查
+│   │   │   │   ├── favorite.go         # 收藏功能
+│   │   │   │   ├── tag.go              # 标签管理
+│   │   │   │   ├── estimation.go       # 执行估算
+│   │   │   │   └── visualization.go    # 可视化数据
 │   │   │   ├── feishu/        # 飞书机器人服务
 │   │   │   │   ├── bot.go              # 机器人核心
 │   │   │   │   ├── command_*.go        # 命令处理器
@@ -298,6 +357,17 @@ kube-node-manager/
 │   │   ├── model/             # 数据模型
 │   │   │   ├── user.go        # 用户模型
 │   │   │   ├── cluster.go     # 集群模型
+│   │   │   ├── ansible.go     # Ansible 相关模型
+│   │   │   │   # - AnsibleTask（任务）
+│   │   │   │   # - AnsibleTemplate（模板）
+│   │   │   │   # - AnsibleInventory（主机清单）
+│   │   │   │   # - AnsibleSSHKey（SSH 密钥）
+│   │   │   │   # - AnsibleSchedule（定时任务）
+│   │   │   │   # - AnsibleWorkflow（工作流）
+│   │   │   │   # - AnsibleWorkflowExecution（工作流执行）
+│   │   │   │   # - AnsibleTag（标签）
+│   │   │   │   # - AnsibleFavorite（收藏）
+│   │   │   │   # - AnsibleTaskHistory（执行历史）
 │   │   │   ├── audit.go       # 审计日志模型
 │   │   │   └── migrate.go     # 数据库迁移
 │   │   └── config/            # 配置管理
@@ -426,6 +496,445 @@ kube-node-manager/
 - 设置污点键值对
 - 批量应用污点配置
 ```
+
+### Ansible 自动化运维使用
+
+#### 概述
+
+Ansible 模块提供了完整的自动化运维能力，支持在 Kubernetes 节点上批量执行运维任务，包括系统配置、软件部署、健康检查等操作。
+
+#### 1. SSH 密钥管理
+
+在执行 Ansible 任务前，需要先配置 SSH 认证方式：
+
+```
+Ansible 管理 → SSH 密钥管理 → 添加密钥
+```
+
+**支持的认证方式**：
+- **SSH 私钥认证**（推荐）：上传 SSH 私钥文件，支持密钥密码
+- **密码认证**：使用 SSH 用户名和密码
+
+**配置项**：
+- 密钥名称：便于识别的名称
+- SSH 用户名：目标主机的登录用户（如 root、ubuntu）
+- SSH 端口：默认 22
+- 私钥内容：RSA/Ed25519 等格式私钥
+- 私钥密码：可选，如果私钥有密码保护
+- 设为默认：新建清单时自动使用此密钥
+
+**安全说明**：所有 SSH 凭据使用 AES-256 加密存储。
+
+#### 2. 主机清单管理
+
+主机清单定义了 Ansible 任务的执行目标主机。
+
+**创建方式**：
+
+##### 方式一：从 K8s 集群自动生成
+```
+Ansible 管理 → 主机清单 → 从集群生成
+- 选择 K8s 集群
+- 选择 SSH 密钥
+- 可选：使用标签过滤节点（如 env=production）
+- 自动获取节点内网 IP 作为主机地址
+```
+
+##### 方式二：手动创建清单
+```
+Ansible 管理 → 主机清单 → 新建清单
+- 清单名称和描述
+- 选择 SSH 密钥
+- 编写 INI 或 YAML 格式的 Inventory 内容
+```
+
+**INI 格式示例**：
+```ini
+[webservers]
+web1.example.com
+web2.example.com
+
+[databases]
+db1.example.com
+db2.example.com
+
+[all:vars]
+ansible_user=ubuntu
+ansible_port=22
+```
+
+**YAML 格式示例**：
+```yaml
+all:
+  children:
+    webservers:
+      hosts:
+        web1.example.com:
+        web2.example.com:
+    databases:
+      hosts:
+        db1.example.com:
+        db2.example.com:
+  vars:
+    ansible_user: ubuntu
+    ansible_port: 22
+```
+
+#### 3. Playbook 模板管理
+
+创建可复用的 Playbook 模板，提高运维效率。
+
+```
+Ansible 管理 → 模板管理 → 新建模板
+```
+
+**配置项**：
+- **模板名称**：如"系统健康检查"、"Nginx 部署"
+- **模板描述**：详细说明模板用途
+- **Playbook 内容**：标准的 Ansible Playbook YAML
+- **变量定义**：定义可配置的变量及默认值
+- **必需变量**：标记必须提供的变量
+- **风险等级**：low/medium/high，用于操作审批
+
+**Playbook 示例**：
+```yaml
+---
+- name: 系统资源状态检查
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: 检查磁盘使用率
+      shell: df -h
+      register: disk_usage
+    
+    - name: 检查内存使用
+      shell: free -h
+      register: memory_usage
+    
+    - name: 检查 CPU 负载
+      shell: uptime
+      register: cpu_load
+    
+    - name: 显示结果
+      debug:
+        msg: |
+          磁盘使用: {{ disk_usage.stdout }}
+          内存使用: {{ memory_usage.stdout }}
+          CPU 负载: {{ cpu_load.stdout }}
+```
+
+**带变量的 Playbook 示例**：
+```yaml
+---
+- name: 部署 Nginx
+  hosts: webservers
+  become: yes
+  vars:
+    nginx_version: "{{ nginx_version | default('latest') }}"
+    nginx_port: "{{ nginx_port | default(80) }}"
+  tasks:
+    - name: 安装 Nginx
+      apt:
+        name: "nginx={{ nginx_version }}"
+        state: present
+        update_cache: yes
+    
+    - name: 配置 Nginx 端口
+      lineinfile:
+        path: /etc/nginx/sites-available/default
+        regexp: '^(\s*)listen'
+        line: '    listen {{ nginx_port }};'
+      notify: 重启 Nginx
+    
+  handlers:
+    - name: 重启 Nginx
+      service:
+        name: nginx
+        state: restarted
+```
+
+#### 4. 执行 Ansible 任务
+
+##### 快速执行
+```
+Ansible 管理 → 任务管理 → 创建任务
+```
+
+**基本配置**：
+1. **任务名称**：描述性名称
+2. **选择模板**：使用已有模板或直接编写 Playbook
+3. **选择清单**：指定目标主机清单
+4. **关联集群**（可选）：关联 K8s 集群便于追踪
+
+**高级选项**：
+
+##### Dry Run 模式（检查模式）
+```
+☑ 启用 Dry Run 模式
+- 不会实际执行变更操作
+- 仅检查语法和预测可能的变更
+- 适合生产环境操作前验证
+```
+
+##### 分批执行
+```
+☑ 启用分批执行
+- 批次大小：固定数量（如 5 台）或百分比（如 20%）
+- 批次间暂停：每批执行后需手动确认继续
+- 失败阈值：超过 N 台主机失败则停止
+- 单批失败率：超过百分比则停止（如 30%）
+```
+
+**应用场景**：大规模滚动更新、逐步灰度部署
+
+##### 超时控制
+```
+超时时间：3600 秒
+- 0 表示不限制
+- 超时自动终止任务
+```
+
+##### 任务优先级
+```
+优先级：高/中/低
+- 影响队列中的执行顺序
+- 紧急任务使用高优先级
+```
+
+##### 变量传递
+```json
+{
+  "nginx_version": "1.20.2",
+  "nginx_port": 8080,
+  "enable_ssl": true
+}
+```
+
+#### 5. 任务监控与控制
+
+##### 实时查看任务执行
+
+**任务列表**：
+- 查看所有任务的状态、进度、耗时
+- 按状态筛选：运行中/成功/失败/已取消
+- 按集群、模板筛选
+
+**任务详情**：
+- 实时日志输出（WebSocket）
+- 执行统计：总主机数、成功/失败/跳过数
+- 执行时间线：各阶段耗时可视化
+- 主机状态列表：每台主机的详细执行情况
+
+##### 任务控制操作
+
+**取消任务**：
+```
+任务详情 → 取消任务
+- 终止正在执行的任务
+- 已完成的主机不会回滚
+```
+
+**暂停/继续批次**（分批执行时）：
+```
+任务详情 → 暂停批次
+- 当前批次完成后暂停
+- 人工检查后再继续下一批
+```
+
+**重试失败任务**：
+```
+任务详情 → 重试
+- 仅在失败的主机上重新执行
+- 保留原有配置和变量
+```
+
+#### 6. 定时任务调度
+
+创建周期性执行的自动化任务。
+
+```
+Ansible 管理 → 定时任务 → 新建调度
+```
+
+**配置项**：
+- **调度名称**：如"每日健康检查"
+- **选择模板**：要执行的 Playbook 模板
+- **选择清单**：目标主机清单
+- **Cron 表达式**：定义执行周期
+- **额外变量**：可选，覆盖模板默认值
+- **启用状态**：开启/关闭调度
+
+**Cron 表达式示例**：
+```bash
+# 每天凌晨 2 点执行
+0 0 2 * * *
+
+# 每小时执行
+0 0 * * * *
+
+# 每周一上午 9 点执行
+0 0 9 * * 1
+
+# 每 30 分钟执行
+0 */30 * * * *
+```
+
+**调度管理**：
+- 查看下次执行时间
+- 查看历史执行记录
+- 临时禁用/启用调度
+- 查看执行统计
+
+#### 7. 工作流编排（DAG）
+
+使用有向无环图编排复杂的多步骤自动化流程。
+
+```
+Ansible 管理 → 工作流管理 → 新建工作流
+```
+
+**工作流组件**：
+- **开始节点**：工作流入口（有且仅有一个）
+- **任务节点**：执行 Ansible 任务（可配置模板、清单、变量）
+- **结束节点**：工作流出口（有且仅有一个）
+- **连接线**：定义任务执行顺序和依赖关系
+
+**功能特性**：
+- **依赖管理**：任务按依赖顺序执行
+- **并行执行**：无依赖关系的任务可并行执行
+- **条件执行**：根据前置任务结果决定是否执行
+- **可视化编辑**：拖拽式 DAG 图编辑器
+- **循环检测**：自动检测并禁止循环依赖
+
+**应用场景**：
+- 应用部署流程：拉取代码 → 构建 → 测试 → 部署 → 健康检查
+- 系统初始化：安装基础软件 → 配置防火墙 → 安装监控 → 配置日志
+- 故障恢复：检测故障 → 停止服务 → 恢复数据 → 重启服务 → 验证
+
+**工作流执行**：
+```
+工作流管理 → 选择工作流 → 执行
+- 查看实时执行状态
+- 可视化显示当前执行节点
+- 查看各任务的详细日志
+- 失败自动停止后续依赖任务
+```
+
+#### 8. 前置检查
+
+在执行任务前进行环境检查，降低执行风险。
+
+```
+任务创建 → 高级选项 → 执行前置检查
+```
+
+**检查项**：
+
+| 类别 | 检查项 | 说明 |
+|------|--------|------|
+| **连接性检查** | SSH 连通性 | 验证能否连接所有目标主机 |
+| | SSH 认证 | 验证 SSH 密钥或密码是否正确 |
+| | 网络延迟 | 测试网络连接质量 |
+| **资源检查** | 磁盘空间 | 检查可用磁盘空间是否充足 |
+| | 内存资源 | 检查可用内存 |
+| | CPU 负载 | 检查当前系统负载 |
+| **配置检查** | Ansible 版本 | 验证目标主机 Ansible 版本兼容性 |
+| | Python 版本 | 检查 Python 环境 |
+| | 必需软件 | 检查依赖软件是否已安装 |
+
+**检查结果**：
+- ✅ **通过**：所有检查项通过，可以安全执行
+- ⚠️ **警告**：部分检查项异常，建议修复后执行
+- ❌ **失败**：严重问题，禁止执行任务
+
+#### 9. 收藏与快速操作
+
+**收藏功能**：
+```
+模板/清单/任务 → 收藏
+- 收藏常用配置
+- 快速访问收藏夹
+- 一键创建相同配置的任务
+```
+
+**执行历史**：
+```
+任务管理 → 执行历史
+- 查看历史执行记录
+- 基于历史快速重建任务
+- 保留原有变量和配置
+- 一键重新执行
+```
+
+#### 10. 标签管理
+
+使用标签对任务进行分类管理。
+
+```
+Ansible 管理 → 标签管理
+```
+
+**功能**：
+- 创建自定义标签（支持颜色分类）
+- 为任务批量添加/移除标签
+- 按标签筛选任务
+- 标签统计和分析
+
+**应用场景**：
+- 环境标签：dev、staging、production
+- 类型标签：部署、配置、监控、备份
+- 项目标签：project-a、project-b
+
+#### 11. 任务队列与优先级
+
+系统自动管理任务队列，支持优先级调度。
+
+**优先级级别**：
+- **高优先级**：紧急任务、故障恢复
+- **中优先级**：常规运维任务（默认）
+- **低优先级**：批量巡检、清理任务
+
+**队列管理**：
+```
+Ansible 管理 → 任务队列
+- 查看等待执行的任务
+- 查看当前执行的任务
+- 修改任务优先级
+- 取消排队中的任务
+```
+
+#### 12. 执行统计与分析
+
+查看 Ansible 模块的整体使用情况。
+
+```
+Ansible 管理 → 统计分析
+```
+
+**统计指标**：
+- 总任务数、成功率、失败率
+- 平均执行时长
+- 最常用的模板和清单
+- 各集群的任务分布
+- 用户操作统计
+- 每日/每周/每月趋势图
+
+#### 安全与权限
+
+**权限要求**：
+- Ansible 模块仅限管理员（Admin）角色访问
+- 所有操作记录审计日志
+- SSH 凭据加密存储
+
+**最佳实践**：
+1. 使用 SSH 密钥认证，避免使用密码
+2. 为不同环境创建独立的 SSH 密钥
+3. 敏感操作前先执行 Dry Run
+4. 使用分批执行进行大规模变更
+5. 配置合理的超时时间
+6. 定期清理历史任务日志
+7. 使用工作流编排复杂流程
+8. 充分利用模板复用 Playbook
 
 ### 飞书机器人使用
 
@@ -651,6 +1160,7 @@ git commit -m "docs: 更新 README 安装说明"
 | `/api/v1/labels/*` (GET) | ✅ | ✅ | ✅ |
 | `/api/v1/taints/*` (POST/PUT/DELETE) | ✅ | ✅ | ❌ |
 | `/api/v1/taints/*` (GET) | ✅ | ✅ | ✅ |
+| `/api/v1/ansible/*` | ✅ | ❌ | ❌ |
 | `/api/v1/audit/*` | ✅ | ✅ | ✅ |
 
 ## 🔌 LDAP 集成
@@ -1108,11 +1618,19 @@ kubectl get pods,svc,ingress -n kube-system -l app=kube-node-manager
 ## 📚 文档
 
 ### 功能文档
+
+#### Ansible 自动化运维
+- [Ansible 工作流 DAG 功能实现](docs/workflow-dag-implementation.md)
+- [任务可视化与执行改进](docs/CHANGELOG-task-visualization-improvements.md)
+
+#### 飞书机器人集成
 - [飞书机器人批量操作和快捷命令](docs/feishu-bot-batch-and-quick-commands.md)
 - [飞书机器人交互式卡片和命令解析](docs/feishu-bot-interactive-and-parser.md)
 - [飞书机器人标签和污点管理](docs/feishu-bot-label-taint-implementation.md)
 - [飞书机器人会话管理](docs/feishu-bot-session-management.md)
 - [飞书机器人优化和性能提升](docs/feishu-bot-optimization-and-performance.md)
+
+#### 其他功能
 - [批量操作优化](docs/batch-operations-optimization.md)
 
 ### 部署与配置
@@ -1153,7 +1671,7 @@ docker-compose up --build -d
 
 # 5. Kubernetes 更新
 kubectl set image deployment/kube-node-manager \
-  kube-node-manager=your-registry/kube-node-manager:v2.9.8 \
+  kube-node-manager=your-registry/kube-node-manager:v2.27.0 \
   -n kube-system
 
 # 6. 验证更新
@@ -1287,8 +1805,8 @@ git push origin feature/amazing-feature
 
 ### 项目信息
 
-- **当前版本**: v2.9.8
-- **最后更新**: 2024-10-22
+- **当前版本**: v2.27.0
+- **最后更新**: 2025-11-04
 - **维护状态**: 🟢 活跃维护中
 
 ### 鸣谢
