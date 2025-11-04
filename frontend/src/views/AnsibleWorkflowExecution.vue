@@ -337,7 +337,11 @@ const selectNode = (node) => {
 
 // 查看任务日志
 const viewTaskLog = (task) => {
-  router.push(`/ansible/tasks/${task.id}`)
+  // 跳转到任务中心，并通过 query 参数指定要查看的任务
+  router.push({
+    path: '/ansible-tasks',
+    query: { taskId: task.id }
+  })
 }
 
 // 取消执行

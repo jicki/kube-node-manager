@@ -346,6 +346,38 @@ func (h *WorkflowHandler) CancelWorkflowExecution(c *gin.Context) {
 	})
 }
 
+// DeleteWorkflowExecution 删除工作流执行记录
+// @Summary 删除工作流执行记录
+// @Tags Ansible Workflow
+// @Produce json
+// @Param id path int true "执行 ID"
+// @Success 200 {object} map[string]string
+// @Router /api/ansible/workflow-executions/{id} [delete]
+func (h *WorkflowHandler) DeleteWorkflowExecution(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 ID"})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
+	if err := h.workflowService.DeleteWorkflowExecution(uint(id), userID.(uint)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "执行记录已删除",
+	})
+}
+
 // GetWorkflowExecutionStatus 获取工作流执行状态
 // @Summary 获取工作流执行状态（实时节点状态）
 // @Tags Ansible Workflow

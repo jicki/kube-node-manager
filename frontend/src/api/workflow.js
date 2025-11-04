@@ -76,6 +76,14 @@ export function cancelWorkflowExecution(id) {
   })
 }
 
+// 删除工作流执行记录
+export function deleteWorkflowExecution(id) {
+  return request({
+    url: `/api/v1/ansible/workflow-executions/${id}`,
+    method: 'delete'
+  })
+}
+
 // 获取工作流执行状态（实时）
 export function getWorkflowExecutionStatus(id) {
   return request({

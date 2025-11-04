@@ -294,6 +294,39 @@ func (s *WorkflowService) ListWorkflowExecutions(userID uint, req *model.Workflo
 	return result, total, nil
 }
 
+// DeleteWorkflowExecution 删除工作流执行记录
+func (s *WorkflowService) DeleteWorkflowExecution(id uint, userID uint) error {
+	// 验证执行记录存在且用户有权限
+	var execution model.AnsibleWorkflowExecution
+	if err := s.db.Where("id = ? AND user_id = ?", id, userID).
+		First(&execution).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("执行记录不存在或无权访问")
+		}
+		return fmt.Errorf("查询执行记录失败: %w", err)
+	}
+
+	// 不能删除正在运行的执行
+	if execution.Status == "running" || execution.Status == "pending" {
+		return fmt.Errorf("无法删除正在运行的工作流执行")
+	}
+
+	// 删除关联的任务（如果有外键约束，这一步可能不需要）
+	if err := s.db.Where("workflow_execution_id = ?", id).Delete(&model.AnsibleTask{}).Error; err != nil {
+		s.logger.Errorf("Failed to delete workflow execution tasks: %v", err)
+		return fmt.Errorf("删除关联任务失败: %w", err)
+	}
+
+	// 删除执行记录
+	if err := s.db.Delete(&execution).Error; err != nil {
+		s.logger.Errorf("Failed to delete workflow execution: %v", err)
+		return fmt.Errorf("删除执行记录失败: %w", err)
+	}
+
+	s.logger.Infof("Deleted workflow execution %d by user %d", id, userID)
+	return nil
+}
+
 // GetCompletedWorkflowStatus 获取已完成工作流的节点状态
 func (s *WorkflowService) GetCompletedWorkflowStatus(executionID uint, userID uint) (map[string]string, error) {
 	// 验证执行记录存在且有权访问

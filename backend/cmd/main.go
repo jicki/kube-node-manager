@@ -428,6 +428,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.GET("/workflow-executions", handlers.AnsibleWorkflow.ListWorkflowExecutions)
 		ansible.GET("/workflow-executions/:id", handlers.AnsibleWorkflow.GetWorkflowExecution)
 		ansible.POST("/workflow-executions/:id/cancel", handlers.AnsibleWorkflow.CancelWorkflowExecution)
+		ansible.DELETE("/workflow-executions/:id", handlers.AnsibleWorkflow.DeleteWorkflowExecution)
 		ansible.GET("/workflow-executions/:id/status", handlers.AnsibleWorkflow.GetWorkflowExecutionStatus)
 	}
 
