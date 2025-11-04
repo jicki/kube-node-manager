@@ -1,13 +1,21 @@
 <template>
   <div class="dag-editor">
     <div class="toolbar">
-      <el-button-group>
-        <el-button size="small" icon="el-icon-plus" @click="addNode('task')">添加任务节点</el-button>
-        <el-button size="small" icon="el-icon-connection" @click="toggleConnectionMode">
-          {{ connectionMode ? '取消连线' : '连线模式' }}
-        </el-button>
-        <el-button size="small" icon="el-icon-delete" @click="deleteSelected">删除选中</el-button>
-      </el-button-group>
+      <div class="toolbar-left">
+        <el-button-group>
+          <el-button size="small" icon="el-icon-plus" @click="addNode('task')">添加任务节点</el-button>
+          <el-button size="small" icon="el-icon-connection" @click="toggleConnectionMode">
+            {{ connectionMode ? '取消连线' : '连线模式' }}
+          </el-button>
+          <el-button size="small" icon="el-icon-delete" @click="deleteSelected">删除选中</el-button>
+        </el-button-group>
+        <el-alert
+          title="提示：双击节点可以配置任务详情，配置完整后节点边框会变为实线"
+          type="info"
+          :closable="false"
+          style="margin-left: 15px; padding: 8px 12px;"
+        />
+      </div>
       <el-button size="small" type="primary" @click="saveDAG">保存</el-button>
     </div>
 
@@ -46,7 +54,13 @@
         v-for="node in dag.nodes"
         :key="node.id"
         class="node"
-        :class="[node.type, { selected: selectedNode === node.id }]"
+        :class="[
+          node.type, 
+          { 
+            selected: selectedNode === node.id,
+            'not-configured': node.type === 'task' && !isNodeConfigured(node)
+          }
+        ]"
         :style="{
           left: node.position.x + 'px',
           top: node.position.y + 'px'
@@ -62,9 +76,19 @@
             <i v-else class="el-icon-document"></i>
           </span>
           <span class="node-label">{{ node.label }}</span>
+          <i v-if="node.type === 'task' && !isNodeConfigured(node)" 
+             class="el-icon-warning" 
+             style="color: #f56c6c; margin-left: 5px;"
+             title="节点未配置完整，请双击编辑"
+          ></i>
         </div>
         <div v-if="node.type === 'task' && node.task_config" class="node-body">
-          <div class="node-info">{{ node.task_config.name }}</div>
+          <div class="node-info">
+            {{ node.task_config.name || '未配置任务名称' }}
+          </div>
+          <div class="node-hint" v-if="!isNodeConfigured(node)">
+            <small style="color: #f56c6c;">双击配置</small>
+          </div>
         </div>
         <div v-if="connectionMode" class="connection-points">
           <div class="point input" @click.stop="connectTo(node.id)" />
@@ -75,31 +99,40 @@
 
     <!-- 节点编辑对话框 -->
     <el-dialog v-model="editDialogVisible" title="编辑节点" width="600px">
-      <el-form :model="editingNode" label-width="100px">
-        <el-form-item label="节点标签">
-          <el-input v-model="editingNode.label" />
+      <el-form ref="editFormRef" :model="editingNode" :rules="editFormRules" label-width="100px">
+        <el-form-item label="节点标签" prop="label">
+          <el-input v-model="editingNode.label" placeholder="为节点设置一个描述性的标签" />
         </el-form-item>
-        <el-form-item v-if="editingNode.type === 'task'" label="任务名称">
-          <el-input v-model="editingNode.task_config.name" />
-        </el-form-item>
-        <el-form-item v-if="editingNode.type === 'task'" label="主机清单">
-          <el-select v-model="editingNode.task_config.inventory_id" placeholder="选择主机清单">
-            <el-option
-              v-for="inv in inventories"
-              :key="inv.id"
-              :label="inv.name"
-              :value="inv.id"
+        <template v-if="editingNode.type === 'task'">
+          <el-form-item label="任务名称" prop="task_config.name">
+            <el-input 
+              v-model="editingNode.task_config.name" 
+              placeholder="输入任务名称，用于标识该任务"
             />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="editingNode.type === 'task'" label="Playbook">
-          <el-input
-            v-model="editingNode.task_config.playbook_content"
-            type="textarea"
-            :rows="10"
-            placeholder="输入 Ansible Playbook YAML 内容"
-          />
-        </el-form-item>
+          </el-form-item>
+          <el-form-item label="主机清单" prop="task_config.inventory_id">
+            <el-select 
+              v-model="editingNode.task_config.inventory_id" 
+              placeholder="选择要执行任务的主机清单"
+              style="width: 100%;"
+            >
+              <el-option
+                v-for="inv in inventories"
+                :key="inv.id"
+                :label="inv.name"
+                :value="inv.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="Playbook" prop="task_config.playbook_content">
+            <el-input
+              v-model="editingNode.task_config.playbook_content"
+              type="textarea"
+              :rows="10"
+              placeholder="输入 Ansible Playbook YAML 内容，例如：&#10;- hosts: all&#10;  tasks:&#10;    - name: ping&#10;      ping:"
+            />
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
@@ -111,7 +144,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElNotification } from 'element-plus'
 
 const props = defineProps({
   modelValue: {
@@ -148,6 +181,24 @@ const dragOffset = ref({ x: 0, y: 0 })
 
 // 画布引用
 const canvasRef = ref(null)
+const editFormRef = ref(null)
+
+// 表单验证规则
+const editFormRules = {
+  label: [
+    { required: true, message: '节点标签不能为空', trigger: 'blur' }
+  ],
+  'task_config.name': [
+    { required: true, message: '任务名称不能为空', trigger: 'blur' },
+    { min: 2, max: 100, message: '任务名称长度在 2 到 100 个字符', trigger: 'blur' }
+  ],
+  'task_config.inventory_id': [
+    { required: true, message: '请选择主机清单', trigger: 'change' }
+  ],
+  'task_config.playbook_content': [
+    { required: true, message: 'Playbook 内容不能为空', trigger: 'blur' }
+  ]
+}
 
 // 监听 DAG 变化，同步到父组件
 watch(
@@ -253,15 +304,29 @@ const selectEdge = (edgeId) => {
 const editNode = (node) => {
   editingNode.value = JSON.parse(JSON.stringify(node))
   editDialogVisible.value = true
+  // 清除表单验证状态
+  setTimeout(() => {
+    if (editFormRef.value) {
+      editFormRef.value.clearValidate()
+    }
+  }, 0)
 }
 
 // 保存节点编辑
-const saveNodeEdit = () => {
-  const index = dag.nodes.findIndex(n => n.id === editingNode.value.id)
-  if (index !== -1) {
-    dag.nodes[index] = editingNode.value
+const saveNodeEdit = async () => {
+  if (!editFormRef.value) return
+  
+  try {
+    await editFormRef.value.validate()
+    const index = dag.nodes.findIndex(n => n.id === editingNode.value.id)
+    if (index !== -1) {
+      dag.nodes[index] = editingNode.value
+    }
+    editDialogVisible.value = false
+    ElMessage.success('节点配置保存成功')
+  } catch (error) {
+    console.log('Validation failed:', error)
   }
-  editDialogVisible.value = false
 }
 
 // 删除选中
@@ -319,8 +384,71 @@ const handleCanvasClick = () => {
   selectedEdge.value = null
 }
 
+// 检查节点是否已配置
+const isNodeConfigured = (node) => {
+  if (node.type !== 'task') return true
+  if (!node.task_config) return false
+  
+  return !!(
+    node.task_config.name && 
+    node.task_config.name.trim() !== '' &&
+    node.task_config.inventory_id &&
+    node.task_config.playbook_content && 
+    node.task_config.playbook_content.trim() !== ''
+  )
+}
+
+// 验证 DAG
+const validateDAG = () => {
+  const errors = []
+  
+  // 检查是否有节点
+  if (dag.nodes.length === 0) {
+    errors.push('至少需要添加一个节点')
+    return errors
+  }
+  
+  // 检查任务节点配置
+  dag.nodes.forEach(node => {
+    if (node.type === 'task') {
+      if (!node.task_config) {
+        errors.push(`节点"${node.label}"缺少任务配置，请双击节点进行配置`)
+        return
+      }
+      
+      if (!node.task_config.name || node.task_config.name.trim() === '') {
+        errors.push(`节点"${node.label}"的任务名称不能为空，请双击节点配置任务名称`)
+      }
+      
+      if (!node.task_config.inventory_id) {
+        errors.push(`节点"${node.label}"未选择主机清单，请双击节点配置主机清单`)
+      }
+      
+      if (!node.task_config.playbook_content || node.task_config.playbook_content.trim() === '') {
+        errors.push(`节点"${node.label}"的 Playbook 内容不能为空，请双击节点配置 Playbook`)
+      }
+    }
+  })
+  
+  return errors
+}
+
 // 保存 DAG
 const saveDAG = () => {
+  // 验证 DAG
+  const errors = validateDAG()
+  if (errors.length > 0) {
+    // 使用通知组件显示多个错误
+    ElNotification({
+      title: 'DAG 配置不完整',
+      message: errors.map((err, index) => `${index + 1}. ${err}`).join('\n'),
+      type: 'error',
+      duration: 8000,
+      dangerouslyUseHTMLString: false
+    })
+    return
+  }
+  
   emit('save', { ...dag })
 }
 
@@ -360,6 +488,13 @@ onMounted(() => {
   border-bottom: 1px solid #ddd;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+
+.dag-editor .toolbar .toolbar-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
 }
 
 .dag-editor .canvas {
@@ -436,6 +571,25 @@ onMounted(() => {
 .dag-editor .canvas .node.task .node-header {
   background: #409eff;
   color: white;
+}
+
+.dag-editor .canvas .node.not-configured {
+  border-color: #f56c6c;
+  border-style: dashed;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.dag-editor .canvas .node.not-configured .node-header {
+  background: #f56c6c;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(245, 108, 108, 0.2);
+  }
+  50% {
+    box-shadow: 0 4px 12px rgba(245, 108, 108, 0.4);
+  }
 }
 
 .dag-editor .canvas .node .node-header {
