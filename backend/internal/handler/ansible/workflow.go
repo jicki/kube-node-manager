@@ -1,6 +1,7 @@
 package ansible
 
 import (
+	"fmt"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/ansible"
 	"kube-node-manager/pkg/logger"
@@ -375,6 +376,42 @@ func (h *WorkflowHandler) DeleteWorkflowExecution(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "执行记录已删除",
+	})
+}
+
+// BatchDeleteWorkflowExecutions 批量删除工作流执行记录
+// @Summary 批量删除工作流执行记录
+// @Tags Ansible Workflow
+// @Accept json
+// @Produce json
+// @Param ids body []uint true "执行 ID 列表"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/ansible/workflow-executions/batch-delete [post]
+func (h *WorkflowHandler) BatchDeleteWorkflowExecutions(c *gin.Context) {
+	var req struct {
+		IDs []uint `json:"ids" binding:"required,min=1"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求参数: " + err.Error()})
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
+	if err := h.workflowService.DeleteWorkflowExecutions(req.IDs, userID.(uint)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": fmt.Sprintf("成功删除 %d 条执行记录", len(req.IDs)),
+		"deleted": len(req.IDs),
 	})
 }
 

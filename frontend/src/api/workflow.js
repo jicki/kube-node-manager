@@ -84,6 +84,15 @@ export function deleteWorkflowExecution(id) {
   })
 }
 
+// 批量删除工作流执行记录
+export function batchDeleteWorkflowExecutions(ids) {
+  return request({
+    url: '/api/v1/ansible/workflow-executions/batch-delete',
+    method: 'post',
+    data: { ids }
+  })
+}
+
 // 获取工作流执行状态（实时）
 export function getWorkflowExecutionStatus(id) {
   return request({

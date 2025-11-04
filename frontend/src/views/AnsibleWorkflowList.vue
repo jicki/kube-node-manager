@@ -83,6 +83,15 @@
         <div class="execution-header">
           <span>工作流执行监控</span>
           <div class="execution-filters">
+            <el-button 
+              v-if="selectedExecutionIds.length > 0"
+              type="danger" 
+              icon="el-icon-delete"
+              @click="handleBatchDelete"
+              style="margin-right: 12px"
+            >
+              批量删除 ({{ selectedExecutionIds.length }})
+            </el-button>
             <el-select 
               v-model="executionFilters.workflow_id" 
               clearable 
@@ -122,7 +131,13 @@
         </div>
       </template>
       
-      <el-table :data="executions" v-loading="executionLoading" stripe>
+      <el-table 
+        :data="executions" 
+        v-loading="executionLoading" 
+        stripe
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="55" :selectable="isExecutionSelectable" />
         <el-table-column prop="id" label="执行 ID" width="100" align="center" />
         <el-table-column label="工作流" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
@@ -219,7 +234,8 @@ import {
   executeWorkflow,
   listWorkflowExecutions,
   cancelWorkflowExecution,
-  deleteWorkflowExecution
+  deleteWorkflowExecution,
+  batchDeleteWorkflowExecutions
 } from '@/api/workflow'
 import { formatTime } from '@/utils/format'
 
@@ -240,6 +256,7 @@ const executionCurrentPage = ref(1)
 const executionPageSize = ref(20)
 const executionTotal = ref(0)
 const autoRefreshTimer = ref(null)
+const selectedExecutionIds = ref([])
 
 const executionFilters = ref({
   workflow_id: null,
@@ -406,6 +423,7 @@ const handleDeleteExecution = async (execution) => {
 
     await deleteWorkflowExecution(execution.id)
     ElMessage.success('执行记录已删除')
+    selectedExecutionIds.value = []
     await loadExecutions()
   } catch (error) {
     if (error !== 'cancel') {
@@ -413,6 +431,46 @@ const handleDeleteExecution = async (execution) => {
       ElMessage.error(error.response?.data?.error || '删除执行记录失败')
     }
   }
+}
+
+// 批量删除执行记录
+const handleBatchDelete = async () => {
+  if (selectedExecutionIds.value.length === 0) {
+    ElMessage.warning('请选择要删除的执行记录')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedExecutionIds.value.length} 条执行记录吗？此操作不可恢复。`,
+      '确认批量删除',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    await batchDeleteWorkflowExecutions(selectedExecutionIds.value)
+    ElMessage.success(`成功删除 ${selectedExecutionIds.value.length} 条执行记录`)
+    selectedExecutionIds.value = []
+    await loadExecutions()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Failed to batch delete executions:', error)
+      ElMessage.error(error.response?.data?.error || '批量删除执行记录失败')
+    }
+  }
+}
+
+// 选择变更处理
+const handleSelectionChange = (selection) => {
+  selectedExecutionIds.value = selection.map(item => item.id)
+}
+
+// 判断执行记录是否可选择（正在运行的不能选）
+const isExecutionSelectable = (row) => {
+  return row.status !== 'running' && row.status !== 'pending'
 }
 
 // 获取状态类型
