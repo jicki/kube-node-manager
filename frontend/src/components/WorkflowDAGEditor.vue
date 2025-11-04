@@ -21,16 +21,17 @@
     </div>
 
     <div class="canvas" ref="canvasRef" @click="handleCanvasClick">
-      <!-- 临时调试面板 -->
-      <div style="position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border: 2px solid red; z-index: 100; font-size: 12px; max-width: 400px;">
-        <div><strong>调试信息：</strong></div>
-        <div>画布尺寸: {{ canvasRef?.offsetWidth }}x{{ canvasRef?.offsetHeight }}</div>
-        <div>节点总数: {{ dag.nodes.length }}</div>
-        <div>边总数: {{ dag.edges.length }}</div>
-        <div v-for="(node, idx) in dag.nodes" :key="node.id" style="margin-top: 5px; border-top: 1px solid #eee; padding-top: 5px;">
-          <div>节点{{ idx }}: {{ node.label }} ({{ node.type }})</div>
-          <div>位置: [{{ node.position.x }}, {{ node.position.y }}]</div>
-          <div>ID: {{ node.id }}</div>
+      <!-- 临时调试面板 - 增强版 -->
+      <div style="position: fixed; top: 100px; left: 50px; background: yellow; padding: 15px; border: 3px solid red; z-index: 99999; font-size: 14px; max-width: 500px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+        <div style="font-weight: bold; font-size: 16px; margin-bottom: 10px;">🔍 DAG 调试信息</div>
+        <div style="margin: 5px 0;"><strong>画布尺寸:</strong> {{ canvasRef?.offsetWidth }}px × {{ canvasRef?.offsetHeight }}px</div>
+        <div style="margin: 5px 0;"><strong>节点总数:</strong> {{ dag.nodes.length }}</div>
+        <div style="margin: 5px 0;"><strong>边总数:</strong> {{ dag.edges.length }}</div>
+        <hr style="margin: 10px 0;">
+        <div v-for="(node, idx) in dag.nodes" :key="node.id" style="margin-top: 8px; border: 1px solid #999; padding: 8px; background: white;">
+          <div><strong>节点 {{ idx + 1 }}:</strong> {{ node.label }} <span style="color: blue;">({{ node.type }})</span></div>
+          <div><strong>位置:</strong> x={{ node.position.x }}, y={{ node.position.y }}</div>
+          <div style="font-size: 11px; color: #666;"><strong>ID:</strong> {{ node.id }}</div>
         </div>
       </div>
       
@@ -77,11 +78,13 @@
         ]"
         :style="{
           left: node.position.x + 'px',
-          top: node.position.y + 'px'
+          top: node.position.y + 'px',
+          border: '3px solid orange'
         }"
         @mousedown="startDrag(node, $event)"
         @click.stop="selectNode(node.id)"
         @dblclick.stop="editNode(node)"
+        :title="`节点: ${node.label} at [${node.position.x}, ${node.position.y}]`"
       >
         <div class="node-header">
           <span class="node-type-icon">
@@ -641,7 +644,8 @@ onMounted(() => {
 .dag-editor .canvas {
   flex: 1;
   position: relative;
-  overflow: hidden;
+  overflow: auto;
+  min-height: 600px;
   background: 
     linear-gradient(90deg, #e5e5e5 1px, transparent 1px),
     linear-gradient(#e5e5e5 1px, transparent 1px);

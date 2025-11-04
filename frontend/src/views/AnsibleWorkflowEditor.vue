@@ -192,6 +192,7 @@ onMounted(async () => {
   background: white;
   border-radius: 4px;
   overflow: hidden;
+  min-height: 700px;
 }
 
 .workflow-editor .content .dag-section h3 {
