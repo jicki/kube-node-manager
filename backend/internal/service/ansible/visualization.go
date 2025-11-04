@@ -285,16 +285,19 @@ func (s *VisualizationService) calculatePhaseDistribution(timeline model.TaskExe
 // parseAndEnrichTimeline 解析日志中的 TASK 阶段信息并丰富时间线
 func (s *VisualizationService) parseAndEnrichTimeline(timeline *model.TaskExecutionTimeline, task *model.AnsibleTask) {
 	if timeline == nil || task.FullLog == "" {
+		s.logger.Warningf("Cannot parse timeline: timeline=%v, log_length=%d", timeline == nil, len(task.FullLog))
 		return
 	}
 	
-	s.logger.Infof("Parsing TASK phases from log for task %d", task.ID)
+	s.logger.Infof("Parsing TASK phases from log for task %d, log size: %d bytes", task.ID, len(task.FullLog))
 	
 	// 查找所有 TASK 行
 	// 格式: TASK [task name] ******************
 	taskRegex := regexp.MustCompile(`^TASK\s+\[([^\]]+)\]`)
 	
 	lines := strings.Split(task.FullLog, "\n")
+	s.logger.Debugf("Total log lines: %d", len(lines))
+	
 	tasks := make([]struct {
 		name      string
 		lineIndex int
@@ -303,6 +306,7 @@ func (s *VisualizationService) parseAndEnrichTimeline(timeline *model.TaskExecut
 	for i, line := range lines {
 		if matches := taskRegex.FindStringSubmatch(strings.TrimSpace(line)); len(matches) > 1 {
 			taskName := matches[1]
+			s.logger.Debugf("Found TASK at line %d: %s", i, taskName)
 			tasks = append(tasks, struct {
 				name      string
 				lineIndex int
@@ -314,11 +318,18 @@ func (s *VisualizationService) parseAndEnrichTimeline(timeline *model.TaskExecut
 	}
 	
 	if len(tasks) == 0 {
-		s.logger.Infof("No TASK phases found in log")
+		s.logger.Warningf("No TASK phases found in log (searched %d lines)", len(lines))
+		// 打印前10行日志用于调试
+		for i := 0; i < 10 && i < len(lines); i++ {
+			s.logger.Debugf("Log line %d: %s", i, lines[i])
+		}
 		return
 	}
 	
 	s.logger.Infof("Found %d TASK phases in log", len(tasks))
+	for i, t := range tasks {
+		s.logger.Debugf("TASK %d: %s (line %d)", i+1, t.name, t.lineIndex)
+	}
 	
 	// 找到 "executing" 阶段的时间窗口
 	var executingStartTime time.Time

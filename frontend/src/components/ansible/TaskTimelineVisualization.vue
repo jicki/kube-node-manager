@@ -327,9 +327,24 @@ const loadVisualization = async () => {
 
 // 渲染饼图
 const renderChart = () => {
-  if (!chartRef.value || !hasPhaseDistribution.value) return
+  console.log('renderChart called', {
+    hasChartRef: !!chartRef.value,
+    hasPhaseDistribution: hasPhaseDistribution.value,
+    phaseDistribution: visualization.value?.phase_distribution
+  })
+  
+  if (!chartRef.value) {
+    console.warn('chartRef.value is null')
+    return
+  }
+  
+  if (!hasPhaseDistribution.value) {
+    console.warn('No phase distribution data')
+    return
+  }
   
   if (!chart) {
+    console.log('Initializing echarts')
     chart = echarts.init(chartRef.value)
   }
   
@@ -341,6 +356,8 @@ const renderChart = () => {
       rawPhase: name
     }))
     .sort((a, b) => b.value - a.value)
+  
+  console.log('Chart data prepared:', data)
   
   const option = {
     tooltip: {
@@ -437,7 +454,9 @@ const renderChart = () => {
     ]
   }
   
+  console.log('Setting chart option')
   chart.setOption(option, true)
+  console.log('Chart rendered successfully')
   
   // 清理旧的事件监听器
   const resizeHandler = () => {
