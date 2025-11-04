@@ -39,9 +39,9 @@ func main() {
 	cfg := config.LoadConfig()
 
 	logger := logger.NewLogger()
-
+	
 	// 配置 klog 使用自定义格式
-	klog.SetLogger(&klogAdapter{logger: logger})
+	klog.SetLogger(logr.New(&klogAdapter{logger: logger}))
 
 	// 初始化数据库
 	dbConfig := database.DatabaseConfig{

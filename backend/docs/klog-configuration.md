@@ -152,7 +152,8 @@ func formatKeyValues(keysAndValues ...interface{}) string {
 logger := logger.NewLogger()
 
 // 配置 klog 使用自定义格式
-klog.SetLogger(&klogAdapter{logger: logger})
+// 注意：klog.SetLogger() 需要 logr.Logger 类型，所以要用 logr.New() 包装 LogSink
+klog.SetLogger(logr.New(&klogAdapter{logger: logger}))
 ```
 
 ## 依赖包
