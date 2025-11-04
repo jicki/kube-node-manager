@@ -683,8 +683,8 @@
               {{ currentTask?.name || '任务详情' }}
             </h3>
             <div style="display: flex; gap: 12px; align-items: center">
-              <el-tag :type="getStatusTagType(currentTask?.status)" size="small">
-                {{ getStatusLabel(currentTask?.status) }}
+              <el-tag :type="getStatusType(currentTask?.status)" size="small">
+                {{ getStatusText(currentTask?.status) }}
               </el-tag>
               <span v-if="currentTask?.duration" style="color: #909399; font-size: 13px">
                 <el-icon><Timer /></el-icon>
