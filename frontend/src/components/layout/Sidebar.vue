@@ -154,6 +154,11 @@
           <el-icon><Timer /></el-icon>
           <template #title>定时任务</template>
         </el-menu-item>
+
+        <el-menu-item index="/ansible/workflows">
+          <el-icon><Share /></el-icon>
+          <template #title>工作流管理</template>
+        </el-menu-item>
       </el-sub-menu>
 
       <!-- 系统配置 -->
@@ -242,7 +247,8 @@ import {
   Document,
   Menu,
   Key,
-  Timer
+  Timer,
+  Share
 } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -282,7 +288,7 @@ const defaultOpeneds = computed(() => {
     openedMenus.push('feishu')
   }
 
-  if (['/ansible-tasks', '/ansible-templates', '/ansible-inventories', '/ansible-ssh-keys', '/ansible-schedules'].includes(path)) {
+  if (['/ansible-tasks', '/ansible-templates', '/ansible-inventories', '/ansible-ssh-keys', '/ansible-schedules'].includes(path) || path.startsWith('/ansible/workflow')) {
     openedMenus.push('ansible')
   }
 
