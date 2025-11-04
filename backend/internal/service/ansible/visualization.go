@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/pkg/logger"
+	"regexp"
 	"strings"
 	"time"
 
@@ -45,10 +46,13 @@ func (s *VisualizationService) GetTaskVisualization(taskID uint) (*model.TaskExe
 		Status:   string(task.Status),
 	}
 
-	// 如果有执行时间线，直接使用
+	// 如果有执行时间线，使用它但需要重新计算 Duration
 	if task.ExecutionTimeline != nil && len(*task.ExecutionTimeline) > 0 {
 		s.logger.Infof("Using stored execution timeline with %d events", len(*task.ExecutionTimeline))
 		viz.Timeline = *task.ExecutionTimeline
+		
+		// 重新计算每个事件的耗时，确保 Duration 正确
+		s.recalculateTimelineDurations(&viz.Timeline, &task)
 	} else {
 		// 否则，根据任务状态生成基本时间线
 		s.logger.Infof("Generating basic timeline for task %d", taskID)
@@ -74,11 +78,63 @@ func (s *VisualizationService) GetTaskVisualization(taskID uint) (*model.TaskExe
 		s.logger.Warningf("No phase distribution data available for task %d", taskID)
 	}
 
+	// 解析日志中的 TASK 阶段并添加到时间线（如果有日志）
+	if task.FullLog != "" && len(viz.Timeline) > 0 {
+		s.parseAndEnrichTimeline(&viz.Timeline, &task)
+	}
+
 	// 获取主机执行状态
 	viz.HostStatuses = s.extractHostStatuses(&task)
 	s.logger.Infof("Extracted %d host statuses", len(viz.HostStatuses))
 
 	return viz, nil
+}
+
+// recalculateTimelineDurations 重新计算时间线中每个事件的耗时
+func (s *VisualizationService) recalculateTimelineDurations(timeline *model.TaskExecutionTimeline, task *model.AnsibleTask) {
+	if timeline == nil || len(*timeline) == 0 {
+		return
+	}
+	
+	s.logger.Infof("Recalculating durations for %d timeline events", len(*timeline))
+	
+	// 重新计算每个事件的耗时
+	for i := 0; i < len(*timeline); i++ {
+		if i < len(*timeline)-1 {
+			// 不是最后一个事件，用下一个事件的时间戳计算
+			duration := int((*timeline)[i+1].Timestamp.Sub((*timeline)[i].Timestamp).Milliseconds())
+			if duration > 0 {
+				(*timeline)[i].Duration = duration
+			}
+		} else {
+			// 最后一个事件，使用任务总耗时计算剩余时间
+			if task.Duration > 0 && len(*timeline) > 1 {
+				// 计算已有事件的总耗时
+				totalDuration := 0
+				for j := 0; j < i; j++ {
+					totalDuration += (*timeline)[j].Duration
+				}
+				
+				// 剩余时间分配给最后一个事件
+				taskDurationMs := task.Duration * 1000
+				remainingDuration := taskDurationMs - totalDuration
+				
+				if remainingDuration > 0 {
+					(*timeline)[i].Duration = remainingDuration
+					s.logger.Debugf("Assigned remaining duration %dms to final event", remainingDuration)
+				} else if totalDuration == 0 {
+					// 如果前面所有事件都没有耗时，把整个任务耗时分配给最后一个事件
+					(*timeline)[i].Duration = taskDurationMs
+					s.logger.Debugf("Assigned full task duration %dms to final event", taskDurationMs)
+				}
+			}
+		}
+	}
+	
+	// 打印调试信息
+	for i, event := range *timeline {
+		s.logger.Debugf("Event %d after recalc: phase=%s, duration=%dms", i, event.Phase, event.Duration)
+	}
 }
 
 // generateBasicTimeline 为没有详细时间线的任务生成基本时间线
@@ -223,6 +279,144 @@ func (s *VisualizationService) calculatePhaseDistribution(timeline model.TaskExe
 	
 	s.logger.Infof("Phase distribution calculated: %v (total phases: %d)", distribution, len(distribution))
 	return distribution
+}
+
+// parseAndEnrichTimeline 解析日志中的 TASK 阶段信息并丰富时间线
+func (s *VisualizationService) parseAndEnrichTimeline(timeline *model.TaskExecutionTimeline, task *model.AnsibleTask) {
+	if timeline == nil || task.FullLog == "" {
+		return
+	}
+	
+	s.logger.Infof("Parsing TASK phases from log for task %d", task.ID)
+	
+	// 查找所有 TASK 行
+	// 格式: TASK [task name] ******************
+	taskRegex := regexp.MustCompile(`^TASK\s+\[([^\]]+)\]`)
+	
+	lines := strings.Split(task.FullLog, "\n")
+	tasks := make([]struct {
+		name      string
+		lineIndex int
+	}, 0)
+	
+	for i, line := range lines {
+		if matches := taskRegex.FindStringSubmatch(strings.TrimSpace(line)); len(matches) > 1 {
+			taskName := matches[1]
+			tasks = append(tasks, struct {
+				name      string
+				lineIndex int
+			}{
+				name:      taskName,
+				lineIndex: i,
+			})
+		}
+	}
+	
+	if len(tasks) == 0 {
+		s.logger.Infof("No TASK phases found in log")
+		return
+	}
+	
+	s.logger.Infof("Found %d TASK phases in log", len(tasks))
+	
+	// 找到 "executing" 阶段的时间窗口
+	var executingStartTime time.Time
+	var executingEndTime time.Time
+	var executingIndex int = -1
+	
+	for i, event := range *timeline {
+		if event.Phase == model.PhaseExecuting {
+			executingStartTime = event.Timestamp
+			executingIndex = i
+			
+			// 找到下一个事件的时间作为执行结束时间
+			if i < len(*timeline)-1 {
+				executingEndTime = (*timeline)[i+1].Timestamp
+			} else {
+				// 如果是最后一个事件，使用任务结束时间
+				if task.FinishedAt != nil {
+					executingEndTime = *task.FinishedAt
+				} else {
+					executingEndTime = executingStartTime.Add(time.Duration(task.Duration) * time.Second)
+				}
+			}
+			break
+		}
+	}
+	
+	if executingIndex == -1 {
+		s.logger.Warningf("No executing phase found in timeline")
+		return
+	}
+	
+	// 计算执行总时长（毫秒）
+	totalExecutionMs := float64(executingEndTime.Sub(executingStartTime).Milliseconds())
+	if totalExecutionMs <= 0 {
+		s.logger.Warningf("Invalid execution time window")
+		return
+	}
+	
+	// 根据 TASK 在日志中的位置，估算每个 TASK 的时间戳
+	// 简单策略：均匀分布
+	totalLines := float64(len(lines))
+	newEvents := make(model.TaskExecutionTimeline, 0, len(tasks))
+	
+	for i, taskInfo := range tasks {
+		// 根据日志行位置计算时间偏移
+		progress := float64(taskInfo.lineIndex) / totalLines
+		timeOffset := time.Duration(progress * totalExecutionMs) * time.Millisecond
+		timestamp := executingStartTime.Add(timeOffset)
+		
+		// 计算持续时间（到下一个 TASK 或执行结束）
+		var duration int
+		if i < len(tasks)-1 {
+			nextProgress := float64(tasks[i+1].lineIndex) / totalLines
+			nextOffset := time.Duration(nextProgress * totalExecutionMs) * time.Millisecond
+			duration = int((nextOffset - timeOffset).Milliseconds())
+		} else {
+			// 最后一个 TASK，持续到执行结束
+			duration = int(executingEndTime.Sub(timestamp).Milliseconds())
+		}
+		
+		newEvents = append(newEvents, model.TaskExecutionEvent{
+			Phase:     "task_execution", // 自定义阶段
+			Message:   fmt.Sprintf("执行任务: %s", taskInfo.name),
+			Timestamp: timestamp,
+			Duration:  duration,
+			Details: map[string]interface{}{
+				"task_name": taskInfo.name,
+			},
+		})
+	}
+	
+	if len(newEvents) == 0 {
+		return
+	}
+	
+	// 将新事件插入到时间线中（在 executing 事件之后）
+	// 重新构建时间线
+	newTimeline := make(model.TaskExecutionTimeline, 0, len(*timeline)+len(newEvents))
+	
+	// 添加 executing 之前的事件
+	for i := 0; i <= executingIndex; i++ {
+		newTimeline = append(newTimeline, (*timeline)[i])
+	}
+	
+	// 添加解析出的 TASK 事件
+	newTimeline = append(newTimeline, newEvents...)
+	
+	// 添加 executing 之后的事件
+	for i := executingIndex + 1; i < len(*timeline); i++ {
+		newTimeline = append(newTimeline, (*timeline)[i])
+	}
+	
+	// 更新原时间线
+	*timeline = newTimeline
+	
+	// 重新计算耗时
+	s.recalculateTimelineDurations(timeline, task)
+	
+	s.logger.Infof("Enriched timeline with %d TASK events, total events: %d", len(newEvents), len(*timeline))
 }
 
 // extractHostStatuses 从任务日志中提取主机执行状态
