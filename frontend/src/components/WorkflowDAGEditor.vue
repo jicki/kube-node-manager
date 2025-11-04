@@ -21,20 +21,6 @@
     </div>
 
     <div class="canvas" ref="canvasRef" @click="handleCanvasClick">
-      <!-- 临时调试面板 - 增强版 -->
-      <div style="position: fixed; top: 100px; left: 50px; background: yellow; padding: 15px; border: 3px solid red; z-index: 99999; font-size: 14px; max-width: 500px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-        <div style="font-weight: bold; font-size: 16px; margin-bottom: 10px;">🔍 DAG 调试信息</div>
-        <div style="margin: 5px 0;"><strong>画布尺寸:</strong> {{ canvasRef?.offsetWidth }}px × {{ canvasRef?.offsetHeight }}px</div>
-        <div style="margin: 5px 0;"><strong>节点总数:</strong> {{ dag.nodes.length }}</div>
-        <div style="margin: 5px 0;"><strong>边总数:</strong> {{ dag.edges.length }}</div>
-        <hr style="margin: 10px 0;">
-        <div v-for="(node, idx) in dag.nodes" :key="node.id" style="margin-top: 8px; border: 1px solid #999; padding: 8px; background: white;">
-          <div><strong>节点 {{ idx + 1 }}:</strong> {{ node.label }} <span style="color: blue;">({{ node.type }})</span></div>
-          <div><strong>位置:</strong> x={{ node.position.x }}, y={{ node.position.y }}</div>
-          <div style="font-size: 11px; color: #666;"><strong>ID:</strong> {{ node.id }}</div>
-        </div>
-      </div>
-      
       <svg class="canvas-svg" width="100%" height="100%">
         <!-- 绘制边 -->
         <g v-for="edge in dag.edges" :key="edge.id">
@@ -78,13 +64,11 @@
         ]"
         :style="{
           left: node.position.x + 'px',
-          top: node.position.y + 'px',
-          border: '3px solid orange'
+          top: node.position.y + 'px'
         }"
         @mousedown="startDrag(node, $event)"
         @click.stop="selectNode(node.id)"
         @dblclick.stop="editNode(node)"
-        :title="`节点: ${node.label} at [${node.position.x}, ${node.position.y}]`"
       >
         <div class="node-header">
           <span class="node-type-icon">
@@ -181,9 +165,13 @@ const initializeDAG = () => {
   const initialNodes = props.modelValue?.nodes || []
   const initialEdges = props.modelValue?.edges || []
   
+  console.log('🔄 [initializeDAG] 初始化DAG')
+  console.log('  - initialNodes:', initialNodes)
+  console.log('  - initialEdges:', initialEdges)
+  
   // 如果没有节点，添加开始和结束节点，并创建它们之间的连接
   if (initialNodes.length === 0) {
-    return {
+    const defaultDAG = {
       nodes: [
         {
           id: 'start',
@@ -206,8 +194,11 @@ const initializeDAG = () => {
         }
       ]
     }
+    console.log('✅ [initializeDAG] 创建默认DAG:', defaultDAG)
+    return defaultDAG
   }
   
+  console.log('✅ [initializeDAG] 使用现有数据')
   return {
     nodes: initialNodes,
     edges: initialEdges
@@ -215,6 +206,7 @@ const initializeDAG = () => {
 }
 
 const dag = reactive(initializeDAG())
+console.log('📊 [初始状态] dag.nodes:', dag.nodes.length, 'dag.edges:', dag.edges.length)
 
 // 工具栏状态
 const connectionMode = ref(false)
@@ -268,8 +260,13 @@ watch(
       
       if (nodesChanged || edgesChanged) {
         syncing.value = true
-        if (newValue.nodes) dag.nodes = [...newValue.nodes]
-        if (newValue.edges) dag.edges = [...newValue.edges]
+        // 如果父组件传入空数组，不要覆盖已初始化的数据
+        if (newValue.nodes && newValue.nodes.length > 0) {
+          dag.nodes = [...newValue.nodes]
+        }
+        if (newValue.edges && newValue.edges.length > 0) {
+          dag.edges = [...newValue.edges]
+        }
         syncing.value = false
       }
     }
@@ -283,11 +280,17 @@ watch(
   (newDag) => {
     if (syncing.value) return
     
+    console.log('📤 [watch dag] DAG变化，同步到父组件')
+    console.log('  - nodes:', newDag.nodes.length)
+    console.log('  - edges:', newDag.edges.length)
+    
     syncing.value = true
-    emit('update:modelValue', { 
+    const updateData = { 
       nodes: [...newDag.nodes], 
       edges: [...newDag.edges] 
-    })
+    }
+    console.log('  - 发送数据:', updateData)
+    emit('update:modelValue', updateData)
     syncing.value = false
   },
   { deep: true }
@@ -295,17 +298,15 @@ watch(
 
 // 添加节点
 const addNode = (type) => {
-  console.log('=== addNode called, type:', type)
-  console.log('Current nodes count:', dag.nodes.length)
+  console.log(`➕ [addNode] 添加 ${type} 节点`)
+  console.log('  - 当前节点数:', dag.nodes.length)
+  console.log('  - 当前边数:', dag.edges.length)
   
   const id = `node-${Date.now()}`
   
   // 查找 start 和 end 节点
   const startNode = dag.nodes.find(n => n.type === 'start')
   const endNode = dag.nodes.find(n => n.type === 'end')
-  
-  console.log('startNode:', startNode)
-  console.log('endNode:', endNode)
   
   // 计算新节点的位置（在 start 和 end 之间）
   const taskNodes = dag.nodes.filter(n => n.type === 'task')
@@ -375,6 +376,10 @@ const addNode = (type) => {
         target: 'end'
       })
     }
+    
+    console.log('✅ [addNode] 节点添加完成')
+    console.log('  - 最终节点数:', dag.nodes.length)
+    console.log('  - 最终边数:', dag.edges.length)
     
     ElMessage.success('任务节点已添加，请双击节点配置任务详情')
   }

@@ -159,12 +159,25 @@ const handleExecute = async (workflow) => {
       }
     )
 
+    console.log('开始执行工作流，ID:', workflow.id)
     const response = await executeWorkflow(workflow.id)
-    ElMessage.success(`工作流开始执行，执行 ID: ${response.data.id}`)
-    router.push(`/ansible/workflow-executions/${response.data.id}`)
+    console.log('执行工作流响应:', response)
+    console.log('响应数据:', response.data)
+    
+    // 提取执行 ID
+    const executionId = response.data?.data?.id || response.data?.id
+    
+    if (executionId) {
+      ElMessage.success(`工作流开始执行，执行 ID: ${executionId}`)
+      router.push(`/ansible/workflow-executions/${executionId}`)
+    } else {
+      console.error('无法获取执行 ID，完整响应:', response)
+      ElMessage.warning('工作流已提交执行，但无法获取执行 ID')
+    }
   } catch (error) {
     if (error !== 'cancel') {
       console.error('Failed to execute workflow:', error)
+      console.error('Error response:', error.response)
       ElMessage.error(error.response?.data?.error || '执行工作流失败')
     }
   }
