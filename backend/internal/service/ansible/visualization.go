@@ -394,13 +394,18 @@ func (s *VisualizationService) parseAndEnrichTimeline(timeline *model.TaskExecut
 			duration = int(executingEndTime.Sub(timestamp).Milliseconds())
 		}
 		
+		// 为每个 TASK 创建唯一的 phase 标识
+		// 使用 task_N 格式，这样可以在前端正确分组显示
+		phaseID := fmt.Sprintf("task_%d", i+1)
+		
 		newEvents = append(newEvents, model.TaskExecutionEvent{
-			Phase:     "task_execution", // 自定义阶段
+			Phase:     model.ExecutionPhase(phaseID),
 			Message:   fmt.Sprintf("执行任务: %s", taskInfo.name),
 			Timestamp: timestamp,
 			Duration:  duration,
 			Details: map[string]interface{}{
-				"task_name": taskInfo.name,
+				"task_name":  taskInfo.name,
+				"task_index": i + 1,
 			},
 		})
 	}

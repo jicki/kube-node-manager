@@ -307,8 +307,15 @@ const loadVisualization = async () => {
       
       // 渲染图表（需要等待 DOM 更新）
       if (hasPhaseDistribution.value) {
+        console.log('Has phase distribution, preparing to render chart')
+        // 使用 setTimeout 确保 DOM 完全渲染
         await nextTick()
-        renderChart()
+        setTimeout(() => {
+          console.log('Calling renderChart after timeout')
+          renderChart()
+        }, 100)
+      } else {
+        console.warn('No phase distribution data available')
       }
     } else {
       console.warn('Invalid visualization response:', response)
@@ -333,19 +340,33 @@ const renderChart = () => {
     phaseDistribution: visualization.value?.phase_distribution
   })
   
-  if (!chartRef.value) {
-    console.warn('chartRef.value is null')
-    return
-  }
-  
   if (!hasPhaseDistribution.value) {
     console.warn('No phase distribution data')
     return
   }
   
+  if (!chartRef.value) {
+    console.warn('chartRef.value is null, will retry after nextTick')
+    // 使用 nextTick 确保 DOM 已更新
+    nextTick(() => {
+      if (chartRef.value) {
+        console.log('chartRef available after nextTick, retrying')
+        renderChart()
+      } else {
+        console.error('chartRef still null after nextTick')
+      }
+    })
+    return
+  }
+  
   if (!chart) {
     console.log('Initializing echarts')
-    chart = echarts.init(chartRef.value)
+    try {
+      chart = echarts.init(chartRef.value)
+    } catch (error) {
+      console.error('Failed to initialize echarts:', error)
+      return
+    }
   }
   
   // 准备数据并排序（按耗时从大到小）
@@ -481,6 +502,12 @@ const getPhaseLabel = (phase) => {
     'cancelled': '🚫 已取消',
     'timeout': '⏱️ 执行超时'
   }
+  
+  // 处理动态 TASK 阶段 (task_1, task_2, etc.)
+  if (phase && phase.startsWith('task_')) {
+    return '📋 任务执行'
+  }
+  
   return labels[phase] || phase
 }
 
@@ -496,6 +523,12 @@ const getPhaseType = (phase) => {
     'cancelled': 'info',
     'timeout': 'danger'
   }
+  
+  // 处理动态 TASK 阶段
+  if (phase && phase.startsWith('task_')) {
+    return ''
+  }
+  
   return types[phase] || 'info'
 }
 
@@ -516,6 +549,12 @@ const getPhaseIconComponent = (phase) => {
     'cancelled': WarningFilled,
     'timeout': WarningFilled
   }
+  
+  // 处理动态 TASK 阶段
+  if (phase && phase.startsWith('task_')) {
+    return DocumentCopy
+  }
+  
   return icons[phase] || InfoFilled
 }
 
