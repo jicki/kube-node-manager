@@ -389,167 +389,163 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .workflow-execution {
   padding: 20px;
+}
 
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
+.workflow-execution .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
 
-    h2 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 600;
-    }
+.workflow-execution .header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
 
-    .actions {
-      display: flex;
-      gap: 12px;
-    }
-  }
+.workflow-execution .header .actions {
+  display: flex;
+  gap: 12px;
+}
 
-  .content {
-    .el-card {
-      margin-bottom: 20px;
+.workflow-execution .content .el-card {
+  margin-bottom: 20px;
+}
 
-      .card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-    }
+.workflow-execution .content .el-card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 
-    .dag-card {
-      .dag-view {
-        position: relative;
-        height: 600px;
-        background: 
-          linear-gradient(90deg, #e5e5e5 1px, transparent 1px),
-          linear-gradient(#e5e5e5 1px, transparent 1px);
-        background-size: 20px 20px;
-        overflow: hidden;
+.workflow-execution .content .dag-card .dag-view {
+  position: relative;
+  height: 600px;
+  background: 
+    linear-gradient(90deg, #e5e5e5 1px, transparent 1px),
+    linear-gradient(#e5e5e5 1px, transparent 1px);
+  background-size: 20px 20px;
+  overflow: hidden;
+}
 
-        svg {
-          position: absolute;
-          top: 0;
-          left: 0;
-          pointer-events: none;
-        }
+.workflow-execution .content .dag-card .dag-view svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
 
-        .node {
-          position: absolute;
-          width: 200px;
-          background: white;
-          border: 2px solid #ddd;
-          border-radius: 8px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-          cursor: pointer;
-          transition: all 0.2s;
+.workflow-execution .content .dag-card .dag-view .node {
+  position: absolute;
+  width: 200px;
+  background: white;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.2s;
+}
 
-          &:hover {
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-          }
+.workflow-execution .content .dag-card .dag-view .node:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
 
-          &.status-pending {
-            border-color: #909399;
-          }
+.workflow-execution .content .dag-card .dag-view .node.status-pending {
+  border-color: #909399;
+}
 
-          &.status-running {
-            border-color: #e6a23c;
-            animation: pulse 1.5s infinite;
-          }
+.workflow-execution .content .dag-card .dag-view .node.status-running {
+  border-color: #e6a23c;
+  animation: pulse 1.5s infinite;
+}
 
-          &.status-success {
-            border-color: #67c23a;
-          }
+.workflow-execution .content .dag-card .dag-view .node.status-success {
+  border-color: #67c23a;
+}
 
-          &.status-failed {
-            border-color: #f56c6c;
-          }
+.workflow-execution .content .dag-card .dag-view .node.status-failed {
+  border-color: #f56c6c;
+}
 
-          &.status-skipped {
-            border-color: #c0c4cc;
-            opacity: 0.6;
-          }
+.workflow-execution .content .dag-card .dag-view .node.status-skipped {
+  border-color: #c0c4cc;
+  opacity: 0.6;
+}
 
-          .node-header {
-            padding: 8px 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #f5f5f5;
-            border-radius: 6px 6px 0 0;
-            font-weight: 600;
+.workflow-execution .content .dag-card .dag-view .node .node-header {
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f5f5f5;
+  border-radius: 6px 6px 0 0;
+  font-weight: 600;
+}
 
-            .node-label {
-              flex: 1;
-              overflow: hidden;
-              text-overflow: ellipsis;
-              white-space: nowrap;
-            }
-          }
+.workflow-execution .content .dag-card .dag-view .node .node-header .node-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-          .node-body {
-            padding: 12px;
+.workflow-execution .content .dag-card .dag-view .node .node-body {
+  padding: 12px;
+}
 
-            .node-info {
-              font-size: 13px;
-              color: #666;
-            }
-          }
+.workflow-execution .content .dag-card .dag-view .node .node-body .node-info {
+  font-size: 13px;
+  color: #666;
+}
 
-          .status-indicator {
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            border: 2px solid white;
+.workflow-execution .content .dag-card .dag-view .node .status-indicator {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid white;
+}
 
-            &.status-pending {
-              background: #909399;
-            }
+.workflow-execution .content .dag-card .dag-view .node .status-indicator.status-pending {
+  background: #909399;
+}
 
-            &.status-running {
-              background: #e6a23c;
-              animation: blink 1s infinite;
-            }
+.workflow-execution .content .dag-card .dag-view .node .status-indicator.status-running {
+  background: #e6a23c;
+  animation: blink 1s infinite;
+}
 
-            &.status-success {
-              background: #67c23a;
-            }
+.workflow-execution .content .dag-card .dag-view .node .status-indicator.status-success {
+  background: #67c23a;
+}
 
-            &.status-failed {
-              background: #f56c6c;
-            }
+.workflow-execution .content .dag-card .dag-view .node .status-indicator.status-failed {
+  background: #f56c6c;
+}
 
-            &.status-skipped {
-              background: #c0c4cc;
-            }
-          }
-        }
-      }
-    }
-  }
+.workflow-execution .content .dag-card .dag-view .node .status-indicator.status-skipped {
+  background: #c0c4cc;
+}
 
-  .loading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 400px;
-    gap: 16px;
-    font-size: 16px;
-    color: #666;
+.workflow-execution .loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  gap: 16px;
+  font-size: 16px;
+  color: #666;
+}
 
-    .el-icon {
-      font-size: 48px;
-    }
-  }
+.workflow-execution .loading .el-icon {
+  font-size: 48px;
 }
 
 @keyframes pulse {

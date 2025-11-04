@@ -144,60 +144,60 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .workflow-editor {
   height: 100%;
   display: flex;
   flex-direction: column;
   padding: 20px;
+}
 
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
+.workflow-editor .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
 
-    h2 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 600;
-    }
+.workflow-editor .header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
 
-    .actions {
-      display: flex;
-      gap: 12px;
-    }
-  }
+.workflow-editor .header .actions {
+  display: flex;
+  gap: 12px;
+}
 
-  .content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+.workflow-editor .content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 
-    .el-form {
-      background: white;
-      padding: 20px;
-      border-radius: 4px;
-      margin-bottom: 20px;
-    }
+.workflow-editor .content .el-form {
+  background: white;
+  padding: 20px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
 
-    .dag-section {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      background: white;
-      border-radius: 4px;
-      overflow: hidden;
+.workflow-editor .content .dag-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 4px;
+  overflow: hidden;
+}
 
-      h3 {
-        padding: 20px 20px 0;
-        margin: 0 0 12px 0;
-        font-size: 16px;
-        font-weight: 600;
-      }
-    }
-  }
+.workflow-editor .content .dag-section h3 {
+  padding: 20px 20px 0;
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
 }
 </style>
 

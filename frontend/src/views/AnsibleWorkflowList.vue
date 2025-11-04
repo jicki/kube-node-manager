@@ -175,37 +175,37 @@ onMounted(() => {
 })
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .workflow-list {
   padding: 20px;
+}
 
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
+.workflow-list .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
 
-    h2 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 600;
-    }
+.workflow-list .header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
 
-    .actions {
-      display: flex;
-      gap: 12px;
+.workflow-list .header .actions {
+  display: flex;
+  gap: 12px;
+}
 
-      .search-input {
-        width: 300px;
-      }
-    }
-  }
+.workflow-list .header .actions .search-input {
+  width: 300px;
+}
 
-  .pagination {
-    margin-top: 20px;
-    display: flex;
-    justify-content: flex-end;
-  }
+.workflow-list .pagination {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>
 

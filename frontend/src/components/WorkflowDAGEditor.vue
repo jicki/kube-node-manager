@@ -346,149 +346,151 @@ onMounted(() => {
 })
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .dag-editor {
   height: 100%;
   display: flex;
   flex-direction: column;
   background: #f5f5f5;
+}
 
-  .toolbar {
-    padding: 12px;
-    background: white;
-    border-bottom: 1px solid #ddd;
-    display: flex;
-    justify-content: space-between;
-  }
+.dag-editor .toolbar {
+  padding: 12px;
+  background: white;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+}
 
-  .canvas {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
-    background: 
-      linear-gradient(90deg, #e5e5e5 1px, transparent 1px),
-      linear-gradient(#e5e5e5 1px, transparent 1px);
-    background-size: 20px 20px;
+.dag-editor .canvas {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: 
+    linear-gradient(90deg, #e5e5e5 1px, transparent 1px),
+    linear-gradient(#e5e5e5 1px, transparent 1px);
+  background-size: 20px 20px;
+}
 
-    svg {
-      position: absolute;
-      top: 0;
-      left: 0;
-      pointer-events: none;
+.dag-editor .canvas svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
 
-      path {
-        pointer-events: stroke;
-        cursor: pointer;
-        transition: stroke 0.2s;
+.dag-editor .canvas svg path {
+  pointer-events: stroke;
+  cursor: pointer;
+  transition: stroke 0.2s;
+}
 
-        &:hover, &.selected {
-          stroke: #409eff;
-          stroke-width: 3;
-        }
-      }
-    }
+.dag-editor .canvas svg path:hover,
+.dag-editor .canvas svg path.selected {
+  stroke: #409eff;
+  stroke-width: 3;
+}
 
-    .node {
-      position: absolute;
-      width: 200px;
-      background: white;
-      border: 2px solid #ddd;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-      cursor: move;
-      transition: all 0.2s;
+.dag-editor .canvas .node {
+  position: absolute;
+  width: 200px;
+  background: white;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: move;
+  transition: all 0.2s;
+}
 
-      &:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      }
+.dag-editor .canvas .node:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
 
-      &.selected {
-        border-color: #409eff;
-        box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.2);
-      }
+.dag-editor .canvas .node.selected {
+  border-color: #409eff;
+  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.2);
+}
 
-      &.start {
-        border-color: #67c23a;
-        .node-header {
-          background: #67c23a;
-          color: white;
-        }
-      }
+.dag-editor .canvas .node.start {
+  border-color: #67c23a;
+}
 
-      &.end {
-        border-color: #909399;
-        .node-header {
-          background: #909399;
-          color: white;
-        }
-      }
+.dag-editor .canvas .node.start .node-header {
+  background: #67c23a;
+  color: white;
+}
 
-      &.task {
-        border-color: #409eff;
-        .node-header {
-          background: #409eff;
-          color: white;
-        }
-      }
+.dag-editor .canvas .node.end {
+  border-color: #909399;
+}
 
-      .node-header {
-        padding: 8px 12px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        border-radius: 6px 6px 0 0;
-        font-weight: 600;
+.dag-editor .canvas .node.end .node-header {
+  background: #909399;
+  color: white;
+}
 
-        .node-type-icon {
-          font-size: 16px;
-        }
+.dag-editor .canvas .node.task {
+  border-color: #409eff;
+}
 
-        .node-label {
-          flex: 1;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-      }
+.dag-editor .canvas .node.task .node-header {
+  background: #409eff;
+  color: white;
+}
 
-      .node-body {
-        padding: 12px;
+.dag-editor .canvas .node .node-header {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px 6px 0 0;
+  font-weight: 600;
+}
 
-        .node-info {
-          font-size: 13px;
-          color: #666;
-        }
-      }
+.dag-editor .canvas .node .node-header .node-type-icon {
+  font-size: 16px;
+}
 
-      .connection-points {
-        .point {
-          position: absolute;
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          background: #409eff;
-          border: 2px solid white;
-          cursor: pointer;
+.dag-editor .canvas .node .node-header .node-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-          &:hover {
-            transform: scale(1.3);
-          }
+.dag-editor .canvas .node .node-body {
+  padding: 12px;
+}
 
-          &.input {
-            top: -6px;
-            left: 50%;
-            transform: translateX(-50%);
-          }
+.dag-editor .canvas .node .node-body .node-info {
+  font-size: 13px;
+  color: #666;
+}
 
-          &.output {
-            bottom: -6px;
-            left: 50%;
-            transform: translateX(-50%);
-          }
-        }
-      }
-    }
-  }
+.dag-editor .canvas .node .connection-points .point {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #409eff;
+  border: 2px solid white;
+  cursor: pointer;
+}
+
+.dag-editor .canvas .node .connection-points .point:hover {
+  transform: scale(1.3);
+}
+
+.dag-editor .canvas .node .connection-points .point.input {
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.dag-editor .canvas .node .connection-points .point.output {
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 </style>
 
