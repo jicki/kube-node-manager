@@ -1019,11 +1019,6 @@ const rerunTask = async (history) => {
   // 显示创建对话框
   createDialogVisible.value = true
   
-  // 如果有模板ID，需要加载模板内容
-  if (taskForm.template_id) {
-    loadTemplateContent()
-  }
-  
   // 加载预估信息
   loadEstimation()
 }
