@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"kube-node-manager/internal/config"
 	"kube-node-manager/internal/handler"
 	"kube-node-manager/internal/handler/health"
@@ -20,13 +22,26 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/go-logr/logr"
 	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 func main() {
+	// 初始化 klog 配置
+	klog.InitFlags(nil)
+	flag.Set("logtostderr", "false")     // 不输出到 stderr
+	flag.Set("alsologtostderr", "false") // 不同时输出到 stderr
+	flag.Set("stderrthreshold", "FATAL") // 只有 FATAL 级别才输出到 stderr
+	flag.Set("v", "0")                   // 设置详细级别为 0（最小）
+	flag.Parse()
+
 	cfg := config.LoadConfig()
 
 	logger := logger.NewLogger()
+
+	// 配置 klog 使用自定义格式
+	klog.SetLogger(&klogAdapter{logger: logger})
 
 	// 初始化数据库
 	dbConfig := database.DatabaseConfig{
@@ -388,7 +403,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.DELETE("/schedules/:id", handlers.AnsibleSchedule.DeleteSchedule)
 		ansible.POST("/schedules/:id/toggle", handlers.AnsibleSchedule.ToggleSchedule)
 		ansible.POST("/schedules/:id/run-now", handlers.AnsibleSchedule.RunNow)
-		
+
 		// 收藏和快速操作
 		ansible.GET("/favorites", handlers.AnsibleFavorite.ListFavorites)
 		ansible.POST("/favorites", handlers.AnsibleFavorite.AddFavorite)
@@ -396,26 +411,26 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.GET("/recent-tasks", handlers.AnsibleFavorite.GetRecentTasks)
 		ansible.GET("/task-history/:id", handlers.AnsibleFavorite.GetTaskHistory)
 		ansible.DELETE("/task-history/:id", handlers.AnsibleFavorite.DeleteTaskHistory)
-		
+
 		// 任务执行预估
 		ansible.GET("/estimate/template", handlers.AnsibleEstimation.EstimateByTemplate)
 		ansible.GET("/estimate/inventory", handlers.AnsibleEstimation.EstimateByInventory)
 		ansible.GET("/estimate/combined", handlers.AnsibleEstimation.EstimateByTemplateAndInventory)
-		
+
 		// 任务队列统计
 		ansible.GET("/queue/stats", handlers.AnsibleQueue.GetQueueStats)
-		
+
 		// 标签管理
 		ansible.POST("/tags", handlers.AnsibleTag.CreateTag)
 		ansible.GET("/tags", handlers.AnsibleTag.ListTags)
 		ansible.PUT("/tags/:id", handlers.AnsibleTag.UpdateTag)
 		ansible.DELETE("/tags/:id", handlers.AnsibleTag.DeleteTag)
 		ansible.POST("/tags/batch", handlers.AnsibleTag.BatchTagOperation)
-		
+
 		// 任务执行可视化
 		ansible.GET("/tasks/:id/visualization", handlers.AnsibleVisualization.GetTaskVisualization)
 		ansible.GET("/tasks/:id/timeline-summary", handlers.AnsibleVisualization.GetTaskTimelineSummary)
-		
+
 		// 工作流管理 (Workflow DAG)
 		ansible.POST("/workflows", handlers.AnsibleWorkflow.CreateWorkflow)
 		ansible.GET("/workflows", handlers.AnsibleWorkflow.ListWorkflows)
@@ -423,7 +438,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.PUT("/workflows/:id", handlers.AnsibleWorkflow.UpdateWorkflow)
 		ansible.DELETE("/workflows/:id", handlers.AnsibleWorkflow.DeleteWorkflow)
 		ansible.POST("/workflows/:id/execute", handlers.AnsibleWorkflow.ExecuteWorkflow)
-		
+
 		// 工作流执行管理
 		ansible.GET("/workflow-executions", handlers.AnsibleWorkflow.ListWorkflowExecutions)
 		ansible.GET("/workflow-executions/:id", handlers.AnsibleWorkflow.GetWorkflowExecution)
@@ -494,4 +509,87 @@ func getVersion() string {
 		return "dev" // 如果读取失败，返回默认版本
 	}
 	return strings.TrimSpace(string(data))
+}
+
+// klogAdapter 实现 logr.Logger 接口，将 klog 的日志适配到自定义 logger
+type klogAdapter struct {
+	logger *logger.Logger
+	name   string
+	depth  int
+}
+
+func (k *klogAdapter) Init(info logr.RuntimeInfo) {
+	k.depth = info.CallDepth
+}
+
+func (k *klogAdapter) Enabled(level int) bool {
+	return true
+}
+
+func (k *klogAdapter) Info(level int, msg string, keysAndValues ...interface{}) {
+	// 格式化键值对
+	kvStr := formatKeyValues(keysAndValues)
+	if kvStr != "" {
+		k.logger.Infof("%s %s", msg, kvStr)
+	} else {
+		k.logger.Info(msg)
+	}
+}
+
+func (k *klogAdapter) Error(err error, msg string, keysAndValues ...interface{}) {
+	kvStr := formatKeyValues(keysAndValues)
+	if err != nil {
+		if kvStr != "" {
+			k.logger.Errorf("%s: %v %s", msg, err, kvStr)
+		} else {
+			k.logger.Errorf("%s: %v", msg, err)
+		}
+	} else {
+		if kvStr != "" {
+			k.logger.Errorf("%s %s", msg, kvStr)
+		} else {
+			k.logger.Error(msg)
+		}
+	}
+}
+
+// formatKeyValues 格式化键值对为字符串
+func formatKeyValues(keysAndValues ...interface{}) string {
+	if len(keysAndValues) == 0 {
+		return ""
+	}
+
+	// keysAndValues 是可变参数，直接遍历
+	var parts []string
+	for i := 0; i < len(keysAndValues); i += 2 {
+		if i+1 < len(keysAndValues) {
+			parts = append(parts, fmt.Sprintf("%v=%v", keysAndValues[i], keysAndValues[i+1]))
+		}
+	}
+
+	if len(parts) > 0 {
+		return "[" + strings.Join(parts, " ") + "]"
+	}
+	return ""
+}
+
+func (k *klogAdapter) WithValues(keysAndValues ...interface{}) logr.LogSink {
+	return &klogAdapter{
+		logger: k.logger,
+		name:   k.name,
+		depth:  k.depth,
+	}
+}
+
+func (k *klogAdapter) WithName(name string) logr.LogSink {
+	newName := k.name
+	if len(newName) > 0 {
+		newName += "."
+	}
+	newName += name
+	return &klogAdapter{
+		logger: k.logger,
+		name:   newName,
+		depth:  k.depth,
+	}
 }
