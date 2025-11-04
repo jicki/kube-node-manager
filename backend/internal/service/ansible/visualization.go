@@ -110,8 +110,8 @@ func (s *VisualizationService) generateBasicTimeline(task *model.AnsibleTask) mo
 		})
 	}
 
-	// 执行开始事件（仅在任务已完成时添加）
-	if task.StartedAt != nil && task.FinishedAt != nil {
+	// 执行开始事件
+	if task.StartedAt != nil {
 		timeline = append(timeline, model.TaskExecutionEvent{
 			Phase:     model.PhaseExecuting,
 			Message:   "任务开始执行",
@@ -120,7 +120,7 @@ func (s *VisualizationService) generateBasicTimeline(task *model.AnsibleTask) mo
 		})
 	}
 
-	// 完成事件
+	// 完成事件（仅在任务已完成时添加）
 	if task.FinishedAt != nil {
 		var phase model.ExecutionPhase
 		var message string
@@ -147,25 +147,41 @@ func (s *VisualizationService) generateBasicTimeline(task *model.AnsibleTask) mo
 			SuccessCount: task.HostsOk,
 			FailCount:    task.HostsFailed,
 		})
-	} else if task.StartedAt != nil {
-		// 任务还在执行中
-		timeline = append(timeline, model.TaskExecutionEvent{
-			Phase:     model.PhaseExecuting,
-			Message:   "任务执行中",
-			Timestamp: *task.StartedAt,
-			HostCount: task.HostsTotal,
-		})
 	}
 
 	// 计算每个事件的耗时
+	// 耗时表示从当前事件到下一个事件之间的时间间隔
 	for i := 0; i < len(timeline); i++ {
 		if timeline[i].Duration == 0 {
-			// 如果不是最后一个事件，用下一个事件的时间戳计算
 			if i < len(timeline)-1 {
-				timeline[i].Duration = int(timeline[i+1].Timestamp.Sub(timeline[i].Timestamp).Milliseconds())
-			} else if task.FinishedAt != nil && task.StartedAt != nil {
-				// 最后一个事件，如果是完成事件，计算从开始到完成的耗时
-				timeline[i].Duration = int(task.FinishedAt.Sub(*task.StartedAt).Milliseconds())
+				// 不是最后一个事件，用下一个事件的时间戳计算
+				duration := int(timeline[i+1].Timestamp.Sub(timeline[i].Timestamp).Milliseconds())
+				if duration > 0 {
+					timeline[i].Duration = duration
+				}
+			} else {
+				// 最后一个事件（完成/失败事件）的耗时处理
+				// 如果只有一个事件，或者前面所有事件耗时都为0，使用任务总耗时
+				if task.Duration > 0 && len(timeline) > 1 {
+					// 计算已有事件的总耗时
+					totalDuration := 0
+					for j := 0; j < i; j++ {
+						totalDuration += timeline[j].Duration
+					}
+					
+					// 剩余时间分配给最后一个事件
+					taskDurationMs := task.Duration * 1000 // 转换为毫秒
+					remainingDuration := taskDurationMs - totalDuration
+					
+					if remainingDuration > 0 {
+						timeline[i].Duration = remainingDuration
+						s.logger.Debugf("Assigned remaining duration %dms to final event", remainingDuration)
+					} else if totalDuration == 0 {
+						// 如果前面所有事件都没有耗时，把整个任务耗时分配给最后一个事件
+						timeline[i].Duration = taskDurationMs
+						s.logger.Debugf("Assigned full task duration %dms to final event", taskDurationMs)
+					}
+				}
 			}
 		}
 	}
@@ -181,23 +197,31 @@ func (s *VisualizationService) generateBasicTimeline(task *model.AnsibleTask) mo
 
 // calculatePhaseDistribution 计算各阶段耗时分布
 func (s *VisualizationService) calculatePhaseDistribution(timeline model.TaskExecutionTimeline) map[string]int {
+	if len(timeline) == 0 {
+		s.logger.Infof("No timeline events to calculate distribution")
+		return nil
+	}
+	
 	distribution := make(map[string]int)
 	
-	for _, event := range timeline {
-		// 只统计有耗时的事件，跳过 Duration 为 0 的事件
+	for i, event := range timeline {
+		// 统计有耗时的事件
 		if event.Duration > 0 {
 			phase := string(event.Phase)
 			distribution[phase] += event.Duration
+			s.logger.Debugf("Event %d: phase=%s, duration=%dms", i, phase, event.Duration)
+		} else {
+			s.logger.Debugf("Event %d: phase=%s, duration=0 (skipped)", i, event.Phase)
 		}
 	}
 	
 	// 如果没有任何耗时数据，返回 nil 而不是空 map
 	if len(distribution) == 0 {
-		s.logger.Infof("No phase distribution data for timeline with %d events", len(timeline))
+		s.logger.Warningf("No phase distribution data for timeline with %d events (all durations are 0)", len(timeline))
 		return nil
 	}
 	
-	s.logger.Debugf("Phase distribution calculated: %v", distribution)
+	s.logger.Infof("Phase distribution calculated: %v (total phases: %d)", distribution, len(distribution))
 	return distribution
 }
 

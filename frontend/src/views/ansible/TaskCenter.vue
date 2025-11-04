@@ -673,10 +673,31 @@
     <!-- 任务详情对话框（日志和可视化） -->
     <el-dialog 
       v-model="logDialogVisible" 
-      title="任务详情" 
       width="85%"
       :close-on-click-modal="false"
     >
+      <template #header>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0">
+          <div>
+            <h3 style="margin: 0 0 8px 0; font-size: 18px">
+              {{ currentTask?.name || '任务详情' }}
+            </h3>
+            <div style="display: flex; gap: 12px; align-items: center">
+              <el-tag :type="getStatusTagType(currentTask?.status)" size="small">
+                {{ getStatusLabel(currentTask?.status) }}
+              </el-tag>
+              <span v-if="currentTask?.duration" style="color: #909399; font-size: 13px">
+                <el-icon><Timer /></el-icon>
+                耗时: {{ currentTask.duration }}秒
+              </span>
+              <span v-if="currentTask?.hosts_total" style="color: #909399; font-size: 13px">
+                <el-icon><Monitor /></el-icon>
+                主机: {{ currentTask.hosts_ok }}/{{ currentTask.hosts_total }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </template>
       <el-tabs v-model="detailActiveTab" type="border-card">
         <el-tab-pane label="执行日志" name="logs">
           <template #label>
@@ -863,6 +884,7 @@ const preflightResult = ref(null)
 const estimation = ref(null)
 const detailActiveTab = ref('logs') // 任务详情对话框的活动 tab
 const currentTaskId = ref(null) // 当前查看的任务 ID
+const currentTask = ref(null) // 当前查看的任务完整信息
 
 const taskForm = reactive({
   name: '',
@@ -1321,6 +1343,7 @@ const confirmDialogProps = computed(() => {
 
 const handleViewLogs = async (row) => {
   currentTaskId.value = row.id // 设置当前任务 ID
+  currentTask.value = row // 保存当前任务完整信息
   detailActiveTab.value = 'logs' // 默认显示日志 tab
   logDialogVisible.value = true
   try {

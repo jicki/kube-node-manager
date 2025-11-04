@@ -3,42 +3,59 @@
     <!-- 有数据时显示 -->
     <div v-if="!loading && visualization && visualization.timeline && visualization.timeline.length > 0">
       <!-- 时间线头部 -->
-      <el-card class="header-card">
+      <el-card class="header-card" shadow="hover">
         <el-row :gutter="20">
-          <el-col :span="6">
-            <div class="stat-card-item">
-              <div class="stat-label">任务名称</div>
-              <div class="stat-value" :title="visualization.task_name || '未命名'">
-                {{ visualization.task_name || '未命名任务' }}
+          <el-col :xs="24" :sm="12" :md="6">
+            <div class="stat-card-item stat-card-primary">
+              <div class="stat-icon-wrapper">
+                <el-icon><DocumentCopy /></el-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">任务名称</div>
+                <div class="stat-value" :title="visualization.task_name || '未命名'">
+                  {{ visualization.task_name || '未命名任务' }}
+                </div>
               </div>
             </div>
           </el-col>
-          <el-col :span="6">
-            <div class="stat-card-item">
-              <div class="stat-label">
+          <el-col :xs="24" :sm="12" :md="6">
+            <div class="stat-card-item stat-card-success">
+              <div class="stat-icon-wrapper">
                 <el-icon><Clock /></el-icon>
-                总耗时
               </div>
-              <div class="stat-value">
-                {{ formatDuration(visualization.total_duration) }}
-              </div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="stat-card-item">
-              <div class="stat-label">执行状态</div>
-              <div class="stat-value">
-                <el-tag :type="getStatusType(visualization.status)" size="large">
-                  {{ getStatusText(visualization.status) }}
-                </el-tag>
+              <div class="stat-content">
+                <div class="stat-label">总耗时</div>
+                <div class="stat-value">
+                  {{ formatDuration(visualization.total_duration) }}
+                </div>
               </div>
             </div>
           </el-col>
-          <el-col :span="6">
-            <div class="stat-card-item">
-              <div class="stat-label">执行阶段</div>
-              <div class="stat-value">
-                {{ visualization.timeline.length }} 个
+          <el-col :xs="24" :sm="12" :md="6">
+            <div class="stat-card-item stat-card-info">
+              <div class="stat-icon-wrapper">
+                <el-icon><InfoFilled /></el-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">执行状态</div>
+                <div class="stat-value">
+                  <el-tag :type="getStatusType(visualization.status)" size="large" effect="dark">
+                    {{ getStatusText(visualization.status) }}
+                  </el-tag>
+                </div>
+              </div>
+            </div>
+          </el-col>
+          <el-col :xs="24" :sm="12" :md="6">
+            <div class="stat-card-item stat-card-warning">
+              <div class="stat-icon-wrapper">
+                <el-icon><DataLine /></el-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">执行阶段</div>
+                <div class="stat-value">
+                  {{ visualization.timeline.length }} 个
+                </div>
               </div>
             </div>
           </el-col>
@@ -46,11 +63,16 @@
       </el-card>
 
       <!-- 时间线 -->
-      <el-card style="margin-top: 20px">
+      <el-card style="margin-top: 20px" shadow="hover">
         <template #header>
-          <div style="display: flex; align-items: center; gap: 8px">
-            <el-icon><DataLine /></el-icon>
-            <span>执行时间线</span>
+          <div style="display: flex; align-items: center; justify-content: space-between">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <el-icon><DataLine /></el-icon>
+              <span>执行时间线</span>
+            </div>
+            <el-tag type="info" size="small">
+              {{ visualization.timeline.length }} 个事件
+            </el-tag>
           </div>
         </template>
         <el-timeline v-if="visualization.timeline && visualization.timeline.length > 0">
@@ -135,15 +157,84 @@
         <el-empty v-else description="暂无执行时间线数据" />
       </el-card>
 
-      <!-- 阶段耗时分布饼图 -->
-      <el-card style="margin-top: 20px" v-if="hasPhaseDistribution">
+      <!-- 阶段耗时分布 -->
+      <el-card style="margin-top: 20px">
         <template #header>
-          <div style="display: flex; align-items: center; gap: 8px">
-            <el-icon><PieChart /></el-icon>
-            <span>阶段耗时分布</span>
+          <div style="display: flex; align-items: center; justify-content: space-between">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <el-icon><PieChart /></el-icon>
+              <span>阶段耗时分布</span>
+            </div>
+            <el-tag v-if="hasPhaseDistribution" type="success" size="small">
+              {{ Object.keys(visualization.phase_distribution).length }} 个阶段
+            </el-tag>
           </div>
         </template>
-        <div ref="chartRef" style="height: 400px"></div>
+        
+        <!-- 有分布数据时显示饼图 -->
+        <div v-if="hasPhaseDistribution">
+          <div ref="chartRef" style="height: 400px"></div>
+          
+          <!-- 阶段详细统计 -->
+          <el-divider />
+          <div class="phase-stats">
+            <h4 style="margin: 0 0 16px 0; font-size: 14px; color: #606266">阶段耗时详情</h4>
+            <el-row :gutter="16">
+              <el-col 
+                v-for="(duration, phase) in visualization.phase_distribution" 
+                :key="phase"
+                :xs="24" :sm="12" :md="8" :lg="6"
+                style="margin-bottom: 16px"
+              >
+                <div class="phase-stat-card">
+                  <div class="phase-stat-label">{{ getPhaseLabel(phase) }}</div>
+                  <div class="phase-stat-value">{{ formatDuration(duration) }}</div>
+                  <div class="phase-stat-percent">
+                    {{ calculatePercentage(duration) }}%
+                  </div>
+                </div>
+              </el-col>
+            </el-row>
+          </div>
+        </div>
+        
+        <!-- 无分布数据时的友好提示 -->
+        <el-empty 
+          v-else 
+          description="暂无阶段耗时分布数据" 
+          :image-size="120"
+        >
+          <template #description>
+            <div style="color: #909399; font-size: 14px; padding: 0 20px">
+              <p style="margin: 8px 0; line-height: 1.6">
+                该任务的执行时间线尚未包含详细的阶段耗时数据
+              </p>
+              <div style="margin-top: 16px; text-align: left; display: inline-block">
+                <p style="margin: 8px 0; font-size: 13px; font-weight: 500; color: #606266">
+                  可能原因：
+                </p>
+                <ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 2">
+                  <li>任务执行时间极短（几乎瞬时完成）</li>
+                  <li>任务尚未开始执行或仍在队列中</li>
+                  <li>执行过程中未记录详细的阶段时间戳</li>
+                  <li>任务已被取消或超时</li>
+                </ul>
+              </div>
+              <el-alert 
+                v-if="visualization && visualization.total_duration > 0"
+                type="info" 
+                :closable="false"
+                style="margin-top: 16px"
+              >
+                <template #title>
+                  <div style="font-size: 13px">
+                    任务总耗时: <strong>{{ formatDuration(visualization.total_duration) }}</strong>
+                  </div>
+                </template>
+              </el-alert>
+            </div>
+          </template>
+        </el-empty>
       </el-card>
     </div>
     
@@ -170,7 +261,7 @@ import { ElMessage } from 'element-plus'
 import { 
   Clock, DataLine, CircleCheck, CircleClose, Loading as LoadingIcon, 
   WarningFilled, SuccessFilled, InfoFilled, Timer, 
-  Monitor, PieChart 
+  Monitor, PieChart, DocumentCopy
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { getTaskVisualization } from '@/api/ansible'
@@ -242,35 +333,81 @@ const renderChart = () => {
     chart = echarts.init(chartRef.value)
   }
   
-  const data = Object.entries(visualization.value.phase_distribution || {}).map(([name, value]) => ({
-    name: getPhaseLabel(name),
-    value: value
-  }))
+  // 准备数据并排序（按耗时从大到小）
+  const data = Object.entries(visualization.value.phase_distribution || {})
+    .map(([name, value]) => ({
+      name: getPhaseLabel(name),
+      value: value,
+      rawPhase: name
+    }))
+    .sort((a, b) => b.value - a.value)
   
   const option = {
     tooltip: {
       trigger: 'item',
-      formatter: '{a} <br/>{b}: {c}ms ({d}%)'
+      formatter: (params) => {
+        const duration = formatDuration(params.value)
+        return `${params.seriesName}<br/>${params.marker}${params.name}<br/>耗时: ${duration}<br/>占比: ${params.percent}%`
+      },
+      backgroundColor: 'rgba(50, 50, 50, 0.9)',
+      borderColor: '#777',
+      borderWidth: 1,
+      textStyle: {
+        color: '#fff',
+        fontSize: 13
+      },
+      padding: 12
     },
     legend: {
       orient: 'vertical',
       left: 'left',
-      top: 'middle'
+      top: 'middle',
+      itemGap: 16,
+      itemWidth: 16,
+      itemHeight: 16,
+      textStyle: {
+        fontSize: 13,
+        color: '#606266'
+      },
+      formatter: (name) => {
+        const item = data.find(d => d.name === name)
+        if (item) {
+          return `${name} (${formatDuration(item.value)})`
+        }
+        return name
+      }
     },
     series: [
       {
-        name: '阶段耗时',
+        name: '执行阶段',
         type: 'pie',
-        radius: ['40%', '70%'],
+        radius: ['45%', '75%'],
+        center: ['65%', '50%'],
         avoidLabelOverlap: true,
         itemStyle: {
-          borderRadius: 10,
+          borderRadius: 12,
           borderColor: '#fff',
-          borderWidth: 2
+          borderWidth: 3,
+          shadowBlur: 10,
+          shadowColor: 'rgba(0, 0, 0, 0.1)'
         },
         label: {
           show: true,
-          formatter: '{b}: {d}%'
+          position: 'outside',
+          formatter: '{b}\n{d}%',
+          fontSize: 13,
+          fontWeight: 'bold',
+          color: '#606266',
+          lineHeight: 18
+        },
+        labelLine: {
+          show: true,
+          length: 15,
+          length2: 30,
+          smooth: true,
+          lineStyle: {
+            width: 2
+          }
         },
         emphasis: {
           label: {
@@ -279,27 +416,37 @@ const renderChart = () => {
             fontWeight: 'bold'
           },
           itemStyle: {
-            shadowBlur: 10,
+            shadowBlur: 20,
             shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
-          }
+            shadowColor: 'rgba(0, 0, 0, 0.3)'
+          },
+          scaleSize: 10
         },
         data: data,
-        // 配色方案
+        // 精选配色方案 - 使用现代化的渐变色
         color: [
-          '#5470c6', '#91cc75', '#fac858', '#ee6666', 
-          '#73c0de', '#3ba272', '#fc8452', '#9a60b4'
-        ]
+          '#667eea', '#91cc75', '#fac858', '#ee6666', 
+          '#73c0de', '#3ba272', '#fc8452', '#9a60b4',
+          '#f093fb', '#4facfe', '#43e97b', '#fa709a'
+        ],
+        // 动画配置
+        animationType: 'scale',
+        animationEasing: 'elasticOut',
+        animationDelay: (idx) => idx * 100
       }
     ]
   }
   
-  chart.setOption(option)
+  chart.setOption(option, true)
+  
+  // 清理旧的事件监听器
+  const resizeHandler = () => {
+    chart?.resize()
+  }
   
   // 响应式处理
-  window.addEventListener('resize', () => {
-    chart?.resize()
-  })
+  window.removeEventListener('resize', resizeHandler)
+  window.addEventListener('resize', resizeHandler)
 }
 
 // 辅助方法
@@ -410,6 +557,16 @@ const getStatusType = (status) => {
   return types[status] || 'info'
 }
 
+// 计算百分比
+const calculatePercentage = (duration) => {
+  if (!visualization.value?.phase_distribution) return 0
+  
+  const total = Object.values(visualization.value.phase_distribution).reduce((sum, val) => sum + val, 0)
+  if (total === 0) return 0
+  
+  return ((duration / total) * 100).toFixed(1)
+}
+
 onMounted(() => {
   loadVisualization()
 })
@@ -456,28 +613,78 @@ watch(() => chart, (newChart, oldChart) => {
 
 .header-card {
   margin-bottom: 20px;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .stat-card-item {
-  text-align: center;
-  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  height: 100%;
+  min-height: 100px;
 }
 
-.stat-card-item .stat-label {
-  font-size: 14px;
-  color: #909399;
-  margin-bottom: 8px;
+.stat-card-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.stat-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  font-size: 24px;
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card-primary .stat-icon-wrapper {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.stat-card-success .stat-icon-wrapper {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.stat-card-info .stat-icon-wrapper {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.stat-card-warning .stat-icon-wrapper {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+.stat-content {
+  flex: 1;
+  text-align: left;
+  min-width: 0;
+}
+
+.stat-card-item .stat-label {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 8px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .stat-card-item .stat-value {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
   color: #303133;
   word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-item {
@@ -556,6 +763,83 @@ watch(() => chart, (newChart, oldChart) => {
   height: 1em;
 }
 
+/* 阶段统计卡片 */
+.phase-stats {
+  padding: 16px 0;
+}
+
+.phase-stat-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 20px;
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  transition: all 0.3s ease;
+  text-align: center;
+}
+
+.phase-stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.25);
+}
+
+.phase-stat-label {
+  font-size: 14px;
+  opacity: 0.9;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.phase-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.phase-stat-percent {
+  font-size: 12px;
+  opacity: 0.85;
+  background: rgba(255, 255, 255, 0.2);
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+}
+
+/* 为不同阶段使用不同的渐变色 */
+.phase-stat-card:nth-child(1) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.phase-stat-card:nth-child(2) {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.phase-stat-card:nth-child(3) {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.phase-stat-card:nth-child(4) {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.phase-stat-card:nth-child(5) {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+.phase-stat-card:nth-child(6) {
+  background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+}
+
+.phase-stat-card:nth-child(7) {
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+}
+
+.phase-stat-card:nth-child(8) {
+  background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .task-timeline-visualization {
@@ -564,6 +848,64 @@ watch(() => chart, (newChart, oldChart) => {
   
   :deep(.el-col) {
     margin-bottom: 16px;
+  }
+  
+  .stat-card-item {
+    min-height: 80px;
+    padding: 12px;
+  }
+  
+  .stat-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+  
+  .stat-card-item .stat-label {
+    font-size: 12px;
+  }
+  
+  .stat-card-item .stat-value {
+    font-size: 16px;
+  }
+  
+  .phase-stat-card {
+    padding: 16px;
+  }
+  
+  .phase-stat-value {
+    font-size: 20px;
+  }
+  
+  /* 移动端饼图调整 */
+  :deep(.header-card) {
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 576px) {
+  .stat-card-item {
+    flex-direction: row;
+    text-align: left;
+    min-height: 70px;
+  }
+  
+  .stat-icon-wrapper {
+    width: 42px;
+    height: 42px;
+    font-size: 18px;
+  }
+  
+  .stat-card-item .stat-value {
+    font-size: 15px;
+  }
+  
+  .phase-stat-card {
+    padding: 14px;
+  }
+  
+  .phase-stat-value {
+    font-size: 18px;
   }
 }
 </style>
