@@ -11,16 +11,19 @@
           clearable
           @change="loadWorkflows"
         />
+        <el-button icon="el-icon-monitor" @click="handleViewExecutions">
+          执行监控
+        </el-button>
         <el-button type="primary" icon="el-icon-plus" @click="handleCreate">
           创建工作流
         </el-button>
       </div>
     </div>
 
-    <el-table :data="workflows" v-loading="loading" stripe>
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="name" label="工作流名称" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="description" label="描述" min-width="250" show-overflow-tooltip />
+    <el-table :data="workflows" v-loading="loading" stripe :fit="true">
+      <el-table-column prop="id" label="ID" width="80" align="center" />
+      <el-table-column prop="name" label="工作流名称" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
       <el-table-column label="节点数" width="80" align="center">
         <template #default="{ row }">
           <el-tag size="small">{{ row.dag?.nodes?.length || 0 }}</el-tag>
@@ -110,6 +113,11 @@ const loadWorkflows = async () => {
 // 创建工作流
 const handleCreate = () => {
   router.push('/ansible/workflows/create')
+}
+
+// 查看执行监控列表
+const handleViewExecutions = () => {
+  router.push('/ansible/workflow-executions')
 }
 
 // 编辑工作流

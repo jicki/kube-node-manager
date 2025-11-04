@@ -2,7 +2,7 @@
   <div class="dag-editor">
     <div class="toolbar">
       <div class="toolbar-left">
-        <el-button-group>
+        <el-button-group v-if="!readonly">
           <el-button size="small" icon="el-icon-plus" @click="addNode('task')">添加任务节点</el-button>
           <el-button size="small" icon="el-icon-connection" @click="toggleConnectionMode">
             {{ connectionMode ? '取消连线' : '连线模式' }}
@@ -11,13 +11,21 @@
         </el-button-group>
         <el-tag style="margin-left: 15px;">节点数: {{ dag.nodes.length }}</el-tag>
         <el-alert
+          v-if="!readonly"
           title="提示：双击节点可以配置任务详情，配置完整后节点边框会变为实线"
           type="info"
           :closable="false"
           style="margin-left: 15px; padding: 8px 12px;"
         />
+        <el-alert
+          v-else
+          title="只读模式：您正在查看工作流，无法进行编辑操作"
+          type="info"
+          :closable="false"
+          style="margin-left: 15px; padding: 8px 12px;"
+        />
       </div>
-      <el-button size="small" type="primary" @click="saveDAG">保存</el-button>
+      <el-button v-if="!readonly" size="small" type="primary" @click="saveDAG">保存</el-button>
     </div>
 
     <div class="canvas" ref="canvasRef" @click="handleCanvasClick">
@@ -59,16 +67,18 @@
           node.type, 
           { 
             selected: selectedNode === node.id,
-            'not-configured': node.type === 'task' && !isNodeConfigured(node)
+            'not-configured': node.type === 'task' && !isNodeConfigured(node),
+            'readonly': readonly
           }
         ]"
         :style="{
           left: node.position.x + 'px',
-          top: node.position.y + 'px'
+          top: node.position.y + 'px',
+          cursor: readonly ? 'default' : 'move'
         }"
-        @mousedown="startDrag(node, $event)"
-        @click.stop="selectNode(node.id)"
-        @dblclick.stop="editNode(node)"
+        @mousedown="!readonly && startDrag(node, $event)"
+        @click.stop="!readonly && selectNode(node.id)"
+        @dblclick.stop="!readonly && editNode(node)"
       >
         <div class="node-header">
           <span class="node-type-icon">
@@ -155,6 +165,10 @@ const props = defineProps({
   inventories: {
     type: Array,
     default: () => []
+  },
+  readonly: {
+    type: Boolean,
+    default: false
   }
 })
 

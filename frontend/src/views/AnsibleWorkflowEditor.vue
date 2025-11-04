@@ -1,10 +1,10 @@
 <template>
   <div class="workflow-editor">
     <div class="header">
-      <h2>{{ isEdit ? '编辑工作流' : '创建工作流' }}</h2>
+      <h2>{{ isViewMode ? '查看工作流' : (isEdit ? '编辑工作流' : '创建工作流') }}</h2>
       <div class="actions">
-        <el-button @click="handleCancel">取消</el-button>
-        <el-button type="primary" @click="handleSave" :loading="saving">
+        <el-button @click="handleCancel">{{ isViewMode ? '返回' : '取消' }}</el-button>
+        <el-button v-if="!isViewMode" type="primary" @click="handleSave" :loading="saving">
           保存
         </el-button>
       </div>
@@ -13,7 +13,7 @@
     <div class="content">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
         <el-form-item label="工作流名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入工作流名称" />
+          <el-input v-model="form.name" placeholder="请输入工作流名称" :disabled="isViewMode" />
         </el-form-item>
         <el-form-item label="描述" prop="description">
           <el-input
@@ -21,6 +21,7 @@
             type="textarea"
             :rows="3"
             placeholder="请输入工作流描述"
+            :disabled="isViewMode"
           />
         </el-form-item>
       </el-form>
@@ -30,6 +31,7 @@
         <WorkflowDAGEditor
           v-model="form.dag"
           :inventories="inventories"
+          :readonly="isViewMode"
           @save="handleSave"
         />
       </div>
@@ -49,6 +51,7 @@ const route = useRoute()
 const router = useRouter()
 
 const isEdit = ref(false)
+const isViewMode = ref(false)  // 查看模式标志
 const workflowId = ref(null)
 const saving = ref(false)
 const formRef = ref(null)
@@ -162,10 +165,17 @@ const handleCancel = () => {
 onMounted(async () => {
   await loadInventories()
 
-  // 检查是否为编辑模式
+  // 检查是否为查看模式或编辑模式
   if (route.params.id) {
-    isEdit.value = true
     workflowId.value = parseInt(route.params.id)
+    
+    // 根据路由名称判断是查看还是编辑
+    if (route.name === 'AnsibleWorkflowDetail') {
+      isViewMode.value = true
+    } else if (route.name === 'AnsibleWorkflowEdit') {
+      isEdit.value = true
+    }
+    
     await loadWorkflow()
   }
 })
