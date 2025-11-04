@@ -245,57 +245,91 @@ const editFormRules = {
 
 // 标记是否正在同步，避免循环更新
 const syncing = ref(false)
+const lastUpdateData = ref(null)
 
 // 监听 props.modelValue 变化，更新 DAG
 watch(
   () => props.modelValue,
   (newValue) => {
-    if (syncing.value) return
+    if (syncing.value) {
+      console.log('⏸️ [DAG Editor] watch 跳过（syncing）')
+      return
+    }
     
-    console.log('🔄 [DAG Editor] watch triggered, newValue:', newValue)
+    if (!newValue || (!newValue.nodes && !newValue.edges)) {
+      return
+    }
     
-    if (newValue && (newValue.nodes || newValue.edges)) {
-      // 检查是否有节点数据
-      const hasNodesData = newValue.nodes && newValue.nodes.length > 0
-      const hasEdgesData = newValue.edges && newValue.edges.length > 0
+    // 检查数据是否真的变化了（避免无限循环）
+    const newDataStr = JSON.stringify({ nodes: newValue.nodes || [], edges: newValue.edges || [] })
+    const currentDataStr = JSON.stringify({ nodes: dag.nodes, edges: dag.edges })
+    
+    if (newDataStr === currentDataStr) {
+      console.log('⏸️ [DAG Editor] watch 跳过（数据相同）')
+      return
+    }
+    
+    // 检查是否是我们刚刚发送出去的数据（避免接收自己发送的数据）
+    if (lastUpdateData.value && newDataStr === lastUpdateData.value) {
+      console.log('⏸️ [DAG Editor] watch 跳过（是自己发送的数据）')
+      return
+    }
+    
+    console.log('🔄 [DAG Editor] watch triggered')
+    console.log('  - 新数据: nodes=' + (newValue.nodes?.length || 0) + ', edges=' + (newValue.edges?.length || 0))
+    console.log('  - 当前: nodes=' + dag.nodes.length + ', edges=' + dag.edges.length)
+    
+    const hasNodesData = newValue.nodes && newValue.nodes.length > 0
+    const hasEdgesData = newValue.edges && newValue.edges.length > 0
+    
+    if (hasNodesData || hasEdgesData) {
+      syncing.value = true
       
-      console.log('  - hasNodesData:', hasNodesData, '(', newValue.nodes?.length, '个)')
-      console.log('  - hasEdgesData:', hasEdgesData, '(', newValue.edges?.length, '条)')
-      console.log('  - 当前 dag.nodes:', dag.nodes.length)
-      console.log('  - 当前 dag.edges:', dag.edges.length)
-      
-      // 如果父组件传入的数据有节点（包括已有工作流的完整数据），则使用父组件的数据
-      if (hasNodesData || hasEdgesData) {
-        syncing.value = true
-        
-        if (hasNodesData) {
-          console.log(`✅ [DAG Editor] 更新节点: ${newValue.nodes.length}个`)
-          dag.nodes = [...newValue.nodes]
-        }
-        if (hasEdgesData) {
-          console.log(`✅ [DAG Editor] 更新边: ${newValue.edges.length}条`)
-          dag.edges = [...newValue.edges]
-        }
-        
-        syncing.value = false
+      if (hasNodesData) {
+        console.log(`✅ [DAG Editor] 更新节点: ${newValue.nodes.length}个`)
+        dag.nodes = [...newValue.nodes]
       }
+      if (hasEdgesData) {
+        console.log(`✅ [DAG Editor] 更新边: ${newValue.edges.length}条`)
+        dag.edges = [...newValue.edges]
+      }
+      
+      // 短暂延迟后解除同步锁
+      setTimeout(() => {
+        syncing.value = false
+      }, 50)
     }
   },
-  { deep: true, immediate: true }  // 改为 immediate: true，确保首次加载时也触发
+  { deep: true, immediate: false }
 )
 
 // 监听 DAG 变化，同步到父组件
 watch(
   dag,
   (newDag) => {
-    if (syncing.value) return
+    if (syncing.value) {
+      console.log('⏸️ [DAG -> Parent] 跳过（syncing）')
+      return
+    }
     
-    syncing.value = true
-    emit('update:modelValue', { 
+    const updateData = JSON.stringify({ 
       nodes: [...newDag.nodes], 
       edges: [...newDag.edges] 
     })
-    syncing.value = false
+    
+    console.log('📤 [DAG -> Parent] 同步数据到父组件')
+    console.log('  - nodes: ' + newDag.nodes.length)
+    console.log('  - edges: ' + newDag.edges.length)
+    
+    syncing.value = true
+    lastUpdateData.value = updateData
+    
+    emit('update:modelValue', JSON.parse(updateData))
+    
+    // 短暂延迟后解除同步锁
+    setTimeout(() => {
+      syncing.value = false
+    }, 50)
   },
   { deep: true }
 )

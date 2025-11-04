@@ -38,7 +38,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createWorkflow, getWorkflow, updateWorkflow } from '@/api/workflow'
@@ -92,15 +92,23 @@ const loadWorkflow = async () => {
     
     form.name = workflow.name
     form.description = workflow.description
-    // 确保 dag 对象包含完整的节点和边信息
+    
+    // 使用 nextTick 确保在下一个 tick 更新，触发子组件的 watch
+    await nextTick()
+    
+    // 确保 dag 对象包含完整的节点和边信息，创建新对象触发响应式更新
     form.dag = {
-      nodes: workflow.dag?.nodes || [],
-      edges: workflow.dag?.edges || []
+      nodes: workflow.dag?.nodes ? [...workflow.dag.nodes] : [],
+      edges: workflow.dag?.edges ? [...workflow.dag.edges] : []
     }
     
     console.log('✅ [loadWorkflow] 已设置 form.dag:', form.dag)
     console.log('  - nodes:', form.dag.nodes.length)
     console.log('  - edges:', form.dag.edges.length)
+    
+    // 再次使用 nextTick 确保数据已经完全更新
+    await nextTick()
+    console.log('✅ [loadWorkflow] nextTick 完成，数据应该已经同步到子组件')
   } catch (error) {
     console.error('❌ [loadWorkflow] 加载失败:', error)
     ElMessage.error(error.response?.data?.error || '加载工作流失败')
