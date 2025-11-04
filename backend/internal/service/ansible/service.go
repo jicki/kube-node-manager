@@ -14,19 +14,21 @@ import (
 
 // Service Ansible 服务
 type Service struct {
-	db              *gorm.DB
-	logger          *logger.Logger
-	templateSvc     *TemplateService
-	inventorySvc    *InventoryService
-	sshKeySvc       *SSHKeyService
-	scheduleSvc     *ScheduleService
-	favoriteSvc     *FavoriteService
-	preflightSvc    *PreflightService
-	estimationSvc   *EstimationService
-	queueSvc        *QueueService
-	tagSvc          *TagService
+	db               *gorm.DB
+	logger           *logger.Logger
+	templateSvc      *TemplateService
+	inventorySvc     *InventoryService
+	sshKeySvc        *SSHKeyService
+	scheduleSvc      *ScheduleService
+	favoriteSvc      *FavoriteService
+	preflightSvc     *PreflightService
+	estimationSvc    *EstimationService
+	queueSvc         *QueueService
+	tagSvc           *TagService
 	visualizationSvc *VisualizationService
-	executor        *TaskExecutor
+	workflowSvc      *WorkflowService
+	workflowExecutor *WorkflowExecutor
+	executor         *TaskExecutor
 }
 
 // NewService 创建 Ansible 服务实例
@@ -49,20 +51,24 @@ func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, wsHub i
 	tagSvc := NewTagService(db, logger)
 	visualizationSvc := NewVisualizationService(db, logger)
 	executor := NewTaskExecutor(db, logger, inventorySvc, sshKeySvc, wsHub)
+	workflowSvc := NewWorkflowService(db, logger)
+	workflowExecutor := NewWorkflowExecutor(db, logger, executor)
 
 	service := &Service{
-		db:              db,
-		logger:          logger,
-		templateSvc:     templateSvc,
-		inventorySvc:    inventorySvc,
-		sshKeySvc:       sshKeySvc,
-		favoriteSvc:     favoriteSvc,
-		preflightSvc:    preflightSvc,
-		estimationSvc:   estimationSvc,
-		queueSvc:        queueSvc,
-		tagSvc:          tagSvc,
+		db:               db,
+		logger:           logger,
+		templateSvc:      templateSvc,
+		inventorySvc:     inventorySvc,
+		sshKeySvc:        sshKeySvc,
+		favoriteSvc:      favoriteSvc,
+		preflightSvc:     preflightSvc,
+		estimationSvc:    estimationSvc,
+		queueSvc:         queueSvc,
+		tagSvc:           tagSvc,
 		visualizationSvc: visualizationSvc,
-		executor:        executor,
+		workflowSvc:      workflowSvc,
+		workflowExecutor: workflowExecutor,
+		executor:         executor,
 	}
 
 	// 创建定时任务调度服务（需要依赖 service）
@@ -125,6 +131,16 @@ func (s *Service) GetTagService() *TagService {
 // GetVisualizationService 获取可视化服务
 func (s *Service) GetVisualizationService() *VisualizationService {
 	return s.visualizationSvc
+}
+
+// GetWorkflowService 获取工作流服务
+func (s *Service) GetWorkflowService() *WorkflowService {
+	return s.workflowSvc
+}
+
+// GetWorkflowExecutor 获取工作流执行器
+func (s *Service) GetWorkflowExecutor() *WorkflowExecutor {
+	return s.workflowExecutor
 }
 
 // CreateTask 创建并执行任务

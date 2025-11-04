@@ -43,6 +43,7 @@ type Handlers struct {
 	AnsibleTag           *ansibleHandler.TagHandler
 	AnsibleVisualization *ansibleHandler.VisualizationHandler
 	AnsibleWebSocket     *ansibleHandler.WebSocketHandler
+	AnsibleWorkflow      *ansibleHandler.WorkflowHandler
 }
 
 func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
@@ -74,5 +75,6 @@ func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
 		AnsibleTag:           ansibleHandler.NewTagHandler(services.Ansible, logger),
 		AnsibleVisualization: ansibleHandler.NewVisualizationHandler(services.Ansible, logger),
 		AnsibleWebSocket:     ansibleHandler.NewWebSocketHandler(services.WSHub, logger),
+		AnsibleWorkflow:      ansibleHandler.NewWorkflowHandler(services.Ansible.GetWorkflowService(), services.Ansible.GetWorkflowExecutor(), logger),
 	}
 }

@@ -142,6 +142,36 @@ const router = createRouter({
           name: 'AnsibleSchedules',
           component: () => import('@/views/ansible/ScheduleManage.vue'),
           meta: { title: '定时任务', icon: 'Timer', requiresAuth: true }
+        },
+        {
+          path: 'ansible/workflows',
+          name: 'AnsibleWorkflows',
+          component: () => import('@/views/AnsibleWorkflowList.vue'),
+          meta: { title: '工作流管理', icon: 'Share', requiresAuth: true }
+        },
+        {
+          path: 'ansible/workflows/create',
+          name: 'AnsibleWorkflowCreate',
+          component: () => import('@/views/AnsibleWorkflowEditor.vue'),
+          meta: { title: '创建工作流', requiresAuth: true }
+        },
+        {
+          path: 'ansible/workflows/:id',
+          name: 'AnsibleWorkflowDetail',
+          component: () => import('@/views/AnsibleWorkflowEditor.vue'),
+          meta: { title: '工作流详情', requiresAuth: true }
+        },
+        {
+          path: 'ansible/workflows/:id/edit',
+          name: 'AnsibleWorkflowEdit',
+          component: () => import('@/views/AnsibleWorkflowEditor.vue'),
+          meta: { title: '编辑工作流', requiresAuth: true }
+        },
+        {
+          path: 'ansible/workflow-executions/:id',
+          name: 'AnsibleWorkflowExecution',
+          component: () => import('@/views/AnsibleWorkflowExecution.vue'),
+          meta: { title: '工作流执行', requiresAuth: true }
         }
       ]
     },

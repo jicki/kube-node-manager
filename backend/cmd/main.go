@@ -415,6 +415,20 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		// 任务执行可视化
 		ansible.GET("/tasks/:id/visualization", handlers.AnsibleVisualization.GetTaskVisualization)
 		ansible.GET("/tasks/:id/timeline-summary", handlers.AnsibleVisualization.GetTaskTimelineSummary)
+		
+		// 工作流管理 (Workflow DAG)
+		ansible.POST("/workflows", handlers.AnsibleWorkflow.CreateWorkflow)
+		ansible.GET("/workflows", handlers.AnsibleWorkflow.ListWorkflows)
+		ansible.GET("/workflows/:id", handlers.AnsibleWorkflow.GetWorkflow)
+		ansible.PUT("/workflows/:id", handlers.AnsibleWorkflow.UpdateWorkflow)
+		ansible.DELETE("/workflows/:id", handlers.AnsibleWorkflow.DeleteWorkflow)
+		ansible.POST("/workflows/:id/execute", handlers.AnsibleWorkflow.ExecuteWorkflow)
+		
+		// 工作流执行管理
+		ansible.GET("/workflow-executions", handlers.AnsibleWorkflow.ListWorkflowExecutions)
+		ansible.GET("/workflow-executions/:id", handlers.AnsibleWorkflow.GetWorkflowExecution)
+		ansible.POST("/workflow-executions/:id/cancel", handlers.AnsibleWorkflow.CancelWorkflowExecution)
+		ansible.GET("/workflow-executions/:id/status", handlers.AnsibleWorkflow.GetWorkflowExecutionStatus)
 	}
 
 	// Ansible WebSocket (任务日志流)
