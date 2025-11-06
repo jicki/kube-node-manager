@@ -186,7 +186,8 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑集群' : '添加集群'"
-      width="600px"
+      width="800px"
+      class="cluster-dialog"
       @close="resetForm"
     >
       <el-form
@@ -206,7 +207,7 @@
           <el-input
             v-model="form.description"
             type="textarea"
-            :rows="2"
+            :rows="3"
             placeholder="请输入集群描述"
           />
         </el-form-item>
@@ -215,8 +216,9 @@
           <el-input
             v-model="form.kube_config"
             type="textarea"
-            :rows="8"
+            :rows="12"
             placeholder="请粘贴Kubeconfig文件内容"
+            class="kubeconfig-input"
           />
           <div class="form-help-text">
             <el-alert
@@ -664,6 +666,29 @@ onMounted(async () => {
   line-height: 1.4;
 }
 
+/* 集群对话框样式 */
+.cluster-dialog {
+  --el-dialog-width: 800px;
+}
+
+.cluster-dialog :deep(.el-dialog__body) {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 20px 20px 0;
+}
+
+.cluster-dialog :deep(.el-dialog__footer) {
+  padding: 15px 20px 20px;
+  border-top: 1px solid #ebeef5;
+}
+
+/* Kubeconfig输入框样式 */
+.kubeconfig-input :deep(textarea) {
+  font-family: 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .page-header {
@@ -678,6 +703,35 @@ onMounted(async () => {
   .action-buttons {
     flex-direction: column;
     gap: 2px;
+  }
+  
+  /* 移动端弹出框适配 */
+  .cluster-dialog {
+    --el-dialog-width: 95%;
+  }
+  
+  .cluster-dialog :deep(.el-dialog__body) {
+    max-height: 60vh;
+    padding: 15px 15px 0;
+  }
+  
+  .cluster-dialog :deep(.el-form) {
+    --el-form-label-font-size: 13px;
+  }
+  
+  .cluster-dialog :deep(.el-form-item__label) {
+    width: 100px !important;
+  }
+}
+
+@media (min-width: 1200px) {
+  /* 大屏幕优化 */
+  .cluster-dialog {
+    --el-dialog-width: 900px;
+  }
+  
+  .cluster-dialog :deep(.el-dialog__body) {
+    max-height: 75vh;
   }
 }
 </style>
