@@ -7,6 +7,7 @@ import (
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/pkg/logger"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
