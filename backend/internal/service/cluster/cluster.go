@@ -6,6 +6,7 @@ import (
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/pkg/logger"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -533,13 +534,42 @@ func (s *Service) CheckClusterStatus(clusterName string, userID uint) error {
 func (s *Service) syncClusterInfo(cluster *model.Cluster) error {
 	clusterInfo, err := s.k8sSvc.GetClusterInfo(cluster.Name)
 	if err != nil {
-		s.logger.Error("Failed to get cluster info for %s: %v", cluster.Name, err)
-		// 更新状态为错误
-		s.db.Model(cluster).Updates(map[string]interface{}{
-			"status":    model.ClusterStatusError,
-			"last_sync": time.Now(),
-		})
-		return err
+		// 检查是否是客户端不存在的错误，如果是则尝试重新创建
+		if strings.Contains(err.Error(), "kubernetes client not found") {
+			s.logger.Warning("Kubernetes client not found for cluster %s, attempting to recreate", cluster.Name)
+			
+			// 尝试重新创建客户端
+			if createErr := s.k8sSvc.CreateClient(cluster.Name, cluster.KubeConfig); createErr != nil {
+				s.logger.Error("Failed to recreate k8s client for cluster %s: %v", cluster.Name, createErr)
+				// 更新状态为错误
+				s.db.Model(cluster).Updates(map[string]interface{}{
+					"status":    model.ClusterStatusError,
+					"last_sync": time.Now(),
+				})
+				return fmt.Errorf("failed to recreate client: %w", createErr)
+			}
+			
+			// 重新尝试获取集群信息
+			clusterInfo, err = s.k8sSvc.GetClusterInfo(cluster.Name)
+			if err != nil {
+				s.logger.Error("Failed to get cluster info for %s after recreating client: %v", cluster.Name, err)
+				// 更新状态为错误
+				s.db.Model(cluster).Updates(map[string]interface{}{
+					"status":    model.ClusterStatusError,
+					"last_sync": time.Now(),
+				})
+				return err
+			}
+			s.logger.Info("Successfully recreated client and synced cluster: %s", cluster.Name)
+		} else {
+			s.logger.Error("Failed to get cluster info for %s: %v", cluster.Name, err)
+			// 更新状态为错误
+			s.db.Model(cluster).Updates(map[string]interface{}{
+				"status":    model.ClusterStatusError,
+				"last_sync": time.Now(),
+			})
+			return err
+		}
 	}
 
 	// 更新集群信息
