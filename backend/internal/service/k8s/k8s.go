@@ -1239,14 +1239,16 @@ func (s *Service) TestConnection(kubeconfig string) error {
 		return fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
-	config.Timeout = 10 * time.Second
+	// 增加超时时间以适应网络延迟较高的环境
+	config.Timeout = 30 * time.Second
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// 增加上下文超时时间
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// 尝试多种权限验证方法，从最基础开始

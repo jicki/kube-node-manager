@@ -538,9 +538,19 @@ func (s *Service) syncClusterInfo(cluster *model.Cluster) error {
 		if strings.Contains(err.Error(), "kubernetes client not found") {
 			s.logger.Warning("Kubernetes client not found for cluster %s, attempting to recreate", cluster.Name)
 			
+			// 调试：输出 kubeconfig 长度（不输出完整内容以保护敏感信息）
+			s.logger.Info("Kubeconfig length for cluster %s: %d bytes", cluster.Name, len(cluster.KubeConfig))
+			
 			// 尝试重新创建客户端
 			if createErr := s.k8sSvc.CreateClient(cluster.Name, cluster.KubeConfig); createErr != nil {
-				s.logger.Error("Failed to recreate k8s client for cluster %s: %v", cluster.Name, createErr)
+				// 检查是否是凭证相关错误
+				errMsg := createErr.Error()
+				if strings.Contains(errMsg, "provide credentials") || strings.Contains(errMsg, "Unauthorized") {
+					s.logger.Error("Failed to recreate k8s client for cluster %s: credentials error - %v", cluster.Name, createErr)
+					s.logger.Warning("Please check if the kubeconfig contains valid client-certificate-data and client-key-data")
+				} else {
+					s.logger.Error("Failed to recreate k8s client for cluster %s: %v", cluster.Name, createErr)
+				}
 				// 更新状态为错误
 				s.db.Model(cluster).Updates(map[string]interface{}{
 					"status":    model.ClusterStatusError,
@@ -656,10 +666,19 @@ func (s *Service) initializeExistingClients() {
 	s.logger.Info("Initializing %d existing cluster connections", len(clusters))
 
 	for _, cluster := range clusters {
+		// 输出 kubeconfig 基本信息（不输出完整内容）
+		s.logger.Info("Initializing cluster %s (kubeconfig length: %d bytes)", cluster.Name, len(cluster.KubeConfig))
+		
 		if err := s.k8sSvc.CreateClient(cluster.Name, cluster.KubeConfig); err != nil {
-			s.logger.Warning("Failed to initialize client for cluster %s: %v", cluster.Name, err)
-			// 更新集群状态为不可用
-			s.db.Model(&cluster).Update("status", model.ClusterStatusInactive)
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "provide credentials") || strings.Contains(errMsg, "Unauthorized") {
+				s.logger.Warning("Failed to initialize client for cluster %s: credentials missing or invalid - %v", cluster.Name, err)
+				s.logger.Warning("Cluster %s may need kubeconfig update with valid credentials", cluster.Name)
+			} else {
+				s.logger.Warning("Failed to initialize client for cluster %s: %v", cluster.Name, err)
+			}
+			// 更新集群状态为错误
+			s.db.Model(&cluster).Update("status", model.ClusterStatusError)
 		} else {
 			s.logger.Info("Successfully initialized client for cluster: %s", cluster.Name)
 		}
