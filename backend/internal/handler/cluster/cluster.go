@@ -461,6 +461,88 @@ func (h *Handler) TestConnection(c *gin.Context) {
 	})
 }
 
+// GetHealth 获取集群健康状态
+// @Summary 获取集群健康状态
+// @Description 获取集群的健康状态，包括断路器状态
+// @Tags clusters
+// @Produce json
+// @Param cluster_name query string true "集群名称"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Router /clusters/health [get]
+func (h *Handler) GetHealth(c *gin.Context) {
+	clusterName := c.Query("cluster_name")
+	if clusterName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "cluster_name is required",
+		})
+		return
+	}
+
+	health := h.clusterSvc.GetClusterHealth(clusterName)
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Success",
+		Data:    health,
+	})
+}
+
+// GetAllHealth 获取所有集群健康状态
+// @Summary 获取所有集群健康状态
+// @Description 获取所有集群的健康状态
+// @Tags clusters
+// @Produce json
+// @Success 200 {object} Response
+// @Router /clusters/health/all [get]
+func (h *Handler) GetAllHealth(c *gin.Context) {
+	healths := h.clusterSvc.GetAllClustersHealth()
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Success",
+		Data:    healths,
+	})
+}
+
+// ResetCircuitBreaker 重置断路器
+// @Summary 重置断路器
+// @Description 手动重置集群断路器
+// @Tags clusters
+// @Produce json
+// @Param cluster_name query string true "集群名称"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Router /clusters/circuit-breaker/reset [post]
+func (h *Handler) ResetCircuitBreaker(c *gin.Context) {
+	clusterName := c.Query("cluster_name")
+	if clusterName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "cluster_name is required",
+		})
+		return
+	}
+
+	// 检查用户权限 - 只有管理员可以重置断路器
+	userRole, exists := c.Get("user_role")
+	if !exists || userRole != model.RoleAdmin {
+		c.JSON(http.StatusForbidden, Response{
+			Code:    http.StatusForbidden,
+			Message: "Only admin users can reset circuit breaker",
+		})
+		return
+	}
+
+	h.clusterSvc.ResetClusterCircuitBreaker(clusterName)
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Circuit breaker reset successfully",
+	})
+}
+
 // CheckStatus 检查集群状态
 // @Summary 检查集群状态
 // @Description 检查指定集群的连接状态

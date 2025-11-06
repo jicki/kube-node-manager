@@ -15,6 +15,7 @@ type Cluster struct {
 	Version     string         `json:"version"`
 	NodeCount   int            `json:"node_count" gorm:"default:0"`
 	LastSync    *time.Time     `json:"last_sync"`
+	Priority    int            `json:"priority" gorm:"default:0"` // 优先级：数值越大优先级越高
 	CreatedBy   uint           `json:"created_by" gorm:"not null"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`

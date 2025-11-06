@@ -14,10 +14,11 @@ import (
 
 // Service 集群管理服务
 type Service struct {
-	db       *gorm.DB
-	logger   *logger.Logger
-	auditSvc *audit.Service
-	k8sSvc   *k8s.Service
+	db            *gorm.DB
+	logger        *logger.Logger
+	auditSvc      *audit.Service
+	k8sSvc        *k8s.Service
+	healthChecker *HealthChecker // 健康检查器（断路器模式）
 }
 
 // CreateRequest 创建集群请求
@@ -32,6 +33,7 @@ type UpdateRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	KubeConfig  string `json:"kube_config"`
+	Priority    *int   `json:"priority"` // 优先级（可选）
 }
 
 // ListRequest 集群列表请求
@@ -59,10 +61,11 @@ type ClusterWithNodes struct {
 // NewService 创建新的集群管理服务实例
 func NewService(db *gorm.DB, logger *logger.Logger, auditSvc *audit.Service, k8sSvc *k8s.Service) *Service {
 	service := &Service{
-		db:       db,
-		logger:   logger,
-		auditSvc: auditSvc,
-		k8sSvc:   k8sSvc,
+		db:            db,
+		logger:        logger,
+		auditSvc:      auditSvc,
+		k8sSvc:        k8sSvc,
+		healthChecker: NewHealthChecker(), // 初始化健康检查器
 	}
 
 	// 初始化已存在的集群客户端连接
@@ -266,6 +269,10 @@ func (s *Service) Update(id uint, req UpdateRequest, userID uint) (*model.Cluste
 		updates["description"] = req.Description
 	}
 
+	if req.Priority != nil {
+		updates["priority"] = *req.Priority
+	}
+
 	if req.KubeConfig != "" && req.KubeConfig != cluster.KubeConfig {
 		// 验证新的kubeconfig
 		if err := s.k8sSvc.TestConnection(req.KubeConfig); err != nil {
@@ -427,9 +434,9 @@ func (s *Service) List(req ListRequest, userID uint) (*ListResponse, error) {
 
 	offset := (req.Page - 1) * req.PageSize
 
-	// 获取集群列表
+	// 获取集群列表（按优先级排序）
 	clusters := make([]model.Cluster, 0) // 初始化为空数组而不是nil
-	if err := query.Order("created_at DESC").Offset(offset).Limit(req.PageSize).Find(&clusters).Error; err != nil {
+	if err := query.Order("priority DESC, created_at DESC").Offset(offset).Limit(req.PageSize).Find(&clusters).Error; err != nil {
 		s.logger.Errorf("Failed to list clusters: %v", err)
 		return nil, fmt.Errorf("failed to list clusters: %w", err)
 	}
@@ -601,22 +608,88 @@ func (s *Service) syncClusterInfo(cluster *model.Cluster) error {
 }
 
 // SyncAll 同步所有集群信息
+// 优化：使用并行处理，避免单个集群失败阻塞其他集群同步
+// 优化：按优先级排序，优先同步高优先级集群
 func (s *Service) SyncAll() error {
 	var clusters []model.Cluster
-	if err := s.db.Where("status != ?", model.ClusterStatusInactive).Find(&clusters).Error; err != nil {
+	// 按优先级降序排序
+	if err := s.db.Where("status != ?", model.ClusterStatusInactive).
+		Order("priority DESC, id ASC").
+		Find(&clusters).Error; err != nil {
 		s.logger.Error("Failed to get clusters for sync: %v", err)
 		return err
 	}
 
+	s.logger.Info("Starting parallel sync for %d clusters (priority-based)", len(clusters))
+
+	// 使用并行处理，限制并发数为5
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 5)
+	errChan := make(chan error, len(clusters))
+
 	for _, cluster := range clusters {
-		if err := s.syncClusterInfo(&cluster); err != nil {
-			s.logger.Error("Failed to sync cluster %s: %v", cluster.Name, err)
+		// 检查断路器状态
+		if s.healthChecker.ShouldSkip(cluster.Name) {
+			health := s.healthChecker.GetHealth(cluster.Name)
+			s.logger.Warning("Skipping cluster %s sync (circuit breaker open, failures: %d)",
+				cluster.Name, health.FailureCount)
 			continue
 		}
+
+		wg.Add(1)
+		go func(c model.Cluster) {
+			defer wg.Done()
+
+			// 获取信号量
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			if err := s.syncClusterInfo(&c); err != nil {
+				// 记录失败到健康检查器
+				s.healthChecker.RecordFailure(c.Name, err)
+				s.logger.Error("Failed to sync cluster %s: %v", c.Name, err)
+				errChan <- fmt.Errorf("cluster %s: %w", c.Name, err)
+			} else {
+				// 记录成功到健康检查器
+				s.healthChecker.RecordSuccess(c.Name)
+				s.logger.Info("Successfully synced cluster: %s", c.Name)
+			}
+		}(cluster)
 	}
 
-	s.logger.Info("Completed syncing all clusters")
+	// 等待所有同步完成
+	wg.Wait()
+	close(errChan)
+
+	// 收集错误
+	var errors []error
+	for err := range errChan {
+		errors = append(errors, err)
+	}
+
+	if len(errors) > 0 {
+		s.logger.Warning("Completed syncing all clusters with %d failures", len(errors))
+		return fmt.Errorf("sync completed with %d failures", len(errors))
+	}
+
+	s.logger.Info("Completed syncing all clusters successfully")
 	return nil
+}
+
+// GetClusterHealth 获取集群健康状态
+func (s *Service) GetClusterHealth(clusterName string) *ClusterHealth {
+	return s.healthChecker.GetHealth(clusterName)
+}
+
+// GetAllClustersHealth 获取所有集群的健康状态
+func (s *Service) GetAllClustersHealth() map[string]*ClusterHealth {
+	return s.healthChecker.GetAllHealth()
+}
+
+// ResetClusterCircuitBreaker 重置集群断路器（手动恢复）
+func (s *Service) ResetClusterCircuitBreaker(clusterName string) {
+	s.healthChecker.ResetCircuitBreaker(clusterName)
+	s.logger.Info("Manually reset circuit breaker for cluster: %s", clusterName)
 }
 
 // GetNodes 获取集群节点
@@ -656,31 +729,66 @@ func (s *Service) GetNodes(id uint, userID uint) ([]k8s.NodeInfo, error) {
 }
 
 // initializeExistingClients 初始化已存在的集群客户端连接
+// 优化：使用并行处理，避免单个集群失败阻塞其他集群初始化
+// 优化：按优先级排序，优先初始化高优先级集群
 func (s *Service) initializeExistingClients() {
 	var clusters []model.Cluster
-	if err := s.db.Where("status = ?", model.ClusterStatusActive).Find(&clusters).Error; err != nil {
+	// 按优先级降序排序（priority DESC），优先级高的先初始化
+	if err := s.db.Where("status = ?", model.ClusterStatusActive).
+		Order("priority DESC, id ASC").
+		Find(&clusters).Error; err != nil {
 		s.logger.Error("Failed to load existing clusters: %v", err)
 		return
 	}
 
-	s.logger.Info("Initializing %d existing cluster connections", len(clusters))
+	s.logger.Info("Initializing %d existing cluster connections (parallel mode, priority-based)", len(clusters))
+
+	// 使用并行处理，限制并发数为5，避免同时创建过多连接
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 5)
 
 	for _, cluster := range clusters {
-		// 输出 kubeconfig 基本信息（不输出完整内容）
-		s.logger.Info("Initializing cluster %s (kubeconfig length: %d bytes)", cluster.Name, len(cluster.KubeConfig))
-		
-		if err := s.k8sSvc.CreateClient(cluster.Name, cluster.KubeConfig); err != nil {
-			errMsg := err.Error()
-			if strings.Contains(errMsg, "provide credentials") || strings.Contains(errMsg, "Unauthorized") {
-				s.logger.Warning("Failed to initialize client for cluster %s: credentials missing or invalid - %v", cluster.Name, err)
-				s.logger.Warning("Cluster %s may need kubeconfig update with valid credentials", cluster.Name)
-			} else {
-				s.logger.Warning("Failed to initialize client for cluster %s: %v", cluster.Name, err)
-			}
-			// 更新集群状态为错误
-			s.db.Model(&cluster).Update("status", model.ClusterStatusError)
-		} else {
-			s.logger.Info("Successfully initialized client for cluster: %s", cluster.Name)
+		// 检查断路器状态
+		if s.healthChecker.ShouldSkip(cluster.Name) {
+			health := s.healthChecker.GetHealth(cluster.Name)
+			s.logger.Warning("Skipping cluster %s initialization (circuit breaker open, failures: %d, last error: %v)",
+				cluster.Name, health.FailureCount, health.LastError)
+			continue
 		}
+
+		wg.Add(1)
+		go func(c model.Cluster) {
+			defer wg.Done()
+
+			// 获取信号量
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			// 输出 kubeconfig 基本信息（不输出完整内容）
+			s.logger.Info("Initializing cluster %s (kubeconfig length: %d bytes)", c.Name, len(c.KubeConfig))
+
+			if err := s.k8sSvc.CreateClient(c.Name, c.KubeConfig); err != nil {
+				// 记录失败到健康检查器
+				s.healthChecker.RecordFailure(c.Name, err)
+
+				errMsg := err.Error()
+				if strings.Contains(errMsg, "provide credentials") || strings.Contains(errMsg, "Unauthorized") {
+					s.logger.Warning("Failed to initialize client for cluster %s: credentials missing or invalid - %v", c.Name, err)
+					s.logger.Warning("Cluster %s may need kubeconfig update with valid credentials", c.Name)
+				} else {
+					s.logger.Warning("Failed to initialize client for cluster %s: %v", c.Name, err)
+				}
+				// 更新集群状态为错误
+				s.db.Model(&c).Update("status", model.ClusterStatusError)
+			} else {
+				// 记录成功到健康检查器
+				s.healthChecker.RecordSuccess(c.Name)
+				s.logger.Info("Successfully initialized client for cluster: %s", c.Name)
+			}
+		}(cluster)
 	}
+
+	// 等待所有初始化完成
+	wg.Wait()
+	s.logger.Info("Completed initializing all cluster connections")
 }

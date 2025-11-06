@@ -187,6 +187,59 @@ const nodeApi = {
       method: 'post',
       data
     })
+  },
+
+  // ============== 新增：优化方法 ==============
+
+  // 获取节点列表（带超时）
+  getNodesWithTimeout(params, timeout = 15000) {
+    return request({
+      url: '/api/v1/nodes',
+      method: 'get',
+      params,
+      timeout
+    })
+  },
+
+  // 并行获取多个集群的节点列表
+  async getAllClustersNodesParallel(clusterNames, timeout = 15000) {
+    const promises = clusterNames.map(clusterName =>
+      this.getNodesWithTimeout({ cluster_name: clusterName }, timeout)
+        .then(res => ({
+          clusterName,
+          success: true,
+          data: res.data || []
+        }))
+        .catch(err => {
+          console.warn(`Failed to load cluster ${clusterName}:`, err)
+          return {
+            clusterName,
+            success: false,
+            error: err.message || 'Failed to fetch',
+            data: []
+          }
+        })
+    )
+
+    return await Promise.all(promises)
+  },
+
+  // 快速检查集群节点可用性（超时时间更短）
+  async quickCheckClusterNodes(clusterName) {
+    try {
+      const res = await this.getNodesWithTimeout({ cluster_name: clusterName }, 5000)
+      return {
+        clusterName,
+        available: true,
+        nodeCount: res.data?.length || 0
+      }
+    } catch (err) {
+      return {
+        clusterName,
+        available: false,
+        error: err.message
+      }
+    }
   }
 }
 

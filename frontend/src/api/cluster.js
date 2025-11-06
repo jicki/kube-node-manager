@@ -82,6 +82,63 @@ const clusterApi = {
       url: `/api/v1/clusters/${id}/sync`,
       method: 'post'
     })
+  },
+
+  // ============== 新增：优化方法 ==============
+
+  // 获取集群列表（带超时）
+  getClustersWithTimeout(params, timeout = 10000) {
+    return request({
+      url: '/api/v1/clusters',
+      method: 'get',
+      params,
+      timeout
+    })
+  },
+
+  // 获取集群健康状态
+  getClusterHealth(clusterName) {
+    return request({
+      url: '/api/v1/clusters/health',
+      method: 'get',
+      params: { cluster_name: clusterName },
+      timeout: 5000 // 5秒超时
+    })
+  },
+
+  // 获取所有集群健康状态
+  getAllClustersHealth() {
+    return request({
+      url: '/api/v1/clusters/health/all',
+      method: 'get',
+      timeout: 5000
+    })
+  },
+
+  // 重置断路器
+  resetCircuitBreaker(clusterName) {
+    return request({
+      url: '/api/v1/clusters/circuit-breaker/reset',
+      method: 'post',
+      params: { cluster_name: clusterName }
+    })
+  },
+
+  // 并行获取多个集群的状态
+  async getAllClustersStatusParallel(clusters, timeout = 10000) {
+    const promises = clusters.map(cluster =>
+      this.getClusterStatus(cluster.id)
+        .catch(err => {
+          console.warn(`Failed to get status for cluster ${cluster.name}:`, err)
+          return { 
+            error: err.message || 'Failed to fetch',
+            cluster: cluster.name,
+            clusterId: cluster.id
+          }
+        })
+    )
+
+    return await Promise.all(promises)
   }
 }
 

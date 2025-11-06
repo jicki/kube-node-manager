@@ -32,6 +32,7 @@ type Service struct {
 	cache           *cache.K8sCache          // 旧的K8s API缓存层（仅用于非节点资源）
 	podCountCache   *podcache.PodCountCache  // 轻量级 Pod 统计缓存（基于 Informer）
 	realtimeManager interface{}              // 实时同步管理器（使用接口避免循环依赖）
+	connPool        *ConnectionPool          // 连接池统计和管理
 }
 
 // NodeInfo Kubernetes节点信息
@@ -120,12 +121,29 @@ func NewService(logger *logger.Logger, realtimeMgr interface{}) *Service {
 		cache:           cache.NewK8sCache(logger),
 		podCountCache:   podcache.NewPodCountCache(logger),
 		realtimeManager: realtimeMgr,
+		connPool:        NewConnectionPool(), // 初始化连接池
 	}
 }
 
 // GetPodCountCache 获取 Pod 统计缓存（供外部注册到 Informer）
 func (s *Service) GetPodCountCache() *podcache.PodCountCache {
 	return s.podCountCache
+}
+
+// GetConnectionPoolStats 获取连接池统计
+func (s *Service) GetConnectionPoolStats() map[string]*ConnectionStats {
+	return s.connPool.GetAllStats()
+}
+
+// GetConnectionPoolSummary 获取连接池摘要
+func (s *Service) GetConnectionPoolSummary() map[string]interface{} {
+	healthy, unhealthy, total := s.connPool.GetHealthySummary()
+	return map[string]interface{}{
+		"total":         total,
+		"healthy":       healthy,
+		"unhealthy":     unhealthy,
+		"max_connections": s.connPool.GetMaxConnections(),
+	}
 }
 
 // CreateClient 根据kubeconfig创建Kubernetes客户端
@@ -139,8 +157,8 @@ func (s *Service) CreateClient(clusterName, kubeconfig string) error {
 		return fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
-	// 设置超时 - 针对大规模集群增加超时时间
-	config.Timeout = 60 * time.Second
+	// 优化：减少超时时间 60s -> 15s，加快失败集群的识别速度
+	config.Timeout = 15 * time.Second
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
@@ -148,8 +166,8 @@ func (s *Service) CreateClient(clusterName, kubeconfig string) error {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	// 测试连接
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// 优化：减少连接测试超时 10s -> 5s
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// 使用基础的API版本检查来验证连接
@@ -168,13 +186,16 @@ func (s *Service) CreateClient(clusterName, kubeconfig string) error {
 
 	s.clients[clusterName] = clientset
 
+	// 注册到连接池
+	s.connPool.RegisterConnection(clusterName)
+
 	// 创建metrics client（可选，用于获取资源使用情况）
 	metricsClient, err := metricsclientset.NewForConfig(config)
 	if err != nil {
 		s.logger.Warningf("Failed to create metrics client for cluster %s (metrics may not be available): %v", clusterName, err)
 	} else {
-		// 测试metrics API是否可用
-		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+		// 优化：减少metrics API测试超时 5s -> 3s
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel2()
 		_, err = metricsClient.MetricsV1beta1().NodeMetricses().List(ctx2, metav1.ListOptions{Limit: 1})
 		if err != nil {
@@ -356,12 +377,21 @@ func (s *Service) fetchNodesFromAPI(clusterName string) ([]NodeInfo, error) {
 		return nil, fmt.Errorf("cluster connection not available for %s: %w", clusterName, err)
 	}
 
-	// 针对大规模集群增加超时时间
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// 优化：减少超时时间 60s -> 20s，加快失败响应速度
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
+	// 记录请求开始时间（用于连接池统计）
+	startTime := time.Now()
+
 	nodeList, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	
+	// 记录请求延迟
+	latencyMs := float64(time.Since(startTime).Milliseconds())
+	
 	if err != nil {
+		// 记录失败到连接池
+		s.connPool.RecordRequest(clusterName, false, latencyMs)
 		s.logger.Errorf("Failed to list nodes for cluster %s: %v", clusterName, err)
 		// 提供更详细的错误信息以帮助诊断
 		if strings.Contains(err.Error(), "connection refused") {
@@ -408,6 +438,9 @@ func (s *Service) fetchNodesFromAPI(clusterName string) ([]NodeInfo, error) {
 	if gpuNodeCount > 0 {
 		s.logger.Infof("Cluster %s: Found %d GPU nodes with total %d GPUs", clusterName, gpuNodeCount, totalGPUCount)
 	}
+
+	// 记录成功到连接池
+	s.connPool.RecordRequest(clusterName, true, latencyMs)
 
 	return nodes, nil
 }
@@ -475,7 +508,8 @@ func (s *Service) fetchNodeFromAPI(clusterName, nodeName string) (*NodeInfo, err
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// 优化：减少超时时间 30s -> 10s
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
@@ -1556,8 +1590,8 @@ func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[
 
 	for pageCount < maxPages {
 		pageCount++
-		// 优化：每次分页请求超时从 30 秒增加到 60 秒
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		// 优化：减少每次分页请求超时 60s -> 30s，加快失败响应
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 		podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 			Limit:    pageSize,

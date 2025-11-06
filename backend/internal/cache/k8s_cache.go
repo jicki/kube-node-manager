@@ -22,11 +22,16 @@ type K8sCache struct {
 	// 大规模集群优化：Pod数量查询很慢，使用独立缓存（5分钟TTL）
 	podCountCache *sync.Map
 
+	// 失败集群黑名单: cluster -> lastFailureTime
+	// 优化：记录最近失败的集群，短时间内跳过缓存刷新
+	failureBlacklist *sync.Map
+
 	// 缓存配置
-	listCacheTTL     time.Duration // 列表缓存TTL（默认30s）
-	detailCacheTTL   time.Duration // 详情缓存TTL（默认5min）
-	podCountCacheTTL time.Duration // Pod数量缓存TTL（默认5min）
-	staleThreshold   time.Duration // 过期但可用阈值（默认5min）
+	listCacheTTL      time.Duration // 列表缓存TTL（默认30s）
+	detailCacheTTL    time.Duration // 详情缓存TTL（默认5min）
+	podCountCacheTTL  time.Duration // Pod数量缓存TTL（默认5min）
+	staleThreshold    time.Duration // 过期但可用阈值（默认5min）
+	blacklistDuration time.Duration // 黑名单持续时间（默认2min）
 
 	logger *logger.Logger
 
@@ -46,16 +51,42 @@ type CacheEntry struct {
 // 多副本部署优化：使用较短的TTL减少副本间数据不一致窗口
 func NewK8sCache(logger *logger.Logger) *K8sCache {
 	return &K8sCache{
-		nodeListCache:    &sync.Map{},
-		nodeDetailCache:  &sync.Map{},
-		podCountCache:    &sync.Map{},
-		listCacheTTL:     10 * time.Second, // 列表缓存10秒（多副本环境优化）
-		detailCacheTTL:   1 * time.Minute,  // 详情缓存1分钟（多副本环境优化）
-		podCountCacheTTL: 5 * time.Minute,  // Pod数量缓存5分钟（大规模集群优化）
-		staleThreshold:   2 * time.Minute,  // 过期阈值2分钟（异步刷新窗口）
-		logger:           logger,
-		refreshLocks:     &sync.Map{},
+		nodeListCache:     &sync.Map{},
+		nodeDetailCache:   &sync.Map{},
+		podCountCache:     &sync.Map{},
+		failureBlacklist:  &sync.Map{}, // 失败集群黑名单
+		listCacheTTL:      10 * time.Second, // 列表缓存10秒（多副本环境优化）
+		detailCacheTTL:    1 * time.Minute,  // 详情缓存1分钟（多副本环境优化）
+		podCountCacheTTL:  5 * time.Minute,  // Pod数量缓存5分钟（大规模集群优化）
+		staleThreshold:    2 * time.Minute,  // 过期阈值2分钟（异步刷新窗口）
+		blacklistDuration: 2 * time.Minute,  // 失败集群黑名单2分钟
+		logger:            logger,
+		refreshLocks:      &sync.Map{},
 	}
+}
+
+// isBlacklisted 检查集群是否在黑名单中
+func (c *K8sCache) isBlacklisted(cluster string) bool {
+	if failTime, ok := c.failureBlacklist.Load(cluster); ok {
+		lastFail := failTime.(time.Time)
+		if time.Since(lastFail) < c.blacklistDuration {
+			return true // 还在黑名单期内
+		}
+		// 黑名单过期，移除
+		c.failureBlacklist.Delete(cluster)
+	}
+	return false
+}
+
+// addToBlacklist 将集群添加到黑名单
+func (c *K8sCache) addToBlacklist(cluster string) {
+	c.failureBlacklist.Store(cluster, time.Now())
+	c.logger.Warningf("Added cluster %s to failure blacklist", cluster)
+}
+
+// removeFromBlacklist 从黑名单移除集群（成功后）
+func (c *K8sCache) removeFromBlacklist(cluster string) {
+	c.failureBlacklist.Delete(cluster)
 }
 
 // GetNodeList 获取节点列表（带缓存）
@@ -63,11 +94,28 @@ func NewK8sCache(logger *logger.Logger) *K8sCache {
 // - <10s: 直接返回缓存（新鲜数据）
 // - 10s-2min: 返回缓存并异步刷新（过期但可用）
 // - >2min或forceRefresh: 同步刷新（强制更新）
+// - 黑名单集群：跳过刷新，使用旧缓存
 func (c *K8sCache) GetNodeList(ctx context.Context, cluster string, forceRefresh bool, fetchFunc func() (interface{}, error)) (interface{}, error) {
-	// 强制刷新，清除缓存
+	// 强制刷新，清除缓存和黑名单
 	if forceRefresh {
 		c.nodeListCache.Delete(cluster)
+		c.removeFromBlacklist(cluster)
 		return c.fetchAndCacheNodeList(ctx, cluster, fetchFunc)
+	}
+
+	// 检查黑名单
+	if c.isBlacklisted(cluster) {
+		// 如果有缓存，返回旧缓存
+		if cached, ok := c.nodeListCache.Load(cluster); ok {
+			entry := cached.(*CacheEntry)
+			entry.mu.RLock()
+			data := entry.Data
+			entry.mu.RUnlock()
+			c.logger.Debugf("Cluster %s in blacklist, returning cached data", cluster)
+			return data, nil
+		}
+		// 没有缓存，返回错误
+		return nil, fmt.Errorf("cluster %s temporarily unavailable (blacklisted)", cluster)
 	}
 
 	// 尝试从缓存获取
@@ -133,8 +181,13 @@ func (c *K8sCache) fetchAndCacheNodeList(ctx context.Context, cluster string, fe
 	nodes, err := fetchFunc()
 	if err != nil {
 		c.logger.Errorf("Failed to fetch node list for cluster %s: %v", cluster, err)
+		// 失败时添加到黑名单
+		c.addToBlacklist(cluster)
 		return nil, err
 	}
+
+	// 成功后从黑名单移除
+	c.removeFromBlacklist(cluster)
 
 	// 缓存结果
 	entry := &CacheEntry{
