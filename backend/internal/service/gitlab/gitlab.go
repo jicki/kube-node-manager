@@ -1579,9 +1579,6 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			projectsProcessed, len(allJobs), elapsedTime.Seconds()))
 	}
 
-	// Record total count before filtering (cap at 1000 for display)
-	totalCount := len(allJobs)
-
 	// Collect status statistics for debugging
 	statusCounts := make(map[string]int)
 	for _, job := range allJobs {
@@ -1591,8 +1588,11 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	// Log status distribution (always log to help debugging)
 	s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution (last 3 days, excluding manual): %v", statusCounts))
 
-	if totalCount > 1000 {
-		totalCount = 1001 // Signal that there are more than 1000
+	// Record total count before filtering
+	// 注意：这是过滤前的总数（只包含活跃状态，最近3天）
+	totalCount := len(allJobs)
+	if totalCount > 10000 {
+		totalCount = 10001 // Signal that there are more than 10000
 	}
 
 	// Filter by status if specified (in memory)
