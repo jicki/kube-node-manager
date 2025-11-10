@@ -1207,13 +1207,13 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	// Calculate time range: last 5 days (balance between coverage and performance)
 	fiveDaysAgo := time.Now().AddDate(0, 0, -5)
 	s.logger.Info(fmt.Sprintf("Fetching active jobs from the last 5 days (since %s), excluding manual jobs", fiveDaysAgo.Format("2006-01-02 15:04:05")))
-	
+
 	startTime := time.Now()
 
 	// Collect jobs from all projects
 	var allJobs []GlobalJobInfo
 	projectsProcessed := 0
-	maxJobsLimit := 3000 // Increased limit since we're excluding manual jobs
+	maxJobsLimit := 3000   // Increased limit since we're excluding manual jobs
 	maxProjectsLimit := 50 // Increased to process more projects
 
 	// Iterate through projects and fetch jobs (with pagination)
@@ -1271,7 +1271,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 				break
 			}
 
-			jobBody, err := io.ReadAll(jobResp.Body)
+			jobBody, nil := io.ReadAll(jobResp.Body)
 			jobResp.Body.Close()
 			if err != nil {
 				break
@@ -1336,7 +1336,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	}
 
 	elapsedTime := time.Since(startTime)
-	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d active jobs from the last 5 days (excluding manual) in %.2f seconds", 
+	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d active jobs from the last 5 days (excluding manual) in %.2f seconds",
 		projectsProcessed, len(allJobs), elapsedTime.Seconds()))
 
 	// Record total count before filtering (cap at 1000 for display)
