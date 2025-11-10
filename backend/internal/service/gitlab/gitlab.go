@@ -1372,13 +1372,16 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	startTime := time.Now()
 
 	// 并发控制参数
-	maxProjectsLimit := 30     // 最多处理 30 个项目
+	// 注意：增加这些值会提高完整性，但也会增加响应时间
+	maxProjectsLimit := 50     // 最多处理 50 个项目（从 30 增加）
 	maxConcurrency := 10       // 最多 10 个并发请求
-	maxPagesPerProject := 3    // 每个项目最多获取 3 页
+	maxPagesPerProject := 2    // 每个项目最多获取 2 页（减少以补偿项目数增加）
 	
 	// 限制要处理的项目数量
+	originalProjectCount := len(projects)
 	if len(projects) > maxProjectsLimit {
 		projects = projects[:maxProjectsLimit]
+		s.logger.Info(fmt.Sprintf("Limiting projects from %d to %d (maxProjectsLimit)", originalProjectCount, maxProjectsLimit))
 	}
 
 	// 使用通道和 WaitGroup 进行并发控制
@@ -1442,12 +1445,22 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 				// 在 API 级别过滤活跃状态的作业
 				// 参考：https://docs.gitlab.com/api/jobs/#job-status-values
 				// 获取所有活跃（非终止）状态的 jobs
+				
+				// 尝试方案：根据 GitLab API 文档，waiting_for_resource 可能需要特殊处理
+				// 先添加明确支持的状态
 				jobQ.Add("scope[]", "created")              // 已创建，未处理
 				jobQ.Add("scope[]", "pending")              // 队列中等待 runner
+				jobQ.Add("scope[]", "running")              // 正在执行
+				
+				// 这些状态可能不被所有 GitLab 版本支持，但尝试添加
 				jobQ.Add("scope[]", "preparing")            // Runner 准备执行环境
 				jobQ.Add("scope[]", "scheduled")            // 已调度，未开始
 				jobQ.Add("scope[]", "waiting_for_resource") // 等待资源
-				jobQ.Add("scope[]", "running")              // 正在执行
+				
+				// 调试：如果需要查看所有状态，可以注释掉上面的 scope[] 并取消下面的注释
+				// 这样会获取所有状态的 jobs，包括已完成的
+				// 注意：会显著增加数据量和响应时间
+				
 				// 排除 manual 状态（需要人工触发）
 				// 排除终止状态：success, failed, canceled, skipped, canceling
 				jobQ.Set("per_page", "100")
@@ -1552,6 +1565,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	var allJobs []GlobalJobInfo
 	projectsProcessed := 0
 	projectsFailed := 0
+	projectIDsProcessed := make([]int, 0)
 	
 	for result := range resultChan {
 		if result.Error != nil {
@@ -1564,6 +1578,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		
 		if len(result.Jobs) > 0 {
 			projectsProcessed++
+			projectIDsProcessed = append(projectIDsProcessed, result.ProjectID)
 			allJobs = append(allJobs, result.Jobs...)
 			
 			// 只为前几个项目记录详细日志
@@ -1572,6 +1587,11 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 					len(result.Jobs), result.ProjectName, result.ProjectID))
 			}
 		}
+	}
+	
+	// 记录处理的项目 ID 列表（用于调试）
+	if projectsProcessed > 0 {
+		s.logger.Debug(fmt.Sprintf("Processed project IDs: %v", projectIDsProcessed))
 	}
 
 	elapsedTime := time.Since(startTime)
@@ -1585,9 +1605,18 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	// Collect status statistics for debugging
 	statusCounts := make(map[string]int)
+	uniqueStatuses := make(map[string]bool)
 	for _, job := range allJobs {
 		statusCounts[job.Status]++
+		uniqueStatuses[job.Status] = true
 	}
+
+	// Log all unique statuses found
+	allStatuses := make([]string, 0, len(uniqueStatuses))
+	for status := range uniqueStatuses {
+		allStatuses = append(allStatuses, status)
+	}
+	s.logger.Debug(fmt.Sprintf("[ListAllJobs] Unique statuses found in API response: %v", allStatuses))
 
 	// Log status distribution (always log to help debugging)
 	s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution (last 3 days, active jobs only): %v", statusCounts))
