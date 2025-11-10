@@ -1127,18 +1127,19 @@ type ProjectBasicInfo struct {
 }
 
 // ListAllJobs retrieves all visible jobs across all projects
-func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJobInfo, error) {
+// Returns: jobs, totalCount, filteredCount, error
+func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJobInfo, int, int, error) {
 	settings, err := s.GetSettings()
 	if err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
 
 	if !settings.Enabled {
-		return nil, errors.New("GitLab integration is not enabled")
+		return nil, 0, 0, errors.New("GitLab integration is not enabled")
 	}
 
 	if settings.Domain == "" || settings.Token == "" {
-		return nil, errors.New("GitLab domain or token is not configured")
+		return nil, 0, 0, errors.New("GitLab domain or token is not configured")
 	}
 
 	// Set default pagination values
@@ -1175,28 +1176,28 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch projects: %w", err)
+		return nil, 0, 0, fmt.Errorf("failed to fetch projects: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GitLab API returned status %d when fetching projects: %s", resp.StatusCode, string(body))
+		return nil, 0, 0, fmt.Errorf("GitLab API returned status %d when fetching projects: %s", resp.StatusCode, string(body))
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
 
 	var projects []ProjectBasicInfo
 	if err := json.Unmarshal(body, &projects); err != nil {
-		return nil, fmt.Errorf("failed to parse projects: %w", err)
+		return nil, 0, 0, fmt.Errorf("failed to parse projects: %w", err)
 	}
 
 	if len(projects) == 0 {
 		s.logger.Info("No projects found for user")
-		return []GlobalJobInfo{}, nil
+		return []GlobalJobInfo{}, 0, 0, nil
 	}
 
 	s.logger.Info(fmt.Sprintf("Found %d projects, fetching jobs...", len(projects)))
@@ -1267,7 +1268,14 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		jobCount += len(projectJobs)
 	}
 
+	// Record total count before filtering (cap at 1000 for display)
+	totalCount := len(allJobs)
+	if totalCount > 1000 {
+		totalCount = 1001 // Signal that there are more than 1000
+	}
+
 	// Filter by tag if specified
+	filteredCount := len(allJobs)
 	if tag != "" {
 		var filteredJobs []GlobalJobInfo
 		tagLower := strings.ToLower(tag)
@@ -1297,6 +1305,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		s.logger.Info(fmt.Sprintf("Filtered jobs by tag '%s', %d jobs matched", tag, len(filteredJobs)))
 		
 		allJobs = filteredJobs
+		filteredCount = len(allJobs)
 	}
 
 	// Sort jobs by created_at (newest first)
@@ -1314,7 +1323,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	endIdx := startIdx + perPage
 
 	if startIdx >= len(allJobs) {
-		return []GlobalJobInfo{}, nil
+		return []GlobalJobInfo{}, totalCount, filteredCount, nil
 	}
 
 	if endIdx > len(allJobs) {
@@ -1323,8 +1332,8 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	result := allJobs[startIdx:endIdx]
 
-	logMsg := fmt.Sprintf("Fetched total %d jobs from %d projects, returning %d jobs (page=%d, per_page=%d)", 
-		len(allJobs), len(projects), len(result), page, perPage)
+	logMsg := fmt.Sprintf("Fetched total %d jobs from %d projects, filtered %d jobs, returning %d jobs (page=%d, per_page=%d)", 
+		totalCount, len(projects), filteredCount, len(result), page, perPage)
 	if status != "" {
 		logMsg += fmt.Sprintf(", status=%s", status)
 	}
@@ -1333,5 +1342,5 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	}
 	s.logger.Info(logMsg)
 
-	return result, nil
+	return result, totalCount, filteredCount, nil
 }

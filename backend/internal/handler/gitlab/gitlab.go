@@ -416,12 +416,16 @@ func (h *Handler) ListAllJobs(c *gin.Context) {
 		}
 	}
 
-	jobs, err := h.service.ListAllJobs(status, tag, page, perPage)
+	jobs, total, filtered, err := h.service.ListAllJobs(status, tag, page, perPage)
 	if err != nil {
 		h.logger.Error("Failed to list all jobs: " + err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, jobs)
+	c.JSON(http.StatusOK, gin.H{
+		"jobs":           jobs,
+		"total":          total,
+		"filtered_count": filtered,
+	})
 }

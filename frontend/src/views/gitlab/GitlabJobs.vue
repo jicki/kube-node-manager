@@ -50,6 +50,11 @@
           <el-button :icon="Refresh" @click="fetchJobs" :loading="loading">
             刷新
           </el-button>
+
+          <!-- 数量显示 -->
+          <div v-if="getCountDisplay()" style="margin-left: 16px; color: #606266; font-size: 14px; white-space: nowrap">
+            {{ getCountDisplay() }}
+          </div>
         </div>
       </div>
 
@@ -234,6 +239,8 @@ const gitlabStore = useGitlabStore()
 
 const loading = ref(false)
 const jobs = ref([])
+const totalCount = ref(0) // 总数量
+const filteredCount = ref(0) // 过滤后的数量
 
 const filters = ref({
   status: '',
@@ -262,20 +269,27 @@ const fetchJobs = async () => {
     }
 
     const response = await listAllJobs(params)
-    jobs.value = response.data || []
     
-    // 动态计算总数以支持分页
-    if (jobs.value.length > 0) {
-      if (jobs.value.length === pagination.value.pageSize) {
-        // 当前页已满，假设可能有更多页
-        pagination.value.total = pagination.value.currentPage * pagination.value.pageSize + pagination.value.pageSize
-      } else {
-        // 当前页未满，这是最后一页
-        pagination.value.total = (pagination.value.currentPage - 1) * pagination.value.pageSize + jobs.value.length
-      }
+    // 处理新的响应格式
+    if (response.data.jobs) {
+      jobs.value = response.data.jobs || []
+      totalCount.value = response.data.total || 0
+      filteredCount.value = response.data.filtered_count || 0
+      pagination.value.total = filteredCount.value
     } else {
-      // 无数据返回
-      pagination.value.total = (pagination.value.currentPage - 1) * pagination.value.pageSize
+      // 向后兼容旧格式
+      jobs.value = response.data || []
+      
+      // 动态计算总数以支持分页
+      if (jobs.value.length > 0) {
+        if (jobs.value.length === pagination.value.pageSize) {
+          pagination.value.total = pagination.value.currentPage * pagination.value.pageSize + pagination.value.pageSize
+        } else {
+          pagination.value.total = (pagination.value.currentPage - 1) * pagination.value.pageSize + jobs.value.length
+        }
+      } else {
+        pagination.value.total = (pagination.value.currentPage - 1) * pagination.value.pageSize
+      }
     }
   } catch (error) {
     ElMessage.error(error.response?.data?.error || '获取 Jobs 失败')
@@ -310,6 +324,22 @@ const getEmptyDescription = () => {
     return `没有找到状态为"${getJobStatusLabel(filters.value.status)}"的 Jobs`
   }
   return '暂无 Jobs 数据'
+}
+
+// 获取数量显示
+const getCountDisplay = () => {
+  if (totalCount.value > 1000) {
+    if (filters.value.tag) {
+      return `共 1000+ 条，过滤后 ${filteredCount.value} 条`
+    }
+    return '共 1000+ 条'
+  } else if (totalCount.value > 0) {
+    if (filters.value.tag) {
+      return `共 ${totalCount.value} 条，过滤后 ${filteredCount.value} 条`
+    }
+    return `共 ${totalCount.value} 条`
+  }
+  return ''
 }
 
 // Handle page size change
