@@ -1206,17 +1206,19 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	// Collect jobs from all projects
 	var allJobs []GlobalJobInfo
 	jobCount := 0
-	maxJobsToFetch := 9999 // Increase limit to collect more jobs (will show as 1000+ if over 9999)
+	maxJobsToFetch := 2000 // Limit to 2000 jobs to avoid timeout (will show as 1000+ if over 1000)
+	projectsProcessed := 0
+	maxProjectsToProcess := 30 // Process up to 30 projects to balance coverage and performance
 
 	// Iterate through projects and fetch jobs (with pagination)
 	for _, project := range projects {
-		if jobCount >= maxJobsToFetch {
+		if jobCount >= maxJobsToFetch || projectsProcessed >= maxProjectsToProcess {
 			break // Limit total jobs fetched to avoid performance issues
 		}
 
 		// Fetch multiple pages of jobs from each project
 		jobsPerProject := 0
-		maxPagesPerProject := 3 // Fetch up to 3 pages per project (3 * 100 = 300 jobs per project)
+		maxPagesPerProject := 2 // Fetch up to 2 pages per project (2 * 100 = 200 jobs per project)
 
 		for pageNum := 1; pageNum <= maxPagesPerProject; pageNum++ {
 			if jobCount >= maxJobsToFetch {
@@ -1271,7 +1273,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 			// Enrich jobs with project information if not present
 			for i := range projectJobs {
-				if projectJobs[i].Project == nil || len(projectJobs[i].Project) == 0 {
+				if len(projectJobs[i].Project) == 0 {
 					projectJobs[i].Project = map[string]interface{}{
 						"id":                  project.ID,
 						"name":                project.Name,
@@ -1292,9 +1294,15 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		}
 
 		if jobsPerProject > 0 {
-			s.logger.Debug(fmt.Sprintf("Collected %d jobs from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
+			projectsProcessed++
+			// Only log details for first few projects to reduce log noise
+			if projectsProcessed <= 3 {
+				s.logger.Debug(fmt.Sprintf("Collected %d jobs from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
+			}
 		}
 	}
+
+	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d total jobs", projectsProcessed, len(allJobs)))
 
 	// Record total count before filtering (cap at 1000 for display)
 	totalCount := len(allJobs)
