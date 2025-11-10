@@ -1246,14 +1246,14 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			jobQ := jobReq.URL.Query()
 			// Filter by active scopes at API level to reduce data volume
 			// Only fetch jobs that are NOT completed (success, failed, canceled, skipped)
-			// This significantly reduces response time
-			jobQ.Set("scope[]", "created")
-			jobQ.Set("scope[]", "pending")
-			jobQ.Set("scope[]", "running")
-			jobQ.Set("scope[]", "manual")
-			jobQ.Set("scope[]", "scheduled")
-			jobQ.Set("scope[]", "preparing")
-			jobQ.Set("scope[]", "waiting_for_resource")
+			// Use Add() instead of Set() to allow multiple scope[] parameters
+			jobQ.Add("scope[]", "created")
+			jobQ.Add("scope[]", "pending")
+			jobQ.Add("scope[]", "running")
+			jobQ.Add("scope[]", "manual")
+			jobQ.Add("scope[]", "scheduled")
+			jobQ.Add("scope[]", "preparing")
+			jobQ.Add("scope[]", "waiting_for_resource")
 			jobQ.Set("per_page", "100")                  // Get up to 100 jobs per page (GitLab API max)
 			jobQ.Set("page", fmt.Sprintf("%d", pageNum)) // Page number
 			jobQ.Set("order_by", "id")                   // Order by ID
