@@ -1162,7 +1162,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	projectsURL := fmt.Sprintf("%s/api/v4/projects", settings.Domain)
 	req, err := http.NewRequest("GET", projectsURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
 	req.Header.Set("PRIVATE-TOKEN", settings.Token)
 	
