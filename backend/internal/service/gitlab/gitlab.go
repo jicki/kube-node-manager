@@ -1165,11 +1165,11 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		return nil, 0, 0, err
 	}
 	req.Header.Set("PRIVATE-TOKEN", settings.Token)
-	
+
 	q := req.URL.Query()
 	q.Set("membership", "true")
-	q.Set("per_page", "100") // Get up to 100 projects (GitLab API max per page)
-	q.Set("simple", "true")  // Get simplified project info
+	q.Set("per_page", "100")   // Get up to 100 projects (GitLab API max per page)
+	q.Set("simple", "true")    // Get simplified project info
 	q.Set("archived", "false") // Exclude archived projects
 	q.Set("order_by", "last_activity_at")
 	q.Set("sort", "desc")
@@ -1206,82 +1206,108 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	// Collect jobs from all projects
 	var allJobs []GlobalJobInfo
 	jobCount := 0
-	maxJobsToFetch := 1500 // Fetch up to 1500 jobs to calculate accurate count (will show as 1000+ if more)
+	maxJobsToFetch := 9999 // Increase limit to collect more jobs (will show as 1000+ if over 9999)
 
-	// Iterate through projects and fetch jobs
+	// Iterate through projects and fetch jobs (with pagination)
 	for _, project := range projects {
 		if jobCount >= maxJobsToFetch {
 			break // Limit total jobs fetched to avoid performance issues
 		}
 
-		// Fetch jobs for this project
-		jobsURL := fmt.Sprintf("%s/api/v4/projects/%d/jobs", settings.Domain, project.ID)
-		jobReq, err := http.NewRequest("GET", jobsURL, nil)
-		if err != nil {
-			s.logger.Warning(fmt.Sprintf("Failed to create request for project %d: %v", project.ID, err))
-			continue
-		}
-		jobReq.Header.Set("PRIVATE-TOKEN", settings.Token)
+		// Fetch multiple pages of jobs from each project
+		jobsPerProject := 0
+		maxPagesPerProject := 3 // Fetch up to 3 pages per project (3 * 100 = 300 jobs per project)
 
-		jobQ := jobReq.URL.Query()
-		// Note: Do NOT filter by status here - we need to get all jobs to calculate totalCount
-		// Status filtering will be done in memory after collecting all jobs
-		jobQ.Set("per_page", "100") // Get up to 100 jobs from each project (GitLab API max)
-		jobQ.Set("order_by", "id")   // Order by ID
-		jobQ.Set("sort", "desc")     // Newest first
-		jobReq.URL.RawQuery = jobQ.Encode()
+		for pageNum := 1; pageNum <= maxPagesPerProject; pageNum++ {
+			if jobCount >= maxJobsToFetch {
+				break
+			}
 
-		jobResp, err := client.Do(jobReq)
-		if err != nil {
-			s.logger.Warning(fmt.Sprintf("Failed to fetch jobs for project %d: %v", project.ID, err))
-			continue
-		}
+			// Fetch jobs for this project (with pagination)
+			jobsURL := fmt.Sprintf("%s/api/v4/projects/%d/jobs", settings.Domain, project.ID)
+			jobReq, err := http.NewRequest("GET", jobsURL, nil)
+			if err != nil {
+				s.logger.Warning(fmt.Sprintf("Failed to create request for project %d: %v", project.ID, err))
+				break
+			}
+			jobReq.Header.Set("PRIVATE-TOKEN", settings.Token)
 
-		if jobResp.StatusCode != http.StatusOK {
+			jobQ := jobReq.URL.Query()
+			// Note: Do NOT filter by status here - we need to get all jobs to calculate totalCount
+			// Status filtering will be done in memory after collecting all jobs
+			jobQ.Set("per_page", "100")                  // Get up to 100 jobs per page (GitLab API max)
+			jobQ.Set("page", fmt.Sprintf("%d", pageNum)) // Page number
+			jobQ.Set("order_by", "id")                   // Order by ID
+			jobQ.Set("sort", "desc")                     // Newest first
+			jobReq.URL.RawQuery = jobQ.Encode()
+
+			jobResp, err := client.Do(jobReq)
+			if err != nil {
+				s.logger.Warning(fmt.Sprintf("Failed to fetch jobs for project %d page %d: %v", project.ID, pageNum, err))
+				break
+			}
+
+			if jobResp.StatusCode != http.StatusOK {
+				jobResp.Body.Close()
+				break
+			}
+
+			jobBody, err := io.ReadAll(jobResp.Body)
 			jobResp.Body.Close()
-			continue
-		}
+			if err != nil {
+				break
+			}
 
-		jobBody, err := io.ReadAll(jobResp.Body)
-		jobResp.Body.Close()
-		if err != nil {
-			continue
-		}
+			var projectJobs []GlobalJobInfo
+			if err := json.Unmarshal(jobBody, &projectJobs); err != nil {
+				s.logger.Warning(fmt.Sprintf("Failed to parse jobs for project %d page %d: %v", project.ID, pageNum, err))
+				break
+			}
 
-		var projectJobs []GlobalJobInfo
-		if err := json.Unmarshal(jobBody, &projectJobs); err != nil {
-			s.logger.Warning(fmt.Sprintf("Failed to parse jobs for project %d: %v", project.ID, err))
-			continue
-		}
+			// If no jobs returned, we've reached the end
+			if len(projectJobs) == 0 {
+				break
+			}
 
-		// Enrich jobs with project information if not present
-		for i := range projectJobs {
-			if projectJobs[i].Project == nil || len(projectJobs[i].Project) == 0 {
-				projectJobs[i].Project = map[string]interface{}{
-					"id":                  project.ID,
-					"name":                project.Name,
-					"name_with_namespace": project.NameWithNamespace,
-					"path_with_namespace": project.PathWithNamespace,
+			// Enrich jobs with project information if not present
+			for i := range projectJobs {
+				if projectJobs[i].Project == nil || len(projectJobs[i].Project) == 0 {
+					projectJobs[i].Project = map[string]interface{}{
+						"id":                  project.ID,
+						"name":                project.Name,
+						"name_with_namespace": project.NameWithNamespace,
+						"path_with_namespace": project.PathWithNamespace,
+					}
 				}
+			}
+
+			allJobs = append(allJobs, projectJobs...)
+			jobCount += len(projectJobs)
+			jobsPerProject += len(projectJobs)
+
+			// If we got less than 100 jobs, it's the last page for this project
+			if len(projectJobs) < 100 {
+				break
 			}
 		}
 
-		allJobs = append(allJobs, projectJobs...)
-		jobCount += len(projectJobs)
+		if jobsPerProject > 0 {
+			s.logger.Debug(fmt.Sprintf("Collected %d jobs from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
+		}
 	}
 
 	// Record total count before filtering (cap at 1000 for display)
 	totalCount := len(allJobs)
-	
+
 	// Collect status statistics for debugging
 	statusCounts := make(map[string]int)
 	for _, job := range allJobs {
 		statusCounts[job.Status]++
 	}
-	
+
 	// Log status distribution (always log to help debugging)
 	s.logger.Info(fmt.Sprintf("[ListAllJobs] Collected %d jobs. Status distribution: %v", len(allJobs), statusCounts))
-	
+
 	if totalCount > 1000 {
 		totalCount = 1001 // Signal that there are more than 1000
 	}
@@ -1290,13 +1316,13 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	if status != "" {
 		var statusFilteredJobs []GlobalJobInfo
 		statusLower := strings.ToLower(status)
-		
+
 		for _, job := range allJobs {
 			if strings.ToLower(job.Status) == statusLower {
 				statusFilteredJobs = append(statusFilteredJobs, job)
 			}
 		}
-		
+
 		allJobs = statusFilteredJobs
 	}
 
@@ -1304,7 +1330,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	if tag != "" {
 		var tagFilteredJobs []GlobalJobInfo
 		tagLower := strings.ToLower(tag)
-		
+
 		for _, job := range allJobs {
 			// Check if any tag in job's tag_list contains the search tag
 			if len(job.TagList) > 0 {
@@ -1316,7 +1342,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 				}
 			}
 		}
-		
+
 		allJobs = tagFilteredJobs
 	}
 
@@ -1359,8 +1385,8 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	if len(filters) > 0 {
 		filterStr = fmt.Sprintf(" [%s]", strings.Join(filters, ", "))
 	}
-	
-	s.logger.Info(fmt.Sprintf("[ListAllJobs] Total: %d, Filtered: %d, Page: %d, Returning: %d jobs%s", 
+
+	s.logger.Info(fmt.Sprintf("[ListAllJobs] Total: %d, Filtered: %d, Page: %d, Returning: %d jobs%s",
 		totalCount, filteredCount, page, len(result), filterStr))
 
 	return result, totalCount, filteredCount, nil
