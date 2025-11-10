@@ -1155,7 +1155,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	}
 
 	client := &http.Client{
-		Timeout: 60 * time.Second, // Increased timeout for slow GitLab responses
+		Timeout: 20 * time.Second, // Reduced timeout to fail fast on slow projects
 	}
 
 	// First, get user's projects
@@ -1214,8 +1214,8 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	var allJobs []GlobalJobInfo
 	projectsProcessed := 0
 	projectsFailed := 0
-	maxJobsLimit := 3000   // Increased limit since we're excluding manual jobs
-	maxProjectsLimit := 50 // Increased to process more projects
+	maxJobsLimit := 2000   // Reduced limit for faster response
+	maxProjectsLimit := 30 // Reduced to ensure completion within 20 seconds
 
 	// Iterate through projects and fetch jobs (with pagination)
 	for _, project := range projects {
@@ -1228,7 +1228,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		// Fetch multiple pages of jobs from each project
 		jobsPerProject := 0
 		projectHadError := false
-		maxPagesPerProject := 5 // Limit pages per project to avoid too many API calls
+		maxPagesPerProject := 3 // Reduced to 3 pages for faster response
 
 		for pageNum := 1; pageNum <= maxPagesPerProject; pageNum++ { // Limited loop with safety
 			// Check if we've exceeded the global job limit
