@@ -1251,6 +1251,18 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			continue
 		}
 
+		// Enrich jobs with project information if not present
+		for i := range projectJobs {
+			if projectJobs[i].Project == nil || len(projectJobs[i].Project) == 0 {
+				projectJobs[i].Project = map[string]interface{}{
+					"id":                  project.ID,
+					"name":                project.Name,
+					"name_with_namespace": project.NameWithNamespace,
+					"path_with_namespace": project.PathWithNamespace,
+				}
+			}
+		}
+
 		allJobs = append(allJobs, projectJobs...)
 		jobCount += len(projectJobs)
 	}
@@ -1259,17 +1271,32 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	if tag != "" {
 		var filteredJobs []GlobalJobInfo
 		tagLower := strings.ToLower(tag)
+		tagCount := 0
+		emptyTagCount := 0
+		
 		for _, job := range allJobs {
+			if len(job.TagList) == 0 {
+				emptyTagCount++
+			} else {
+				tagCount++
+			}
+			
 			// Check if any tag in job's tag_list contains the search tag
-			for _, jobTag := range job.TagList {
-				if strings.Contains(strings.ToLower(jobTag), tagLower) {
-					filteredJobs = append(filteredJobs, job)
-					break
+			if len(job.TagList) > 0 {
+				for _, jobTag := range job.TagList {
+					if strings.Contains(strings.ToLower(jobTag), tagLower) {
+						filteredJobs = append(filteredJobs, job)
+						break
+					}
 				}
 			}
 		}
+		
+		s.logger.Info(fmt.Sprintf("Tag filter stats: total_jobs=%d, jobs_with_tags=%d, jobs_without_tags=%d", 
+			len(allJobs), tagCount, emptyTagCount))
+		s.logger.Info(fmt.Sprintf("Filtered jobs by tag '%s', %d jobs matched", tag, len(filteredJobs)))
+		
 		allJobs = filteredJobs
-		s.logger.Info(fmt.Sprintf("Filtered jobs by tag '%s', %d jobs remaining", tag, len(allJobs)))
 	}
 
 	// Sort jobs by created_at (newest first)

@@ -6,23 +6,11 @@
           <h2>GitLab Jobs</h2>
         </div>
         <div class="toolbar-right">
-          <el-input
-            v-model="filters.tag"
-            placeholder="Tag 过滤（支持模糊匹配）"
-            clearable
-            style="width: 200px; margin-right: 8px"
-            @keyup.enter="applyFilters"
-          >
-            <template #prepend>
-              <span>Tag</span>
-            </template>
-          </el-input>
-
           <el-select
             v-model="filters.status"
             placeholder="状态"
             clearable
-            style="width: 140px; margin-right: 8px"
+            style="width: 160px; margin-right: 8px"
             @change="applyFilters"
           >
             <el-option label="全部" value="" />
@@ -37,6 +25,18 @@
             <el-option label="已调度" value="scheduled" />
             <el-option label="等待资源" value="waiting_for_resource" />
           </el-select>
+
+          <el-input
+            v-model="filters.tag"
+            placeholder="标签过滤（支持模糊匹配）"
+            clearable
+            style="width: 240px; margin-right: 8px"
+            @keyup.enter="applyFilters"
+          >
+            <template #prepend>
+              <span>标签</span>
+            </template>
+          </el-input>
 
           <el-button
             type="primary"
@@ -87,12 +87,21 @@
 
         <el-table-column label="项目" min-width="200">
           <template #default="{ row }">
-            <div v-if="row.project">
-              <span style="font-size: 12px">
-                {{ row.project.name_with_namespace || row.project.name || '-' }}
+            <div v-if="row.project && (row.project.name_with_namespace || row.project.name)">
+              <el-tooltip 
+                v-if="row.project.path_with_namespace"
+                :content="row.project.path_with_namespace"
+                placement="top"
+              >
+                <span style="font-size: 12px">
+                  {{ row.project.name_with_namespace || row.project.name }}
+                </span>
+              </el-tooltip>
+              <span v-else style="font-size: 12px">
+                {{ row.project.name_with_namespace || row.project.name }}
               </span>
             </div>
-            <div v-else>-</div>
+            <div v-else style="color: #909399; font-size: 12px">未知项目</div>
           </template>
         </el-table-column>
 
@@ -174,10 +183,15 @@
       </el-table>
 
       <div v-if="!loading && jobs.length === 0" class="empty-state">
-        <el-empty description="暂无 Jobs 数据">
-          <el-button type="primary" @click="fetchJobs">
+        <el-empty :description="getEmptyDescription()">
+          <el-button type="primary" @click="fetchJobs" v-if="!filters.tag && !filters.status">
             查询 Jobs
           </el-button>
+          <div v-else>
+            <el-button type="primary" @click="clearFilters">
+              清除过滤条件
+            </el-button>
+          </div>
         </el-empty>
       </div>
 
@@ -206,7 +220,7 @@
       >
         <p>此页面显示所有可见的 GitLab Jobs。</p>
         <p style="margin-top: 8px">
-          您可以按状态和 Tag 进行过滤，Tag 支持模糊匹配。
+          您可以按状态和标签进行过滤，标签支持模糊匹配。
         </p>
       </el-alert>
     </div>
@@ -280,6 +294,26 @@ const fetchJobs = async () => {
 const applyFilters = () => {
   pagination.value.currentPage = 1
   fetchJobs()
+}
+
+// 清除过滤条件
+const clearFilters = () => {
+  filters.value.status = ''
+  filters.value.tag = ''
+  pagination.value.currentPage = 1
+  fetchJobs()
+}
+
+// 获取空状态描述
+const getEmptyDescription = () => {
+  if (filters.value.tag && filters.value.status) {
+    return `没有找到状态为"${getJobStatusLabel(filters.value.status)}"且标签包含"${filters.value.tag}"的 Jobs`
+  } else if (filters.value.tag) {
+    return `没有找到标签包含"${filters.value.tag}"的 Jobs（注：只有在 .gitlab-ci.yml 中配置了 tags 的 Job 才可被标签过滤）`
+  } else if (filters.value.status) {
+    return `没有找到状态为"${getJobStatusLabel(filters.value.status)}"的 Jobs`
+  }
+  return '暂无 Jobs 数据'
 }
 
 // Handle page size change
