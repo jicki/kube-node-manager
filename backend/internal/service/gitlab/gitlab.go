@@ -1,12 +1,14 @@
 package gitlab
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/pkg/logger"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -19,16 +21,141 @@ import (
 
 // Service handles GitLab-related operations
 type Service struct {
-	db     *gorm.DB
-	logger *logger.Logger
+	db         *gorm.DB
+	logger     *logger.Logger
+	httpClient *http.Client
 }
 
 // NewService creates a new GitLab service
 func NewService(db *gorm.DB, logger *logger.Logger) *Service {
 	return &Service{
-		db:     db,
-		logger: logger,
+		db:         db,
+		logger:     logger,
+		httpClient: createOptimizedHTTPClient(),
 	}
+}
+
+// createOptimizedHTTPClient 创建一个优化的 HTTP 客户端，具有连接池和超时配置
+func createOptimizedHTTPClient() *http.Client {
+	transport := &http.Transport{
+		// 连接池配置
+		MaxIdleConns:        100,              // 最大空闲连接数
+		MaxIdleConnsPerHost: 20,               // 每个主机的最大空闲连接数
+		MaxConnsPerHost:     50,               // 每个主机的最大连接数
+		IdleConnTimeout:     90 * time.Second, // 空闲连接超时时间
+		
+		// TCP 连接配置
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second, // 连接超时
+			KeepAlive: 30 * time.Second, // Keep-alive 探测间隔
+		}).DialContext,
+		
+		// TLS 握手超时
+		TLSHandshakeTimeout: 10 * time.Second,
+		
+		// 响应头超时
+		ResponseHeaderTimeout: 15 * time.Second,
+		
+		// 期望继续超时
+		ExpectContinueTimeout: 1 * time.Second,
+		
+		// 禁用压缩以提高性能（如果 GitLab 响应已压缩）
+		DisableCompression: false,
+		
+		// 禁用 Keep-Alive 会降低性能，保持启用
+		DisableKeepAlives: false,
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   60 * time.Second, // 整体请求超时时间，从 10s 增加到 60s
+	}
+}
+
+// doHTTPRequestWithRetry 执行 HTTP 请求并支持重试机制
+func (s *Service) doHTTPRequestWithRetry(ctx context.Context, req *http.Request, maxRetries int) (*http.Response, error) {
+	var lastErr error
+	
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// 指数退避：第一次重试等待 100ms，第二次 200ms，第三次 400ms
+			backoff := time.Duration(100*(1<<uint(attempt-1))) * time.Millisecond
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			
+			s.logger.Debug(fmt.Sprintf("Retrying request (attempt %d/%d) after %v: %s", 
+				attempt+1, maxRetries+1, backoff, req.URL.String()))
+		}
+		
+		// 使用上下文创建新请求
+		reqWithContext := req.WithContext(ctx)
+		
+		resp, err := s.httpClient.Do(reqWithContext)
+		if err != nil {
+			lastErr = err
+			// 检查是否是可重试的错误
+			if isRetriableError(err) {
+				continue
+			}
+			return nil, err
+		}
+		
+		// 检查 HTTP 状态码
+		// 5xx 错误和 429 (Rate Limit) 可以重试
+		if resp.StatusCode >= 500 || resp.StatusCode == 429 {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			lastErr = fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+			
+			// 如果是 429，等待更长时间
+			if resp.StatusCode == 429 {
+				retryAfter := 5 * time.Second
+				select {
+				case <-time.After(retryAfter):
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+			continue
+		}
+		
+		// 成功或不可重试的错误（如 4xx）
+		return resp, nil
+	}
+	
+	return nil, fmt.Errorf("request failed after %d attempts: %w", maxRetries+1, lastErr)
+}
+
+// isRetriableError 判断错误是否可重试
+func isRetriableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	// 网络超时错误可重试
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		return true
+	}
+	
+	// DNS 解析错误可重试
+	if _, ok := err.(*net.DNSError); ok {
+		return true
+	}
+	
+	// 连接被拒绝可重试
+	if strings.Contains(err.Error(), "connection refused") {
+		return true
+	}
+	
+	// EOF 错误可重试
+	if strings.Contains(err.Error(), "EOF") {
+		return true
+	}
+	
+	return false
 }
 
 // SaveRunnerToken saves the runner token to database
@@ -161,11 +288,12 @@ func (s *Service) TestConnection(domain, token string) error {
 
 	req.Header.Set("PRIVATE-TOKEN", token)
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
+	// 使用带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 
-	resp, err := client.Do(req)
+	// 使用带重试的请求
+	resp, err := s.doHTTPRequestWithRetry(ctx, req, 2)
 	if err != nil {
 		return fmt.Errorf("failed to connect to GitLab: %w", err)
 	}
@@ -269,16 +397,23 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) (i
 		return nil, errors.New("GitLab domain or token is not configured")
 	}
 
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
 	// Fetch all runners with pagination
 	var allRunners []RunnerInfo
 	page := 1
 	perPage := 100 // GitLab default max per page
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
 	for {
+		// 检查上下文是否已取消
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("operation cancelled or timed out: %w", ctx.Err())
+		default:
+		}
+		
 		// Build URL with query parameters
 		// Note: /api/v4/runners/all returns basic runner info only
 		// Fields like tag_list, contacted_at, version, locked are NOT included
@@ -314,7 +449,8 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) (i
 
 		req.Header.Set("PRIVATE-TOKEN", settings.Token)
 
-		resp, err := client.Do(req)
+		// 使用带重试的请求
+		resp, err := s.doHTTPRequestWithRetry(ctx, req, 2)
 		if err != nil {
 			return nil, err
 		}
@@ -357,8 +493,8 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) (i
 	detailedRunners := make([]RunnerInfo, len(allRunners))
 
 	// Use goroutines with a semaphore to limit concurrent requests
-	// Increase concurrency to 50 for better performance
-	maxConcurrent := 50
+	// Increase concurrency to 20 for better performance (减少并发数以避免过载)
+	maxConcurrent := 20
 	sem := make(chan struct{}, maxConcurrent)
 
 	// Use sync.WaitGroup for better synchronization
@@ -366,17 +502,29 @@ func (s *Service) ListRunners(runnerType string, status string, paused *bool) (i
 	wg.Add(len(allRunners))
 
 	for i, runner := range allRunners {
-		sem <- struct{}{} // Acquire semaphore
+		// 检查上下文是否已取消
+		select {
+		case <-ctx.Done():
+			// 如果超时，使用基本信息
+			wg.Done()
+			detailedRunners[i] = runner
+			continue
+		case sem <- struct{}{}: // Acquire semaphore
+		}
+		
 		go func(index int, r RunnerInfo) {
 			defer func() {
 				<-sem // Release semaphore
 				wg.Done()
 			}()
 
-			detailed, err := s.GetRunner(r.ID)
+			// 使用带上下文的 GetRunner
+			detailed, err := s.getRunnerWithContext(ctx, r.ID)
 			if err != nil {
 				// If we can't get detailed info, use basic info from list
-				s.logger.Warning("Failed to get detailed info for runner " + fmt.Sprintf("%d", r.ID) + ": " + err.Error())
+				if err != context.Canceled && err != context.DeadlineExceeded {
+					s.logger.Warning("Failed to get detailed info for runner " + fmt.Sprintf("%d", r.ID) + ": " + err.Error())
+				}
 				detailedRunners[index] = r
 				return
 			}
@@ -459,6 +607,10 @@ func (s *Service) ListPipelines(projectID int, ref, status string, page, perPage
 		perPage = 100 // GitLab API max per_page
 	}
 
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
 	// Build URL
 	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/pipelines", settings.Domain, projectID)
 	u, err := url.Parse(apiURL)
@@ -484,11 +636,8 @@ func (s *Service) ListPipelines(projectID int, ref, status string, page, perPage
 
 	req.Header.Set("PRIVATE-TOKEN", settings.Token)
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	resp, err := client.Do(req)
+	// 使用带重试的请求
+	resp, err := s.doHTTPRequestWithRetry(ctx, req, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -595,6 +744,10 @@ func (s *Service) GetPipelineDetail(projectID, pipelineID int) (*PipelineDetailI
 		return nil, errors.New("GitLab domain or token is not configured")
 	}
 
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/pipelines/%d", settings.Domain, projectID, pipelineID)
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
@@ -603,11 +756,8 @@ func (s *Service) GetPipelineDetail(projectID, pipelineID int) (*PipelineDetailI
 
 	req.Header.Set("PRIVATE-TOKEN", settings.Token)
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	resp, err := client.Do(req)
+	// 使用带重试的请求
+	resp, err := s.doHTTPRequestWithRetry(ctx, req, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -656,6 +806,10 @@ func (s *Service) GetPipelineJobs(projectID, pipelineID int) ([]PipelineJobInfo,
 		return nil, errors.New("GitLab domain or token is not configured")
 	}
 
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	apiURL := fmt.Sprintf("%s/api/v4/projects/%d/pipelines/%d/jobs", settings.Domain, projectID, pipelineID)
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
@@ -669,11 +823,8 @@ func (s *Service) GetPipelineJobs(projectID, pipelineID int) ([]PipelineJobInfo,
 	q.Set("per_page", "100")
 	req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	resp, err := client.Do(req)
+	// 使用带重试的请求
+	resp, err := s.doHTTPRequestWithRetry(ctx, req, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -763,6 +914,10 @@ func (s *Service) GetRunnerJobs(runnerID int, status string, page, perPage int) 
 		perPage = 100 // GitLab API max per_page
 	}
 
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
 	apiURL := fmt.Sprintf("%s/api/v4/runners/%d/jobs", settings.Domain, runnerID)
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
@@ -780,11 +935,8 @@ func (s *Service) GetRunnerJobs(runnerID int, status string, page, perPage int) 
 	q.Set("page", fmt.Sprintf("%d", page))
 	req.URL.RawQuery = q.Encode()
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	resp, err := client.Do(req)
+	// 使用带重试的请求
+	resp, err := s.doHTTPRequestWithRetry(ctx, req, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -811,6 +963,13 @@ func (s *Service) GetRunnerJobs(runnerID int, status string, page, perPage int) 
 
 // GetRunner retrieves a specific runner by ID
 func (s *Service) GetRunner(runnerID int) (*RunnerInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return s.getRunnerWithContext(ctx, runnerID)
+}
+
+// getRunnerWithContext retrieves a specific runner by ID with context support
+func (s *Service) getRunnerWithContext(ctx context.Context, runnerID int) (*RunnerInfo, error) {
 	settings, err := s.GetSettings()
 	if err != nil {
 		return nil, err
@@ -832,11 +991,8 @@ func (s *Service) GetRunner(runnerID int) (*RunnerInfo, error) {
 
 	req.Header.Set("PRIVATE-TOKEN", settings.Token)
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	resp, err := client.Do(req)
+	// 使用带重试的请求
+	resp, err := s.doHTTPRequestWithRetry(ctx, req, 1) // 减少重试次数
 	if err != nil {
 		return nil, err
 	}
@@ -870,6 +1026,10 @@ func (s *Service) UpdateRunner(runnerID int, req UpdateRunnerRequest) (*RunnerIn
 		return nil, errors.New("GitLab domain or token is not configured")
 	}
 
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
 	// Marshal request to JSON
 	jsonData, err := json.Marshal(req)
 	if err != nil {
@@ -885,11 +1045,8 @@ func (s *Service) UpdateRunner(runnerID int, req UpdateRunnerRequest) (*RunnerIn
 	httpReq.Header.Set("PRIVATE-TOKEN", settings.Token)
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	resp, err := client.Do(httpReq)
+	// 使用带重试的请求
+	resp, err := s.doHTTPRequestWithRetry(ctx, httpReq, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -923,6 +1080,10 @@ func (s *Service) DeleteRunner(runnerID int) error {
 		return errors.New("GitLab domain or token is not configured")
 	}
 
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
 	apiURL := fmt.Sprintf("%s/api/v4/runners/%d", settings.Domain, runnerID)
 	req, err := http.NewRequest("DELETE", apiURL, nil)
 	if err != nil {
@@ -931,11 +1092,8 @@ func (s *Service) DeleteRunner(runnerID int) error {
 
 	req.Header.Set("PRIVATE-TOKEN", settings.Token)
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	resp, err := client.Do(req)
+	// 使用带重试的请求
+	resp, err := s.doHTTPRequestWithRetry(ctx, req, 2)
 	if err != nil {
 		return err
 	}
@@ -986,6 +1144,10 @@ func (s *Service) CreateRunner(req CreateRunnerRequest, username string) (*Creat
 		return nil, errors.New("invalid runner_type, must be one of: instance_type, group_type, project_type")
 	}
 
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	// Build request body
 	data := url.Values{}
 	data.Set("runner_type", req.RunnerType)
@@ -1026,11 +1188,8 @@ func (s *Service) CreateRunner(req CreateRunnerRequest, username string) (*Creat
 	httpReq.Header.Set("PRIVATE-TOKEN", settings.Token)
 	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	resp, err := client.Do(httpReq)
+	// 使用带重试的请求
+	resp, err := s.doHTTPRequestWithRetry(ctx, httpReq, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -1072,6 +1231,10 @@ func (s *Service) ResetRunnerToken(runnerID int, username string) (*CreateRunner
 		return nil, errors.New("GitLab domain or token is not configured")
 	}
 
+	// 创建带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	apiURL := fmt.Sprintf("%s/api/v4/runners/%d/reset_authentication_token", settings.Domain, runnerID)
 	httpReq, err := http.NewRequest("POST", apiURL, nil)
 	if err != nil {
@@ -1080,11 +1243,8 @@ func (s *Service) ResetRunnerToken(runnerID int, username string) (*CreateRunner
 
 	httpReq.Header.Set("PRIVATE-TOKEN", settings.Token)
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	resp, err := client.Do(httpReq)
+	// 使用带重试的请求
+	resp, err := s.doHTTPRequestWithRetry(ctx, httpReq, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -1154,9 +1314,9 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		perPage = 100 // GitLab API max per_page
 	}
 
-	client := &http.Client{
-		Timeout: 10 * time.Second, // Aggressive timeout for maximum speed
-	}
+	// 创建带超时的上下文，总体操作不超过 50 秒
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
+	defer cancel()
 
 	// First, get user's projects
 	// Use /api/v4/projects?membership=true to get projects user is a member of
@@ -1176,7 +1336,8 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	q.Set("sort", "desc")
 	req.URL.RawQuery = q.Encode()
 
-	resp, err := client.Do(req)
+	// 使用带重试的请求
+	resp, err := s.doHTTPRequestWithRetry(ctx, req, 2) // 最多重试 2 次
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("failed to fetch projects: %w", err)
 	}
@@ -1210,135 +1371,202 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	startTime := time.Now()
 
-	// Collect jobs from all projects
+	// 并发控制参数
+	maxProjectsLimit := 30     // 最多处理 30 个项目
+	maxConcurrency := 10       // 最多 10 个并发请求
+	maxPagesPerProject := 3    // 每个项目最多获取 3 页
+	
+	// 限制要处理的项目数量
+	if len(projects) > maxProjectsLimit {
+		projects = projects[:maxProjectsLimit]
+	}
+
+	// 使用通道和 WaitGroup 进行并发控制
+	type projectJobsResult struct {
+		ProjectID   int
+		ProjectName string
+		Jobs        []GlobalJobInfo
+		Error       error
+	}
+	
+	resultChan := make(chan projectJobsResult, len(projects))
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, maxConcurrency)
+	
+	// 并发获取每个项目的 jobs
+	for _, project := range projects {
+		wg.Add(1)
+		go func(proj ProjectBasicInfo) {
+			defer wg.Done()
+			
+			// 获取信号量
+			select {
+			case semaphore <- struct{}{}:
+				defer func() { <-semaphore }()
+			case <-ctx.Done():
+				resultChan <- projectJobsResult{
+					ProjectID: proj.ID,
+					Error:     ctx.Err(),
+				}
+				return
+			}
+			
+			// 为该项目获取 jobs
+			projectJobs := []GlobalJobInfo{}
+			
+			for pageNum := 1; pageNum <= maxPagesPerProject; pageNum++ {
+				// 检查上下文是否已取消
+				select {
+				case <-ctx.Done():
+					resultChan <- projectJobsResult{
+						ProjectID: proj.ID,
+						Error:     ctx.Err(),
+					}
+					return
+				default:
+				}
+				
+				// 构建请求
+				jobsURL := fmt.Sprintf("%s/api/v4/projects/%d/jobs", settings.Domain, proj.ID)
+				jobReq, err := http.NewRequest("GET", jobsURL, nil)
+				if err != nil {
+					resultChan <- projectJobsResult{
+						ProjectID: proj.ID,
+						Error:     err,
+					}
+					return
+				}
+				jobReq.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+				jobQ := jobReq.URL.Query()
+				// 在 API 级别过滤活跃状态的作业
+				jobQ.Add("scope[]", "created")
+				jobQ.Add("scope[]", "pending")
+				jobQ.Add("scope[]", "running")
+				jobQ.Add("scope[]", "scheduled")
+				jobQ.Add("scope[]", "preparing")
+				jobQ.Add("scope[]", "waiting_for_resource")
+				jobQ.Set("per_page", "100")
+				jobQ.Set("page", fmt.Sprintf("%d", pageNum))
+				jobQ.Set("order_by", "id")
+				jobQ.Set("sort", "desc")
+				jobReq.URL.RawQuery = jobQ.Encode()
+
+				// 使用带重试的请求，减少重试次数以加快速度
+				jobResp, err := s.doHTTPRequestWithRetry(ctx, jobReq, 1)
+				if err != nil {
+					// 如果是第一页失败，记录错误；否则忽略
+					if pageNum == 1 {
+						resultChan <- projectJobsResult{
+							ProjectID: proj.ID,
+							Error:     err,
+						}
+						return
+					}
+					break // 分页请求失败，退出循环
+				}
+
+				if jobResp.StatusCode != http.StatusOK {
+					jobResp.Body.Close()
+					if pageNum == 1 {
+						resultChan <- projectJobsResult{
+							ProjectID: proj.ID,
+							Error:     fmt.Errorf("status code: %d", jobResp.StatusCode),
+						}
+						return
+					}
+					break
+				}
+
+				jobBody, err := io.ReadAll(jobResp.Body)
+				jobResp.Body.Close()
+				if err != nil {
+					break
+				}
+
+				var pageJobs []GlobalJobInfo
+				if err := json.Unmarshal(jobBody, &pageJobs); err != nil {
+					s.logger.Warning(fmt.Sprintf("Failed to parse jobs for project %d page %d: %v", proj.ID, pageNum, err))
+					break
+				}
+
+				// 如果没有返回作业，说明到达最后一页
+				if len(pageJobs) == 0 {
+					break
+				}
+
+				// 过滤时间范围并丰富项目信息
+				hasOldJobs := false
+				for i := range pageJobs {
+					// 检查作业是否在最近 3 天内
+					if pageJobs[i].CreatedAt.Before(threeDaysAgo) {
+						hasOldJobs = true
+						continue
+					}
+
+					// 丰富项目信息
+					if len(pageJobs[i].Project) == 0 {
+						pageJobs[i].Project = map[string]interface{}{
+							"id":                  proj.ID,
+							"name":                proj.Name,
+							"name_with_namespace": proj.NameWithNamespace,
+							"path_with_namespace": proj.PathWithNamespace,
+						}
+					}
+
+					projectJobs = append(projectJobs, pageJobs[i])
+				}
+
+				// 如果发现旧作业，停止分页
+				if hasOldJobs {
+					break
+				}
+
+				// 如果返回的作业少于 100 个，说明是最后一页
+				if len(pageJobs) < 100 {
+					break
+				}
+			}
+			
+			// 发送结果
+			resultChan <- projectJobsResult{
+				ProjectID:   proj.ID,
+				ProjectName: proj.Name,
+				Jobs:        projectJobs,
+				Error:       nil,
+			}
+		}(project)
+	}
+	
+	// 等待所有 goroutine 完成
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+	
+	// 收集结果
 	var allJobs []GlobalJobInfo
 	projectsProcessed := 0
 	projectsFailed := 0
-	maxJobsLimit := 1500   // Aggressive limit for sub-20s response
-	maxProjectsLimit := 20 // Reduced to ensure completion within 15 seconds
-
-	// Iterate through projects and fetch jobs (with pagination)
-	for _, project := range projects {
-		// Stop if we've hit limits
-		if len(allJobs) >= maxJobsLimit || projectsProcessed >= maxProjectsLimit {
-			s.logger.Info(fmt.Sprintf("Reached collection limit (jobs: %d, projects: %d), stopping", len(allJobs), projectsProcessed))
-			break
-		}
-
-		// Fetch multiple pages of jobs from each project
-		jobsPerProject := 0
-		projectHadError := false
-		maxPagesPerProject := 2 // Aggressive: only 2 pages for sub-15s response
-
-		for pageNum := 1; pageNum <= maxPagesPerProject; pageNum++ { // Limited loop with safety
-			// Check if we've exceeded the global job limit
-			if len(allJobs) >= maxJobsLimit {
-				break
-			}
-
-			// Fetch jobs for this project (with pagination)
-			jobsURL := fmt.Sprintf("%s/api/v4/projects/%d/jobs", settings.Domain, project.ID)
-			jobReq, err := http.NewRequest("GET", jobsURL, nil)
-			if err != nil {
-				s.logger.Warning(fmt.Sprintf("Failed to create request for project %d: %v", project.ID, err))
-				projectHadError = true
-				break
-			}
-			jobReq.Header.Set("PRIVATE-TOKEN", settings.Token)
-
-			jobQ := jobReq.URL.Query()
-			// Filter by active scopes at API level to reduce data volume
-			// Exclude: completed (success, failed, canceled, skipped) and manual jobs
-			// Use Add() instead of Set() to allow multiple scope[] parameters
-			jobQ.Add("scope[]", "created")
-			jobQ.Add("scope[]", "pending")
-			jobQ.Add("scope[]", "running")
-			// Removed "manual" - these are typically not relevant for automation monitoring
-			jobQ.Add("scope[]", "scheduled")
-			jobQ.Add("scope[]", "preparing")
-			jobQ.Add("scope[]", "waiting_for_resource")
-			jobQ.Set("per_page", "100")                  // Get up to 100 jobs per page (GitLab API max)
-			jobQ.Set("page", fmt.Sprintf("%d", pageNum)) // Page number
-			jobQ.Set("order_by", "id")                   // Order by ID
-			jobQ.Set("sort", "desc")                     // Newest first
-			jobReq.URL.RawQuery = jobQ.Encode()
-
-			jobResp, err := client.Do(jobReq)
-			if err != nil {
-				s.logger.Warning(fmt.Sprintf("Failed to fetch jobs for project %d page %d: %v", project.ID, pageNum, err))
-				projectHadError = true
-				break
-			}
-
-			if jobResp.StatusCode != http.StatusOK {
-				jobResp.Body.Close()
-				projectHadError = true
-				break
-			}
-
-			jobBody, err := io.ReadAll(jobResp.Body)
-			jobResp.Body.Close()
-			if err != nil {
-				break
-			}
-
-			var projectJobs []GlobalJobInfo
-			if err := json.Unmarshal(jobBody, &projectJobs); err != nil {
-				s.logger.Warning(fmt.Sprintf("Failed to parse jobs for project %d page %d: %v", project.ID, pageNum, err))
-				break
-			}
-
-			// If no jobs returned, we've reached the end
-			if len(projectJobs) == 0 {
-				break
-			}
-
-			// Filter jobs by time and enrich with project information
-			jobsInRange := 0
-			hasOldJobs := false
-			for i := range projectJobs {
-				// Check if job is within the last 3 days
-				if projectJobs[i].CreatedAt.Before(threeDaysAgo) {
-					hasOldJobs = true
-					continue // Skip jobs older than 3 days
-				}
-
-				// Enrich jobs with project information if not present
-				if len(projectJobs[i].Project) == 0 {
-					projectJobs[i].Project = map[string]interface{}{
-						"id":                  project.ID,
-						"name":                project.Name,
-						"name_with_namespace": project.NameWithNamespace,
-						"path_with_namespace": project.PathWithNamespace,
-					}
-				}
-
-				allJobs = append(allJobs, projectJobs[i])
-				jobsInRange++
-			}
-
-			jobsPerProject += jobsInRange
-
-			// If we found jobs older than 3 days, stop pagination for this project
-			// Because jobs are sorted by ID desc (newest first), older jobs will only get older
-			if hasOldJobs {
-				break
-			}
-
-			// If we got less than 100 jobs, it's the last page for this project
-			if len(projectJobs) < 100 {
-				break
-			}
-		}
-
-		if jobsPerProject > 0 {
-			projectsProcessed++
-			// Only log details for first few projects to reduce log noise
-			if projectsProcessed <= 5 {
-				s.logger.Debug(fmt.Sprintf("Collected %d active jobs (last 3 days, excluding manual) from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
-			}
-		} else if projectHadError {
+	
+	for result := range resultChan {
+		if result.Error != nil {
 			projectsFailed++
+			if result.Error != context.Canceled && result.Error != context.DeadlineExceeded {
+				s.logger.Warning(fmt.Sprintf("Failed to fetch jobs for project %d: %v", result.ProjectID, result.Error))
+			}
+			continue
+		}
+		
+		if len(result.Jobs) > 0 {
+			projectsProcessed++
+			allJobs = append(allJobs, result.Jobs...)
+			
+			// 只为前几个项目记录详细日志
+			if projectsProcessed <= 5 {
+				s.logger.Debug(fmt.Sprintf("Collected %d active jobs (last 3 days) from project %s (ID: %d)", 
+					len(result.Jobs), result.ProjectName, result.ProjectID))
+			}
 		}
 	}
 
