@@ -1204,20 +1204,35 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	s.logger.Info(fmt.Sprintf("Found %d projects, fetching jobs...", len(projects)))
 
-	// Calculate time range: last 7 days
-	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
-	s.logger.Info(fmt.Sprintf("Fetching jobs from the last 7 days (since %s)", sevenDaysAgo.Format("2006-01-02 15:04:05")))
+	// Calculate time range: last 3 days (balance between coverage and performance)
+	threeDaysAgo := time.Now().AddDate(0, 0, -3)
+	s.logger.Info(fmt.Sprintf("Fetching jobs from the last 3 days (since %s)", threeDaysAgo.Format("2006-01-02 15:04:05")))
+	
+	startTime := time.Now()
 
 	// Collect jobs from all projects
 	var allJobs []GlobalJobInfo
 	projectsProcessed := 0
+	maxJobsLimit := 5000 // Safety limit to prevent excessive data collection
+	maxProjectsLimit := 50 // Limit projects to process for reasonable response time
 
 	// Iterate through projects and fetch jobs (with pagination)
 	for _, project := range projects {
+		// Stop if we've hit limits
+		if len(allJobs) >= maxJobsLimit || projectsProcessed >= maxProjectsLimit {
+			s.logger.Info(fmt.Sprintf("Reached collection limit (jobs: %d, projects: %d), stopping", len(allJobs), projectsProcessed))
+			break
+		}
+
 		// Fetch multiple pages of jobs from each project
 		jobsPerProject := 0
+		maxPagesPerProject := 5 // Limit pages per project to avoid too many API calls
 
-		for pageNum := 1; ; pageNum++ { // Infinite loop, break when no more jobs or too old
+		for pageNum := 1; pageNum <= maxPagesPerProject; pageNum++ { // Limited loop with safety
+			// Check if we've exceeded the global job limit
+			if len(allJobs) >= maxJobsLimit {
+				break
+			}
 
 			// Fetch jobs for this project (with pagination)
 			jobsURL := fmt.Sprintf("%s/api/v4/projects/%d/jobs", settings.Domain, project.ID)
@@ -1269,10 +1284,10 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			jobsInRange := 0
 			hasOldJobs := false
 			for i := range projectJobs {
-				// Check if job is within the last 7 days
-				if projectJobs[i].CreatedAt.Before(sevenDaysAgo) {
+				// Check if job is within the last 3 days
+				if projectJobs[i].CreatedAt.Before(threeDaysAgo) {
 					hasOldJobs = true
-					continue // Skip jobs older than 7 days
+					continue // Skip jobs older than 3 days
 				}
 
 				// Enrich jobs with project information if not present
@@ -1291,7 +1306,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 			jobsPerProject += jobsInRange
 
-			// If we found jobs older than 7 days, stop pagination for this project
+			// If we found jobs older than 3 days, stop pagination for this project
 			// Because jobs are sorted by ID desc (newest first), older jobs will only get older
 			if hasOldJobs {
 				break
@@ -1307,12 +1322,14 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			projectsProcessed++
 			// Only log details for first few projects to reduce log noise
 			if projectsProcessed <= 5 {
-				s.logger.Debug(fmt.Sprintf("Collected %d jobs (last 7 days) from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
+				s.logger.Debug(fmt.Sprintf("Collected %d jobs (last 3 days) from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
 			}
 		}
 	}
 
-	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d total jobs from the last 7 days", projectsProcessed, len(allJobs)))
+	elapsedTime := time.Since(startTime)
+	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d total jobs from the last 3 days in %.2f seconds", 
+		projectsProcessed, len(allJobs), elapsedTime.Seconds()))
 
 	// Record total count before filtering (cap at 1000 for display)
 	totalCount := len(allJobs)
@@ -1324,7 +1341,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	}
 
 	// Log status distribution (always log to help debugging)
-	s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution (last 7 days): %v", statusCounts))
+	s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution (last 3 days): %v", statusCounts))
 
 	if totalCount > 1000 {
 		totalCount = 1001 // Signal that there are more than 1000
