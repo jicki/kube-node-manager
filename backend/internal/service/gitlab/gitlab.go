@@ -1118,6 +1118,14 @@ func (s *Service) ResetRunnerToken(runnerID int, username string) (*CreateRunner
 	return &resetResp, nil
 }
 
+// ProjectBasicInfo represents basic project information
+type ProjectBasicInfo struct {
+	ID                int    `json:"id"`
+	Name              string `json:"name"`
+	NameWithNamespace string `json:"name_with_namespace"`
+	PathWithNamespace string `json:"path_with_namespace"`
+}
+
 // ListAllJobs retrieves all visible jobs across all projects
 func (s *Service) ListAllJobs(status string, page, perPage int) ([]GlobalJobInfo, error) {
 	settings, err := s.GetSettings()
@@ -1144,39 +1152,36 @@ func (s *Service) ListAllJobs(status string, page, perPage int) ([]GlobalJobInfo
 		perPage = 100 // GitLab API max per_page
 	}
 
-	// Build URL - use /api/v4/jobs to get all visible jobs
-	apiURL := fmt.Sprintf("%s/api/v4/jobs", settings.Domain)
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("PRIVATE-TOKEN", settings.Token)
-
-	// Set query parameters
-	q := req.URL.Query()
-	if status != "" {
-		// GitLab API uses 'scope' parameter with array of statuses
-		// Valid values: created, pending, running, failed, success, canceled, skipped, manual
-		q.Set("scope[]", status)
-	}
-	q.Set("per_page", fmt.Sprintf("%d", perPage))
-	q.Set("page", fmt.Sprintf("%d", page))
-	req.URL.RawQuery = q.Encode()
-
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	resp, err := client.Do(req)
+	// First, get user's projects
+	// Use /api/v4/projects?membership=true to get projects user is a member of
+	projectsURL := fmt.Sprintf("%s/api/v4/projects", settings.Domain)
+	req, err := http.NewRequest("GET", projectsURL, nil)
 	if err != nil {
 		return nil, err
+	}
+	req.Header.Set("PRIVATE-TOKEN", settings.Token)
+	
+	q := req.URL.Query()
+	q.Set("membership", "true")
+	q.Set("per_page", "100") // Get up to 100 projects
+	q.Set("simple", "true")  // Get simplified project info
+	q.Set("order_by", "last_activity_at")
+	q.Set("sort", "desc")
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch projects: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("GitLab API returned status %d when fetching projects: %s", resp.StatusCode, string(body))
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -1184,12 +1189,98 @@ func (s *Service) ListAllJobs(status string, page, perPage int) ([]GlobalJobInfo
 		return nil, err
 	}
 
-	var jobs []GlobalJobInfo
-	if err := json.Unmarshal(body, &jobs); err != nil {
-		return nil, err
+	var projects []ProjectBasicInfo
+	if err := json.Unmarshal(body, &projects); err != nil {
+		return nil, fmt.Errorf("failed to parse projects: %w", err)
 	}
 
-	s.logger.Info(fmt.Sprintf("Fetched %d jobs from all projects (status=%s, page=%d, per_page=%d)", len(jobs), status, page, perPage))
+	if len(projects) == 0 {
+		s.logger.Info("No projects found for user")
+		return []GlobalJobInfo{}, nil
+	}
 
-	return jobs, nil
+	s.logger.Info(fmt.Sprintf("Found %d projects, fetching jobs...", len(projects)))
+
+	// Collect jobs from all projects
+	var allJobs []GlobalJobInfo
+	jobCount := 0
+	maxJobs := perPage * page // Calculate how many jobs we need
+
+	// Iterate through projects and fetch jobs
+	for _, project := range projects {
+		if jobCount >= maxJobs {
+			break // We have enough jobs
+		}
+
+		// Fetch jobs for this project
+		jobsURL := fmt.Sprintf("%s/api/v4/projects/%d/jobs", settings.Domain, project.ID)
+		jobReq, err := http.NewRequest("GET", jobsURL, nil)
+		if err != nil {
+			s.logger.Warning(fmt.Sprintf("Failed to create request for project %d: %v", project.ID, err))
+			continue
+		}
+		jobReq.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+		jobQ := jobReq.URL.Query()
+		if status != "" {
+			jobQ.Set("scope[]", status)
+		}
+		jobQ.Set("per_page", "20") // Get recent jobs from each project
+		jobReq.URL.RawQuery = jobQ.Encode()
+
+		jobResp, err := client.Do(jobReq)
+		if err != nil {
+			s.logger.Warning(fmt.Sprintf("Failed to fetch jobs for project %d: %v", project.ID, err))
+			continue
+		}
+
+		if jobResp.StatusCode != http.StatusOK {
+			jobResp.Body.Close()
+			continue
+		}
+
+		jobBody, err := io.ReadAll(jobResp.Body)
+		jobResp.Body.Close()
+		if err != nil {
+			continue
+		}
+
+		var projectJobs []GlobalJobInfo
+		if err := json.Unmarshal(jobBody, &projectJobs); err != nil {
+			s.logger.Warning(fmt.Sprintf("Failed to parse jobs for project %d: %v", project.ID, err))
+			continue
+		}
+
+		allJobs = append(allJobs, projectJobs...)
+		jobCount += len(projectJobs)
+	}
+
+	// Sort jobs by created_at (newest first)
+	// Simple bubble sort for demonstration (in production, use sort.Slice)
+	for i := 0; i < len(allJobs)-1; i++ {
+		for j := i + 1; j < len(allJobs); j++ {
+			if allJobs[i].CreatedAt.Before(allJobs[j].CreatedAt) {
+				allJobs[i], allJobs[j] = allJobs[j], allJobs[i]
+			}
+		}
+	}
+
+	// Apply pagination to collected jobs
+	startIdx := (page - 1) * perPage
+	endIdx := startIdx + perPage
+
+	if startIdx >= len(allJobs) {
+		return []GlobalJobInfo{}, nil
+	}
+
+	if endIdx > len(allJobs) {
+		endIdx = len(allJobs)
+	}
+
+	result := allJobs[startIdx:endIdx]
+
+	s.logger.Info(fmt.Sprintf("Fetched total %d jobs from %d projects, returning %d jobs (page=%d, per_page=%d)", 
+		len(allJobs), len(projects), len(result), page, perPage))
+
+	return result, nil
 }
