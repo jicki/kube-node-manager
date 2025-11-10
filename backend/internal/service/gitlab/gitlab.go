@@ -1363,11 +1363,11 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		return []GlobalJobInfo{}, 0, 0, nil
 	}
 
-	s.logger.Info(fmt.Sprintf("Found %d projects, fetching active jobs (excluding completed & manual jobs)...", len(projects)))
+	s.logger.Info(fmt.Sprintf("Found %d projects, fetching active jobs (all non-terminal states)...", len(projects)))
 
 	// Calculate time range: last 3 days (optimized for speed)
 	threeDaysAgo := time.Now().AddDate(0, 0, -3)
-	s.logger.Info(fmt.Sprintf("Fetching active jobs from the last 3 days (since %s), excluding manual jobs", threeDaysAgo.Format("2006-01-02 15:04:05")))
+	s.logger.Info(fmt.Sprintf("Fetching jobs from last 3 days (since %s), scopes: created,pending,preparing,scheduled,waiting_for_resource,running", threeDaysAgo.Format("2006-01-02 15:04:05")))
 
 	startTime := time.Now()
 
@@ -1440,12 +1440,16 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 				jobQ := jobReq.URL.Query()
 				// 在 API 级别过滤活跃状态的作业
-				jobQ.Add("scope[]", "created")
-				jobQ.Add("scope[]", "pending")
-				jobQ.Add("scope[]", "running")
-				jobQ.Add("scope[]", "scheduled")
-				jobQ.Add("scope[]", "preparing")
-				jobQ.Add("scope[]", "waiting_for_resource")
+				// 参考：https://docs.gitlab.com/api/jobs/#job-status-values
+				// 获取所有活跃（非终止）状态的 jobs
+				jobQ.Add("scope[]", "created")              // 已创建，未处理
+				jobQ.Add("scope[]", "pending")              // 队列中等待 runner
+				jobQ.Add("scope[]", "preparing")            // Runner 准备执行环境
+				jobQ.Add("scope[]", "scheduled")            // 已调度，未开始
+				jobQ.Add("scope[]", "waiting_for_resource") // 等待资源
+				jobQ.Add("scope[]", "running")              // 正在执行
+				// 排除 manual 状态（需要人工触发）
+				// 排除终止状态：success, failed, canceled, skipped, canceling
 				jobQ.Set("per_page", "100")
 				jobQ.Set("page", fmt.Sprintf("%d", pageNum))
 				jobQ.Set("order_by", "id")
@@ -1572,10 +1576,10 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	elapsedTime := time.Since(startTime)
 	if projectsFailed > 0 {
-		s.logger.Warning(fmt.Sprintf("Processed %d projects (%d failed), collected %d active jobs from the last 3 days (excluding manual) in %.2f seconds", 
+		s.logger.Warning(fmt.Sprintf("Processed %d projects (%d failed), collected %d active jobs from the last 3 days in %.2f seconds", 
 			projectsProcessed, projectsFailed, len(allJobs), elapsedTime.Seconds()))
 	} else {
-		s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d active jobs from the last 3 days (excluding manual) in %.2f seconds", 
+		s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d active jobs from the last 3 days in %.2f seconds", 
 			projectsProcessed, len(allJobs), elapsedTime.Seconds()))
 	}
 
@@ -1586,7 +1590,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	}
 
 	// Log status distribution (always log to help debugging)
-	s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution (last 3 days, excluding manual): %v", statusCounts))
+	s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution (last 3 days, active jobs only): %v", statusCounts))
 
 	// Record total count before filtering
 	// 注意：这是过滤前的总数（只包含活跃状态，最近3天）
