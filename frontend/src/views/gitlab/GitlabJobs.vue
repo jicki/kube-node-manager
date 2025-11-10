@@ -30,7 +30,7 @@
             v-model="filters.tag"
             placeholder="支持模糊筛选"
             clearable
-            style="width: 180px; margin-right: 8px"
+            style="width: 240px; margin-right: 8px"
             @keyup.enter="applyFilters"
           >
             <template #prepend>
@@ -70,7 +70,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="作业" show-overflow-tooltip>
+        <el-table-column label="作业" min-width="280" show-overflow-tooltip>
           <template #default="{ row }">
             <div>
               <el-link
@@ -85,7 +85,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Runner" show-overflow-tooltip>
+        <el-table-column label="Runner" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
             <div v-if="row.runner">
               <el-tag size="small" type="info">
@@ -98,7 +98,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="流水线" align="center">
+        <el-table-column label="流水线" width="120" align="center">
           <template #default="{ row }">
             <div v-if="row.pipeline">
               <el-link
@@ -116,13 +116,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="阶段" show-overflow-tooltip>
+        <el-table-column label="阶段" width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.stage }}
           </template>
         </el-table-column>
 
-        <el-table-column label="创建人" show-overflow-tooltip>
+        <el-table-column label="创建人" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             <div v-if="row.user && row.user.name">
               <span style="font-size: 13px">{{ row.user.name }}</span>
@@ -134,7 +134,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="标签" show-overflow-tooltip>
+        <el-table-column label="标签" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             <div v-if="row.tag_list && row.tag_list.length > 0">
               <el-tag
@@ -152,19 +152,19 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="创建时间" show-overflow-tooltip>
+        <el-table-column label="创建时间" width="180" show-overflow-tooltip>
           <template #default="{ row }">
             {{ formatTime(row.created_at) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="耗时" align="right">
+        <el-table-column label="耗时" width="90" align="right">
           <template #default="{ row }">
             {{ formatDuration(row.duration) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" fixed="right" align="center">
+        <el-table-column label="操作" width="100" fixed="right" align="center">
           <template #default="{ row }">
             <el-button
               link
