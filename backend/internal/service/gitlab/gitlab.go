@@ -1202,19 +1202,19 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		return []GlobalJobInfo{}, 0, 0, nil
 	}
 
-	s.logger.Info(fmt.Sprintf("Found %d projects, fetching active jobs (excluding completed: success, failed, canceled, skipped)...", len(projects)))
+	s.logger.Info(fmt.Sprintf("Found %d projects, fetching active jobs (excluding completed & manual jobs)...", len(projects)))
 
-	// Calculate time range: last 3 days (balance between coverage and performance)
-	threeDaysAgo := time.Now().AddDate(0, 0, -3)
-	s.logger.Info(fmt.Sprintf("Fetching active jobs from the last 3 days (since %s)", threeDaysAgo.Format("2006-01-02 15:04:05")))
+	// Calculate time range: last 5 days (balance between coverage and performance)
+	fiveDaysAgo := time.Now().AddDate(0, 0, -5)
+	s.logger.Info(fmt.Sprintf("Fetching active jobs from the last 5 days (since %s), excluding manual jobs", fiveDaysAgo.Format("2006-01-02 15:04:05")))
 	
 	startTime := time.Now()
 
 	// Collect jobs from all projects
 	var allJobs []GlobalJobInfo
 	projectsProcessed := 0
-	maxJobsLimit := 5000 // Safety limit to prevent excessive data collection
-	maxProjectsLimit := 50 // Limit projects to process for reasonable response time
+	maxJobsLimit := 3000 // Increased limit since we're excluding manual jobs
+	maxProjectsLimit := 50 // Increased to process more projects
 
 	// Iterate through projects and fetch jobs (with pagination)
 	for _, project := range projects {
@@ -1245,12 +1245,12 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 			jobQ := jobReq.URL.Query()
 			// Filter by active scopes at API level to reduce data volume
-			// Only fetch jobs that are NOT completed (success, failed, canceled, skipped)
+			// Exclude: completed (success, failed, canceled, skipped) and manual jobs
 			// Use Add() instead of Set() to allow multiple scope[] parameters
 			jobQ.Add("scope[]", "created")
 			jobQ.Add("scope[]", "pending")
 			jobQ.Add("scope[]", "running")
-			jobQ.Add("scope[]", "manual")
+			// Removed "manual" - these are typically not relevant for automation monitoring
 			jobQ.Add("scope[]", "scheduled")
 			jobQ.Add("scope[]", "preparing")
 			jobQ.Add("scope[]", "waiting_for_resource")
@@ -1292,10 +1292,10 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			jobsInRange := 0
 			hasOldJobs := false
 			for i := range projectJobs {
-				// Check if job is within the last 3 days
-				if projectJobs[i].CreatedAt.Before(threeDaysAgo) {
+				// Check if job is within the last 5 days
+				if projectJobs[i].CreatedAt.Before(fiveDaysAgo) {
 					hasOldJobs = true
-					continue // Skip jobs older than 3 days
+					continue // Skip jobs older than 5 days
 				}
 
 				// Enrich jobs with project information if not present
@@ -1314,7 +1314,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 			jobsPerProject += jobsInRange
 
-			// If we found jobs older than 3 days, stop pagination for this project
+			// If we found jobs older than 5 days, stop pagination for this project
 			// Because jobs are sorted by ID desc (newest first), older jobs will only get older
 			if hasOldJobs {
 				break
@@ -1330,13 +1330,13 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			projectsProcessed++
 			// Only log details for first few projects to reduce log noise
 			if projectsProcessed <= 5 {
-				s.logger.Debug(fmt.Sprintf("Collected %d active jobs (last 3 days) from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
+				s.logger.Debug(fmt.Sprintf("Collected %d active jobs (last 5 days, excluding manual) from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
 			}
 		}
 	}
 
 	elapsedTime := time.Since(startTime)
-	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d active jobs from the last 3 days in %.2f seconds", 
+	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d active jobs from the last 5 days (excluding manual) in %.2f seconds", 
 		projectsProcessed, len(allJobs), elapsedTime.Seconds()))
 
 	// Record total count before filtering (cap at 1000 for display)
@@ -1349,7 +1349,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	}
 
 	// Log status distribution (always log to help debugging)
-	s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution (last 3 days): %v", statusCounts))
+	s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution (last 5 days, excluding manual): %v", statusCounts))
 
 	if totalCount > 1000 {
 		totalCount = 1001 // Signal that there are more than 1000
