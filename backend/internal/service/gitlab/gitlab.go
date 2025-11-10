@@ -9,6 +9,7 @@ import (
 	"kube-node-manager/pkg/logger"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -1203,27 +1204,20 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	s.logger.Info(fmt.Sprintf("Found %d projects, fetching jobs...", len(projects)))
 
+	// Calculate time range: last 7 days
+	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
+	s.logger.Info(fmt.Sprintf("Fetching jobs from the last 7 days (since %s)", sevenDaysAgo.Format("2006-01-02 15:04:05")))
+
 	// Collect jobs from all projects
 	var allJobs []GlobalJobInfo
-	jobCount := 0
-	maxJobsToFetch := 2000 // Limit to 2000 jobs to avoid timeout (will show as 1000+ if over 1000)
 	projectsProcessed := 0
-	maxProjectsToProcess := 30 // Process up to 30 projects to balance coverage and performance
 
 	// Iterate through projects and fetch jobs (with pagination)
 	for _, project := range projects {
-		if jobCount >= maxJobsToFetch || projectsProcessed >= maxProjectsToProcess {
-			break // Limit total jobs fetched to avoid performance issues
-		}
-
 		// Fetch multiple pages of jobs from each project
 		jobsPerProject := 0
-		maxPagesPerProject := 2 // Fetch up to 2 pages per project (2 * 100 = 200 jobs per project)
 
-		for pageNum := 1; pageNum <= maxPagesPerProject; pageNum++ {
-			if jobCount >= maxJobsToFetch {
-				break
-			}
+		for pageNum := 1; ; pageNum++ { // Infinite loop, break when no more jobs or too old
 
 			// Fetch jobs for this project (with pagination)
 			jobsURL := fmt.Sprintf("%s/api/v4/projects/%d/jobs", settings.Domain, project.ID)
@@ -1271,8 +1265,17 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 				break
 			}
 
-			// Enrich jobs with project information if not present
+			// Filter jobs by time and enrich with project information
+			jobsInRange := 0
+			hasOldJobs := false
 			for i := range projectJobs {
+				// Check if job is within the last 7 days
+				if projectJobs[i].CreatedAt.Before(sevenDaysAgo) {
+					hasOldJobs = true
+					continue // Skip jobs older than 7 days
+				}
+
+				// Enrich jobs with project information if not present
 				if len(projectJobs[i].Project) == 0 {
 					projectJobs[i].Project = map[string]interface{}{
 						"id":                  project.ID,
@@ -1281,11 +1284,18 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 						"path_with_namespace": project.PathWithNamespace,
 					}
 				}
+
+				allJobs = append(allJobs, projectJobs[i])
+				jobsInRange++
 			}
 
-			allJobs = append(allJobs, projectJobs...)
-			jobCount += len(projectJobs)
-			jobsPerProject += len(projectJobs)
+			jobsPerProject += jobsInRange
+
+			// If we found jobs older than 7 days, stop pagination for this project
+			// Because jobs are sorted by ID desc (newest first), older jobs will only get older
+			if hasOldJobs {
+				break
+			}
 
 			// If we got less than 100 jobs, it's the last page for this project
 			if len(projectJobs) < 100 {
@@ -1296,13 +1306,13 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		if jobsPerProject > 0 {
 			projectsProcessed++
 			// Only log details for first few projects to reduce log noise
-			if projectsProcessed <= 3 {
-				s.logger.Debug(fmt.Sprintf("Collected %d jobs from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
+			if projectsProcessed <= 5 {
+				s.logger.Debug(fmt.Sprintf("Collected %d jobs (last 7 days) from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
 			}
 		}
 	}
 
-	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d total jobs", projectsProcessed, len(allJobs)))
+	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d total jobs from the last 7 days", projectsProcessed, len(allJobs)))
 
 	// Record total count before filtering (cap at 1000 for display)
 	totalCount := len(allJobs)
@@ -1314,7 +1324,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	}
 
 	// Log status distribution (always log to help debugging)
-	s.logger.Info(fmt.Sprintf("[ListAllJobs] Collected %d jobs. Status distribution: %v", len(allJobs), statusCounts))
+	s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution (last 7 days): %v", statusCounts))
 
 	if totalCount > 1000 {
 		totalCount = 1001 // Signal that there are more than 1000
@@ -1357,15 +1367,10 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	// Record filtered count after all filters applied
 	filteredCount := len(allJobs)
 
-	// Sort jobs by created_at (newest first)
-	// Simple bubble sort for demonstration (in production, use sort.Slice)
-	for i := 0; i < len(allJobs)-1; i++ {
-		for j := i + 1; j < len(allJobs); j++ {
-			if allJobs[i].CreatedAt.Before(allJobs[j].CreatedAt) {
-				allJobs[i], allJobs[j] = allJobs[j], allJobs[i]
-			}
-		}
-	}
+	// Sort jobs by created_at (newest first) using efficient sort
+	sort.Slice(allJobs, func(i, j int) bool {
+		return allJobs[i].CreatedAt.After(allJobs[j].CreatedAt)
+	})
 
 	// Apply pagination to collected jobs
 	startIdx := (page - 1) * perPage
