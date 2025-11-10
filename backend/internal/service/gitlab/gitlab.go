@@ -1205,12 +1205,12 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	// Collect jobs from all projects
 	var allJobs []GlobalJobInfo
 	jobCount := 0
-	maxJobs := perPage * page // Calculate how many jobs we need
+	maxJobsToFetch := 1500 // Fetch up to 1500 jobs to calculate accurate count (will show as 1000+ if more)
 
 	// Iterate through projects and fetch jobs
 	for _, project := range projects {
-		if jobCount >= maxJobs {
-			break // We have enough jobs
+		if jobCount >= maxJobsToFetch {
+			break // Limit total jobs fetched to avoid performance issues
 		}
 
 		// Fetch jobs for this project
@@ -1223,10 +1223,9 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		jobReq.Header.Set("PRIVATE-TOKEN", settings.Token)
 
 		jobQ := jobReq.URL.Query()
-		if status != "" {
-			jobQ.Set("scope[]", status)
-		}
-		jobQ.Set("per_page", "20") // Get recent jobs from each project
+		// Note: Do NOT filter by status here - we need to get all jobs to calculate totalCount
+		// Status filtering will be done in memory after collecting all jobs
+		jobQ.Set("per_page", "100") // Get more jobs from each project
 		jobReq.URL.RawQuery = jobQ.Encode()
 
 		jobResp, err := client.Do(jobReq)
@@ -1274,10 +1273,26 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		totalCount = 1001 // Signal that there are more than 1000
 	}
 
-	// Filter by tag if specified
-	filteredCount := len(allJobs)
+	// Filter by status if specified (in memory)
+	if status != "" {
+		var statusFilteredJobs []GlobalJobInfo
+		statusLower := strings.ToLower(status)
+		
+		for _, job := range allJobs {
+			if strings.ToLower(job.Status) == statusLower {
+				statusFilteredJobs = append(statusFilteredJobs, job)
+			}
+		}
+		
+		s.logger.Info(fmt.Sprintf("Filtered jobs by status '%s': %d -> %d jobs", 
+			status, len(allJobs), len(statusFilteredJobs)))
+		
+		allJobs = statusFilteredJobs
+	}
+
+	// Filter by tag if specified (in memory)
 	if tag != "" {
-		var filteredJobs []GlobalJobInfo
+		var tagFilteredJobs []GlobalJobInfo
 		tagLower := strings.ToLower(tag)
 		tagCount := 0
 		emptyTagCount := 0
@@ -1293,7 +1308,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			if len(job.TagList) > 0 {
 				for _, jobTag := range job.TagList {
 					if strings.Contains(strings.ToLower(jobTag), tagLower) {
-						filteredJobs = append(filteredJobs, job)
+						tagFilteredJobs = append(tagFilteredJobs, job)
 						break
 					}
 				}
@@ -1302,11 +1317,13 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		
 		s.logger.Info(fmt.Sprintf("Tag filter stats: total_jobs=%d, jobs_with_tags=%d, jobs_without_tags=%d", 
 			len(allJobs), tagCount, emptyTagCount))
-		s.logger.Info(fmt.Sprintf("Filtered jobs by tag '%s', %d jobs matched", tag, len(filteredJobs)))
+		s.logger.Info(fmt.Sprintf("Filtered jobs by tag '%s', %d jobs matched", tag, len(tagFilteredJobs)))
 		
-		allJobs = filteredJobs
-		filteredCount = len(allJobs)
+		allJobs = tagFilteredJobs
 	}
+
+	// Record filtered count after all filters applied
+	filteredCount := len(allJobs)
 
 	// Sort jobs by created_at (newest first)
 	// Simple bubble sort for demonstration (in production, use sort.Slice)

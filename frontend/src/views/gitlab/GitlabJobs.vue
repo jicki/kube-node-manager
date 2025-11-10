@@ -328,13 +328,15 @@ const getEmptyDescription = () => {
 
 // 获取数量显示
 const getCountDisplay = () => {
+  const hasFilter = filters.value.status || filters.value.tag
+  
   if (totalCount.value > 1000) {
-    if (filters.value.tag) {
+    if (hasFilter) {
       return `共 1000+ 条，过滤后 ${filteredCount.value} 条`
     }
     return '共 1000+ 条'
   } else if (totalCount.value > 0) {
-    if (filters.value.tag) {
+    if (hasFilter) {
       return `共 ${totalCount.value} 条，过滤后 ${filteredCount.value} 条`
     }
     return `共 ${totalCount.value} 条`
