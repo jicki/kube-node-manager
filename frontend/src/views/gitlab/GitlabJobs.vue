@@ -14,16 +14,17 @@
             @change="applyFilters"
           >
             <el-option label="全部" value="" />
-            <el-option label="创建" value="created" />
+            <el-option label="已创建" value="created" />
             <el-option label="等待中" value="pending" />
-            <el-option label="运行中" value="running" />
+            <el-option label="正在运行" value="running" />
             <el-option label="成功" value="success" />
             <el-option label="失败" value="failed" />
             <el-option label="已取消" value="canceled" />
             <el-option label="已跳过" value="skipped" />
             <el-option label="手动" value="manual" />
-            <el-option label="已调度" value="scheduled" />
+            <el-option label="已计划" value="scheduled" />
             <el-option label="等待资源" value="waiting_for_resource" />
+            <el-option label="正在准备" value="preparing" />
           </el-select>
 
           <el-input
@@ -276,16 +277,6 @@ const fetchJobs = async () => {
       totalCount.value = response.data.total || 0
       filteredCount.value = response.data.filtered_count || 0
       pagination.value.total = filteredCount.value
-      
-      // Debug log
-      console.log('[GitlabJobs] Response:', {
-        jobsCount: jobs.value.length,
-        total: totalCount.value,
-        filteredCount: filteredCount.value,
-        paginationTotal: pagination.value.total,
-        currentPage: pagination.value.currentPage,
-        pageSize: pagination.value.pageSize
-      })
     } else {
       // 向后兼容旧格式
       jobs.value = response.data || []
@@ -370,15 +361,15 @@ const getJobStatusLabel = (status) => {
   const labels = {
     created: '已创建',
     pending: '等待中',
-    running: '运行中',
+    running: '正在运行',
     success: '成功',
     failed: '失败',
     canceled: '已取消',
     skipped: '已跳过',
     manual: '手动',
-    scheduled: '已调度',
+    scheduled: '已计划',
     waiting_for_resource: '等待资源',
-    preparing: '准备中'
+    preparing: '正在准备'
   }
   return labels[status] || status
 }

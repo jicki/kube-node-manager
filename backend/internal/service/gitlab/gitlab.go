@@ -1168,8 +1168,9 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	
 	q := req.URL.Query()
 	q.Set("membership", "true")
-	q.Set("per_page", "100") // Get up to 100 projects
+	q.Set("per_page", "100") // Get up to 100 projects (GitLab API max per page)
 	q.Set("simple", "true")  // Get simplified project info
+	q.Set("archived", "false") // Exclude archived projects
 	q.Set("order_by", "last_activity_at")
 	q.Set("sort", "desc")
 	req.URL.RawQuery = q.Encode()
@@ -1225,7 +1226,9 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		jobQ := jobReq.URL.Query()
 		// Note: Do NOT filter by status here - we need to get all jobs to calculate totalCount
 		// Status filtering will be done in memory after collecting all jobs
-		jobQ.Set("per_page", "100") // Get more jobs from each project
+		jobQ.Set("per_page", "100") // Get up to 100 jobs from each project (GitLab API max)
+		jobQ.Set("order_by", "id")   // Order by ID
+		jobQ.Set("sort", "desc")     // Newest first
 		jobReq.URL.RawQuery = jobQ.Encode()
 
 		jobResp, err := client.Do(jobReq)
@@ -1269,30 +1272,30 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	// Record total count before filtering (cap at 1000 for display)
 	totalCount := len(allJobs)
-	s.logger.Info(fmt.Sprintf("[ListAllJobs] Collected %d jobs total from all projects", totalCount))
+	
+	// Collect status statistics for debugging
+	statusCounts := make(map[string]int)
+	for _, job := range allJobs {
+		statusCounts[job.Status]++
+	}
+	
+	// Log status distribution (always log to help debugging)
+	s.logger.Info(fmt.Sprintf("[ListAllJobs] Collected %d jobs. Status distribution: %v", len(allJobs), statusCounts))
 	
 	if totalCount > 1000 {
 		totalCount = 1001 // Signal that there are more than 1000
 	}
 
 	// Filter by status if specified (in memory)
-	beforeStatusFilter := len(allJobs)
 	if status != "" {
 		var statusFilteredJobs []GlobalJobInfo
 		statusLower := strings.ToLower(status)
 		
-		// Debug: count status distribution
-		statusCounts := make(map[string]int)
 		for _, job := range allJobs {
-			statusCounts[strings.ToLower(job.Status)]++
 			if strings.ToLower(job.Status) == statusLower {
 				statusFilteredJobs = append(statusFilteredJobs, job)
 			}
 		}
-		
-		s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution: %v", statusCounts))
-		s.logger.Info(fmt.Sprintf("[ListAllJobs] Filtered by status '%s': %d -> %d jobs", 
-			status, beforeStatusFilter, len(statusFilteredJobs)))
 		
 		allJobs = statusFilteredJobs
 	}
@@ -1301,16 +1304,8 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	if tag != "" {
 		var tagFilteredJobs []GlobalJobInfo
 		tagLower := strings.ToLower(tag)
-		tagCount := 0
-		emptyTagCount := 0
 		
 		for _, job := range allJobs {
-			if len(job.TagList) == 0 {
-				emptyTagCount++
-			} else {
-				tagCount++
-			}
-			
 			// Check if any tag in job's tag_list contains the search tag
 			if len(job.TagList) > 0 {
 				for _, jobTag := range job.TagList {
@@ -1321,10 +1316,6 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 				}
 			}
 		}
-		
-		s.logger.Info(fmt.Sprintf("Tag filter stats: total_jobs=%d, jobs_with_tags=%d, jobs_without_tags=%d", 
-			len(allJobs), tagCount, emptyTagCount))
-		s.logger.Info(fmt.Sprintf("Filtered jobs by tag '%s', %d jobs matched", tag, len(tagFilteredJobs)))
 		
 		allJobs = tagFilteredJobs
 	}
@@ -1356,15 +1347,21 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	result := allJobs[startIdx:endIdx]
 
-	logMsg := fmt.Sprintf("[ListAllJobs] Total: %d, Filtered: %d, CurrentPage: %d/%d, PerPage: %d, Returning: %d jobs", 
-		totalCount, filteredCount, len(result), filteredCount, perPage, len(result))
+	// Log summary
+	filters := make([]string, 0)
 	if status != "" {
-		logMsg += fmt.Sprintf(" | status=%s", status)
+		filters = append(filters, fmt.Sprintf("status=%s", status))
 	}
 	if tag != "" {
-		logMsg += fmt.Sprintf(" | tag=%s", tag)
+		filters = append(filters, fmt.Sprintf("tag=%s", tag))
 	}
-	s.logger.Info(logMsg)
+	filterStr := ""
+	if len(filters) > 0 {
+		filterStr = fmt.Sprintf(" [%s]", strings.Join(filters, ", "))
+	}
+	
+	s.logger.Info(fmt.Sprintf("[ListAllJobs] Total: %d, Filtered: %d, Page: %d, Returning: %d jobs%s", 
+		totalCount, filteredCount, page, len(result), filterStr))
 
 	return result, totalCount, filteredCount, nil
 }
