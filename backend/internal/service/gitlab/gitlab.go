@@ -1155,7 +1155,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	}
 
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 60 * time.Second, // Increased timeout for slow GitLab responses
 	}
 
 	// First, get user's projects
@@ -1213,6 +1213,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	// Collect jobs from all projects
 	var allJobs []GlobalJobInfo
 	projectsProcessed := 0
+	projectsFailed := 0
 	maxJobsLimit := 3000   // Increased limit since we're excluding manual jobs
 	maxProjectsLimit := 50 // Increased to process more projects
 
@@ -1226,6 +1227,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 		// Fetch multiple pages of jobs from each project
 		jobsPerProject := 0
+		projectHadError := false
 		maxPagesPerProject := 5 // Limit pages per project to avoid too many API calls
 
 		for pageNum := 1; pageNum <= maxPagesPerProject; pageNum++ { // Limited loop with safety
@@ -1239,6 +1241,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			jobReq, err := http.NewRequest("GET", jobsURL, nil)
 			if err != nil {
 				s.logger.Warning(fmt.Sprintf("Failed to create request for project %d: %v", project.ID, err))
+				projectHadError = true
 				break
 			}
 			jobReq.Header.Set("PRIVATE-TOKEN", settings.Token)
@@ -1263,15 +1266,17 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			jobResp, err := client.Do(jobReq)
 			if err != nil {
 				s.logger.Warning(fmt.Sprintf("Failed to fetch jobs for project %d page %d: %v", project.ID, pageNum, err))
+				projectHadError = true
 				break
 			}
 
 			if jobResp.StatusCode != http.StatusOK {
 				jobResp.Body.Close()
+				projectHadError = true
 				break
 			}
 
-			jobBody, nil := io.ReadAll(jobResp.Body)
+			jobBody, err := io.ReadAll(jobResp.Body)
 			jobResp.Body.Close()
 			if err != nil {
 				break
@@ -1332,12 +1337,19 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			if projectsProcessed <= 5 {
 				s.logger.Debug(fmt.Sprintf("Collected %d active jobs (last 5 days, excluding manual) from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
 			}
+		} else if projectHadError {
+			projectsFailed++
 		}
 	}
 
 	elapsedTime := time.Since(startTime)
-	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d active jobs from the last 5 days (excluding manual) in %.2f seconds",
-		projectsProcessed, len(allJobs), elapsedTime.Seconds()))
+	if projectsFailed > 0 {
+		s.logger.Warning(fmt.Sprintf("Processed %d projects (%d failed), collected %d active jobs from the last 5 days (excluding manual) in %.2f seconds", 
+			projectsProcessed, projectsFailed, len(allJobs), elapsedTime.Seconds()))
+	} else {
+		s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d active jobs from the last 5 days (excluding manual) in %.2f seconds", 
+			projectsProcessed, len(allJobs), elapsedTime.Seconds()))
+	}
 
 	// Record total count before filtering (cap at 1000 for display)
 	totalCount := len(allJobs)
