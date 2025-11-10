@@ -398,6 +398,7 @@ func (h *Handler) ResetRunnerToken(c *gin.Context) {
 // GET /api/v1/gitlab/jobs
 func (h *Handler) ListAllJobs(c *gin.Context) {
 	status := c.Query("status")
+	tag := c.Query("tag")
 
 	// Parse pagination parameters
 	page := 1
@@ -415,7 +416,7 @@ func (h *Handler) ListAllJobs(c *gin.Context) {
 		}
 	}
 
-	jobs, err := h.service.ListAllJobs(status, page, perPage)
+	jobs, err := h.service.ListAllJobs(status, tag, page, perPage)
 	if err != nil {
 		h.logger.Error("Failed to list all jobs: " + err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

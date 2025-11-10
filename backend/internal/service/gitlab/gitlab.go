@@ -1127,7 +1127,7 @@ type ProjectBasicInfo struct {
 }
 
 // ListAllJobs retrieves all visible jobs across all projects
-func (s *Service) ListAllJobs(status string, page, perPage int) ([]GlobalJobInfo, error) {
+func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJobInfo, error) {
 	settings, err := s.GetSettings()
 	if err != nil {
 		return nil, err
@@ -1255,6 +1255,23 @@ func (s *Service) ListAllJobs(status string, page, perPage int) ([]GlobalJobInfo
 		jobCount += len(projectJobs)
 	}
 
+	// Filter by tag if specified
+	if tag != "" {
+		var filteredJobs []GlobalJobInfo
+		tagLower := strings.ToLower(tag)
+		for _, job := range allJobs {
+			// Check if any tag in job's tag_list contains the search tag
+			for _, jobTag := range job.TagList {
+				if strings.Contains(strings.ToLower(jobTag), tagLower) {
+					filteredJobs = append(filteredJobs, job)
+					break
+				}
+			}
+		}
+		allJobs = filteredJobs
+		s.logger.Info(fmt.Sprintf("Filtered jobs by tag '%s', %d jobs remaining", tag, len(allJobs)))
+	}
+
 	// Sort jobs by created_at (newest first)
 	// Simple bubble sort for demonstration (in production, use sort.Slice)
 	for i := 0; i < len(allJobs)-1; i++ {
@@ -1279,8 +1296,15 @@ func (s *Service) ListAllJobs(status string, page, perPage int) ([]GlobalJobInfo
 
 	result := allJobs[startIdx:endIdx]
 
-	s.logger.Info(fmt.Sprintf("Fetched total %d jobs from %d projects, returning %d jobs (page=%d, per_page=%d)", 
-		len(allJobs), len(projects), len(result), page, perPage))
+	logMsg := fmt.Sprintf("Fetched total %d jobs from %d projects, returning %d jobs (page=%d, per_page=%d)", 
+		len(allJobs), len(projects), len(result), page, perPage)
+	if status != "" {
+		logMsg += fmt.Sprintf(", status=%s", status)
+	}
+	if tag != "" {
+		logMsg += fmt.Sprintf(", tag=%s", tag)
+	}
+	s.logger.Info(logMsg)
 
 	return result, nil
 }

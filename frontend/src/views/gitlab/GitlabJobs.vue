@@ -22,18 +22,20 @@
             v-model="filters.status"
             placeholder="状态"
             clearable
-            style="width: 120px; margin-right: 8px"
-            @change="fetchJobs"
+            style="width: 140px; margin-right: 8px"
+            @change="applyFilters"
           >
             <el-option label="全部" value="" />
             <el-option label="创建" value="created" />
-            <el-option label="待处理" value="pending" />
+            <el-option label="等待中" value="pending" />
             <el-option label="运行中" value="running" />
             <el-option label="成功" value="success" />
             <el-option label="失败" value="failed" />
             <el-option label="已取消" value="canceled" />
             <el-option label="已跳过" value="skipped" />
             <el-option label="手动" value="manual" />
+            <el-option label="已调度" value="scheduled" />
+            <el-option label="等待资源" value="waiting_for_resource" />
           </el-select>
 
           <el-button
@@ -52,7 +54,7 @@
       </div>
 
       <el-table
-        :data="filteredJobs"
+        :data="jobs"
         v-loading="loading"
         style="width: 100%"
         stripe
@@ -171,7 +173,7 @@
         </el-table-column>
       </el-table>
 
-      <div v-if="!loading && filteredJobs.length === 0" class="empty-state">
+      <div v-if="!loading && jobs.length === 0" class="empty-state">
         <el-empty description="暂无 Jobs 数据">
           <el-button type="primary" @click="fetchJobs">
             查询 Jobs
@@ -180,7 +182,7 @@
       </div>
 
       <!-- 分页组件 -->
-      <div v-if="filteredJobs.length > 0" class="pagination-container">
+      <div v-if="jobs.length > 0" class="pagination-container">
         <el-pagination
           v-model:current-page="pagination.currentPage"
           v-model:page-size="pagination.pageSize"
@@ -204,7 +206,7 @@
       >
         <p>此页面显示所有可见的 GitLab Jobs。</p>
         <p style="margin-top: 8px">
-          您可以按状态过滤，或输入 Tag 进行前端过滤。
+          您可以按状态和 Tag 进行过滤，Tag 支持模糊匹配。
         </p>
       </el-alert>
     </div>
@@ -212,7 +214,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { listAllJobs } from '@/api/gitlab'
@@ -234,23 +236,6 @@ const pagination = ref({
   total: 0
 })
 
-// 前端 Tag 过滤
-const filteredJobs = computed(() => {
-  if (!filters.value.tag) {
-    return jobs.value
-  }
-  
-  const tagFilter = filters.value.tag.toLowerCase()
-  return jobs.value.filter(job => {
-    if (!job.tag_list || job.tag_list.length === 0) {
-      return false
-    }
-    return job.tag_list.some(tag => 
-      tag.toLowerCase().includes(tagFilter)
-    )
-  })
-})
-
 // Fetch jobs
 const fetchJobs = async () => {
   loading.value = true
@@ -261,6 +246,9 @@ const fetchJobs = async () => {
     }
     if (filters.value.status) {
       params.status = filters.value.status
+    }
+    if (filters.value.tag) {
+      params.tag = filters.value.tag
     }
 
     const response = await listAllJobs(params)
@@ -288,9 +276,8 @@ const fetchJobs = async () => {
   }
 }
 
-// 应用过滤器（包括 tag 过滤）
+// 应用过滤器
 const applyFilters = () => {
-  // Tag 过滤在前端进行，只需重新获取数据
   pagination.value.currentPage = 1
   fetchJobs()
 }
@@ -309,14 +296,17 @@ const handlePageChange = () => {
 // Get job status label
 const getJobStatusLabel = (status) => {
   const labels = {
-    created: '创建',
-    pending: '待处理',
+    created: '已创建',
+    pending: '等待中',
     running: '运行中',
     success: '成功',
     failed: '失败',
     canceled: '已取消',
     skipped: '已跳过',
-    manual: '手动'
+    manual: '手动',
+    scheduled: '已调度',
+    waiting_for_resource: '等待资源',
+    preparing: '准备中'
   }
   return labels[status] || status
 }
@@ -331,7 +321,10 @@ const getJobStatusColor = (status) => {
     failed: 'danger',
     canceled: 'info',
     skipped: 'info',
-    manual: 'warning'
+    manual: 'warning',
+    scheduled: 'info',
+    waiting_for_resource: 'warning',
+    preparing: 'info'
   }
   return colors[status] || ''
 }
