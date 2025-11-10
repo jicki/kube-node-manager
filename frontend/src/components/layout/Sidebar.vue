@@ -104,9 +104,9 @@
           <template #title>Runners</template>
         </el-menu-item>
 
-        <el-menu-item index="/gitlab-pipelines">
+        <el-menu-item index="/gitlab-jobs">
           <el-icon><List /></el-icon>
-          <template #title>Pipelines</template>
+          <template #title>Jobs</template>
         </el-menu-item>
       </el-sub-menu>
 
@@ -280,7 +280,7 @@ const defaultOpeneds = computed(() => {
     openedMenus.push('system-config')
   }
 
-  if (['/gitlab-runners', '/gitlab-pipelines'].includes(path)) {
+  if (['/gitlab-runners', '/gitlab-jobs'].includes(path)) {
     openedMenus.push('gitlab')
   }
 

@@ -69,3 +69,8 @@ export const getPipelineJobs = (projectId, pipelineId) => {
 export const getRunnerJobs = (runnerId, params) => {
   return request.get(`/api/v1/gitlab/runners/${runnerId}/jobs`, { params })
 }
+
+// List all visible jobs
+export const listAllJobs = (params) => {
+  return request.get('/api/v1/gitlab/jobs', { params })
+}

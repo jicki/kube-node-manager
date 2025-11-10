@@ -78,10 +78,10 @@ const router = createRouter({
           meta: { title: 'GitLab Runners', icon: 'Connection', requiresAuth: true }
         },
         {
-          path: 'gitlab-pipelines',
-          name: 'GitlabPipelines',
-          component: () => import('@/views/gitlab/GitlabPipelines.vue'),
-          meta: { title: 'GitLab Pipelines', icon: 'List', requiresAuth: true }
+          path: 'gitlab-jobs',
+          name: 'GitlabJobs',
+          component: () => import('@/views/gitlab/GitlabJobs.vue'),
+          meta: { title: 'GitLab Jobs', icon: 'List', requiresAuth: true }
         },
         {
           path: 'feishu-settings',

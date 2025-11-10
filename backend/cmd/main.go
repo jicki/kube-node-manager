@@ -288,6 +288,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		gitlab.POST("/runners/:id/reset-token", handlers.Gitlab.ResetRunnerToken)
 		gitlab.PUT("/runners/:id", handlers.Gitlab.UpdateRunner)
 		gitlab.DELETE("/runners/:id", handlers.Gitlab.DeleteRunner)
+		gitlab.GET("/jobs", handlers.Gitlab.ListAllJobs)
 		gitlab.GET("/pipelines", handlers.Gitlab.ListPipelines)
 		gitlab.GET("/pipelines/:project_id/:pipeline_id", handlers.Gitlab.GetPipelineDetail)
 		gitlab.GET("/pipelines/:project_id/:pipeline_id/jobs", handlers.Gitlab.GetPipelineJobs)

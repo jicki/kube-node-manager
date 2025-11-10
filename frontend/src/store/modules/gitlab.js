@@ -5,7 +5,7 @@ export const useGitlabStore = defineStore('gitlab', {
   state: () => ({
     settings: null,
     runners: [],
-    pipelines: [],
+    jobs: [],
     loading: false,
     error: null
   }),
@@ -79,16 +79,16 @@ export const useGitlabStore = defineStore('gitlab', {
       }
     },
 
-    // Fetch pipelines
-    async fetchPipelines(params = {}) {
+    // Fetch all jobs
+    async fetchAllJobs(params = {}) {
       this.loading = true
       this.error = null
       try {
-        const response = await gitlabApi.listGitlabPipelines(params)
-        this.pipelines = response.data
+        const response = await gitlabApi.listAllJobs(params)
+        this.jobs = response.data
         return response.data
       } catch (error) {
-        this.error = error.response?.data?.error || 'Failed to fetch pipelines'
+        this.error = error.response?.data?.error || 'Failed to fetch jobs'
         throw error
       } finally {
         this.loading = false

@@ -715,6 +715,27 @@ type RunnerJobInfo struct {
 	User           map[string]interface{} `json:"user"`
 }
 
+// GlobalJobInfo represents a job from all visible projects
+type GlobalJobInfo struct {
+	ID             int                    `json:"id"`
+	Name           string                 `json:"name"`
+	Status         string                 `json:"status"`
+	Stage          string                 `json:"stage"`
+	Ref            string                 `json:"ref"`
+	CreatedAt      time.Time              `json:"created_at"`
+	StartedAt      *time.Time             `json:"started_at"`
+	FinishedAt     *time.Time             `json:"finished_at"`
+	Duration       float64                `json:"duration"`
+	QueuedDuration float64                `json:"queued_duration"`
+	WebURL         string                 `json:"web_url"`
+	TagList        []string               `json:"tag_list"`
+	Pipeline       map[string]interface{} `json:"pipeline"`
+	Project        map[string]interface{} `json:"project"`
+	Runner         map[string]interface{} `json:"runner"` // May be nil
+	User           map[string]interface{} `json:"user"`
+	Commit         map[string]interface{} `json:"commit"`
+}
+
 // GetRunnerJobs retrieves jobs run by a specific runner
 func (s *Service) GetRunnerJobs(runnerID int, status string, page, perPage int) ([]RunnerJobInfo, error) {
 	settings, err := s.GetSettings()
@@ -1095,4 +1116,80 @@ func (s *Service) ResetRunnerToken(runnerID int, username string) (*CreateRunner
 	s.logger.Info(fmt.Sprintf("Successfully updated runner token in database for runner ID=%d", resetResp.ID))
 
 	return &resetResp, nil
+}
+
+// ListAllJobs retrieves all visible jobs across all projects
+func (s *Service) ListAllJobs(status string, page, perPage int) ([]GlobalJobInfo, error) {
+	settings, err := s.GetSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	if !settings.Enabled {
+		return nil, errors.New("GitLab integration is not enabled")
+	}
+
+	if settings.Domain == "" || settings.Token == "" {
+		return nil, errors.New("GitLab domain or token is not configured")
+	}
+
+	// Set default pagination values
+	if page <= 0 {
+		page = 1
+	}
+	if perPage <= 0 {
+		perPage = 20
+	}
+	if perPage > 100 {
+		perPage = 100 // GitLab API max per_page
+	}
+
+	// Build URL - use /api/v4/jobs to get all visible jobs
+	apiURL := fmt.Sprintf("%s/api/v4/jobs", settings.Domain)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+	// Set query parameters
+	q := req.URL.Query()
+	if status != "" {
+		// GitLab API uses 'scope' parameter with array of statuses
+		// Valid values: created, pending, running, failed, success, canceled, skipped, manual
+		q.Set("scope[]", status)
+	}
+	q.Set("per_page", fmt.Sprintf("%d", perPage))
+	q.Set("page", fmt.Sprintf("%d", page))
+	req.URL.RawQuery = q.Encode()
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var jobs []GlobalJobInfo
+	if err := json.Unmarshal(body, &jobs); err != nil {
+		return nil, err
+	}
+
+	s.logger.Info(fmt.Sprintf("Fetched %d jobs from all projects (status=%s, page=%d, per_page=%d)", len(jobs), status, page, perPage))
+
+	return jobs, nil
 }
