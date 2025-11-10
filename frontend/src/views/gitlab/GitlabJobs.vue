@@ -276,6 +276,16 @@ const fetchJobs = async () => {
       totalCount.value = response.data.total || 0
       filteredCount.value = response.data.filtered_count || 0
       pagination.value.total = filteredCount.value
+      
+      // Debug log
+      console.log('[GitlabJobs] Response:', {
+        jobsCount: jobs.value.length,
+        total: totalCount.value,
+        filteredCount: filteredCount.value,
+        paginationTotal: pagination.value.total,
+        currentPage: pagination.value.currentPage,
+        pageSize: pagination.value.pageSize
+      })
     } else {
       // 向后兼容旧格式
       jobs.value = response.data || []

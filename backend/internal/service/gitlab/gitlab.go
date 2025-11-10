@@ -1269,23 +1269,30 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	// Record total count before filtering (cap at 1000 for display)
 	totalCount := len(allJobs)
+	s.logger.Info(fmt.Sprintf("[ListAllJobs] Collected %d jobs total from all projects", totalCount))
+	
 	if totalCount > 1000 {
 		totalCount = 1001 // Signal that there are more than 1000
 	}
 
 	// Filter by status if specified (in memory)
+	beforeStatusFilter := len(allJobs)
 	if status != "" {
 		var statusFilteredJobs []GlobalJobInfo
 		statusLower := strings.ToLower(status)
 		
+		// Debug: count status distribution
+		statusCounts := make(map[string]int)
 		for _, job := range allJobs {
+			statusCounts[strings.ToLower(job.Status)]++
 			if strings.ToLower(job.Status) == statusLower {
 				statusFilteredJobs = append(statusFilteredJobs, job)
 			}
 		}
 		
-		s.logger.Info(fmt.Sprintf("Filtered jobs by status '%s': %d -> %d jobs", 
-			status, len(allJobs), len(statusFilteredJobs)))
+		s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution: %v", statusCounts))
+		s.logger.Info(fmt.Sprintf("[ListAllJobs] Filtered by status '%s': %d -> %d jobs", 
+			status, beforeStatusFilter, len(statusFilteredJobs)))
 		
 		allJobs = statusFilteredJobs
 	}
@@ -1349,13 +1356,13 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	result := allJobs[startIdx:endIdx]
 
-	logMsg := fmt.Sprintf("Fetched total %d jobs from %d projects, filtered %d jobs, returning %d jobs (page=%d, per_page=%d)", 
-		totalCount, len(projects), filteredCount, len(result), page, perPage)
+	logMsg := fmt.Sprintf("[ListAllJobs] Total: %d, Filtered: %d, CurrentPage: %d/%d, PerPage: %d, Returning: %d jobs", 
+		totalCount, filteredCount, len(result), filteredCount, perPage, len(result))
 	if status != "" {
-		logMsg += fmt.Sprintf(", status=%s", status)
+		logMsg += fmt.Sprintf(" | status=%s", status)
 	}
 	if tag != "" {
-		logMsg += fmt.Sprintf(", tag=%s", tag)
+		logMsg += fmt.Sprintf(" | tag=%s", tag)
 	}
 	s.logger.Info(logMsg)
 
