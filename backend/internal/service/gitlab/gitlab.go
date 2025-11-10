@@ -1202,11 +1202,11 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		return []GlobalJobInfo{}, 0, 0, nil
 	}
 
-	s.logger.Info(fmt.Sprintf("Found %d projects, fetching jobs...", len(projects)))
+	s.logger.Info(fmt.Sprintf("Found %d projects, fetching active jobs (excluding completed: success, failed, canceled, skipped)...", len(projects)))
 
 	// Calculate time range: last 3 days (balance between coverage and performance)
 	threeDaysAgo := time.Now().AddDate(0, 0, -3)
-	s.logger.Info(fmt.Sprintf("Fetching jobs from the last 3 days (since %s)", threeDaysAgo.Format("2006-01-02 15:04:05")))
+	s.logger.Info(fmt.Sprintf("Fetching active jobs from the last 3 days (since %s)", threeDaysAgo.Format("2006-01-02 15:04:05")))
 	
 	startTime := time.Now()
 
@@ -1244,8 +1244,16 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			jobReq.Header.Set("PRIVATE-TOKEN", settings.Token)
 
 			jobQ := jobReq.URL.Query()
-			// Note: Do NOT filter by status here - we need to get all jobs to calculate totalCount
-			// Status filtering will be done in memory after collecting all jobs
+			// Filter by active scopes at API level to reduce data volume
+			// Only fetch jobs that are NOT completed (success, failed, canceled, skipped)
+			// This significantly reduces response time
+			jobQ.Set("scope[]", "created")
+			jobQ.Set("scope[]", "pending")
+			jobQ.Set("scope[]", "running")
+			jobQ.Set("scope[]", "manual")
+			jobQ.Set("scope[]", "scheduled")
+			jobQ.Set("scope[]", "preparing")
+			jobQ.Set("scope[]", "waiting_for_resource")
 			jobQ.Set("per_page", "100")                  // Get up to 100 jobs per page (GitLab API max)
 			jobQ.Set("page", fmt.Sprintf("%d", pageNum)) // Page number
 			jobQ.Set("order_by", "id")                   // Order by ID
@@ -1322,13 +1330,13 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 			projectsProcessed++
 			// Only log details for first few projects to reduce log noise
 			if projectsProcessed <= 5 {
-				s.logger.Debug(fmt.Sprintf("Collected %d jobs (last 3 days) from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
+				s.logger.Debug(fmt.Sprintf("Collected %d active jobs (last 3 days) from project %s (ID: %d)", jobsPerProject, project.Name, project.ID))
 			}
 		}
 	}
 
 	elapsedTime := time.Since(startTime)
-	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d total jobs from the last 3 days in %.2f seconds", 
+	s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d active jobs from the last 3 days in %.2f seconds", 
 		projectsProcessed, len(allJobs), elapsedTime.Seconds()))
 
 	// Record total count before filtering (cap at 1000 for display)
