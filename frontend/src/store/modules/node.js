@@ -151,36 +151,46 @@ export const useNodeStore = defineStore('node', {
       
       if (state.filters.name) {
         const searchTerm = state.filters.name.toLowerCase()
+        
+        // 调试：在过滤之前输出第一个节点的信息
+        if (result.length > 0) {
+          const firstNode = result[0]
+          console.log('🔍 搜索调试 - 开始搜索:', {
+            搜索词: searchTerm,
+            总节点数: result.length,
+            第一个节点名: firstNode.name,
+            第一个节点所有字段: Object.keys(firstNode),
+            第一个节点IP字段: {
+              internal_ip: firstNode.internal_ip,
+              external_ip: firstNode.external_ip,
+              internalIP: firstNode.internalIP,
+              externalIP: firstNode.externalIP
+            }
+          })
+        }
+        
         result = result.filter(node => {
-          // 调试：输出节点信息（仅第一个节点）
-          if (result.indexOf(node) === 0) {
-            console.log('🔍 搜索调试信息:', {
-              搜索词: searchTerm,
-              节点名: node.name,
-              内网IP_snake: node.internal_ip,
-              外网IP_snake: node.external_ip,
-              内网IP_camel: node.internalIP,
-              外网IP_camel: node.externalIP,
-              节点所有字段: Object.keys(node)
-            })
-          }
-          
           // 搜索节点名称
           if (node.name && node.name.toLowerCase().includes(searchTerm)) {
+            console.log('✅ 通过名称匹配:', node.name)
             return true
           }
           // 搜索内网IP（支持 snake_case 和 camelCase）
           const internalIp = node.internal_ip || node.internalIP
           if (internalIp && internalIp.toLowerCase().includes(searchTerm)) {
+            console.log('✅ 通过内网IP匹配:', internalIp)
             return true
           }
           // 搜索外网IP（支持 snake_case 和 camelCase）
           const externalIp = node.external_ip || node.externalIP
           if (externalIp && externalIp.toLowerCase().includes(searchTerm)) {
+            console.log('✅ 通过外网IP匹配:', externalIp)
             return true
           }
           return false
         })
+        
+        console.log('🔍 搜索完成 - 结果数量:', result.length)
       }
       
       if (state.filters.status) {
