@@ -1573,14 +1573,14 @@ func (s *Service) determineSearchStrategy(status string) SearchStrategy {
 		}
 	
 	case "waiting_for_resource":
-		// 等待资源状态：只获取活跃状态，避免获取已完成的 jobs
-		// GitLab API 不支持 waiting_for_resource 作为 scope，所以获取活跃状态后在内存中过滤
+		// 等待资源状态：直接查询 waiting_for_resource scope
+		// 扩大时间范围到 7 天，因为等待资源的 job 可能等待时间较长
 		return SearchStrategy{
-			TimeRange:          "last 3 days",
-			TimeRangeDays:      3,
-			Scopes:             []string{"created", "pending", "running"}, // 只获取活跃状态
-			MaxPagesPerProject: 3,
-			MaxProjects:        50,
+			TimeRange:          "last 7 days",
+			TimeRangeDays:      7,
+			Scopes:             []string{"waiting_for_resource"}, // 直接使用 waiting_for_resource scope
+			MaxPagesPerProject: 2,
+			MaxProjects:        60,
 		}
 	
 	case "success", "failed", "canceled", "skipped":

@@ -16,7 +16,7 @@
             <el-option label="全部（活跃状态）" value="">
               <span style="color: #67C23A">✓</span> 全部（活跃状态）
             </el-option>
-            <el-option-group label="🟢 可用状态">
+            <el-option-group label="🟢 活跃状态（后端过滤）">
               <el-option label="已创建" value="created">
                 <span style="color: #67C23A">✓</span> 已创建
               </el-option>
@@ -26,19 +26,17 @@
               <el-option label="正在运行" value="running">
                 <span style="color: #67C23A">✓</span> 正在运行
               </el-option>
+              <el-option label="正在准备" value="preparing">
+                <span style="color: #67C23A">✓</span> 正在准备
+              </el-option>
+              <el-option label="已计划" value="scheduled">
+                <span style="color: #67C23A">✓</span> 已计划
+              </el-option>
+              <el-option label="等待资源" value="waiting_for_resource">
+                <span style="color: #67C23A">✓</span> 等待资源
+              </el-option>
               <el-option label="手动触发" value="manual">
                 <span style="color: #67C23A">✓</span> 手动触发
-              </el-option>
-            </el-option-group>
-            <el-option-group label="⚠️ 可能不可用（取决于 GitLab 版本）">
-              <el-option label="正在准备 ⚠️" value="preparing" disabled>
-                <span style="color: #E6A23C">⚠️</span> 正在准备（可能不可用）
-              </el-option>
-              <el-option label="已计划 ⚠️" value="scheduled" disabled>
-                <span style="color: #E6A23C">⚠️</span> 已计划（可能不可用）
-              </el-option>
-              <el-option label="等待资源 ⚠️" value="waiting_for_resource" disabled>
-                <span style="color: #E6A23C">⚠️</span> 等待资源（可能不可用）
               </el-option>
             </el-option-group>
           </el-select>
@@ -53,13 +51,15 @@
                 
                 <div style="margin-bottom: 10px;">
                   <p style="margin: 0 0 4px 0; font-weight: 500; color: #67C23A;">
-                    ✅ 可用状态（后端过滤）：
+                    🟢 活跃状态（后端过滤）：
                   </p>
                   <p style="margin: 0 0 0 16px; font-size: 13px; color: #606266;">
-                    • 已创建、等待中、正在运行、手动触发
+                    • 已创建、等待中、正在运行<br/>
+                    • 正在准备、已计划、等待资源<br/>
+                    • 手动触发
                   </p>
                   <p style="margin: 4px 0 0 16px; font-size: 12px; color: #909399;">
-                    响应速度快（8-12秒），数据实时
+                    响应速度：8-12秒｜查询范围：3-7 天｜数据实时
                   </p>
                 </div>
                 
@@ -71,19 +71,16 @@
                     • 成功、失败、已取消、已跳过
                   </p>
                   <p style="margin: 4px 0 0 16px; font-size: 12px; color: #909399;">
-                    请使用表格"状态"列的筛选按钮
+                    使用表格"状态"列的筛选按钮进行过滤
                   </p>
                 </div>
                 
-                <div style="padding: 8px; background: #FFF7E6; border-left: 3px solid #E6A23C; border-radius: 4px;">
-                  <p style="margin: 0 0 4px 0; font-weight: 500; color: #E6A23C;">
-                    ⚠️ 不可用状态：
+                <div style="padding: 8px; background: #E8F4FD; border-left: 3px solid #409EFF; border-radius: 4px;">
+                  <p style="margin: 0 0 4px 0; font-weight: 500; color: #409EFF;">
+                    💡 提示：
                   </p>
                   <p style="margin: 0; font-size: 12px; color: #606266;">
-                    • 正在准备、已计划、等待资源
-                  </p>
-                  <p style="margin: 4px 0 0 0; font-size: 12px; color: #909399;">
-                    这些状态在您的 GitLab 版本中可能不存在，或当前没有处于这些状态的 jobs
+                    某些状态（如"正在准备"、"已计划"）可能在当前 GitLab 中较少出现，查询结果为空属正常现象
                   </p>
                 </div>
               </div>
@@ -305,9 +302,14 @@
       >
         <div style="line-height: 1.8;">
           <div style="margin-bottom: 12px;">
-            <strong style="color: #67C23A;">✅ 可用的后端过滤（已优化）：</strong>
+            <strong style="color: #67C23A;">🟢 活跃状态（后端过滤）：</strong>
             <div style="padding-left: 20px; margin-top: 4px;">
-              • <strong>已创建、等待中、正在运行、手动触发</strong>
+              • <strong>已创建、等待中、正在运行</strong>
+              <br/>
+              • <strong>正在准备、已计划、等待资源</strong>
+              <br/>
+              • <strong>手动触发</strong>
+              <br/>
               <br/>
               • 响应速度：<span style="color: #67C23A;">8-12 秒</span>
               <br/>
@@ -318,7 +320,7 @@
           </div>
 
           <div style="margin-bottom: 12px;">
-            <strong style="color: #909399;">📊 已完成状态（使用表格筛选）：</strong>
+            <strong style="color: #909399;">📊 已完成状态（表格筛选）：</strong>
             <div style="padding-left: 20px; margin-top: 4px;">
               • <strong>成功、失败、已取消、已跳过</strong>
               <br/>
@@ -330,16 +332,14 @@
             </div>
           </div>
 
-          <div style="padding: 12px; background: #FFF7E6; border-left: 3px solid #E6A23C; border-radius: 4px;">
-            <strong style="color: #E6A23C;">⚠️ 不可用状态说明：</strong>
+          <div style="padding: 12px; background: #E8F4FD; border-left: 3px solid #409EFF; border-radius: 4px;">
+            <strong style="color: #409EFF;">💡 温馨提示：</strong>
             <div style="padding-left: 20px; margin-top: 4px; color: #606266;">
-              • <strong>正在准备、已计划、等待资源</strong> - 已禁用
+              • 某些状态（如<strong>正在准备、已计划</strong>）在 GitLab 中可能较少出现
               <br/>
-              • 原因：这些状态在您的 GitLab 版本中可能不存在
+              • 查询结果为空时属正常现象，不代表功能不可用
               <br/>
-              • 或者当前确实没有处于这些状态的 jobs
-              <br/>
-              • 建议：使用"全部"或"等待中"查看更多数据
+              • 建议优先查询"全部"或"已创建"状态查看整体情况
             </div>
           </div>
         </div>
@@ -441,10 +441,6 @@ const getEmptyDescription = () => {
   } else if (filters.value.tag) {
     return `没有找到标签包含"${filters.value.tag}"的 Jobs（注：只有在 .gitlab-ci.yml 中配置了 tags 的 Job 才可被标签过滤）`
   } else if (filters.value.status) {
-    // 特殊提示：waiting_for_resource 可能不可用
-    if (filters.value.status === 'waiting_for_resource') {
-      return `没有找到"${getJobStatusLabel(filters.value.status)}"状态的 Jobs。\n提示：此状态可能在您的 GitLab 版本中不可用，或确实没有处于此状态的 jobs。建议尝试查询"等待中"或"已创建"状态。`
-    }
     return `没有找到状态为"${getJobStatusLabel(filters.value.status)}"的 Jobs`
   }
   return '暂无 Jobs 数据'
