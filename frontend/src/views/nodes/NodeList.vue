@@ -19,7 +19,7 @@
       <div class="search-section">
         <el-input
           v-model="searchKeyword"
-          placeholder="搜索节点名称..."
+          placeholder="搜索节点名称或IP地址..."
           clearable
           @input="handleSearch"
           @clear="handleSearch"

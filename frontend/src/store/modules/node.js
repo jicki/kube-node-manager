@@ -150,9 +150,22 @@ export const useNodeStore = defineStore('node', {
       }
       
       if (state.filters.name) {
-        result = result.filter(node => 
-          node.name.toLowerCase().includes(state.filters.name.toLowerCase())
-        )
+        const searchTerm = state.filters.name.toLowerCase()
+        result = result.filter(node => {
+          // 搜索节点名称
+          if (node.name.toLowerCase().includes(searchTerm)) {
+            return true
+          }
+          // 搜索内网IP
+          if (node.internal_ip && node.internal_ip.toLowerCase().includes(searchTerm)) {
+            return true
+          }
+          // 搜索外网IP
+          if (node.external_ip && node.external_ip.toLowerCase().includes(searchTerm)) {
+            return true
+          }
+          return false
+        })
       }
       
       if (state.filters.status) {

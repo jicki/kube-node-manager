@@ -19,7 +19,7 @@
       <div class="search-section">
         <el-input
           v-model="searchKeyword"
-          placeholder="搜索节点名称..."
+          placeholder="搜索节点名称或IP地址..."
           clearable
           @input="handleSearch"
         >
@@ -270,12 +270,24 @@ const tableColumns = [
 const filteredNodes = computed(() => {
   let nodes = nodeStore.nodes || []
   
-  // 搜索过滤
+  // 搜索过滤（支持节点名称和IP地址）
   if (searchKeyword.value) {
     const keyword = searchKeyword.value.toLowerCase()
-    nodes = nodes.filter(node => 
-      node.name.toLowerCase().includes(keyword)
-    )
+    nodes = nodes.filter(node => {
+      // 搜索节点名称
+      if (node.name.toLowerCase().includes(keyword)) {
+        return true
+      }
+      // 搜索内网IP
+      if (node.internal_ip && node.internal_ip.toLowerCase().includes(keyword)) {
+        return true
+      }
+      // 搜索外网IP
+      if (node.external_ip && node.external_ip.toLowerCase().includes(keyword)) {
+        return true
+      }
+      return false
+    })
   }
   
   // 状态过滤
