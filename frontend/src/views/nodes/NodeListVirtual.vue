@@ -116,10 +116,10 @@
             </div>
             
             <!-- IP地址 -->
-            <div class="node-ip" v-if="row.internal_ip || row.external_ip">
+            <div class="node-ip" v-if="row.internal_ip || row.external_ip || row.internalIP || row.externalIP">
               <span class="ip-label">IP:</span>
-              <span class="ip-text" v-if="row.internal_ip">{{ row.internal_ip }}</span>
-              <span class="ip-text" v-if="row.external_ip">({{ row.external_ip }})</span>
+              <span class="ip-text" v-if="row.internal_ip || row.internalIP">{{ row.internal_ip || row.internalIP }}</span>
+              <span class="ip-text" v-if="row.external_ip || row.externalIP">({{ row.external_ip || row.externalIP }})</span>
             </div>
           </div>
         </template>
@@ -275,15 +275,17 @@ const filteredNodes = computed(() => {
     const keyword = searchKeyword.value.toLowerCase()
     nodes = nodes.filter(node => {
       // 搜索节点名称
-      if (node.name.toLowerCase().includes(keyword)) {
+      if (node.name && node.name.toLowerCase().includes(keyword)) {
         return true
       }
-      // 搜索内网IP
-      if (node.internal_ip && node.internal_ip.toLowerCase().includes(keyword)) {
+      // 搜索内网IP（支持 snake_case 和 camelCase）
+      const internalIp = node.internal_ip || node.internalIP
+      if (internalIp && internalIp.toLowerCase().includes(keyword)) {
         return true
       }
-      // 搜索外网IP
-      if (node.external_ip && node.external_ip.toLowerCase().includes(keyword)) {
+      // 搜索外网IP（支持 snake_case 和 camelCase）
+      const externalIp = node.external_ip || node.externalIP
+      if (externalIp && externalIp.toLowerCase().includes(keyword)) {
         return true
       }
       return false

@@ -367,11 +367,11 @@
               </div>
               
               <!-- IP地址行 -->
-              <div class="node-info-row" v-if="row.internal_ip || row.external_ip">
+              <div class="node-info-row" v-if="row.internal_ip || row.external_ip || row.internalIP || row.externalIP">
                 <span class="info-label">IP:</span>
                 <div class="info-tags">
-                  <span class="ip-text" v-if="row.internal_ip">{{ row.internal_ip }}</span>
-                  <span class="ip-text" v-if="row.external_ip">({{ row.external_ip }})</span>
+                  <span class="ip-text" v-if="row.internal_ip || row.internalIP">{{ row.internal_ip || row.internalIP }}</span>
+                  <span class="ip-text" v-if="row.external_ip || row.externalIP">({{ row.external_ip || row.externalIP }})</span>
                 </div>
               </div>
             </div>

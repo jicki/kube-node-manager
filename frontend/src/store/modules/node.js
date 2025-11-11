@@ -152,16 +152,31 @@ export const useNodeStore = defineStore('node', {
       if (state.filters.name) {
         const searchTerm = state.filters.name.toLowerCase()
         result = result.filter(node => {
+          // 调试：输出节点信息（仅第一个节点）
+          if (result.indexOf(node) === 0) {
+            console.log('🔍 搜索调试信息:', {
+              搜索词: searchTerm,
+              节点名: node.name,
+              内网IP_snake: node.internal_ip,
+              外网IP_snake: node.external_ip,
+              内网IP_camel: node.internalIP,
+              外网IP_camel: node.externalIP,
+              节点所有字段: Object.keys(node)
+            })
+          }
+          
           // 搜索节点名称
-          if (node.name.toLowerCase().includes(searchTerm)) {
+          if (node.name && node.name.toLowerCase().includes(searchTerm)) {
             return true
           }
-          // 搜索内网IP
-          if (node.internal_ip && node.internal_ip.toLowerCase().includes(searchTerm)) {
+          // 搜索内网IP（支持 snake_case 和 camelCase）
+          const internalIp = node.internal_ip || node.internalIP
+          if (internalIp && internalIp.toLowerCase().includes(searchTerm)) {
             return true
           }
-          // 搜索外网IP
-          if (node.external_ip && node.external_ip.toLowerCase().includes(searchTerm)) {
+          // 搜索外网IP（支持 snake_case 和 camelCase）
+          const externalIp = node.external_ip || node.externalIP
+          if (externalIp && externalIp.toLowerCase().includes(searchTerm)) {
             return true
           }
           return false
