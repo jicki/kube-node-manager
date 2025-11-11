@@ -105,7 +105,7 @@ func (s *TemplateService) CreateTemplate(req model.TemplateCreateRequest, userID
 		Description:     req.Description,
 		PlaybookContent: req.PlaybookContent,
 		Variables:       req.Variables,
-		RequiredVars:    requiredVars,
+		RequiredVars:    model.StringArray(requiredVars),
 		Tags:            req.Tags,
 		UserID:          userID,
 	}
@@ -160,7 +160,7 @@ func (s *TemplateService) UpdateTemplate(id uint, req model.TemplateUpdateReques
 		
 		// 重新提取必需变量
 		requiredVars := ansibleUtil.ExtractVariables(req.PlaybookContent)
-		template.RequiredVars = requiredVars
+		template.RequiredVars = model.StringArray(requiredVars)
 		s.logger.Infof("Re-extracted %d variables from playbook: %v", len(requiredVars), requiredVars)
 	}
 

@@ -327,7 +327,7 @@ type AnsibleTemplate struct {
 	Description     string         `json:"description" gorm:"type:text;comment:模板描述"`
 	PlaybookContent string         `json:"playbook_content" gorm:"type:text;not null;comment:Playbook内容"`
 	Variables       ExtraVars      `json:"variables" gorm:"type:jsonb;comment:变量定义"`
-	RequiredVars    []string       `json:"required_vars" gorm:"type:jsonb;comment:必需变量列表"`
+	RequiredVars    StringArray    `json:"required_vars" gorm:"type:jsonb;comment:必需变量列表"`
 	Tags            string         `json:"tags" gorm:"size:255;comment:标签(逗号分隔)"`
 	RiskLevel       string         `json:"risk_level" gorm:"size:20;default:'low';comment:风险等级(low/medium/high)"`
 	UserID          uint           `json:"user_id" gorm:"not null;index;comment:创建用户ID"`

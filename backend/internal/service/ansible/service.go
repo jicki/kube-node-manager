@@ -173,7 +173,7 @@ func (s *Service) CreateTask(req model.TaskCreateRequest, userID uint) (*model.A
 		
 		// 验证必需变量是否都已提供
 		if len(template.RequiredVars) > 0 {
-			missingVars := s.validateRequiredVariables(template.RequiredVars, req.ExtraVars)
+			missingVars := s.validateRequiredVariables([]string(template.RequiredVars), req.ExtraVars)
 			if len(missingVars) > 0 {
 				s.logger.Warningf("Task creation: missing required variables: %v", missingVars)
 				return nil, fmt.Errorf("missing required variables: %v", missingVars)
