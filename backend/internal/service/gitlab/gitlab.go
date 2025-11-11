@@ -1970,6 +1970,9 @@ func (s *Service) fetchJobsWithWorkerPool(ctx context.Context, settings *model.G
 		}
 	}()
 	
+	// 预先为所有项目添加 WaitGroup 计数
+	wg.Add(len(projects))
+	
 	// 结果收集器和动态任务分发
 	go func() {
 		// 记录每个项目的状态
@@ -1979,12 +1982,15 @@ func (s *Service) fetchJobsWithWorkerPool(ctx context.Context, settings *model.G
 			jobs        []GlobalJobInfo
 		})
 		
+		// 创建项目 ID 到项目信息的映射，提高查找效率
+		projectMap := make(map[int]ProjectBasicInfo)
 		for _, proj := range projects {
 			projectStatus[proj.ID] = struct {
 				currentPage int
 				hasMore     bool
 				jobs        []GlobalJobInfo
 			}{currentPage: 0, hasMore: true, jobs: []GlobalJobInfo{}}
+			projectMap[proj.ID] = proj
 		}
 		
 		tasksInFlight := len(projects) // 初始任务数
@@ -2004,15 +2010,8 @@ func (s *Service) fetchJobsWithWorkerPool(ctx context.Context, settings *model.G
 				
 				// 如果还有更多页且未达到最大页数，分发下一页任务
 				if result.hasMore && result.page < maxPages {
-					// 查找项目信息
-					var proj ProjectBasicInfo
-					for _, p := range projects {
-						if p.ID == result.projectID {
-							proj = p
-							break
-						}
-					}
-					
+					// 从 map 中获取项目信息
+					proj := projectMap[result.projectID]
 					taskChan <- jobTask{project: proj, page: result.page + 1}
 					tasksInFlight++
 				}
@@ -2028,26 +2027,18 @@ func (s *Service) fetchJobsWithWorkerPool(ctx context.Context, settings *model.G
 		workerWg.Wait()
 		close(pageResultChan)
 		
-		// 汇总每个项目的结果
+		// 汇总每个项目的结果并发送
 		for projectID, status := range projectStatus {
-			wg.Add(1)
-			
-			// 找到项目名称
-			var projectName string
-			for _, p := range projects {
-				if p.ID == projectID {
-					projectName = p.Name
-					break
-				}
-			}
+			// 从 map 中获取项目名称
+			proj := projectMap[projectID]
 			
 			resultChan <- projectJobsResult{
 				ProjectID:   projectID,
-				ProjectName: projectName,
+				ProjectName: proj.Name,
 				Jobs:        status.jobs,
 				Error:       nil,
 			}
-			wg.Done()
+			wg.Done() // 每发送一个项目结果，计数减一
 		}
 	}()
 }
