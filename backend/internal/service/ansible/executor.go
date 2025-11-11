@@ -334,6 +334,9 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 	e.logger.Infof("Task %d completed, log size: %d bytes (%d KB)", 
 		task.ID, task.LogSize, task.LogSize/1024)
 
+	// 推送任务完成消息到 WebSocket
+	e.pushTaskCompletionToWebSocket(task.ID, string(task.Status))
+
 	// 移除运行任务记录
 	e.mu.Lock()
 	delete(e.runningTasks, task.ID)
@@ -812,6 +815,27 @@ func (e *TaskExecutor) pushLogToWebSocket(log *model.AnsibleLog) {
 			"task_id": log.TaskID,
 			"log":     log,
 		})
+	}
+}
+
+// pushTaskCompletionToWebSocket 推送任务完成消息到 WebSocket
+func (e *TaskExecutor) pushTaskCompletionToWebSocket(taskID uint, status string) {
+	if e.wsHub == nil {
+		return
+	}
+
+	// 使用类型断言获取 WebSocket Hub 的方法
+	type WSHub interface {
+		BroadcastToTask(taskID uint, message interface{})
+	}
+
+	if hub, ok := e.wsHub.(WSHub); ok {
+		hub.BroadcastToTask(taskID, map[string]interface{}{
+			"type":    "task_completed",
+			"task_id": taskID,
+			"status":  status,
+		})
+		e.logger.Infof("Pushed task completion notification to WebSocket for task %d", taskID)
 	}
 }
 

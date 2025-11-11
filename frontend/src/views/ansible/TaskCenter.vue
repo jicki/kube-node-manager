@@ -1367,12 +1367,25 @@ const handleViewLogs = async (row) => {
       // 建立 WebSocket 连接获取实时日志
       logWebSocket.value = ansibleAPI.connectTaskLogStream(
         row.id,
-        (data) => {
+        async (data) => {
           console.log('WebSocket 消息:', data)
           if (data.type === 'log' && data.log) {
             // 追加日志内容
             const logLine = `[${data.log.log_type}] ${data.log.content}\n`
             logContent.value += logLine
+          } else if (data.type === 'task_completed') {
+            // 任务完成，重新获取完整日志
+            console.log('任务已完成，重新加载完整日志')
+            isRealtimeLog.value = false
+            try {
+              const res = await ansibleAPI.getTaskLogs(row.id, { full: true })
+              logContent.value = res.data?.data || '暂无日志'
+              ElMessage.success(`任务已${data.status === 'success' ? '成功完成' : '完成'}`)
+              // 刷新任务列表
+              loadTasks()
+            } catch (error) {
+              console.error('重新加载日志失败:', error)
+            }
           } else if (data.type === 'connected') {
             console.log('WebSocket 已连接')
           }
@@ -1407,8 +1420,13 @@ const handleViewLogs = async (row) => {
     try {
       const res = await ansibleAPI.getTaskLogs(row.id, { full: true })
       console.log('任务日志响应:', res)
+      console.log('响应数据类型:', typeof res.data?.data)
+      console.log('日志长度:', res.data?.data?.length)
+      console.log('日志行数:', res.data?.data?.split('\n').length)
+      console.log('日志前200字符:', res.data?.data?.substring(0, 200))
       // axios拦截器返回完整response，数据是字符串格式
       logContent.value = res.data?.data || '暂无日志'
+      console.log('logContent已设置，长度:', logContent.value.length)
     } catch (error) {
       console.error('加载日志失败:', error)
       ElMessage.error('加载日志失败: ' + (error.message || '未知错误'))

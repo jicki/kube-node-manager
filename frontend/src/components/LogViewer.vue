@@ -149,7 +149,9 @@ const parseLogLines = (logText) => {
     }
     
     return parsed
-  }).filter(line => line.content.trim() !== '')
+  })
+  // 不过滤空行，保留所有行以便完整显示日志
+  // }).filter(line => line.content.trim() !== '')
 }
 
 // 计算属性
