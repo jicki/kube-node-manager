@@ -352,6 +352,18 @@ type ListResponse struct {
 	Items      []model.NodeAnomaly `json:"items"`
 }
 
+// GetByID 根据ID获取单个异常记录
+func (s *Service) GetByID(id uint) (*model.NodeAnomaly, error) {
+	var anomaly model.NodeAnomaly
+	if err := s.db.Preload("Cluster").First(&anomaly, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("anomaly not found with id: %d", id)
+		}
+		return nil, fmt.Errorf("failed to get anomaly: %w", err)
+	}
+	return &anomaly, nil
+}
+
 // GetAnomalies 获取异常记录列表
 func (s *Service) GetAnomalies(req ListRequest) (*ListResponse, error) {
 	query := s.db.Model(&model.NodeAnomaly{}).Preload("Cluster")

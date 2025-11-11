@@ -218,7 +218,7 @@ import {
   CircleClose,
   Bell
 } from '@element-plus/icons-vue'
-import { getAnomalies } from '@/api/anomaly'
+import { getAnomalyById, getAnomalies } from '@/api/anomaly'
 import { handleError, ErrorLevel } from '@/utils/errorHandler'
 
 const route = useRoute()
@@ -310,32 +310,24 @@ const timeline = computed(() => {
 const loadAnomalyDetail = async () => {
   loading.value = true
   try {
-    // 实际场景中应该有一个专门的 getAnomalyById API
-    // 这里暂时通过列表接口模拟
-    const response = await getAnomalies({
-      page: 1,
-      page_size: 1
-      // 实际应该传递 ID 过滤
-    })
+    // 使用专门的 getAnomalyById API 根据ID获取异常记录
+    const response = await getAnomalyById(anomalyId.value)
     
     if (response.data && response.data.code === 200) {
-      const items = response.data.data?.items || []
-      if (items.length > 0) {
-        anomaly.value = items[0]
-        
-        // 模拟节点快照数据（实际应该从后端获取）
-        nodeSnapshot.value = {
-          role: 'Worker',
-          kubelet_version: 'v1.28.2',
-          os_image: 'Ubuntu 22.04.3 LTS',
-          cpu_usage: Math.floor(Math.random() * 100),
-          memory_usage: Math.floor(Math.random() * 100),
-          pod_count: Math.floor(Math.random() * 50)
-        }
-        
-        // 加载历史记录
-        loadHistoryRecords()
+      anomaly.value = response.data.data || {}
+      
+      // 模拟节点快照数据（实际应该从后端获取）
+      nodeSnapshot.value = {
+        role: 'Worker',
+        kubelet_version: 'v1.28.2',
+        os_image: 'Ubuntu 22.04.3 LTS',
+        cpu_usage: Math.floor(Math.random() * 100),
+        memory_usage: Math.floor(Math.random() * 100),
+        pod_count: Math.floor(Math.random() * 50)
       }
+      
+      // 加载历史记录
+      loadHistoryRecords()
     }
   } catch (error) {
     handleError(error, ErrorLevel.ERROR, { title: '加载异常详情失败' })

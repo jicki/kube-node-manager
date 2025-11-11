@@ -335,6 +335,9 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		anomalies.GET("/cleanup/config", handlers.Anomaly.GetCleanupConfig)
 		anomalies.PUT("/cleanup/config", handlers.Anomaly.UpdateCleanupConfig)
 		anomalies.GET("/cleanup/stats", handlers.Anomaly.GetCleanupStats)
+
+		// 根据ID获取单个异常记录（必须放在最后，避免与其他路由冲突）
+		anomalies.GET("/:id", handlers.Anomaly.GetByID)
 	}
 
 	// Anomaly Report routes (异常报告配置管理)

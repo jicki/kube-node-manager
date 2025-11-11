@@ -1,6 +1,17 @@
 import request from '@/utils/request'
 
 /**
+ * 根据ID获取单个异常记录
+ * @param {number} id - 异常记录ID
+ */
+export function getAnomalyById(id) {
+  return request({
+    url: `/api/v1/anomalies/${id}`,
+    method: 'get'
+  })
+}
+
+/**
  * 获取异常记录列表
  * @param {Object} params - 查询参数
  * @param {number} params.cluster_id - 集群ID

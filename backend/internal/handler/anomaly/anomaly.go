@@ -35,6 +35,55 @@ func NewHandler(anomalySvc *anomaly.Service, cleanupSvc *anomaly.CleanupService,
 	}
 }
 
+// GetByID 根据ID获取单个异常记录
+// @Summary 根据ID获取异常记录详情
+// @Description 根据ID获取单个异常记录的详细信息
+// @Tags anomalies
+// @Produce json
+// @Param id path int true "异常记录ID"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
+// @Failure 500 {object} Response
+// @Router /anomalies/{id} [get]
+func (h *Handler) GetByID(c *gin.Context) {
+	// 解析ID参数
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid anomaly ID: " + err.Error(),
+		})
+		return
+	}
+
+	// 调用服务获取异常记录
+	anomaly, err := h.anomalySvc.GetByID(uint(id))
+	if err != nil {
+		h.logger.Errorf("Failed to get anomaly by ID %d: %v", id, err)
+		// 判断是否是记录不存在的错误
+		if err.Error() == fmt.Sprintf("anomaly not found with id: %d", id) {
+			c.JSON(http.StatusNotFound, Response{
+				Code:    http.StatusNotFound,
+				Message: "Anomaly not found",
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    http.StatusInternalServerError,
+				Message: "Failed to get anomaly: " + err.Error(),
+			})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Success",
+		Data:    anomaly,
+	})
+}
+
 // List 获取异常记录列表
 // @Summary 获取异常记录列表
 // @Description 获取节点异常记录列表，支持多条件过滤和分页
