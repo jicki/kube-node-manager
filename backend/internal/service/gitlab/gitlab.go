@@ -1689,7 +1689,7 @@ func (s *Service) fetchAllUserProjects(ctx context.Context, settings *model.Gitl
 		
 		// 限制最多获取 300 个项目（3 页）以避免超时
 		if len(allProjects) >= 300 {
-			s.logger.Info(fmt.Sprintf("Reached project limit (300), stopping pagination"))
+			s.logger.Info(fmt.Println("Reached project limit (300), stopping pagination"))
 			break
 		}
 		

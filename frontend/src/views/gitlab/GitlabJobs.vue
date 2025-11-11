@@ -10,38 +10,85 @@
             v-model="filters.status"
             placeholder="状态"
             clearable
-            style="width: 200px; margin-right: 8px"
+            style="width: 240px; margin-right: 8px"
             @change="applyFilters"
           >
-            <el-option label="全部（活跃状态）" value="" />
-            <el-option-group label="活跃状态">
-              <el-option label="已创建" value="created" />
-              <el-option label="等待中" value="pending" />
-              <el-option label="正在运行" value="running" />
-              <el-option label="正在准备" value="preparing" />
-              <el-option label="已计划" value="scheduled" />
+            <el-option label="全部（活跃状态）" value="">
+              <span style="color: #67C23A">✓</span> 全部（活跃状态）
+            </el-option>
+            <el-option-group label="🟢 可用状态">
+              <el-option label="已创建" value="created">
+                <span style="color: #67C23A">✓</span> 已创建
+              </el-option>
+              <el-option label="等待中" value="pending">
+                <span style="color: #67C23A">✓</span> 等待中
+              </el-option>
+              <el-option label="正在运行" value="running">
+                <span style="color: #67C23A">✓</span> 正在运行
+              </el-option>
+              <el-option label="手动触发" value="manual">
+                <span style="color: #67C23A">✓</span> 手动触发
+              </el-option>
             </el-option-group>
-            <el-option-group label="特殊状态（可能不可用）">
-              <el-option label="等待资源 ⚠️" value="waiting_for_resource" />
-            </el-option-group>
-            <el-option-group label="其他">
-              <el-option label="手动触发" value="manual" />
+            <el-option-group label="⚠️ 可能不可用（取决于 GitLab 版本）">
+              <el-option label="正在准备 ⚠️" value="preparing" disabled>
+                <span style="color: #E6A23C">⚠️</span> 正在准备（可能不可用）
+              </el-option>
+              <el-option label="已计划 ⚠️" value="scheduled" disabled>
+                <span style="color: #E6A23C">⚠️</span> 已计划（可能不可用）
+              </el-option>
+              <el-option label="等待资源 ⚠️" value="waiting_for_resource" disabled>
+                <span style="color: #E6A23C">⚠️</span> 等待资源（可能不可用）
+              </el-option>
             </el-option-group>
           </el-select>
           
-          <!-- 表格过滤提示 -->
-          <el-tooltip placement="bottom">
+          <!-- 状态说明提示 -->
+          <el-tooltip placement="bottom" effect="light">
             <template #content>
-              <div style="max-width: 300px;">
-                <p><strong>已优化：</strong></p>
-                <p>• 已取消「成功」「失败」等状态的后端过滤</p>
-                <p>• 请使用表格的状态列筛选功能</p>
-                <p style="margin-top: 8px;"><strong>注意：</strong></p>
-                <p>• 「等待资源」状态可能在您的 GitLab 版本中不可用</p>
-                <p>• 查询时会自动过滤，如无结果属正常现象</p>
+              <div style="max-width: 380px; padding: 4px;">
+                <p style="margin: 0 0 8px 0; font-weight: 600; color: #303133;">
+                  📊 状态筛选说明
+                </p>
+                
+                <div style="margin-bottom: 10px;">
+                  <p style="margin: 0 0 4px 0; font-weight: 500; color: #67C23A;">
+                    ✅ 可用状态（后端过滤）：
+                  </p>
+                  <p style="margin: 0 0 0 16px; font-size: 13px; color: #606266;">
+                    • 已创建、等待中、正在运行、手动触发
+                  </p>
+                  <p style="margin: 4px 0 0 16px; font-size: 12px; color: #909399;">
+                    响应速度快（8-12秒），数据实时
+                  </p>
+                </div>
+                
+                <div style="margin-bottom: 10px;">
+                  <p style="margin: 0 0 4px 0; font-weight: 500; color: #909399;">
+                    📋 已完成状态（表格筛选）：
+                  </p>
+                  <p style="margin: 0 0 0 16px; font-size: 13px; color: #606266;">
+                    • 成功、失败、已取消、已跳过
+                  </p>
+                  <p style="margin: 4px 0 0 16px; font-size: 12px; color: #909399;">
+                    请使用表格"状态"列的筛选按钮
+                  </p>
+                </div>
+                
+                <div style="padding: 8px; background: #FFF7E6; border-left: 3px solid #E6A23C; border-radius: 4px;">
+                  <p style="margin: 0 0 4px 0; font-weight: 500; color: #E6A23C;">
+                    ⚠️ 不可用状态：
+                  </p>
+                  <p style="margin: 0; font-size: 12px; color: #606266;">
+                    • 正在准备、已计划、等待资源
+                  </p>
+                  <p style="margin: 4px 0 0 0; font-size: 12px; color: #909399;">
+                    这些状态在您的 GitLab 版本中可能不存在，或当前没有处于这些状态的 jobs
+                  </p>
+                </div>
               </div>
             </template>
-            <el-icon style="margin-left: 4px; margin-right: 8px; color: #909399; cursor: help">
+            <el-icon style="margin-left: 4px; margin-right: 8px; color: #409EFF; cursor: help; font-size: 16px">
               <InfoFilled />
             </el-icon>
           </el-tooltip>
@@ -252,20 +299,50 @@
     <!-- 使用提示 -->
     <div v-if="jobs.length === 0 && !loading" class="card-container" style="margin-top: 20px">
       <el-alert
-        title="使用提示"
+        title="📋 使用说明"
         type="info"
         :closable="false"
       >
-        <p><strong>后端过滤：</strong>可以按活跃状态（已创建、等待中、正在运行等）和标签进行过滤。</p>
-        <p style="margin-top: 8px">
-          <strong>表格筛选：</strong>对于已完成状态（成功、失败、已取消、已跳过），请使用表格的状态列筛选功能。
-        </p>
-        <p style="margin-top: 8px">
-          <strong>性能优化：</strong>为了提升响应速度，已取消对已完成状态的后端查询（曾耗时 16+ 秒）。
-        </p>
-        <p style="margin-top: 8px; color: #E6A23C;">
-          <strong>⚠️ 注意：</strong>"等待资源"状态可能在您的 GitLab 版本中不可用。如查询无结果，建议使用"等待中"或"已创建"状态。
-        </p>
+        <div style="line-height: 1.8;">
+          <div style="margin-bottom: 12px;">
+            <strong style="color: #67C23A;">✅ 可用的后端过滤（已优化）：</strong>
+            <div style="padding-left: 20px; margin-top: 4px;">
+              • <strong>已创建、等待中、正在运行、手动触发</strong>
+              <br/>
+              • 响应速度：<span style="color: #67C23A;">8-12 秒</span>
+              <br/>
+              • 查询范围：最近 3-7 天
+              <br/>
+              • 数据量：活跃状态的 jobs（通常 500-1000+ 个）
+            </div>
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <strong style="color: #909399;">📊 已完成状态（使用表格筛选）：</strong>
+            <div style="padding-left: 20px; margin-top: 4px;">
+              • <strong>成功、失败、已取消、已跳过</strong>
+              <br/>
+              • 使用方法：点击表格"状态"列的 
+              <el-icon style="vertical-align: middle; margin: 0 2px;"><Filter /></el-icon> 
+              筛选按钮
+              <br/>
+              • 原因：后端查询耗时 <span style="color: #F56C6C;">16+ 秒</span>，已优化为前端筛选
+            </div>
+          </div>
+
+          <div style="padding: 12px; background: #FFF7E6; border-left: 3px solid #E6A23C; border-radius: 4px;">
+            <strong style="color: #E6A23C;">⚠️ 不可用状态说明：</strong>
+            <div style="padding-left: 20px; margin-top: 4px; color: #606266;">
+              • <strong>正在准备、已计划、等待资源</strong> - 已禁用
+              <br/>
+              • 原因：这些状态在您的 GitLab 版本中可能不存在
+              <br/>
+              • 或者当前确实没有处于这些状态的 jobs
+              <br/>
+              • 建议：使用"全部"或"等待中"查看更多数据
+            </div>
+          </div>
+        </div>
       </el-alert>
     </div>
   </div>
@@ -274,7 +351,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Search, InfoFilled } from '@element-plus/icons-vue'
+import { Refresh, Search, InfoFilled, Filter } from '@element-plus/icons-vue'
 import { listAllJobs } from '@/api/gitlab'
 import { useGitlabStore } from '@/store/modules/gitlab'
 
