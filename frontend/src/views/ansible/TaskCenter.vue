@@ -922,6 +922,8 @@ const templates = ref([])
 const inventories = ref([])
 const clusters = ref([])
 const logContent = ref('')
+const logWebSocket = ref(null) // WebSocket 连接
+const isRealtimeLog = ref(false) // 是否为实时日志
 
 // 计算属性：选中的模板
 const selectedTemplate = computed(() => {
@@ -1346,14 +1348,71 @@ const handleViewLogs = async (row) => {
   currentTask.value = row // 保存当前任务完整信息
   detailActiveTab.value = 'logs' // 默认显示日志 tab
   logDialogVisible.value = true
-  try {
-    const res = await ansibleAPI.getTaskLogs(row.id, { full: true })
-    console.log('任务日志响应:', res)
-    // axios拦截器返回完整response，数据是字符串格式
-    logContent.value = res.data?.data || '暂无日志'
-  } catch (error) {
-    console.error('加载日志失败:', error)
-    ElMessage.error('加载日志失败: ' + (error.message || '未知错误'))
+  logContent.value = '' // 清空之前的日志
+  
+  // 关闭之前的 WebSocket 连接（如果有）
+  if (logWebSocket.value) {
+    logWebSocket.value.close()
+    logWebSocket.value = null
+  }
+  
+  // 如果任务正在运行，使用 WebSocket 实时获取日志
+  if (row.status === 'running') {
+    isRealtimeLog.value = true
+    try {
+      // 先获取已有的日志
+      const res = await ansibleAPI.getTaskLogs(row.id, { full: true })
+      logContent.value = res.data?.data || '正在等待日志输出...\n'
+      
+      // 建立 WebSocket 连接获取实时日志
+      logWebSocket.value = ansibleAPI.connectTaskLogStream(
+        row.id,
+        (data) => {
+          console.log('WebSocket 消息:', data)
+          if (data.type === 'log' && data.log) {
+            // 追加日志内容
+            const logLine = `[${data.log.log_type}] ${data.log.content}\n`
+            logContent.value += logLine
+          } else if (data.type === 'connected') {
+            console.log('WebSocket 已连接')
+          }
+        },
+        (error) => {
+          console.error('WebSocket 错误:', error)
+          ElMessage.warning('实时日志连接已断开，显示已保存的日志')
+          isRealtimeLog.value = false
+        }
+      )
+      
+      // WebSocket 关闭时重新加载日志
+      logWebSocket.value.addEventListener('close', async () => {
+        console.log('WebSocket 连接已关闭')
+        isRealtimeLog.value = false
+        // 重新获取完整日志
+        try {
+          const res = await ansibleAPI.getTaskLogs(row.id, { full: true })
+          logContent.value = res.data?.data || '暂无日志'
+        } catch (error) {
+          console.error('重新加载日志失败:', error)
+        }
+      })
+    } catch (error) {
+      console.error('加载日志失败:', error)
+      ElMessage.error('加载日志失败: ' + (error.message || '未知错误'))
+      isRealtimeLog.value = false
+    }
+  } else {
+    // 任务已完成，直接获取完整日志
+    isRealtimeLog.value = false
+    try {
+      const res = await ansibleAPI.getTaskLogs(row.id, { full: true })
+      console.log('任务日志响应:', res)
+      // axios拦截器返回完整response，数据是字符串格式
+      logContent.value = res.data?.data || '暂无日志'
+    } catch (error) {
+      console.error('加载日志失败:', error)
+      ElMessage.error('加载日志失败: ' + (error.message || '未知错误'))
+    }
   }
 }
 
@@ -1655,6 +1714,20 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (refreshTimer) {
     clearInterval(refreshTimer)
+  }
+  // 关闭 WebSocket 连接
+  if (logWebSocket.value) {
+    logWebSocket.value.close()
+    logWebSocket.value = null
+  }
+})
+
+// 监听日志对话框关闭，关闭 WebSocket 连接
+watch(logDialogVisible, (newValue) => {
+  if (!newValue && logWebSocket.value) {
+    logWebSocket.value.close()
+    logWebSocket.value = null
+    isRealtimeLog.value = false
   }
 })
 </script>

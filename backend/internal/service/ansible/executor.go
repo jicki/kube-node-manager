@@ -93,6 +93,22 @@ func NewTaskExecutor(db *gorm.DB, logger *logger.Logger, inventorySvc *Inventory
 	}
 }
 
+// GetRunningTaskLog 获取正在运行任务的实时日志
+func (e *TaskExecutor) GetRunningTaskLog(taskID uint) string {
+	e.mu.RLock()
+	runningTask, exists := e.runningTasks[taskID]
+	e.mu.RUnlock()
+
+	if !exists {
+		return ""
+	}
+
+	runningTask.LogMutex.Lock()
+	defer runningTask.LogMutex.Unlock()
+	
+	return runningTask.LogBuffer.String()
+}
+
 // ExecuteTask 执行任务
 func (e *TaskExecutor) ExecuteTask(taskID uint) error {
 	e.mu.Lock()
@@ -206,6 +222,7 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 	runningTask.Cmd = cmd
 
 	// 启动日志收集
+	e.logger.Infof("Task %d: Starting log collection goroutine", task.ID)
 	go e.collectLogs(runningTask)
 
 	// 捕获输出
@@ -222,10 +239,12 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 	}
 
 	// 启动命令
+	e.logger.Infof("Task %d: Starting ansible-playbook command", task.ID)
 	if err := cmd.Start(); err != nil {
 		e.handleTaskError(task, runningTask, fmt.Errorf("failed to start ansible command: %w", err))
 		return
 	}
+	e.logger.Infof("Task %d: ansible-playbook command started successfully", task.ID)
 
 	// 读取输出
 	var wg sync.WaitGroup
@@ -233,15 +252,20 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 
 	go func() {
 		defer wg.Done()
+		e.logger.Infof("Task %d: Starting stdout reader", task.ID)
 		e.readOutput(stdout, runningTask, model.AnsibleLogTypeStdout)
+		e.logger.Infof("Task %d: Stdout reader finished", task.ID)
 	}()
 
 	go func() {
 		defer wg.Done()
+		e.logger.Infof("Task %d: Starting stderr reader", task.ID)
 		e.readOutput(stderr, runningTask, model.AnsibleLogTypeStderr)
+		e.logger.Infof("Task %d: Stderr reader finished", task.ID)
 	}()
 
 	wg.Wait()
+	e.logger.Infof("Task %d: All output readers finished", task.ID)
 
 	// 等待命令完成
 	err = cmd.Wait()

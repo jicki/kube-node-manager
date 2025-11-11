@@ -356,10 +356,10 @@ func (s *Service) ListTasks(req model.TaskListRequest, userID uint) ([]model.Ans
 }
 
 // GetTaskLogs 获取任务日志
-// GetTaskFullLog 获取任务的完整日志（从 task.FullLog 字段）
+// GetTaskFullLog 获取任务的完整日志（从 task.FullLog 字段，或运行中任务的内存缓冲）
 func (s *Service) GetTaskFullLog(taskID uint) (string, error) {
 	var task model.AnsibleTask
-	if err := s.db.Select("full_log, log_size").First(&task, taskID).Error; err != nil {
+	if err := s.db.Select("id, status, full_log, log_size").First(&task, taskID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return "", fmt.Errorf("task not found")
 		}
@@ -367,6 +367,16 @@ func (s *Service) GetTaskFullLog(taskID uint) (string, error) {
 		return "", fmt.Errorf("failed to get task full log: %w", err)
 	}
 
+	// 如果任务正在运行，从执行器的内存缓冲中获取实时日志
+	if task.Status == model.AnsibleTaskStatusRunning {
+		runningLog := s.executor.GetRunningTaskLog(taskID)
+		if runningLog != "" {
+			s.logger.Infof("Task %d is running, returning real-time log from memory (%d bytes)", taskID, len(runningLog))
+			return runningLog, nil
+		}
+	}
+
+	// 任务已完成或没有运行记录，返回数据库中的完整日志
 	return task.FullLog, nil
 }
 

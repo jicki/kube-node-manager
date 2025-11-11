@@ -41,6 +41,9 @@ type Hub struct {
 	// 集群订阅：cluster -> map[clientID]bool
 	subscriptions sync.Map
 
+	// 任务订阅：taskID -> map[userID]chan interface{}
+	taskSubscriptions sync.Map
+
 	// 注册通道
 	register chan *Client
 
@@ -444,5 +447,66 @@ func UnmarshalMessage(data []byte) (*Message, error) {
 	var msg Message
 	err := json.Unmarshal(data, &msg)
 	return &msg, err
+}
+
+// RegisterTaskClient 注册任务日志客户端
+func (h *Hub) RegisterTaskClient(taskID uint, userID uint, messageChan chan interface{}) {
+	// 获取或创建任务订阅映射
+	subsInterface, _ := h.taskSubscriptions.LoadOrStore(taskID, &sync.Map{})
+	subs := subsInterface.(*sync.Map)
+	
+	// 添加用户订阅
+	subs.Store(userID, messageChan)
+	
+	h.logger.Infof("Registered task client: taskID=%d, userID=%d", taskID, userID)
+}
+
+// UnregisterTaskClient 注销任务日志客户端
+func (h *Hub) UnregisterTaskClient(taskID uint, userID uint) {
+	// 获取任务订阅映射
+	if subsInterface, ok := h.taskSubscriptions.Load(taskID); ok {
+		subs := subsInterface.(*sync.Map)
+		
+		// 删除用户订阅
+		subs.Delete(userID)
+		
+		h.logger.Infof("Unregistered task client: taskID=%d, userID=%d", taskID, userID)
+		
+		// 检查是否还有订阅者，如果没有则删除任务订阅映射
+		hasSubscribers := false
+		subs.Range(func(_, _ interface{}) bool {
+			hasSubscribers = true
+			return false // 只需检查是否有至少一个订阅者
+		})
+		
+		if !hasSubscribers {
+			h.taskSubscriptions.Delete(taskID)
+			h.logger.Infof("Removed task subscription mapping for taskID=%d (no more subscribers)", taskID)
+		}
+	}
+}
+
+// BroadcastToTask 向任务的所有订阅者广播消息
+func (h *Hub) BroadcastToTask(taskID uint, message interface{}) {
+	// 获取任务订阅映射
+	if subsInterface, ok := h.taskSubscriptions.Load(taskID); ok {
+		subs := subsInterface.(*sync.Map)
+		
+		// 向所有订阅者发送消息
+		subs.Range(func(key, value interface{}) bool {
+			userID := key.(uint)
+			messageChan := value.(chan interface{})
+			
+			select {
+			case messageChan <- message:
+				// 消息发送成功
+			default:
+				// 通道已满，记录警告
+				h.logger.Warningf("Task message channel full for userID=%d, taskID=%d", userID, taskID)
+			}
+			
+			return true
+		})
+	}
 }
 
