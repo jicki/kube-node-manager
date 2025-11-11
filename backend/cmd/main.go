@@ -452,8 +452,8 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.GET("/workflow-executions/:id/status", handlers.AnsibleWorkflow.GetWorkflowExecutionStatus)
 	}
 
-	// Ansible WebSocket (任务日志流)
-	api.GET("/ansible/tasks/:id/ws", handlers.AnsibleWebSocket.HandleTaskLogStream)
+	// Ansible WebSocket (任务日志流) - 需要认证
+	protected.GET("/ansible/tasks/:id/ws", handlers.AnsibleWebSocket.HandleTaskLogStream)
 }
 
 // gracefulShutdown 优雅关闭服务器

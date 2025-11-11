@@ -38,6 +38,7 @@ func NewWebSocketHandler(wsHub interface{}, logger *logger.Logger) *WebSocketHan
 // @Accept json
 // @Produce json
 // @Param id path int true "任务ID"
+// @Param token query string true "认证Token"
 // @Router /api/v1/ansible/tasks/{id}/ws [get]
 func (h *WebSocketHandler) HandleTaskLogStream(c *gin.Context) {
 	// 获取任务ID
@@ -47,10 +48,13 @@ func (h *WebSocketHandler) HandleTaskLogStream(c *gin.Context) {
 		return
 	}
 
-	// 获取用户ID（用于权限验证）
+	// 获取用户ID（从认证中间件或 context）
+	// WebSocket 连接时，认证中间件可能已经设置了 user_id
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		// 如果中间件没有设置，返回未授权错误
+		h.logger.Warningf("WebSocket connection attempt without authentication for task %d", taskID)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized - missing authentication"})
 		return
 	}
 
