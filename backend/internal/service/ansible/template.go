@@ -42,6 +42,11 @@ func (s *TemplateService) ListTemplates(req model.TemplateListRequest) ([]model.
 			"%"+req.Keyword+"%", "%"+req.Keyword+"%", "%"+req.Keyword+"%")
 	}
 
+	// 按风险等级筛选
+	if req.RiskLevel != "" {
+		query = query.Where("risk_level = ?", req.RiskLevel)
+	}
+
 	// 统计总数
 	if err := query.Count(&total).Error; err != nil {
 		s.logger.Errorf("Failed to count templates: %v", err)
@@ -96,9 +101,21 @@ func (s *TemplateService) CreateTemplate(req model.TemplateCreateRequest, userID
 		return nil, fmt.Errorf("invalid playbook: %w", err)
 	}
 
-	// 自动提取必需变量
-	requiredVars := ansibleUtil.ExtractVariables(req.PlaybookContent)
-	s.logger.Infof("Extracted %d variables from playbook: %v", len(requiredVars), requiredVars)
+	// 处理必需变量：优先使用用户提供的，否则自动提取
+	var requiredVars []string
+	if len(req.RequiredVars) > 0 {
+		requiredVars = req.RequiredVars
+		s.logger.Infof("Using user-provided required vars: %v", requiredVars)
+	} else {
+		requiredVars = ansibleUtil.ExtractVariables(req.PlaybookContent)
+		s.logger.Infof("Auto-extracted %d variables from playbook: %v", len(requiredVars), requiredVars)
+	}
+
+	// 处理风险等级：如果未提供则默认为 low
+	riskLevel := req.RiskLevel
+	if riskLevel == "" {
+		riskLevel = "low"
+	}
 
 	template := &model.AnsibleTemplate{
 		Name:            req.Name,
@@ -107,6 +124,7 @@ func (s *TemplateService) CreateTemplate(req model.TemplateCreateRequest, userID
 		Variables:       req.Variables,
 		RequiredVars:    model.StringArray(requiredVars),
 		Tags:            req.Tags,
+		RiskLevel:       riskLevel,
 		UserID:          userID,
 	}
 
@@ -158,10 +176,19 @@ func (s *TemplateService) UpdateTemplate(id uint, req model.TemplateUpdateReques
 		}
 		template.PlaybookContent = req.PlaybookContent
 		
-		// 重新提取必需变量
-		requiredVars := ansibleUtil.ExtractVariables(req.PlaybookContent)
-		template.RequiredVars = model.StringArray(requiredVars)
-		s.logger.Infof("Re-extracted %d variables from playbook: %v", len(requiredVars), requiredVars)
+		// 处理必需变量：如果用户提供了则使用用户的，否则重新提取
+		if len(req.RequiredVars) > 0 {
+			template.RequiredVars = model.StringArray(req.RequiredVars)
+			s.logger.Infof("Updated to user-provided required vars: %v", req.RequiredVars)
+		} else {
+			requiredVars := ansibleUtil.ExtractVariables(req.PlaybookContent)
+			template.RequiredVars = model.StringArray(requiredVars)
+			s.logger.Infof("Re-extracted %d variables from playbook: %v", len(requiredVars), requiredVars)
+		}
+	} else if len(req.RequiredVars) > 0 {
+		// 如果只更新必需变量而不更新 playbook
+		template.RequiredVars = model.StringArray(req.RequiredVars)
+		s.logger.Infof("Updated required vars: %v", req.RequiredVars)
 	}
 
 	if req.Variables != nil {
@@ -170,6 +197,12 @@ func (s *TemplateService) UpdateTemplate(id uint, req model.TemplateUpdateReques
 
 	if req.Tags != "" {
 		template.Tags = req.Tags
+	}
+
+	// 更新风险等级
+	if req.RiskLevel != "" {
+		template.RiskLevel = req.RiskLevel
+		s.logger.Infof("Updated risk level to: %s", req.RiskLevel)
 	}
 
 	if err := s.db.Save(&template).Error; err != nil {

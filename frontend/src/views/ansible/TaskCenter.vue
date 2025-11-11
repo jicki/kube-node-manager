@@ -985,7 +985,7 @@ const formatRecentTime = (dateStr) => {
 // 重新执行任务
 const rerunTask = async (history) => {
   // 填充表单数据
-  taskForm.name = history.task_name + ' (重新执行)'
+  taskForm.name = history.task_name
   taskForm.template_id = history.template_id || null
   taskForm.inventory_id = history.inventory_id || null
   taskForm.cluster_id = history.cluster_id || null

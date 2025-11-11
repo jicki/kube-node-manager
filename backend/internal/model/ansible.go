@@ -421,10 +421,11 @@ type TaskCreateRequest struct {
 
 // TemplateListRequest 模板列表请求
 type TemplateListRequest struct {
-	Page     int    `json:"page" form:"page"`
-	PageSize int    `json:"page_size" form:"page_size"`
-	Keyword  string `json:"keyword" form:"keyword"`
-	UserID   uint   `json:"user_id" form:"user_id"`
+	Page      int    `json:"page" form:"page"`
+	PageSize  int    `json:"page_size" form:"page_size"`
+	Keyword   string `json:"keyword" form:"keyword"`
+	RiskLevel string `json:"risk_level" form:"risk_level"` // 风险等级筛选
+	UserID    uint   `json:"user_id" form:"user_id"`
 }
 
 // TemplateCreateRequest 模板创建请求
@@ -434,6 +435,8 @@ type TemplateCreateRequest struct {
 	PlaybookContent string                 `json:"playbook_content" binding:"required"`
 	Variables       map[string]interface{} `json:"variables"`
 	Tags            string                 `json:"tags"`
+	RiskLevel       string                 `json:"risk_level"` // 风险等级(low/medium/high)
+	RequiredVars    []string               `json:"required_vars"` // 必需变量列表
 }
 
 // TemplateUpdateRequest 模板更新请求
@@ -443,6 +446,8 @@ type TemplateUpdateRequest struct {
 	PlaybookContent string                 `json:"playbook_content"`
 	Variables       map[string]interface{} `json:"variables"`
 	Tags            string                 `json:"tags"`
+	RiskLevel       string                 `json:"risk_level"` // 风险等级(low/medium/high)
+	RequiredVars    []string               `json:"required_vars"` // 必需变量列表
 }
 
 // InventoryListRequest 主机清单列表请求
