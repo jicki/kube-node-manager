@@ -1449,7 +1449,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	for _, job := range allJobs {
 		statusCounts[job.Status]++
 	}
-	s.logger.Debug(fmt.Sprintf("[ListAllJobs] Status distribution: %v", statusCounts))
+	s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution (before filtering): %v", statusCounts))
 
 	// Record total count before filtering
 	totalCount := len(allJobs)
@@ -1462,12 +1462,17 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		var statusFilteredJobs []GlobalJobInfo
 		statusLower := strings.ToLower(status)
 
+		s.logger.Info(fmt.Sprintf("[ListAllJobs] Filtering by status: %s", statusLower))
+		
 		for _, job := range allJobs {
 			if strings.ToLower(job.Status) == statusLower {
 				statusFilteredJobs = append(statusFilteredJobs, job)
 			}
 		}
 
+		s.logger.Info(fmt.Sprintf("[ListAllJobs] After status filtering: found %d jobs with status '%s' (from %d total)", 
+			len(statusFilteredJobs), statusLower, len(allJobs)))
+		
 		allJobs = statusFilteredJobs
 	}
 
@@ -1568,14 +1573,14 @@ func (s *Service) determineSearchStrategy(status string) SearchStrategy {
 		}
 	
 	case "waiting_for_resource":
-		// 等待资源状态：不使用 scope（GitLab API 可能不支持此 scope）
-		// 在内存中过滤
+		// 等待资源状态：只获取活跃状态，避免获取已完成的 jobs
+		// GitLab API 不支持 waiting_for_resource 作为 scope，所以获取活跃状态后在内存中过滤
 		return SearchStrategy{
 			TimeRange:          "last 3 days",
 			TimeRangeDays:      3,
-			Scopes:             []string{}, // 不使用 scope，获取所有活跃状态
+			Scopes:             []string{"created", "pending", "running"}, // 只获取活跃状态
 			MaxPagesPerProject: 3,
-			MaxProjects:        50, // 减少项目数，因为要在内存中过滤
+			MaxProjects:        50,
 		}
 	
 	case "success", "failed", "canceled", "skipped":

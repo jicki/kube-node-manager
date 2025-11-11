@@ -18,9 +18,11 @@
               <el-option label="已创建" value="created" />
               <el-option label="等待中" value="pending" />
               <el-option label="正在运行" value="running" />
-              <el-option label="等待资源" value="waiting_for_resource" />
               <el-option label="正在准备" value="preparing" />
               <el-option label="已计划" value="scheduled" />
+            </el-option-group>
+            <el-option-group label="特殊状态（可能不可用）">
+              <el-option label="等待资源 ⚠️" value="waiting_for_resource" />
             </el-option-group>
             <el-option-group label="其他">
               <el-option label="手动触发" value="manual" />
@@ -28,10 +30,17 @@
           </el-select>
           
           <!-- 表格过滤提示 -->
-          <el-tooltip 
-            content="已取消「成功」「失败」「已取消」「已跳过」状态的后端过滤，请使用下方表格的状态列筛选功能"
-            placement="bottom"
-          >
+          <el-tooltip placement="bottom">
+            <template #content>
+              <div style="max-width: 300px;">
+                <p><strong>已优化：</strong></p>
+                <p>• 已取消「成功」「失败」等状态的后端过滤</p>
+                <p>• 请使用表格的状态列筛选功能</p>
+                <p style="margin-top: 8px;"><strong>注意：</strong></p>
+                <p>• 「等待资源」状态可能在您的 GitLab 版本中不可用</p>
+                <p>• 查询时会自动过滤，如无结果属正常现象</p>
+              </div>
+            </template>
             <el-icon style="margin-left: 4px; margin-right: 8px; color: #909399; cursor: help">
               <InfoFilled />
             </el-icon>
@@ -254,6 +263,9 @@
         <p style="margin-top: 8px">
           <strong>性能优化：</strong>为了提升响应速度，已取消对已完成状态的后端查询（曾耗时 16+ 秒）。
         </p>
+        <p style="margin-top: 8px; color: #E6A23C;">
+          <strong>⚠️ 注意：</strong>"等待资源"状态可能在您的 GitLab 版本中不可用。如查询无结果，建议使用"等待中"或"已创建"状态。
+        </p>
       </el-alert>
     </div>
   </div>
@@ -352,6 +364,10 @@ const getEmptyDescription = () => {
   } else if (filters.value.tag) {
     return `没有找到标签包含"${filters.value.tag}"的 Jobs（注：只有在 .gitlab-ci.yml 中配置了 tags 的 Job 才可被标签过滤）`
   } else if (filters.value.status) {
+    // 特殊提示：waiting_for_resource 可能不可用
+    if (filters.value.status === 'waiting_for_resource') {
+      return `没有找到"${getJobStatusLabel(filters.value.status)}"状态的 Jobs。\n提示：此状态可能在您的 GitLab 版本中不可用，或确实没有处于此状态的 jobs。建议尝试查询"等待中"或"已创建"状态。`
+    }
     return `没有找到状态为"${getJobStatusLabel(filters.value.status)}"的 Jobs`
   }
   return '暂无 Jobs 数据'
