@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { getToken } from '@/utils/auth'
 
 // 任务管理 API
 
@@ -350,7 +351,7 @@ export function testSSHConnection(id, data) {
  * 创建任务日志 WebSocket 连接
  */
 export function connectTaskLogStream(taskId, onMessage, onError) {
-  const token = localStorage.getItem('token')
+  const token = getToken()
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/ansible/tasks/${taskId}/ws?token=${token}`
   
