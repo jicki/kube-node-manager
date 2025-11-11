@@ -1287,6 +1287,14 @@ type ProjectBasicInfo struct {
 	PathWithNamespace string `json:"path_with_namespace"`
 }
 
+// projectJobsResult 表示项目 jobs 获取的结果
+type projectJobsResult struct {
+	ProjectID   int
+	ProjectName string
+	Jobs        []GlobalJobInfo
+	Error       error
+}
+
 // ListAllJobs retrieves all visible jobs across all projects
 // Returns: jobs, totalCount, filteredCount, error
 func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJobInfo, int, int, error) {
@@ -1314,48 +1322,14 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		perPage = 100 // GitLab API max per_page
 	}
 
-	// 创建带超时的上下文，总体操作不超过 50 秒
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
+	// 创建带超时的上下文，总体操作不超过 60 秒
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// First, get user's projects
-	// Use /api/v4/projects?membership=true to get projects user is a member of
-	projectsURL := fmt.Sprintf("%s/api/v4/projects", settings.Domain)
-	req, err := http.NewRequest("GET", projectsURL, nil)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	req.Header.Set("PRIVATE-TOKEN", settings.Token)
-
-	q := req.URL.Query()
-	q.Set("membership", "true")
-	q.Set("per_page", "100")   // Get up to 100 projects (GitLab API max per page)
-	q.Set("simple", "true")    // Get simplified project info
-	q.Set("archived", "false") // Exclude archived projects
-	q.Set("order_by", "last_activity_at")
-	q.Set("sort", "desc")
-	req.URL.RawQuery = q.Encode()
-
-	// 使用带重试的请求
-	resp, err := s.doHTTPRequestWithRetry(ctx, req, 2) // 最多重试 2 次
+	// 获取所有用户的项目（支持分页）
+	projects, err := s.fetchAllUserProjects(ctx, settings)
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("failed to fetch projects: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, 0, 0, fmt.Errorf("GitLab API returned status %d when fetching projects: %s", resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-
-	var projects []ProjectBasicInfo
-	if err := json.Unmarshal(body, &projects); err != nil {
-		return nil, 0, 0, fmt.Errorf("failed to parse projects: %w", err)
 	}
 
 	if len(projects) == 0 {
@@ -1363,196 +1337,72 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		return []GlobalJobInfo{}, 0, 0, nil
 	}
 
-	s.logger.Info(fmt.Sprintf("Found %d projects, fetching active jobs (all non-terminal states)...", len(projects)))
-
-	// Calculate time range: last 3 days (optimized for speed)
-	threeDaysAgo := time.Now().AddDate(0, 0, -3)
-	s.logger.Info(fmt.Sprintf("Fetching jobs from last 3 days (since %s), scopes: created,pending,preparing,scheduled,waiting_for_resource,running", threeDaysAgo.Format("2006-01-02 15:04:05")))
+	s.logger.Info(fmt.Sprintf("Found %d projects, fetching jobs...", len(projects)))
 
 	startTime := time.Now()
 
+	// 根据状态过滤条件确定搜索策略
+	searchStrategy := s.determineSearchStrategy(status)
+	s.logger.Info(fmt.Sprintf("Search strategy: time_range=%s, scopes=%v, max_pages=%d",
+		searchStrategy.TimeRange, searchStrategy.Scopes, searchStrategy.MaxPagesPerProject))
+
 	// 并发控制参数
-	// 注意：增加这些值会提高完整性，但也会增加响应时间
-	maxProjectsLimit := 50     // 最多处理 50 个项目（从 30 增加）
-	maxConcurrency := 10       // 最多 10 个并发请求
-	maxPagesPerProject := 2    // 每个项目最多获取 2 页（减少以补偿项目数增加）
+	maxProjectsLimit := searchStrategy.MaxProjects // 根据策略动态调整
+	maxConcurrency := 15                           // 增加并发数以提高速度
+	maxPagesPerProject := searchStrategy.MaxPagesPerProject
 	
-	// 限制要处理的项目数量
+	// 限制要处理的项目数量（如果需要）
 	originalProjectCount := len(projects)
-	if len(projects) > maxProjectsLimit {
+	if maxProjectsLimit > 0 && len(projects) > maxProjectsLimit {
 		projects = projects[:maxProjectsLimit]
 		s.logger.Info(fmt.Sprintf("Limiting projects from %d to %d (maxProjectsLimit)", originalProjectCount, maxProjectsLimit))
 	}
 
 	// 使用通道和 WaitGroup 进行并发控制
-	type projectJobsResult struct {
-		ProjectID   int
-		ProjectName string
-		Jobs        []GlobalJobInfo
-		Error       error
-	}
-	
 	resultChan := make(chan projectJobsResult, len(projects))
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, maxConcurrency)
 	
-	// 并发获取每个项目的 jobs
-	for _, project := range projects {
-		wg.Add(1)
-		go func(proj ProjectBasicInfo) {
-			defer wg.Done()
-			
-			// 获取信号量
-			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
-			case <-ctx.Done():
-				resultChan <- projectJobsResult{
-					ProjectID: proj.ID,
-					Error:     ctx.Err(),
-				}
-				return
-			}
-			
-			// 为该项目获取 jobs
-			projectJobs := []GlobalJobInfo{}
-			
-			for pageNum := 1; pageNum <= maxPagesPerProject; pageNum++ {
-				// 检查上下文是否已取消
+	// 选择并发模式：
+	// 1. 标准模式：项目级并发 + 项目内分页并发（默认）
+	// 2. 高级模式：全局 Worker Pool，所有请求打平处理（可选，更快但更耗资源）
+	useAdvancedMode := len(projects) > 30 && maxPagesPerProject >= 3
+	
+	if useAdvancedMode {
+		s.logger.Info(fmt.Sprintf("Using advanced worker pool mode for %d projects", len(projects)))
+		// 使用全局 Worker Pool 模式
+		s.fetchJobsWithWorkerPool(ctx, settings, projects, searchStrategy, maxPagesPerProject, resultChan, &wg)
+	} else {
+		// 并发获取每个项目的 jobs（标准模式）
+		for _, project := range projects {
+			wg.Add(1)
+			go func(proj ProjectBasicInfo) {
+				defer wg.Done()
+				
+				// 获取信号量
 				select {
+				case semaphore <- struct{}{}:
+					defer func() { <-semaphore }()
 				case <-ctx.Done():
 					resultChan <- projectJobsResult{
 						ProjectID: proj.ID,
 						Error:     ctx.Err(),
 					}
 					return
-				default:
 				}
 				
-				// 构建请求
-				jobsURL := fmt.Sprintf("%s/api/v4/projects/%d/jobs", settings.Domain, proj.ID)
-				jobReq, err := http.NewRequest("GET", jobsURL, nil)
-				if err != nil {
-					resultChan <- projectJobsResult{
-						ProjectID: proj.ID,
-						Error:     err,
-					}
-					return
-				}
-				jobReq.Header.Set("PRIVATE-TOKEN", settings.Token)
-
-				jobQ := jobReq.URL.Query()
-				// 在 API 级别过滤活跃状态的作业
-				// 参考：https://docs.gitlab.com/api/jobs/#job-status-values
-				// 获取所有活跃（非终止）状态的 jobs
+				// 为该项目获取 jobs（使用项目内分页并发）
+				projectJobs := s.fetchProjectJobs(ctx, settings, proj, searchStrategy, maxPagesPerProject)
 				
-				// 尝试方案：根据 GitLab API 文档，waiting_for_resource 可能需要特殊处理
-				// 先添加明确支持的状态
-				jobQ.Add("scope[]", "created")              // 已创建，未处理
-				jobQ.Add("scope[]", "pending")              // 队列中等待 runner
-				jobQ.Add("scope[]", "running")              // 正在执行
-				
-				// 这些状态可能不被所有 GitLab 版本支持，但尝试添加
-				jobQ.Add("scope[]", "preparing")            // Runner 准备执行环境
-				jobQ.Add("scope[]", "scheduled")            // 已调度，未开始
-				jobQ.Add("scope[]", "waiting_for_resource") // 等待资源
-				
-				// 调试：如果需要查看所有状态，可以注释掉上面的 scope[] 并取消下面的注释
-				// 这样会获取所有状态的 jobs，包括已完成的
-				// 注意：会显著增加数据量和响应时间
-				
-				// 排除 manual 状态（需要人工触发）
-				// 排除终止状态：success, failed, canceled, skipped, canceling
-				jobQ.Set("per_page", "100")
-				jobQ.Set("page", fmt.Sprintf("%d", pageNum))
-				jobQ.Set("order_by", "id")
-				jobQ.Set("sort", "desc")
-				jobReq.URL.RawQuery = jobQ.Encode()
-
-				// 使用带重试的请求，减少重试次数以加快速度
-				jobResp, err := s.doHTTPRequestWithRetry(ctx, jobReq, 1)
-				if err != nil {
-					// 如果是第一页失败，记录错误；否则忽略
-					if pageNum == 1 {
-						resultChan <- projectJobsResult{
-							ProjectID: proj.ID,
-							Error:     err,
-						}
-						return
-					}
-					break // 分页请求失败，退出循环
+				// 发送结果
+				resultChan <- projectJobsResult{
+					ProjectID:   proj.ID,
+					ProjectName: proj.Name,
+					Jobs:        projectJobs,
+					Error:       nil,
 				}
-
-				if jobResp.StatusCode != http.StatusOK {
-					jobResp.Body.Close()
-					if pageNum == 1 {
-						resultChan <- projectJobsResult{
-							ProjectID: proj.ID,
-							Error:     fmt.Errorf("status code: %d", jobResp.StatusCode),
-						}
-						return
-					}
-					break
-				}
-
-				jobBody, err := io.ReadAll(jobResp.Body)
-				jobResp.Body.Close()
-				if err != nil {
-					break
-				}
-
-				var pageJobs []GlobalJobInfo
-				if err := json.Unmarshal(jobBody, &pageJobs); err != nil {
-					s.logger.Warning(fmt.Sprintf("Failed to parse jobs for project %d page %d: %v", proj.ID, pageNum, err))
-					break
-				}
-
-				// 如果没有返回作业，说明到达最后一页
-				if len(pageJobs) == 0 {
-					break
-				}
-
-				// 过滤时间范围并丰富项目信息
-				hasOldJobs := false
-				for i := range pageJobs {
-					// 检查作业是否在最近 3 天内
-					if pageJobs[i].CreatedAt.Before(threeDaysAgo) {
-						hasOldJobs = true
-						continue
-					}
-
-					// 丰富项目信息
-					if len(pageJobs[i].Project) == 0 {
-						pageJobs[i].Project = map[string]interface{}{
-							"id":                  proj.ID,
-							"name":                proj.Name,
-							"name_with_namespace": proj.NameWithNamespace,
-							"path_with_namespace": proj.PathWithNamespace,
-						}
-					}
-
-					projectJobs = append(projectJobs, pageJobs[i])
-				}
-
-				// 如果发现旧作业，停止分页
-				if hasOldJobs {
-					break
-				}
-
-				// 如果返回的作业少于 100 个，说明是最后一页
-				if len(pageJobs) < 100 {
-					break
-				}
-			}
-			
-			// 发送结果
-			resultChan <- projectJobsResult{
-				ProjectID:   proj.ID,
-				ProjectName: proj.Name,
-				Jobs:        projectJobs,
-				Error:       nil,
-			}
-		}(project)
+			}(project)
+		}
 	}
 	
 	// 等待所有 goroutine 完成
@@ -1565,7 +1415,7 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 	var allJobs []GlobalJobInfo
 	projectsProcessed := 0
 	projectsFailed := 0
-	projectIDsProcessed := make([]int, 0)
+	totalJobsCollected := 0
 	
 	for result := range resultChan {
 		if result.Error != nil {
@@ -1578,51 +1428,23 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		
 		if len(result.Jobs) > 0 {
 			projectsProcessed++
-			projectIDsProcessed = append(projectIDsProcessed, result.ProjectID)
+			totalJobsCollected += len(result.Jobs)
 			allJobs = append(allJobs, result.Jobs...)
-			
-			// 只为前几个项目记录详细日志
-			if projectsProcessed <= 5 {
-				s.logger.Debug(fmt.Sprintf("Collected %d active jobs (last 3 days) from project %s (ID: %d)", 
-					len(result.Jobs), result.ProjectName, result.ProjectID))
-			}
 		}
-	}
-	
-	// 记录处理的项目 ID 列表（用于调试）
-	if projectsProcessed > 0 {
-		s.logger.Debug(fmt.Sprintf("Processed project IDs: %v", projectIDsProcessed))
 	}
 
 	elapsedTime := time.Since(startTime)
-	if projectsFailed > 0 {
-		s.logger.Warning(fmt.Sprintf("Processed %d projects (%d failed), collected %d active jobs from the last 3 days in %.2f seconds", 
-			projectsProcessed, projectsFailed, len(allJobs), elapsedTime.Seconds()))
-	} else {
-		s.logger.Info(fmt.Sprintf("Processed %d projects, collected %d active jobs from the last 3 days in %.2f seconds", 
-			projectsProcessed, len(allJobs), elapsedTime.Seconds()))
-	}
+	s.logger.Info(fmt.Sprintf("Processed %d projects (%d failed), collected %d jobs in %.2f seconds", 
+		projectsProcessed, projectsFailed, totalJobsCollected, elapsedTime.Seconds()))
 
 	// Collect status statistics for debugging
 	statusCounts := make(map[string]int)
-	uniqueStatuses := make(map[string]bool)
 	for _, job := range allJobs {
 		statusCounts[job.Status]++
-		uniqueStatuses[job.Status] = true
 	}
-
-	// Log all unique statuses found
-	allStatuses := make([]string, 0, len(uniqueStatuses))
-	for status := range uniqueStatuses {
-		allStatuses = append(allStatuses, status)
-	}
-	s.logger.Debug(fmt.Sprintf("[ListAllJobs] Unique statuses found in API response: %v", allStatuses))
-
-	// Log status distribution (always log to help debugging)
-	s.logger.Info(fmt.Sprintf("[ListAllJobs] Status distribution (last 3 days, active jobs only): %v", statusCounts))
+	s.logger.Debug(fmt.Sprintf("[ListAllJobs] Status distribution: %v", statusCounts))
 
 	// Record total count before filtering
-	// 注意：这是过滤前的总数（只包含活跃状态，最近3天）
 	totalCount := len(allJobs)
 	if totalCount > 10000 {
 		totalCount = 10001 // Signal that there are more than 10000
@@ -1701,4 +1523,531 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 		totalCount, filteredCount, page, len(result), filterStr))
 
 	return result, totalCount, filteredCount, nil
+}
+
+// SearchStrategy 定义搜索策略
+type SearchStrategy struct {
+	TimeRange          string   // 时间范围描述
+	TimeRangeDays      int      // 时间范围（天）
+	Scopes             []string // GitLab API scope 参数
+	MaxPagesPerProject int      // 每个项目最多获取的页数
+	MaxProjects        int      // 最多处理的项目数（0 表示不限制）
+}
+
+// determineSearchStrategy 根据状态过滤条件确定搜索策略
+func (s *Service) determineSearchStrategy(status string) SearchStrategy {
+	statusLower := strings.ToLower(status)
+	
+	// 根据不同的状态选择不同的搜索策略
+	switch statusLower {
+	case "created", "pending", "running", "preparing", "scheduled", "waiting_for_resource":
+		// 活跃状态：最近3天，较少页数
+		return SearchStrategy{
+			TimeRange:          "last 3 days",
+			TimeRangeDays:      3,
+			Scopes:             []string{"created", "pending", "running", "preparing", "scheduled", "waiting_for_resource"},
+			MaxPagesPerProject: 3,
+			MaxProjects:        80, // 处理更多项目
+		}
+	
+	case "success", "failed", "canceled", "skipped":
+		// 终止状态：最近7天，更多页数
+		return SearchStrategy{
+			TimeRange:          "last 7 days",
+			TimeRangeDays:      7,
+			Scopes:             []string{statusLower},
+			MaxPagesPerProject: 5,
+			MaxProjects:        60, // 平衡项目数量和页数
+		}
+	
+	case "manual":
+		// 手动状态：最近14天
+		return SearchStrategy{
+			TimeRange:          "last 14 days",
+			TimeRangeDays:      14,
+			Scopes:             []string{"manual"},
+			MaxPagesPerProject: 3,
+			MaxProjects:        70,
+		}
+	
+	case "":
+		// 无状态过滤：获取所有活跃状态和最近完成的作业
+		return SearchStrategy{
+			TimeRange:          "last 7 days",
+			TimeRangeDays:      7,
+			Scopes:             []string{}, // 不使用 scope 过滤，获取所有状态
+			MaxPagesPerProject: 4,
+			MaxProjects:        70,
+		}
+	
+	default:
+		// 其他状态：使用默认策略
+		return SearchStrategy{
+			TimeRange:          "last 7 days",
+			TimeRangeDays:      7,
+			Scopes:             []string{statusLower},
+			MaxPagesPerProject: 4,
+			MaxProjects:        70,
+		}
+	}
+}
+
+// fetchAllUserProjects 获取用户的所有项目（支持分页）
+func (s *Service) fetchAllUserProjects(ctx context.Context, settings *model.GitlabSettings) ([]ProjectBasicInfo, error) {
+	var allProjects []ProjectBasicInfo
+	page := 1
+	perPage := 100 // GitLab API 最大值
+	
+	for {
+		// 检查上下文是否已取消
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+		
+		projectsURL := fmt.Sprintf("%s/api/v4/projects", settings.Domain)
+		req, err := http.NewRequest("GET", projectsURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+		q := req.URL.Query()
+		q.Set("membership", "true")
+		q.Set("per_page", fmt.Sprintf("%d", perPage))
+		q.Set("page", fmt.Sprintf("%d", page))
+		q.Set("simple", "true")
+		q.Set("archived", "false")
+		q.Set("order_by", "last_activity_at")
+		q.Set("sort", "desc")
+		req.URL.RawQuery = q.Encode()
+
+		resp, err := s.doHTTPRequestWithRetry(ctx, req, 2)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("GitLab API returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		var projects []ProjectBasicInfo
+		if err := json.Unmarshal(body, &projects); err != nil {
+			return nil, fmt.Errorf("failed to parse projects: %w", err)
+		}
+
+		allProjects = append(allProjects, projects...)
+		
+		// 如果返回的项目数少于 perPage，说明已经是最后一页
+		if len(projects) < perPage {
+			break
+		}
+		
+		// 限制最多获取 300 个项目（3 页）以避免超时
+		if len(allProjects) >= 300 {
+			s.logger.Info(fmt.Sprintf("Reached project limit (300), stopping pagination"))
+			break
+		}
+		
+		page++
+	}
+	
+	s.logger.Info(fmt.Sprintf("Fetched %d projects in total", len(allProjects)))
+	return allProjects, nil
+}
+
+// JobFetchTask 表示一个 jobs 获取任务
+type JobFetchTask struct {
+	ProjectID   int
+	ProjectName string
+	ProjectInfo ProjectBasicInfo
+	PageNum     int
+	Strategy    SearchStrategy
+}
+
+// JobFetchResult 表示 jobs 获取任务的结果
+type JobFetchResult struct {
+	ProjectID  int
+	PageNum    int
+	Jobs       []GlobalJobInfo
+	HasMore    bool // 是否还有更多页
+	Error      error
+}
+
+// fetchProjectJobsConcurrent 使用并发方式获取单个项目的 jobs（项目内分页并发）
+func (s *Service) fetchProjectJobsConcurrent(ctx context.Context, settings *model.GitlabSettings, 
+	proj ProjectBasicInfo, strategy SearchStrategy, maxPages int) []GlobalJobInfo {
+	
+	if maxPages <= 1 {
+		// 如果只有一页，不需要并发
+		return s.fetchProjectJobsSinglePage(ctx, settings, proj, strategy, 1)
+	}
+
+	timeThreshold := time.Now().AddDate(0, 0, -strategy.TimeRangeDays)
+	
+	// 使用 channel 进行并发控制
+	type pageResult struct {
+		pageNum int
+		jobs    []GlobalJobInfo
+		hasMore bool
+		err     error
+	}
+	
+	resultChan := make(chan pageResult, maxPages)
+	var wg sync.WaitGroup
+	
+	// 并发获取前几页（通常前2-3页就包含了大部分活跃的 jobs）
+	concurrentPages := maxPages
+	if concurrentPages > 3 {
+		concurrentPages = 3 // 前3页并发获取
+	}
+	
+	// 启动并发任务获取前几页
+	for pageNum := 1; pageNum <= concurrentPages; pageNum++ {
+		wg.Add(1)
+		go func(page int) {
+			defer wg.Done()
+			
+			// 检查上下文
+			select {
+			case <-ctx.Done():
+				resultChan <- pageResult{pageNum: page, err: ctx.Err()}
+				return
+			default:
+			}
+			
+			jobs, hasMore, err := s.fetchSingleJobPage(ctx, settings, proj, strategy, page, timeThreshold)
+			resultChan <- pageResult{
+				pageNum: page,
+				jobs:    jobs,
+				hasMore: hasMore,
+				err:     err,
+			}
+		}(pageNum)
+	}
+	
+	// 等待并发任务完成
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+	
+	// 收集结果
+	pageResults := make(map[int]pageResult)
+	for result := range resultChan {
+		pageResults[result.pageNum] = result
+	}
+	
+	// 按页码顺序组装结果
+	var allJobs []GlobalJobInfo
+	shouldContinue := true
+	
+	for pageNum := 1; pageNum <= concurrentPages && shouldContinue; pageNum++ {
+		result, exists := pageResults[pageNum]
+		if !exists || result.err != nil {
+			if pageNum == 1 {
+				s.logger.Debug(fmt.Sprintf("Failed to fetch jobs for project %d page %d", proj.ID, pageNum))
+			}
+			break
+		}
+		
+		allJobs = append(allJobs, result.jobs...)
+		
+		// 如果这一页没有更多数据，停止
+		if !result.hasMore {
+			shouldContinue = false
+			break
+		}
+	}
+	
+	// 如果还需要获取更多页，串行获取剩余页（通常不会到这里）
+	if shouldContinue && len(pageResults) > 0 {
+		lastPage := pageResults[concurrentPages]
+		if lastPage.hasMore {
+			for pageNum := concurrentPages + 1; pageNum <= maxPages; pageNum++ {
+				jobs, hasMore, err := s.fetchSingleJobPage(ctx, settings, proj, strategy, pageNum, timeThreshold)
+				if err != nil || len(jobs) == 0 {
+					break
+				}
+				allJobs = append(allJobs, jobs...)
+				if !hasMore {
+					break
+				}
+			}
+		}
+	}
+	
+	return allJobs
+}
+
+// fetchSingleJobPage 获取单页 jobs 数据
+func (s *Service) fetchSingleJobPage(ctx context.Context, settings *model.GitlabSettings,
+	proj ProjectBasicInfo, strategy SearchStrategy, pageNum int, timeThreshold time.Time) ([]GlobalJobInfo, bool, error) {
+	
+	// 检查上下文
+	select {
+	case <-ctx.Done():
+		return nil, false, ctx.Err()
+	default:
+	}
+	
+	// 构建请求
+	jobsURL := fmt.Sprintf("%s/api/v4/projects/%d/jobs", settings.Domain, proj.ID)
+	jobReq, err := http.NewRequest("GET", jobsURL, nil)
+	if err != nil {
+		return nil, false, err
+	}
+	jobReq.Header.Set("PRIVATE-TOKEN", settings.Token)
+
+	jobQ := jobReq.URL.Query()
+	
+	// 根据策略设置 scope 过滤
+	if len(strategy.Scopes) > 0 {
+		for _, scope := range strategy.Scopes {
+			jobQ.Add("scope[]", scope)
+		}
+	}
+	
+	jobQ.Set("per_page", "100")
+	jobQ.Set("page", fmt.Sprintf("%d", pageNum))
+	jobQ.Set("order_by", "id")
+	jobQ.Set("sort", "desc")
+	jobReq.URL.RawQuery = jobQ.Encode()
+
+	// 使用带重试的请求
+	jobResp, err := s.doHTTPRequestWithRetry(ctx, jobReq, 1)
+	if err != nil {
+		return nil, false, err
+	}
+	defer jobResp.Body.Close()
+
+	if jobResp.StatusCode != http.StatusOK {
+		return nil, false, fmt.Errorf("status code: %d", jobResp.StatusCode)
+	}
+
+	jobBody, err := io.ReadAll(jobResp.Body)
+	if err != nil {
+		return nil, false, err
+	}
+
+	var pageJobs []GlobalJobInfo
+	if err := json.Unmarshal(jobBody, &pageJobs); err != nil {
+		return nil, false, fmt.Errorf("parse error: %w", err)
+	}
+
+	// 如果没有返回作业，说明到达最后一页
+	if len(pageJobs) == 0 {
+		return nil, false, nil
+	}
+
+	// 过滤时间范围并丰富项目信息
+	var filteredJobs []GlobalJobInfo
+	hasOldJobs := false
+	
+	for i := range pageJobs {
+		// 检查作业是否在时间范围内
+		if pageJobs[i].CreatedAt.Before(timeThreshold) {
+			hasOldJobs = true
+			continue
+		}
+
+		// 丰富项目信息
+		if len(pageJobs[i].Project) == 0 {
+			pageJobs[i].Project = map[string]interface{}{
+				"id":                  proj.ID,
+				"name":                proj.Name,
+				"name_with_namespace": proj.NameWithNamespace,
+				"path_with_namespace": proj.PathWithNamespace,
+			}
+		}
+
+		filteredJobs = append(filteredJobs, pageJobs[i])
+	}
+
+	// 判断是否还有更多页
+	// 如果发现旧作业或返回的作业少于 100 个，说明没有更多页了
+	hasMore := !hasOldJobs && len(pageJobs) >= 100
+	
+	return filteredJobs, hasMore, nil
+}
+
+// fetchProjectJobsSinglePage 获取单页数据（简化版，用于只需要1页的情况）
+func (s *Service) fetchProjectJobsSinglePage(ctx context.Context, settings *model.GitlabSettings,
+	proj ProjectBasicInfo, strategy SearchStrategy, pageNum int) []GlobalJobInfo {
+	
+	timeThreshold := time.Now().AddDate(0, 0, -strategy.TimeRangeDays)
+	jobs, _, _ := s.fetchSingleJobPage(ctx, settings, proj, strategy, pageNum, timeThreshold)
+	return jobs
+}
+
+// fetchProjectJobs 获取单个项目的 jobs（保留原函数名以兼容，内部使用并发版本）
+func (s *Service) fetchProjectJobs(ctx context.Context, settings *model.GitlabSettings, 
+	proj ProjectBasicInfo, strategy SearchStrategy, maxPages int) []GlobalJobInfo {
+	
+	// 使用并发版本
+	return s.fetchProjectJobsConcurrent(ctx, settings, proj, strategy, maxPages)
+}
+
+// fetchJobsWithWorkerPool 使用 Worker Pool 模式并发获取所有 jobs（全局任务调度）
+func (s *Service) fetchJobsWithWorkerPool(ctx context.Context, settings *model.GitlabSettings,
+	projects []ProjectBasicInfo, strategy SearchStrategy, maxPages int,
+	resultChan chan<- projectJobsResult, wg *sync.WaitGroup) {
+	
+	timeThreshold := time.Now().AddDate(0, 0, -strategy.TimeRangeDays)
+	
+	// 创建任务队列
+	type jobTask struct {
+		project ProjectBasicInfo
+		page    int
+	}
+	
+	taskChan := make(chan jobTask, len(projects)*maxPages)
+	
+	// Worker Pool：30个并发 worker（增加并发度）
+	workerCount := 30
+	if workerCount > len(projects)*maxPages {
+		workerCount = len(projects) * maxPages
+	}
+	
+	// 页面结果收集
+	type pageTaskResult struct {
+		projectID int
+		page      int
+		jobs      []GlobalJobInfo
+		hasMore   bool
+		err       error
+	}
+	
+	pageResultChan := make(chan pageTaskResult, len(projects)*maxPages)
+	
+	// 启动 workers
+	var workerWg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		workerWg.Add(1)
+		go func(workerID int) {
+			defer workerWg.Done()
+			
+			for task := range taskChan {
+				// 检查上下文
+				select {
+				case <-ctx.Done():
+					pageResultChan <- pageTaskResult{
+						projectID: task.project.ID,
+						page:      task.page,
+						err:       ctx.Err(),
+					}
+					continue
+				default:
+				}
+				
+				// 获取这一页的数据
+				jobs, hasMore, err := s.fetchSingleJobPage(ctx, settings, task.project, strategy, task.page, timeThreshold)
+				
+				pageResultChan <- pageTaskResult{
+					projectID: task.project.ID,
+					page:      task.page,
+					jobs:      jobs,
+					hasMore:   hasMore,
+					err:       err,
+				}
+			}
+		}(i)
+	}
+	
+	// 生产者：分发初始任务（每个项目的第一页）
+	go func() {
+		for _, proj := range projects {
+			taskChan <- jobTask{project: proj, page: 1}
+		}
+	}()
+	
+	// 结果收集器和动态任务分发
+	go func() {
+		// 记录每个项目的状态
+		projectStatus := make(map[int]struct {
+			currentPage int
+			hasMore     bool
+			jobs        []GlobalJobInfo
+		})
+		
+		for _, proj := range projects {
+			projectStatus[proj.ID] = struct {
+				currentPage int
+				hasMore     bool
+				jobs        []GlobalJobInfo
+			}{currentPage: 0, hasMore: true, jobs: []GlobalJobInfo{}}
+		}
+		
+		tasksInFlight := len(projects) // 初始任务数
+		
+		for tasksInFlight > 0 {
+			result := <-pageResultChan
+			tasksInFlight--
+			
+			status := projectStatus[result.projectID]
+			
+			if result.err == nil && len(result.jobs) > 0 {
+				// 合并这一页的结果
+				status.jobs = append(status.jobs, result.jobs...)
+				status.currentPage = result.page
+				status.hasMore = result.hasMore
+				projectStatus[result.projectID] = status
+				
+				// 如果还有更多页且未达到最大页数，分发下一页任务
+				if result.hasMore && result.page < maxPages {
+					// 查找项目信息
+					var proj ProjectBasicInfo
+					for _, p := range projects {
+						if p.ID == result.projectID {
+							proj = p
+							break
+						}
+					}
+					
+					taskChan <- jobTask{project: proj, page: result.page + 1}
+					tasksInFlight++
+				}
+			} else {
+				// 出错或无数据，标记为完成
+				status.hasMore = false
+				projectStatus[result.projectID] = status
+			}
+		}
+		
+		// 关闭任务通道，等待所有 workers 完成
+		close(taskChan)
+		workerWg.Wait()
+		close(pageResultChan)
+		
+		// 汇总每个项目的结果
+		for projectID, status := range projectStatus {
+			wg.Add(1)
+			
+			// 找到项目名称
+			var projectName string
+			for _, p := range projects {
+				if p.ID == projectID {
+					projectName = p.Name
+					break
+				}
+			}
+			
+			resultChan <- projectJobsResult{
+				ProjectID:   projectID,
+				ProjectName: projectName,
+				Jobs:        status.jobs,
+				Error:       nil,
+			}
+			wg.Done()
+		}
+	}()
 }
