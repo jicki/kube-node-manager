@@ -253,21 +253,25 @@ const handleScroll = () => {
   // 如果用户滚动到底部，恢复自动滚动
   if (isAtBottom) {
     isUserScrolling.value = false
-    autoScroll.value = true
-  } else {
-    // 用户主动滚动时暂停自动滚动
+  } else if (autoScroll.value) {
+    // 只有在自动滚动开启时，用户主动向上滚动才暂停
     isUserScrolling.value = true
-    autoScroll.value = false
     
     // 清除之前的定时器
     if (scrollTimeout.value) {
       clearTimeout(scrollTimeout.value)
     }
     
-    // 5秒后恢复自动滚动
+    // 3秒后如果还在底部附近则恢复自动滚动
     scrollTimeout.value = setTimeout(() => {
-      isUserScrolling.value = false
-    }, 5000)
+      if (logContainerRef.value) {
+        const { scrollTop, scrollHeight, clientHeight } = logContainerRef.value
+        const isNearBottom = Math.abs(scrollHeight - clientHeight - scrollTop) < 50
+        if (isNearBottom) {
+          isUserScrolling.value = false
+        }
+      }
+    }, 3000)
   }
 }
 

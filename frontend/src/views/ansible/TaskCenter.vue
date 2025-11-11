@@ -707,7 +707,7 @@
             </span>
           </template>
           <div style="height: 600px">
-            <LogViewer :logs="logContent" :realtime="false" />
+            <LogViewer :logs="logContent" :realtime="isRealtimeLog" />
           </div>
         </el-tab-pane>
         <el-tab-pane label="执行可视化" name="visualization">
