@@ -10,22 +10,32 @@
             v-model="filters.status"
             placeholder="状态"
             clearable
-            style="width: 160px; margin-right: 8px"
+            style="width: 200px; margin-right: 8px"
             @change="applyFilters"
           >
-            <el-option label="全部" value="" />
-            <el-option label="已创建" value="created" />
-            <el-option label="等待中" value="pending" />
-            <el-option label="正在运行" value="running" />
-            <el-option label="成功" value="success" />
-            <el-option label="失败" value="failed" />
-            <el-option label="已取消" value="canceled" />
-            <el-option label="已跳过" value="skipped" />
-            <el-option label="手动" value="manual" />
-            <el-option label="已计划" value="scheduled" />
-            <el-option label="等待资源" value="waiting_for_resource" />
-            <el-option label="正在准备" value="preparing" />
+            <el-option label="全部（活跃状态）" value="" />
+            <el-option-group label="活跃状态">
+              <el-option label="已创建" value="created" />
+              <el-option label="等待中" value="pending" />
+              <el-option label="正在运行" value="running" />
+              <el-option label="等待资源" value="waiting_for_resource" />
+              <el-option label="正在准备" value="preparing" />
+              <el-option label="已计划" value="scheduled" />
+            </el-option-group>
+            <el-option-group label="其他">
+              <el-option label="手动触发" value="manual" />
+            </el-option-group>
           </el-select>
+          
+          <!-- 表格过滤提示 -->
+          <el-tooltip 
+            content="已取消「成功」「失败」「已取消」「已跳过」状态的后端过滤，请使用下方表格的状态列筛选功能"
+            placement="bottom"
+          >
+            <el-icon style="margin-left: 4px; margin-right: 8px; color: #909399; cursor: help">
+              <InfoFilled />
+            </el-icon>
+          </el-tooltip>
 
           <el-input
             v-model="filters.tag"
@@ -65,7 +75,24 @@
         style="width: 100%"
         stripe
       >
-        <el-table-column label="状态" align="center">
+        <el-table-column 
+          label="状态" 
+          align="center"
+          :filters="[
+            { text: '已创建', value: 'created' },
+            { text: '等待中', value: 'pending' },
+            { text: '正在运行', value: 'running' },
+            { text: '成功', value: 'success' },
+            { text: '失败', value: 'failed' },
+            { text: '已取消', value: 'canceled' },
+            { text: '已跳过', value: 'skipped' },
+            { text: '手动', value: 'manual' },
+            { text: '已计划', value: 'scheduled' },
+            { text: '等待资源', value: 'waiting_for_resource' },
+            { text: '正在准备', value: 'preparing' }
+          ]"
+          :filter-method="filterStatus"
+        >
           <template #default="{ row }">
             <el-tag
               :type="getJobStatusColor(row.status)"
@@ -220,9 +247,12 @@
         type="info"
         :closable="false"
       >
-        <p>此页面显示所有可见的 GitLab Jobs。</p>
+        <p><strong>后端过滤：</strong>可以按活跃状态（已创建、等待中、正在运行等）和标签进行过滤。</p>
         <p style="margin-top: 8px">
-          您可以按状态和标签进行过滤，标签支持模糊匹配。
+          <strong>表格筛选：</strong>对于已完成状态（成功、失败、已取消、已跳过），请使用表格的状态列筛选功能。
+        </p>
+        <p style="margin-top: 8px">
+          <strong>性能优化：</strong>为了提升响应速度，已取消对已完成状态的后端查询（曾耗时 16+ 秒）。
         </p>
       </el-alert>
     </div>
@@ -232,7 +262,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { Refresh, Search, InfoFilled } from '@element-plus/icons-vue'
 import { listAllJobs } from '@/api/gitlab'
 import { useGitlabStore } from '@/store/modules/gitlab'
 
@@ -436,6 +466,11 @@ const openJobUrl = (url) => {
   if (url) {
     window.open(url, '_blank')
   }
+}
+
+// Filter status in table
+const filterStatus = (value, row) => {
+  return row.status === value
 }
 
 onMounted(async () => {

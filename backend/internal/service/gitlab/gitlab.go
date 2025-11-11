@@ -1343,6 +1343,13 @@ func (s *Service) ListAllJobs(status, tag string, page, perPage int) ([]GlobalJo
 
 	// 根据状态过滤条件确定搜索策略
 	searchStrategy := s.determineSearchStrategy(status)
+	
+	// 检查是否是不支持的状态
+	if searchStrategy.MaxProjects == 0 {
+		s.logger.Warning(fmt.Sprintf("Unsupported status filter: %s", status))
+		return []GlobalJobInfo{}, 0, 0, fmt.Errorf("状态 '%s' 不支持直接查询。建议：1) 不使用状态过滤查看活跃的 jobs，或 2) 使用前端表格的状态筛选功能", status)
+	}
+	
 	s.logger.Info(fmt.Sprintf("Search strategy: time_range=%s, scopes=%v, max_pages=%d",
 		searchStrategy.TimeRange, searchStrategy.Scopes, searchStrategy.MaxPagesPerProject))
 
@@ -1540,53 +1547,76 @@ func (s *Service) determineSearchStrategy(status string) SearchStrategy {
 	
 	// 根据不同的状态选择不同的搜索策略
 	switch statusLower {
-	case "created", "pending", "running", "preparing", "scheduled", "waiting_for_resource":
-		// 活跃状态：最近3天，较少页数
+	case "created", "pending", "running":
+		// 活跃状态（核心状态）：最近3天
 		return SearchStrategy{
 			TimeRange:          "last 3 days",
 			TimeRangeDays:      3,
-			Scopes:             []string{"created", "pending", "running", "preparing", "scheduled", "waiting_for_resource"},
+			Scopes:             []string{"created", "pending", "running"},
 			MaxPagesPerProject: 3,
-			MaxProjects:        80, // 处理更多项目
+			MaxProjects:        80,
+		}
+	
+	case "preparing", "scheduled":
+		// 活跃状态（准备中）：最近3天
+		return SearchStrategy{
+			TimeRange:          "last 3 days",
+			TimeRangeDays:      3,
+			Scopes:             []string{statusLower},
+			MaxPagesPerProject: 2,
+			MaxProjects:        80,
+		}
+	
+	case "waiting_for_resource":
+		// 等待资源状态：不使用 scope（GitLab API 可能不支持此 scope）
+		// 在内存中过滤
+		return SearchStrategy{
+			TimeRange:          "last 3 days",
+			TimeRangeDays:      3,
+			Scopes:             []string{}, // 不使用 scope，获取所有活跃状态
+			MaxPagesPerProject: 3,
+			MaxProjects:        50, // 减少项目数，因为要在内存中过滤
 		}
 	
 	case "success", "failed", "canceled", "skipped":
-		// 终止状态：最近7天，更多页数
+		// 终止状态：不再支持直接查询，提示用户使用无过滤查询
+		// 返回空策略，在调用处检测并返回友好提示
+		s.logger.Warning(fmt.Sprintf("Status '%s' is not supported for direct query. Please use no filter to get all jobs.", statusLower))
 		return SearchStrategy{
-			TimeRange:          "last 7 days",
-			TimeRangeDays:      7,
-			Scopes:             []string{statusLower},
-			MaxPagesPerProject: 5,
-			MaxProjects:        60, // 平衡项目数量和页数
+			TimeRange:          "not supported",
+			TimeRangeDays:      0,
+			Scopes:             []string{},
+			MaxPagesPerProject: 0,
+			MaxProjects:        0,
 		}
 	
 	case "manual":
-		// 手动状态：最近14天
+		// 手动状态：最近7天（减少时间范围）
 		return SearchStrategy{
-			TimeRange:          "last 14 days",
-			TimeRangeDays:      14,
+			TimeRange:          "last 7 days",
+			TimeRangeDays:      7,
 			Scopes:             []string{"manual"},
-			MaxPagesPerProject: 3,
-			MaxProjects:        70,
+			MaxPagesPerProject: 2,
+			MaxProjects:        60,
 		}
 	
 	case "":
-		// 无状态过滤：获取所有活跃状态和最近完成的作业
+		// 无状态过滤：只获取活跃状态
 		return SearchStrategy{
-			TimeRange:          "last 7 days",
-			TimeRangeDays:      7,
-			Scopes:             []string{}, // 不使用 scope 过滤，获取所有状态
-			MaxPagesPerProject: 4,
-			MaxProjects:        70,
+			TimeRange:          "last 3 days",
+			TimeRangeDays:      3,
+			Scopes:             []string{"created", "pending", "running"},
+			MaxPagesPerProject: 3,
+			MaxProjects:        80,
 		}
 	
 	default:
-		// 其他状态：使用默认策略
+		// 其他状态：尝试使用该状态作为 scope
 		return SearchStrategy{
-			TimeRange:          "last 7 days",
-			TimeRangeDays:      7,
+			TimeRange:          "last 3 days",
+			TimeRangeDays:      3,
 			Scopes:             []string{statusLower},
-			MaxPagesPerProject: 4,
+			MaxPagesPerProject: 3,
 			MaxProjects:        70,
 		}
 	}
