@@ -370,6 +370,27 @@
         </el-table-column>
 
         <el-table-column
+          label="节点IP"
+          min-width="160"
+        >
+          <template #default="{ row }">
+            <div class="ip-address-cell">
+              <div v-if="row.internal_ip" class="ip-item">
+                <span class="ip-label">内网:</span>
+                <span class="ip-value" :title="row.internal_ip">{{ row.internal_ip }}</span>
+              </div>
+              <div v-if="row.external_ip" class="ip-item">
+                <span class="ip-label">外网:</span>
+                <span class="ip-value" :title="row.external_ip">{{ row.external_ip }}</span>
+              </div>
+              <div v-if="!row.internal_ip && !row.external_ip" class="no-ip">
+                <span class="no-ip-text">N/A</span>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column
           prop="status"
           label="状态"
           sortable="custom"
@@ -2476,6 +2497,67 @@ onActivated(async () => {
   color: #ad4e00 !important;
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(212, 107, 8, 0.15);
+}
+
+/* IP 地址列样式 */
+.ip-address-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.ip-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.ip-label {
+  color: #666;
+  font-weight: 600;
+  font-size: 11px;
+  min-width: 36px;
+  text-align: right;
+}
+
+.ip-value {
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  color: #1890ff;
+  font-weight: 500;
+  background: #f0f9ff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #d6f0ff;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ip-value:hover {
+  background: #e6f7ff;
+  border-color: #91d5ff;
+  color: #0050b3;
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.1);
+}
+
+.no-ip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.no-ip-text {
+  color: #bfbfbf;
+  font-size: 12px;
+  font-style: italic;
 }
 
 /* 调度状态相关样式 */

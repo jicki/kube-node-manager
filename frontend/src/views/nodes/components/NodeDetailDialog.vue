@@ -22,6 +22,12 @@
         <el-descriptions-item label="版本">
           {{ node.version }}
         </el-descriptions-item>
+        <el-descriptions-item label="内网IP">
+          <span class="ip-value">{{ node.internal_ip || node.internalIP || '-' }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="外网IP">
+          <span class="ip-value">{{ node.external_ip || node.externalIP || '-' }}</span>
+        </el-descriptions-item>
         <el-descriptions-item label="操作系统">
           {{ node.os_image || node.osImage || '-' }}
         </el-descriptions-item>
@@ -439,5 +445,17 @@ h4 {
   color: #666;
   font-weight: 500;
   font-size: 12px;
+}
+
+/* IP地址样式 */
+.ip-value {
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 13px;
+  color: #1890ff;
+  font-weight: 600;
+  background: #f0f9ff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #d6f0ff;
 }
 </style>

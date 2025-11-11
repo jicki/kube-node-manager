@@ -117,6 +117,23 @@
           </div>
         </template>
         
+        <!-- IP地址列 -->
+        <template #cell-ip="{ row }">
+          <div class="ip-address-cell">
+            <div v-if="row.internal_ip" class="ip-item">
+              <span class="ip-label">内网:</span>
+              <span class="ip-value">{{ row.internal_ip }}</span>
+            </div>
+            <div v-if="row.external_ip" class="ip-item">
+              <span class="ip-label">外网:</span>
+              <span class="ip-value">{{ row.external_ip }}</span>
+            </div>
+            <div v-if="!row.internal_ip && !row.external_ip" class="no-ip">
+              <span class="no-ip-text">N/A</span>
+            </div>
+          </div>
+        </template>
+        
         <!-- 状态列 -->
         <template #cell-status="{ row }">
           <el-tag
@@ -225,6 +242,11 @@ const tableColumns = [
     title: '节点名称',
     width: 300,
     fixed: 'left'
+  },
+  {
+    key: 'ip',
+    title: '节点IP',
+    width: 160
   },
   {
     key: 'status',
@@ -469,6 +491,51 @@ onMounted(async () => {
     .resource-item {
       font-size: 12px;
       line-height: 1.6;
+    }
+  }
+  
+  // IP地址列样式
+  .ip-address-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    
+    .ip-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      
+      .ip-label {
+        color: var(--el-text-color-secondary);
+        font-weight: 600;
+        font-size: 11px;
+        min-width: 36px;
+        text-align: right;
+      }
+      
+      .ip-value {
+        font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+        color: var(--el-color-primary);
+        font-weight: 500;
+        background: var(--el-color-primary-light-9);
+        padding: 2px 8px;
+        border-radius: 4px;
+        border: 1px solid var(--el-color-primary-light-7);
+      }
+    }
+    
+    .no-ip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 0;
+      
+      .no-ip-text {
+        color: var(--el-text-color-placeholder);
+        font-size: 12px;
+        font-style: italic;
+      }
     }
   }
 }
