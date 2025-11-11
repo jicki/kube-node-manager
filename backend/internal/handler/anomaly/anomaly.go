@@ -3,6 +3,7 @@ package anomaly
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"kube-node-manager/internal/model"
@@ -63,7 +64,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 	if err != nil {
 		h.logger.Errorf("Failed to get anomaly by ID %d: %v", id, err)
 		// 判断是否是记录不存在的错误
-		if err.Error() == fmt.Sprintf("anomaly not found with id: %d", id) {
+		if strings.Contains(err.Error(), "anomaly not found") {
 			c.JSON(http.StatusNotFound, Response{
 				Code:    http.StatusNotFound,
 				Message: "Anomaly not found",
