@@ -116,81 +116,37 @@ export const useNodeStore = defineStore('node', {
         }
       })
       
-      // 调试信息
-      console.log('节点总数:', state.nodes.length)
-      console.log('有deeproute.cn/user-type标签的节点数量:', ownershipSet.size)
-      console.log('无deeproute.cn/user-type标签的节点:', noOwnershipNodes)
-      console.log('hasNoOwnership:', hasNoOwnership)
-      
       const options = Array.from(ownershipSet).sort()
       
-      // 如果有节点没有 deeproute.cn/user-type 标签，添加“无归属”选项
+      // 如果有节点没有 deeproute.cn/user-type 标签，添加"无归属"选项
       if (hasNoOwnership) {
         options.unshift('无归属') // 添加到数组开头
       }
       
-      console.log('最终选项数组:', options)
       return options
     },
     filteredNodes: (state) => {
-      let result = state.nodes
-      const originalCount = result.length
-      
-      // 检查是否有任何过滤条件
-      const hasFilters = !!(state.filters.name || state.filters.status || state.filters.role || 
-                           state.filters.schedulable || state.filters.labelKey || state.filters.taintKey || 
-                           state.filters.nodeOwnership)
-      
-      // 只在有过滤条件且结果数量异常时输出调试信息
-      if (hasFilters && originalCount > 0) {
-        console.log('开始过滤节点:', {
-          原始节点数: originalCount,
-          过滤条件: state.filters
-        })
-      }
+      let result = state.nodes || []
       
       if (state.filters.name) {
         const searchTerm = state.filters.name.toLowerCase()
-        
-        // 调试：在过滤之前输出第一个节点的信息
-        if (result.length > 0) {
-          const firstNode = result[0]
-          console.log('🔍 搜索调试 - 开始搜索:', {
-            搜索词: searchTerm,
-            总节点数: result.length,
-            第一个节点名: firstNode.name,
-            第一个节点所有字段: Object.keys(firstNode),
-            第一个节点IP字段: {
-              internal_ip: firstNode.internal_ip,
-              external_ip: firstNode.external_ip,
-              internalIP: firstNode.internalIP,
-              externalIP: firstNode.externalIP
-            }
-          })
-        }
-        
         result = result.filter(node => {
           // 搜索节点名称
           if (node.name && node.name.toLowerCase().includes(searchTerm)) {
-            console.log('✅ 通过名称匹配:', node.name)
             return true
           }
           // 搜索内网IP（支持 snake_case 和 camelCase）
           const internalIp = node.internal_ip || node.internalIP
           if (internalIp && internalIp.toLowerCase().includes(searchTerm)) {
-            console.log('✅ 通过内网IP匹配:', internalIp)
             return true
           }
           // 搜索外网IP（支持 snake_case 和 camelCase）
           const externalIp = node.external_ip || node.externalIP
           if (externalIp && externalIp.toLowerCase().includes(searchTerm)) {
-            console.log('✅ 通过外网IP匹配:', externalIp)
             return true
           }
           return false
         })
-        
-        console.log('🔍 搜索完成 - 结果数量:', result.length)
       }
       
       if (state.filters.status) {
@@ -300,11 +256,6 @@ export const useNodeStore = defineStore('node', {
         })
       }
       
-      // 只在有过滤条件或结果为空时输出最终结果
-      if (hasFilters || result.length === 0) {
-        console.log(`过滤结果: ${originalCount} → ${result.length}`)
-      }
-      
       return result
     },
     // 添加分页后的节点列表
@@ -314,9 +265,24 @@ export const useNodeStore = defineStore('node', {
       
       // 应用所有过滤条件
       if (state.filters.name) {
-        filtered = filtered.filter(node => 
-          node.name.toLowerCase().includes(state.filters.name.toLowerCase())
-        )
+        const searchTerm = state.filters.name.toLowerCase()
+        filtered = filtered.filter(node => {
+          // 搜索节点名称
+          if (node.name && node.name.toLowerCase().includes(searchTerm)) {
+            return true
+          }
+          // 搜索内网IP（支持 snake_case 和 camelCase）
+          const internalIp = node.internal_ip || node.internalIP
+          if (internalIp && internalIp.toLowerCase().includes(searchTerm)) {
+            return true
+          }
+          // 搜索外网IP（支持 snake_case 和 camelCase）
+          const externalIp = node.external_ip || node.externalIP
+          if (externalIp && externalIp.toLowerCase().includes(searchTerm)) {
+            return true
+          }
+          return false
+        })
       }
       
       if (state.filters.status) {
