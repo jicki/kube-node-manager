@@ -1094,6 +1094,8 @@ const filteredNodes = computed(() => {
 // 防抖搜索处理
 let searchDebounceTimer = null
 const handleSearch = () => {
+  console.log('🔍 NodeList.vue - 搜索触发:', searchKeyword.value)
+  
   // 清除之前的定时器
   if (searchDebounceTimer) {
     clearTimeout(searchDebounceTimer)
@@ -1101,6 +1103,20 @@ const handleSearch = () => {
   
   // 设置防抖延迟
   searchDebounceTimer = setTimeout(() => {
+    console.log('🔍 NodeList.vue - 300ms后执行搜索:', searchKeyword.value)
+    console.log('🔍 NodeList.vue - 当前所有节点数:', nodeStore.nodes.length)
+    if (nodeStore.nodes.length > 0) {
+      const firstNode = nodeStore.nodes[0]
+      console.log('🔍 NodeList.vue - 第一个节点:', {
+        name: firstNode.name,
+        internal_ip: firstNode.internal_ip,
+        external_ip: firstNode.external_ip,
+        internalIP: firstNode.internalIP,
+        externalIP: firstNode.externalIP,
+        allKeys: Object.keys(firstNode)
+      })
+    }
+    
     nodeStore.setFilters({
       name: searchKeyword.value,
       status: statusFilter.value,
