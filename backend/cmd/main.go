@@ -62,10 +62,22 @@ func main() {
 		log.Fatal("Failed to initialize database:", err)
 	}
 
+	// 运行 GORM 自动迁移（创建/更新表结构）
 	if err := model.AutoMigrate(db); err != nil {
-		log.Fatal("Failed to run migrations:", err)
+		log.Fatal("Failed to run GORM auto-migrations:", err)
 	}
 
+	// 运行 SQL 迁移文件（自动检测并执行待执行的迁移）
+	migrationManager := database.NewMigrationManager(db, database.MigrationConfig{
+		MigrationsPath: "./migrations",
+		UseEmbed:       false,
+	})
+
+	if err := migrationManager.AutoMigrate(); err != nil {
+		log.Fatal("Failed to run SQL migrations:", err)
+	}
+
+	// 初始化默认数据
 	if err := model.SeedDefaultData(db); err != nil {
 		log.Fatal("Failed to seed default data:", err)
 	}
