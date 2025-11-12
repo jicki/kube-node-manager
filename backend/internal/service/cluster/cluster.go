@@ -162,13 +162,25 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	// 同步集群信息
-	if err := s.syncClusterInfo(&cluster); err != nil {
-		s.logger.Warningf("Failed to sync cluster info for %s: %v", cluster.Name, err)
-		// 不返回错误，允许集群创建成功但需要后续同步
-	}
+	s.logger.Infof("Successfully created cluster: %s (client created, starting background sync)", cluster.Name)
+	
+	// 异步同步集群信息和广播（避免阻塞响应）
+	// 这样即使集群 API 不可达或响应慢，也不会影响用户体验
+	go func(c model.Cluster) {
+		// 同步集群信息
+		if err := s.syncClusterInfo(&c); err != nil {
+			s.logger.Warningf("Failed to sync cluster info for %s: %v", c.Name, err)
+			// 更新状态为需要同步
+			s.db.Model(&c).Update("status", model.ClusterStatusError)
+		} else {
+			s.logger.Infof("Successfully synced cluster info for: %s", c.Name)
+		}
 
-	s.logger.Infof("Successfully created cluster: %s", cluster.Name)
+		// 广播集群创建事件到所有实例
+		s.BroadcastClusterCreation(c.Name)
+	}(cluster)
+
+	// 立即记录审计日志并返回（不等待同步完成）
 	s.auditSvc.Log(audit.LogRequest{
 		UserID:       userID,
 		ClusterID:    &cluster.ID,
@@ -177,9 +189,6 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 		Details:      fmt.Sprintf("Created cluster %s", cluster.Name),
 		Status:       model.AuditStatusSuccess,
 	})
-
-	// 广播集群创建事件到所有实例（异步执行，不阻塞响应）
-	go s.BroadcastClusterCreation(cluster.Name)
 
 	return &cluster, nil
 }
