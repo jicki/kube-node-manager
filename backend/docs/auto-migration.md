@@ -275,11 +275,56 @@ Migration directory ./migrations does not exist, skipping migration
 - SQLite：建议单实例部署，或使用 init container 预先执行迁移
 - 推荐做法：使用 Kubernetes Job 或 init container 在应用启动前执行迁移
 
+## Docker 部署
+
+### 镜像说明
+
+从当前版本开始，Docker 镜像已包含 `migrations/` 目录，无需额外挂载迁移文件。
+
+**镜像结构**：
+```
+/app/
+  ├── main                    # 主程序二进制文件
+  ├── VERSION                 # 版本信息
+  ├── migrations/             # 数据库迁移文件（已内置）
+  │   ├── 001_xxx.sql
+  │   └── 021_xxx.sql
+  └── data/                   # 数据目录
+```
+
+### 运行容器
+
+```bash
+# 使用 PostgreSQL
+docker run -d \
+  --name kube-node-manager \
+  -p 8080:8080 \
+  -e DATABASE_TYPE=postgres \
+  -e DATABASE_HOST=postgres \
+  -e DATABASE_PORT=5432 \
+  -e DATABASE_NAME=kube_node_manager \
+  -e DATABASE_USERNAME=postgres \
+  -e DATABASE_PASSWORD=password \
+  kube-node-manager:latest
+```
+
+**启动日志**：
+```
+Found migrations directory at: ./migrations  ← 自动检测到迁移文件
+Starting database migration check...
+Found 21 pending migration(s) to execute
+...
+All migrations executed successfully
+Server starting on port 8080
+```
+
+> 📖 详细的 Docker 部署说明请参考：[Docker 镜像自动迁移支持](../../../docs/docker-migration-support.md)
+
 ## Kubernetes 部署建议
 
 ### 方案 1：应用启动时自动迁移（推荐）
 
-直接启动应用，迁移会自动执行：
+直接启动应用，迁移会自动执行（镜像中已包含迁移文件）：
 
 ```yaml
 apiVersion: apps/v1
@@ -294,6 +339,7 @@ spec:
       - name: app
         image: kube-node-manager:latest
         # 应用会在启动时自动执行迁移
+        # 迁移文件已内置在镜像中的 /app/migrations
 ```
 
 ### 方案 2：使用 Init Container

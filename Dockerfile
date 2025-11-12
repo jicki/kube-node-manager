@@ -68,6 +68,9 @@ WORKDIR /app
 # 复制构建的二进制文件
 COPY --from=backend-builder /app/main .
 
+# 复制数据库迁移文件
+COPY --from=backend-builder /app/migrations ./migrations
+
 # 复制VERSION文件
 COPY VERSION .
 

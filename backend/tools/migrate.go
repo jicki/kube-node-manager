@@ -37,8 +37,10 @@ func main() {
 	}
 
 	// 创建迁移管理器
+	// 智能检测迁移目录位置
+	migrationsPath := detectMigrationsPath()
 	migrationManager := database.NewMigrationManager(db, database.MigrationConfig{
-		MigrationsPath: "./migrations",
+		MigrationsPath: migrationsPath,
 		UseEmbed:       false,
 	})
 
@@ -118,4 +120,27 @@ func main() {
 		fmt.Println("Available commands: migrate, up, status")
 		os.Exit(1)
 	}
+}
+
+// detectMigrationsPath 智能检测迁移文件目录位置
+func detectMigrationsPath() string {
+	// 尝试的路径列表（按优先级排序）
+	possiblePaths := []string{
+		"./migrations",                    // 当前目录下的 migrations
+		"./backend/migrations",            // 项目根目录下的 backend/migrations
+		"../migrations",                   // 父目录下的 migrations
+		"/app/migrations",                 // 容器中的绝对路径
+		"/app/backend/migrations",         // 容器中的另一个可能路径
+	}
+
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			log.Printf("Found migrations directory at: %s", path)
+			return path
+		}
+	}
+
+	// 如果都找不到，返回默认路径（让迁移管理器处理）
+	log.Println("Warning: migrations directory not found, using default path: ./migrations")
+	return "./migrations"
 }
