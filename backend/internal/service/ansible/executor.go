@@ -280,17 +280,6 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 		e.logger.Warningf("Task %d exceeded timeout limit (%d seconds)", task.ID, task.TimeoutSeconds)
 	}
 
-	// 解析执行结果
-	success := err == nil
-	var errorMsg string
-	if err != nil {
-		if isTimedOut {
-			errorMsg = fmt.Sprintf("任务执行超时（超过 %d 秒）", task.TimeoutSeconds)
-		} else {
-		errorMsg = err.Error()
-		}
-	}
-
 	// 先保存完整日志到任务（必须在 parseTaskStats 之前）
 	runningTask.LogMutex.Lock()
 	task.FullLog = runningTask.LogBuffer.String()
@@ -299,6 +288,21 @@ func (e *TaskExecutor) executeTaskAsync(ctx context.Context, task *model.Ansible
 
 	// 再解析统计信息（从 task.FullLog 中）
 	e.parseTaskStats(task)
+
+	// 解析执行结果 - 基于实际的主机执行结果判断成功与否
+	// 只有当没有超时且没有主机失败时，任务才算成功
+	success := !isTimedOut && task.HostsFailed == 0
+	var errorMsg string
+	
+	if isTimedOut {
+		errorMsg = fmt.Sprintf("任务执行超时（超过 %d 秒）", task.TimeoutSeconds)
+	} else if task.HostsFailed > 0 {
+		errorMsg = fmt.Sprintf("有 %d 个主机执行失败", task.HostsFailed)
+	} else if err != nil {
+		// 即使有错误，如果所有主机都成功了，仍然认为任务成功
+		// 但记录警告信息
+		e.logger.Warningf("Task %d: ansible command returned error but all hosts succeeded: %v", task.ID, err)
+	}
 
 	// 添加完成事件
 	var phase model.ExecutionPhase
@@ -936,48 +940,55 @@ func (e *TaskExecutor) parseTaskStats(task *model.AnsibleTask) {
 		return
 	}
 
+	// 主机总数 = RECAP中的主机数量（清单中的主机数）
+	hostsTotal := len(matches)
+	hostsOk := 0      // 成功的主机数量
+	hostsFailed := 0  // 失败的主机数量
+	hostsSkipped := 0 // 完全跳过的主机数量（所有任务都跳过）
+	
+	// 任务级别的统计（仅用于日志）
 	totalOk := 0
 	totalFailed := 0
 	totalSkipped := 0
 	totalUnreachable := 0
-	hostsTotal := len(matches)
 
+	// 遍历每个主机，统计主机级别的成功/失败
 	for _, match := range matches {
 		if len(match) >= 7 {
+			hostname := match[1]
 			ok, _ := strconv.Atoi(match[2])
 			unreachable, _ := strconv.Atoi(match[4])
 			failed, _ := strconv.Atoi(match[5])
 			skipped, _ := strconv.Atoi(match[6])
 
+			// 累加任务级别的统计
 			totalOk += ok
 			totalFailed += failed
 			totalSkipped += skipped
 			totalUnreachable += unreachable
-		}
-	}
-
-	// 成功的主机数 = 总主机数 - 失败主机数 - 不可达主机数
-	hostsOk := hostsTotal
-	hostsFailed := 0
-	
-	// 如果有任何 failed 或 unreachable 的任务，该主机被视为失败
-	for _, match := range matches {
-		if len(match) >= 7 {
-			unreachable, _ := strconv.Atoi(match[4])
-			failed, _ := strconv.Atoi(match[5])
 			
+			// 判断主机级别的状态
+			// 如果主机有任何 failed 或 unreachable 的任务，该主机被视为失败
 			if unreachable > 0 || failed > 0 {
 				hostsFailed++
-				hostsOk--
+				e.logger.Infof("Task %d: Host %s marked as failed (unreachable=%d, failed=%d)", 
+					task.ID, hostname, unreachable, failed)
+			} else if ok > 0 {
+				// 有成功的任务且没有失败的任务，主机成功
+				hostsOk++
+			} else if skipped > 0 && ok == 0 {
+				// 所有任务都被跳过
+				hostsSkipped++
+				e.logger.Infof("Task %d: Host %s skipped all tasks", task.ID, hostname)
 			}
 		}
 	}
 
-	e.logger.Infof("Task %d stats parsed: total=%d, ok=%d, failed=%d, skipped=%d", 
-		task.ID, hostsTotal, hostsOk, hostsFailed, totalSkipped)
+	e.logger.Infof("Task %d stats parsed - Hosts: total=%d, ok=%d, failed=%d, skipped=%d | Tasks: total_ok=%d, total_failed=%d", 
+		task.ID, hostsTotal, hostsOk, hostsFailed, hostsSkipped, totalOk, totalFailed)
 
-	// 更新任务统计
-	task.UpdateStats(hostsTotal, hostsOk, hostsFailed, totalSkipped)
+	// 更新任务统计 - 使用主机级别的统计，而不是任务级别的统计
+	task.UpdateStats(hostsTotal, hostsOk, hostsFailed, hostsSkipped)
 }
 
 // handleTaskError 处理任务错误
