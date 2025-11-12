@@ -1,6 +1,6 @@
 -- +migrate Up
 -- 创建标签表
-CREATE TABLE ansible_tags (
+CREATE TABLE IF NOT EXISTS ansible_tags (
     id SERIAL PRIMARY KEY,
     name VARCHAR(50) NOT NULL UNIQUE,
     color VARCHAR(20) DEFAULT '#409EFF',
@@ -12,11 +12,11 @@ CREATE TABLE ansible_tags (
 );
 
 -- 为标签表创建索引
-CREATE INDEX idx_ansible_tags_user_id ON ansible_tags (user_id);
-CREATE INDEX idx_ansible_tags_deleted_at ON ansible_tags (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_ansible_tags_user_id ON ansible_tags (user_id);
+CREATE INDEX IF NOT EXISTS idx_ansible_tags_deleted_at ON ansible_tags (deleted_at);
 
 -- 创建任务标签关联表
-CREATE TABLE ansible_task_tags (
+CREATE TABLE IF NOT EXISTS ansible_task_tags (
     task_id INTEGER NOT NULL,
     tag_id INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -26,8 +26,8 @@ CREATE TABLE ansible_task_tags (
 );
 
 -- 为关联表创建索引
-CREATE INDEX idx_ansible_task_tags_task_id ON ansible_task_tags (task_id);
-CREATE INDEX idx_ansible_task_tags_tag_id ON ansible_task_tags (tag_id);
+CREATE INDEX IF NOT EXISTS idx_ansible_task_tags_task_id ON ansible_task_tags (task_id);
+CREATE INDEX IF NOT EXISTS idx_ansible_task_tags_tag_id ON ansible_task_tags (tag_id);
 
 -- +migrate Down
 -- 删除关联表

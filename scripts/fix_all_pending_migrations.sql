@@ -13,6 +13,7 @@
 -- - 013_add_preflight_checks.sql
 -- - 014_add_task_timeout.sql
 -- - 015_add_task_priority.sql
+-- - 016_add_task_tags.sql
 -- - 017_add_execution_timeline.sql
 -- - 019_add_workflow_dag.sql
 
