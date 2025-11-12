@@ -133,17 +133,17 @@ DROP INDEX IF EXISTS idx_ansible_ssh_keys_name;
 
 -- 为 ansible_inventories 添加支持软删除的唯一索引
 -- 只对未删除的记录生效
-CREATE UNIQUE INDEX idx_ansible_inventories_name_active 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ansible_inventories_name_active 
 ON ansible_inventories(name) 
 WHERE deleted_at IS NULL;
 
 -- 为 ansible_templates 添加支持软删除的唯一索引
-CREATE UNIQUE INDEX idx_ansible_templates_name_active 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ansible_templates_name_active 
 ON ansible_templates(name) 
 WHERE deleted_at IS NULL;
 
 -- 为 ansible_ssh_keys 添加支持软删除的唯一索引
-CREATE UNIQUE INDEX idx_ansible_ssh_keys_name_active 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ansible_ssh_keys_name_active 
 ON ansible_ssh_keys(name) 
 WHERE deleted_at IS NULL;
 
