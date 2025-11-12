@@ -40,10 +40,10 @@ ON node_anomalies(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_user_time 
 ON audit_logs(user_id, created_at DESC);
 
--- 复合索引：集群名称 + 操作类型 + 创建时间
+-- 复合索引：集群ID + 操作类型 + 创建时间
 -- 优化场景：按集群和操作类型筛选审计日志
 CREATE INDEX IF NOT EXISTS idx_audit_cluster_action_time 
-ON audit_logs(cluster_name, action, created_at DESC);
+ON audit_logs(cluster_id, action, created_at DESC);
 
 -- 复合索引：资源类型 + 资源名称 + 创建时间
 -- 优化场景：查询特定资源的操作历史
@@ -81,16 +81,12 @@ CREATE INDEX IF NOT EXISTS idx_users_email
 ON users(email);
 
 -- ====================================================
--- 5. Feishu消息相关索引优化
+-- 5. Feishu 相关索引优化
 -- ====================================================
 
--- 复合索引：消息类型 + 创建时间
-CREATE INDEX IF NOT EXISTS idx_feishu_messages_type_time 
-ON feishu_messages(message_type, created_at DESC);
-
--- 复合索引：会话ID + 创建时间
-CREATE INDEX IF NOT EXISTS idx_feishu_messages_session_time 
-ON feishu_sessions(session_id, created_at DESC);
+-- 复合索引：Feishu用户会话 - 用户ID + 更新时间
+CREATE INDEX IF NOT EXISTS idx_feishu_user_sessions_user_time 
+ON feishu_user_sessions(feishu_user_id, updated_at DESC);
 
 -- ====================================================
 -- 6. 异常报告配置索引优化
@@ -157,8 +153,7 @@ WHERE enabled = true;
 -- DROP INDEX IF EXISTS idx_clusters_status;
 -- DROP INDEX IF EXISTS idx_users_username;
 -- DROP INDEX IF EXISTS idx_users_email;
--- DROP INDEX IF EXISTS idx_feishu_messages_type_time;
--- DROP INDEX IF EXISTS idx_feishu_messages_session_time;
+-- DROP INDEX IF EXISTS idx_feishu_user_sessions_user_time;
 -- DROP INDEX IF EXISTS idx_anomaly_report_enabled;
 -- DROP INDEX IF EXISTS idx_anomaly_report_next_run;
 
