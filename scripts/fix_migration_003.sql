@@ -2,7 +2,8 @@
 -- 
 -- 原因：
 -- 1. 使用了错误的列名 cluster_name（应该是 cluster_id）
--- 2. 引用了不存在的表 feishu_messages 和 feishu_sessions
+-- 2. 使用了错误的列名 resource_name（应该是 node_name）
+-- 3. 引用了不存在的表 feishu_messages 和 feishu_sessions
 -- 
 -- 解决方案：
 -- 1. 从 schema_migrations 表删除失败的迁移记录

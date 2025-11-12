@@ -45,10 +45,10 @@ ON audit_logs(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_cluster_action_time 
 ON audit_logs(cluster_id, action, created_at DESC);
 
--- 复合索引：资源类型 + 资源名称 + 创建时间
+-- 复合索引：资源类型 + 节点名称 + 创建时间
 -- 优化场景：查询特定资源的操作历史
 CREATE INDEX IF NOT EXISTS idx_audit_resource_time 
-ON audit_logs(resource_type, resource_name, created_at DESC);
+ON audit_logs(resource_type, node_name, created_at DESC);
 
 -- 部分索引：重要操作（仅索引更新类操作）
 -- 优化场景：快速查询修改类操作
