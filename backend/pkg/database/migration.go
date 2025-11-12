@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"gorm.io/gorm"
 )
@@ -248,8 +249,8 @@ func (m *MigrationManager) executeSQLStatements(db *sql.DB, sqlContent string) e
 
 	sqlContent = strings.Join(cleanedLines, "\n")
 
-	// 按分号分割SQL语句（简单处理）
-	statements := strings.Split(sqlContent, ";")
+	// 智能分割SQL语句（支持 PostgreSQL 的 $$ 语法）
+	statements := m.splitSQLStatements(sqlContent)
 
 	for _, stmt := range statements {
 		stmt = strings.TrimSpace(stmt)
@@ -264,6 +265,75 @@ func (m *MigrationManager) executeSQLStatements(db *sql.DB, sqlContent string) e
 	}
 
 	return nil
+}
+
+// splitSQLStatements 智能分割SQL语句，支持 PostgreSQL 的 dollar-quoted strings
+func (m *MigrationManager) splitSQLStatements(sqlContent string) []string {
+	var statements []string
+	var currentStmt strings.Builder
+	inDollarQuote := false
+	dollarTag := ""
+
+	runes := []rune(sqlContent)
+	i := 0
+
+	for i < len(runes) {
+		// 检查是否是 dollar quote 标记
+		if runes[i] == '$' {
+			// 提取 dollar tag (包括前后的 $)
+			tag := string(runes[i]) // 开始的 $
+			j := i + 1
+			
+			// 读取 tag 内容（字母、数字、下划线）
+			for j < len(runes) && (unicode.IsLetter(runes[j]) || unicode.IsDigit(runes[j]) || runes[j] == '_') {
+				tag += string(runes[j])
+				j++
+			}
+			
+			// 必须以 $ 结束才是有效的 dollar quote
+			if j < len(runes) && runes[j] == '$' {
+				tag += string(runes[j]) // 结束的 $
+				
+				if !inDollarQuote {
+					// 进入 dollar quote
+					inDollarQuote = true
+					dollarTag = tag
+					currentStmt.WriteString(tag)
+					i = j + 1
+					continue
+				} else if tag == dollarTag {
+					// 退出 dollar quote
+					inDollarQuote = false
+					currentStmt.WriteString(tag)
+					dollarTag = ""
+					i = j + 1
+					continue
+				}
+			}
+		}
+
+		// 如果不在 dollar quote 中，检查分号
+		if !inDollarQuote && runes[i] == ';' {
+			stmt := strings.TrimSpace(currentStmt.String())
+			if stmt != "" {
+				statements = append(statements, stmt)
+			}
+			currentStmt.Reset()
+			i++
+			continue
+		}
+
+		currentStmt.WriteRune(runes[i])
+		i++
+	}
+
+	// 添加最后一个语句（如果有）
+	stmt := strings.TrimSpace(currentStmt.String())
+	if stmt != "" {
+		statements = append(statements, stmt)
+	}
+
+	return statements
 }
 
 // GetStatus 获取迁移状态
