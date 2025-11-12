@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -587,6 +588,56 @@ func (h *Handler) CheckStatus(c *gin.Context) {
 		Data: map[string]interface{}{
 			"cluster_name": clusterName,
 			"status":       "healthy",
+		},
+	})
+}
+
+// ReloadCluster 重新加载集群（内部API，用于多实例同步）
+// @Summary 重新加载集群
+// @Description 内部API：重新加载单个集群的Kubernetes客户端（用于多实例广播）
+// @Tags internal
+// @Produce json
+// @Param cluster_name path string true "集群名称"
+// @Success 200 {object} Response
+// @Failure 400 {object} Response
+// @Failure 404 {object} Response
+// @Failure 500 {object} Response
+// @Router /internal/clusters/{cluster_name}/reload [post]
+func (h *Handler) ReloadCluster(c *gin.Context) {
+	clusterName := c.Param("cluster_name")
+	if clusterName == "" {
+		c.JSON(http.StatusBadRequest, Response{
+			Code:    http.StatusBadRequest,
+			Message: "cluster_name is required",
+		})
+		return
+	}
+
+	h.logger.Infof("Received cluster reload request for: %s", clusterName)
+
+	if err := h.clusterSvc.ReloadCluster(clusterName); err != nil {
+		h.logger.Error("Failed to reload cluster %s: %v", clusterName, err)
+		
+		if err.Error() == fmt.Sprintf("cluster not found: %s", clusterName) {
+			c.JSON(http.StatusNotFound, Response{
+				Code:    http.StatusNotFound,
+				Message: "Cluster not found: " + clusterName,
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, Response{
+				Code:    http.StatusInternalServerError,
+				Message: "Failed to reload cluster: " + err.Error(),
+			})
+		}
+		return
+	}
+
+	h.logger.Infof("Successfully reloaded cluster: %s", clusterName)
+	c.JSON(http.StatusOK, Response{
+		Code:    http.StatusOK,
+		Message: "Cluster reloaded successfully",
+		Data: map[string]interface{}{
+			"cluster_name": clusterName,
 		},
 	})
 }

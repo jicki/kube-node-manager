@@ -468,6 +468,14 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 
 	// Ansible WebSocket (任务日志流) - 需要认证
 	protected.GET("/ansible/tasks/:id/ws", handlers.AnsibleWebSocket.HandleTaskLogStream)
+
+	// 内部 API 路由（用于实例间通信，不需要认证）
+	// 注意：在生产环境中，应该通过网络策略限制只有内部服务可以访问这些端点
+	internal := api.Group("/internal")
+	{
+		// 集群重载端点（用于多实例广播）
+		internal.POST("/clusters/:cluster_name/reload", handlers.Cluster.ReloadCluster)
+	}
 }
 
 // gracefulShutdown 优雅关闭服务器

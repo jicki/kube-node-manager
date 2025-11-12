@@ -6,8 +6,8 @@ metadata:
   labels:
     app: kube-node-mgr
 spec:
-  serviceName: kube-node-mgr
-  replicas: 1
+  serviceName: kube-node-mgr-headless  # 使用 Headless Service
+  replicas: 4  # 多实例部署（可根据需要调整）
   selector:
     matchLabels:
       app: kube-node-mgr
@@ -25,6 +25,19 @@ spec:
         - containerPort: 8080
           name: http
         env:
+        # 多实例广播配置（用于集群创建同步）
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: POD_PORT
+          value: "8080"
+        - name: SERVICE_NAME
+          value: "kube-node-mgr-headless"
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         # 应用基础配置
         - name: PORT
           value: "8080"

@@ -6,6 +6,9 @@ import (
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/pkg/logger"
+	"net"
+	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -150,13 +153,20 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 	}
 
 	// 创建Kubernetes客户端
+	// 注意：在多实例部署中，每个实例都需要独立创建 client
 	if err := s.k8sSvc.CreateClient(cluster.Name, cluster.KubeConfig); err != nil {
 		s.logger.Errorf("Failed to create k8s client for cluster %s: %v", cluster.Name, err)
-		// 不返回错误，但记录日志
+		// 更新集群状态为错误
+		s.db.Model(&cluster).Update("status", model.ClusterStatusError)
+		// 返回错误，让前端知道集群创建失败
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
 	// 同步集群信息
-	s.syncClusterInfo(&cluster)
+	if err := s.syncClusterInfo(&cluster); err != nil {
+		s.logger.Warningf("Failed to sync cluster info for %s: %v", cluster.Name, err)
+		// 不返回错误，允许集群创建成功但需要后续同步
+	}
 
 	s.logger.Infof("Successfully created cluster: %s", cluster.Name)
 	s.auditSvc.Log(audit.LogRequest{
@@ -167,6 +177,9 @@ func (s *Service) Create(req CreateRequest, userID uint) (*model.Cluster, error)
 		Details:      fmt.Sprintf("Created cluster %s", cluster.Name),
 		Status:       model.AuditStatusSuccess,
 	})
+
+	// 广播集群创建事件到所有实例（异步执行，不阻塞响应）
+	go s.BroadcastClusterCreation(cluster.Name)
 
 	return &cluster, nil
 }
@@ -765,6 +778,154 @@ func (s *Service) GetNodes(id uint, userID uint) ([]k8s.NodeInfo, error) {
 	// 如果需要审计，可以在具体的节点操作中记录
 
 	return nodes, nil
+}
+
+// ReloadCluster 重新加载单个集群（用于多实例同步）
+func (s *Service) ReloadCluster(clusterName string) error {
+	var cluster model.Cluster
+	if err := s.db.Where("name = ?", clusterName).First(&cluster).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("cluster not found: %s", clusterName)
+		}
+		return fmt.Errorf("failed to get cluster: %w", err)
+	}
+
+	// 检查是否已存在客户端，如果存在则先移除
+	s.k8sSvc.RemoveClient(cluster.Name)
+
+	// 创建新客户端
+	if err := s.k8sSvc.CreateClient(cluster.Name, cluster.KubeConfig); err != nil {
+		s.logger.Error("Failed to reload k8s client for cluster %s: %v", cluster.Name, err)
+		return fmt.Errorf("failed to reload kubernetes client: %w", err)
+	}
+
+	s.logger.Info("Successfully reloaded cluster: %s", cluster.Name)
+	return nil
+}
+
+// BroadcastClusterCreation 广播集群创建事件到所有实例
+func (s *Service) BroadcastClusterCreation(clusterName string) {
+	// 获取所有实例的地址
+	instances := s.getAllInstances()
+	if len(instances) == 0 {
+		s.logger.Warning("No other instances found for broadcasting cluster creation")
+		return
+	}
+
+	s.logger.Info("Broadcasting cluster %s creation to %d instances", clusterName, len(instances))
+
+	// 使用并行请求，提高效率
+	var wg sync.WaitGroup
+	for _, instance := range instances {
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+
+			url := fmt.Sprintf("http://%s/api/v1/internal/clusters/%s/reload", addr, clusterName)
+			
+			// 创建带超时的 HTTP 客户端
+			client := &http.Client{
+				Timeout: 5 * time.Second,
+			}
+
+			req, err := http.NewRequest("POST", url, nil)
+			if err != nil {
+				s.logger.Warning("Failed to create reload request for %s: %v", addr, err)
+				return
+			}
+
+			resp, err := client.Do(req)
+			if err != nil {
+				s.logger.Warning("Failed to broadcast to %s: %v", addr, err)
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode == http.StatusOK {
+				s.logger.Info("Successfully broadcasted cluster %s to instance %s", clusterName, addr)
+			} else {
+				s.logger.Warning("Failed to broadcast to %s, status code: %d", addr, resp.StatusCode)
+			}
+		}(instance)
+	}
+
+	// 等待所有广播完成
+	wg.Wait()
+	s.logger.Info("Completed broadcasting cluster %s creation", clusterName)
+}
+
+// getAllInstances 获取所有实例的地址（IP:PORT）
+func (s *Service) getAllInstances() []string {
+	var instances []string
+
+	// 方法1: 从环境变量获取（适用于 Kubernetes Headless Service）
+	// 格式: POD_IPS=10.10.12.95,10.10.12.96,10.10.12.97,10.10.12.98
+	if podIPs := os.Getenv("POD_IPS"); podIPs != "" {
+		ips := strings.Split(podIPs, ",")
+		port := os.Getenv("POD_PORT")
+		if port == "" {
+			port = "8080" // 默认端口
+		}
+		for _, ip := range ips {
+			instances = append(instances, strings.TrimSpace(ip)+":"+port)
+		}
+		s.logger.Info("Found %d instances from POD_IPS environment variable", len(instances))
+		return instances
+	}
+
+	// 方法2: 从环境变量获取完整地址列表
+	// 格式: INSTANCE_ADDRESSES=10.10.12.95:8080,10.10.12.96:8080
+	if addrs := os.Getenv("INSTANCE_ADDRESSES"); addrs != "" {
+		instances = strings.Split(addrs, ",")
+		for i := range instances {
+			instances[i] = strings.TrimSpace(instances[i])
+		}
+		s.logger.Info("Found %d instances from INSTANCE_ADDRESSES environment variable", len(instances))
+		return instances
+	}
+
+	// 方法3: 使用 Kubernetes Service 进行服务发现
+	// 这需要在 Kubernetes 环境中运行，并且需要配置 Headless Service
+	serviceName := os.Getenv("SERVICE_NAME")
+	namespace := os.Getenv("POD_NAMESPACE")
+	if serviceName != "" && namespace != "" {
+		instances = s.discoverInstancesFromK8s(serviceName, namespace)
+		if len(instances) > 0 {
+			s.logger.Info("Found %d instances from Kubernetes service discovery", len(instances))
+			return instances
+		}
+	}
+
+	s.logger.Warning("No instance discovery method configured, cluster reload will not be broadcasted")
+	return instances
+}
+
+// discoverInstancesFromK8s 从 Kubernetes API 发现实例
+func (s *Service) discoverInstancesFromK8s(serviceName, namespace string) []string {
+	var instances []string
+
+	// 尝试通过 DNS 解析 Headless Service
+	// 格式: <service-name>.<namespace>.svc.cluster.local
+	fqdn := fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace)
+	
+	ips, err := net.LookupIP(fqdn)
+	if err != nil {
+		s.logger.Warning("Failed to lookup service %s: %v", fqdn, err)
+		return instances
+	}
+
+	port := os.Getenv("POD_PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	for _, ip := range ips {
+		if ip.To4() != nil { // 只使用 IPv4
+			instances = append(instances, ip.String()+":"+port)
+		}
+	}
+
+	return instances
 }
 
 // initializeExistingClients 初始化已存在的集群客户端连接
