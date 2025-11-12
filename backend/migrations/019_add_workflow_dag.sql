@@ -12,9 +12,9 @@ CREATE TABLE IF NOT EXISTS ansible_workflows (
     CONSTRAINT fk_ansible_workflows_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_ansible_workflows_user_id ON ansible_workflows(user_id);
-CREATE INDEX idx_ansible_workflows_deleted_at ON ansible_workflows(deleted_at);
-CREATE INDEX idx_ansible_workflows_name ON ansible_workflows(name);
+CREATE INDEX IF NOT EXISTS idx_ansible_workflows_user_id ON ansible_workflows(user_id);
+CREATE INDEX IF NOT EXISTS idx_ansible_workflows_deleted_at ON ansible_workflows(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_ansible_workflows_name ON ansible_workflows(name);
 
 -- 工作流执行记录表
 CREATE TABLE IF NOT EXISTS ansible_workflow_executions (
@@ -31,20 +31,29 @@ CREATE TABLE IF NOT EXISTS ansible_workflow_executions (
     CONSTRAINT fk_ansible_workflow_executions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_ansible_workflow_executions_workflow_id ON ansible_workflow_executions(workflow_id);
-CREATE INDEX idx_ansible_workflow_executions_user_id ON ansible_workflow_executions(user_id);
-CREATE INDEX idx_ansible_workflow_executions_status ON ansible_workflow_executions(status);
+CREATE INDEX IF NOT EXISTS idx_ansible_workflow_executions_workflow_id ON ansible_workflow_executions(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_ansible_workflow_executions_user_id ON ansible_workflow_executions(user_id);
+CREATE INDEX IF NOT EXISTS idx_ansible_workflow_executions_status ON ansible_workflow_executions(status);
 
 -- 修改 ansible_tasks 表，添加工作流关联字段
-ALTER TABLE ansible_tasks ADD COLUMN workflow_execution_id INTEGER;
-ALTER TABLE ansible_tasks ADD COLUMN depends_on JSONB;
-ALTER TABLE ansible_tasks ADD COLUMN node_id VARCHAR(50);
+ALTER TABLE ansible_tasks ADD COLUMN IF NOT EXISTS workflow_execution_id INTEGER;
+ALTER TABLE ansible_tasks ADD COLUMN IF NOT EXISTS depends_on JSONB;
+ALTER TABLE ansible_tasks ADD COLUMN IF NOT EXISTS node_id VARCHAR(50);
 
-ALTER TABLE ansible_tasks ADD CONSTRAINT fk_ansible_tasks_workflow_execution 
-    FOREIGN KEY (workflow_execution_id) REFERENCES ansible_workflow_executions(id) ON DELETE SET NULL;
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_ansible_tasks_workflow_execution' 
+        AND table_name = 'ansible_tasks'
+    ) THEN
+        ALTER TABLE ansible_tasks ADD CONSTRAINT fk_ansible_tasks_workflow_execution 
+            FOREIGN KEY (workflow_execution_id) REFERENCES ansible_workflow_executions(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
-CREATE INDEX idx_ansible_tasks_workflow_execution_id ON ansible_tasks(workflow_execution_id);
-CREATE INDEX idx_ansible_tasks_node_id ON ansible_tasks(node_id);
+CREATE INDEX IF NOT EXISTS idx_ansible_tasks_workflow_execution_id ON ansible_tasks(workflow_execution_id);
+CREATE INDEX IF NOT EXISTS idx_ansible_tasks_node_id ON ansible_tasks(node_id);
 
 -- +migrate Down
 -- 移除 ansible_tasks 表的工作流关联字段
