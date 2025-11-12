@@ -75,6 +75,9 @@ func NewService(db *gorm.DB, logger *logger.Logger, auditSvc *audit.Service, k8s
 	// 初始化已存在的集群客户端连接
 	service.initializeExistingClients()
 
+	// 启动定期同步检查（每5分钟检查一次是否有未加载的集群）
+	go service.startPeriodicSyncCheck()
+
 	return service
 }
 
@@ -812,7 +815,7 @@ func (s *Service) ReloadCluster(clusterName string) error {
 	return nil
 }
 
-// BroadcastClusterCreation 广播集群创建事件到所有实例
+// BroadcastClusterCreation 广播集群创建事件到所有实例（带重试机制）
 func (s *Service) BroadcastClusterCreation(clusterName string) {
 	// 获取所有实例的地址
 	instances := s.getAllInstances()
@@ -825,47 +828,90 @@ func (s *Service) BroadcastClusterCreation(clusterName string) {
 
 	// 使用并行请求，提高效率
 	var wg sync.WaitGroup
+	successCount := 0
+	failedInstances := make([]string, 0)
+	var mu sync.Mutex
+	
 	for _, instance := range instances {
 		wg.Add(1)
 		go func(addr string) {
 			defer wg.Done()
 
-			url := fmt.Sprintf("http://%s/api/v1/internal/clusters/%s/reload", addr, clusterName)
+			// 带重试的广播（最多重试3次）
+			success := false
+			var lastErr error
 			
-			// 创建带超时的 HTTP 客户端
-			client := &http.Client{
-				Timeout: 5 * time.Second,
-			}
+			for retry := 0; retry < 3; retry++ {
+				if retry > 0 {
+					// 重试前等待递增延迟（指数退避）
+					backoff := time.Duration(retry) * 2 * time.Second
+					s.logger.Info("Retrying broadcast to %s (attempt %d/3) after %v", addr, retry+1, backoff)
+					time.Sleep(backoff)
+				}
+				
+				url := fmt.Sprintf("http://%s/api/v1/internal/clusters/%s/reload", addr, clusterName)
+				
+				// 创建带超时的 HTTP 客户端
+				client := &http.Client{
+					Timeout: 10 * time.Second, // 增加超时时间
+				}
 
-			req, err := http.NewRequest("POST", url, nil)
-			if err != nil {
-				s.logger.Warning("Failed to create reload request for %s: %v", addr, err)
-				return
-			}
+				req, err := http.NewRequest("POST", url, nil)
+				if err != nil {
+					lastErr = err
+					s.logger.Warning("Failed to create reload request for %s: %v", addr, err)
+					continue
+				}
 
-			resp, err := client.Do(req)
-			if err != nil {
-				s.logger.Warning("Failed to broadcast to %s: %v", addr, err)
-				return
-			}
-			defer resp.Body.Close()
+				resp, err := client.Do(req)
+				if err != nil {
+					lastErr = err
+					s.logger.Warning("Failed to broadcast to %s (attempt %d/3): %v", addr, retry+1, err)
+					continue
+				}
+				defer resp.Body.Close()
 
-			if resp.StatusCode == http.StatusOK {
-				s.logger.Info("Successfully broadcasted cluster %s to instance %s", clusterName, addr)
-			} else {
-				s.logger.Warning("Failed to broadcast to %s, status code: %d", addr, resp.StatusCode)
+				if resp.StatusCode == http.StatusOK {
+					s.logger.Info("Successfully broadcasted cluster %s to instance %s", clusterName, addr)
+					mu.Lock()
+					successCount++
+					mu.Unlock()
+					success = true
+					break
+				} else {
+					lastErr = fmt.Errorf("status code: %d", resp.StatusCode)
+					s.logger.Warning("Failed to broadcast to %s (attempt %d/3), status code: %d", addr, retry+1, resp.StatusCode)
+				}
+			}
+			
+			if !success {
+				s.logger.Error("Failed to broadcast cluster %s to %s after 3 attempts: %v", clusterName, addr, lastErr)
+				mu.Lock()
+				failedInstances = append(failedInstances, addr)
+				mu.Unlock()
 			}
 		}(instance)
 	}
 
 	// 等待所有广播完成
 	wg.Wait()
-	s.logger.Info("Completed broadcasting cluster %s creation", clusterName)
+	
+	// 输出广播结果摘要
+	if len(failedInstances) > 0 {
+		s.logger.Error("Broadcast completed for cluster %s: %d succeeded, %d failed. Failed instances: %v", 
+			clusterName, successCount, len(failedInstances), failedInstances)
+		s.logger.Warning("Some instances may not have the cluster %s loaded. You may need to restart them or manually trigger reload.", clusterName)
+	} else {
+		s.logger.Info("Successfully broadcasted cluster %s to all %d instances", clusterName, successCount)
+	}
 }
 
-// getAllInstances 获取所有实例的地址（IP:PORT）
+// getAllInstances 获取所有实例的地址（IP:PORT），排除当前实例
 func (s *Service) getAllInstances() []string {
-	var instances []string
+	var allInstances []string
+	
+	// 获取当前实例的 IP 地址
+	currentPodIP := os.Getenv("POD_IP")
 
 	// 方法1: 从环境变量获取（适用于 Kubernetes Headless Service）
 	// 格式: POD_IPS=10.10.12.95,10.10.12.96,10.10.12.97,10.10.12.98
@@ -876,21 +922,37 @@ func (s *Service) getAllInstances() []string {
 			port = "8080" // 默认端口
 		}
 		for _, ip := range ips {
-			instances = append(instances, strings.TrimSpace(ip)+":"+port)
+			ip = strings.TrimSpace(ip)
+			// 排除当前实例自己
+			if ip != currentPodIP && ip != "" {
+				allInstances = append(allInstances, ip+":"+port)
+			}
 		}
-		s.logger.Info("Found %d instances from POD_IPS environment variable", len(instances))
-		return instances
+		s.logger.Info("Found %d other instances from POD_IPS (current: %s, total: %d)", 
+			len(allInstances), currentPodIP, len(ips))
+		return allInstances
 	}
 
 	// 方法2: 从环境变量获取完整地址列表
 	// 格式: INSTANCE_ADDRESSES=10.10.12.95:8080,10.10.12.96:8080
 	if addrs := os.Getenv("INSTANCE_ADDRESSES"); addrs != "" {
-		instances = strings.Split(addrs, ",")
-		for i := range instances {
-			instances[i] = strings.TrimSpace(instances[i])
+		port := os.Getenv("POD_PORT")
+		if port == "" {
+			port = "8080"
 		}
-		s.logger.Info("Found %d instances from INSTANCE_ADDRESSES environment variable", len(instances))
-		return instances
+		currentAddr := currentPodIP + ":" + port
+		
+		addresses := strings.Split(addrs, ",")
+		for _, addr := range addresses {
+			addr = strings.TrimSpace(addr)
+			// 排除当前实例自己
+			if addr != currentAddr && addr != "" {
+				allInstances = append(allInstances, addr)
+			}
+		}
+		s.logger.Info("Found %d other instances from INSTANCE_ADDRESSES (current: %s, total: %d)", 
+			len(allInstances), currentAddr, len(addresses))
+		return allInstances
 	}
 
 	// 方法3: 使用 Kubernetes Service 进行服务发现
@@ -898,15 +960,33 @@ func (s *Service) getAllInstances() []string {
 	serviceName := os.Getenv("SERVICE_NAME")
 	namespace := os.Getenv("POD_NAMESPACE")
 	if serviceName != "" && namespace != "" {
-		instances = s.discoverInstancesFromK8s(serviceName, namespace)
-		if len(instances) > 0 {
-			s.logger.Info("Found %d instances from Kubernetes service discovery", len(instances))
-			return instances
+		allInstances = s.discoverInstancesFromK8s(serviceName, namespace)
+		// 从发现的实例中排除当前实例
+		if currentPodIP != "" {
+			port := os.Getenv("POD_PORT")
+			if port == "" {
+				port = "8080"
+			}
+			currentAddr := currentPodIP + ":" + port
+			
+			var otherInstances []string
+			for _, addr := range allInstances {
+				if addr != currentAddr {
+					otherInstances = append(otherInstances, addr)
+				}
+			}
+			allInstances = otherInstances
+		}
+		
+		if len(allInstances) > 0 {
+			s.logger.Info("Found %d other instances from Kubernetes service discovery (current: %s)", 
+				len(allInstances), currentPodIP)
+			return allInstances
 		}
 	}
 
 	s.logger.Warning("No instance discovery method configured, cluster reload will not be broadcasted")
-	return instances
+	return allInstances
 }
 
 // discoverInstancesFromK8s 从 Kubernetes API 发现实例
@@ -1000,4 +1080,57 @@ func (s *Service) initializeExistingClients() {
 	// 等待所有初始化完成
 	wg.Wait()
 	s.logger.Info("Completed initializing all cluster connections")
+}
+
+// startPeriodicSyncCheck 启动定期同步检查，确保所有集群都已加载
+// 这个机制可以防止由于广播失败导致的集群未同步问题
+func (s *Service) startPeriodicSyncCheck() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	s.logger.Info("Started periodic sync check (every 5 minutes)")
+
+	for range ticker.C {
+		s.logger.Info("Running periodic sync check for clusters...")
+		
+		// 获取数据库中所有active状态的集群
+		var dbClusters []model.Cluster
+		if err := s.db.Where("status = ?", model.ClusterStatusActive).Find(&dbClusters).Error; err != nil {
+			s.logger.Error("Failed to load clusters from database for sync check: %v", err)
+			continue
+		}
+
+		// 获取当前已加载的集群列表
+		loadedClusters := s.k8sSvc.GetLoadedClusters()
+		loadedMap := make(map[string]bool)
+		for _, name := range loadedClusters {
+			loadedMap[name] = true
+		}
+
+		// 检查是否有未加载的集群
+		unloadedClusters := make([]model.Cluster, 0)
+		for _, cluster := range dbClusters {
+			if !loadedMap[cluster.Name] {
+				unloadedClusters = append(unloadedClusters, cluster)
+			}
+		}
+
+		if len(unloadedClusters) > 0 {
+			s.logger.Warning("Found %d unloaded clusters, attempting to load them...", len(unloadedClusters))
+			
+			// 尝试加载未同步的集群
+			for _, cluster := range unloadedClusters {
+				s.logger.Info("Loading unsynced cluster: %s", cluster.Name)
+				if err := s.k8sSvc.CreateClient(cluster.Name, cluster.KubeConfig); err != nil {
+					s.logger.Error("Failed to load cluster %s during sync check: %v", cluster.Name, err)
+					// 更新状态为错误
+					s.db.Model(&cluster).Update("status", model.ClusterStatusError)
+				} else {
+					s.logger.Info("Successfully loaded unsynced cluster: %s", cluster.Name)
+				}
+			}
+		} else {
+			s.logger.Info("All clusters are in sync (%d clusters loaded)", len(loadedClusters))
+		}
+	}
 }

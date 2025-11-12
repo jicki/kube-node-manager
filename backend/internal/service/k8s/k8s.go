@@ -267,6 +267,13 @@ func (s *Service) getAvailableClusterNames() []string {
 	return names
 }
 
+// GetLoadedClusters 获取当前已加载的集群列表（公开方法，用于同步检查）
+func (s *Service) GetLoadedClusters() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.getAvailableClusterNames()
+}
+
 // GetClusterInfo 获取集群信息
 func (s *Service) GetClusterInfo(clusterName string) (*ClusterInfo, error) {
 	client, err := s.getClient(clusterName)
