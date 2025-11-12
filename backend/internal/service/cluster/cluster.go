@@ -373,9 +373,47 @@ func (s *Service) Delete(id uint, userID uint) error {
 		return fmt.Errorf("failed to get cluster: %w", err)
 	}
 
-	// 删除数据库记录
-	if err := s.db.Delete(&cluster).Error; err != nil {
-		s.logger.Error("Failed to delete cluster %s: %v", cluster.Name, err)
+	// 在事务中删除集群及相关记录
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. 解除审计日志的集群关联（保留审计记录）
+		// 注意：数据库层面已配置 ON DELETE SET NULL，这里是双保险
+		if err := tx.Model(&model.AuditLog{}).
+			Where("cluster_id = ?", cluster.ID).
+			Update("cluster_id", nil).Error; err != nil {
+			s.logger.Error("Failed to unlink audit logs for cluster %s: %v", cluster.Name, err)
+			return fmt.Errorf("failed to unlink audit logs: %w", err)
+		}
+		s.logger.Info("Unlinked audit logs for cluster %s", cluster.Name)
+
+		// 2. 删除节点异常记录
+		// 注意：数据库层面已配置 ON DELETE CASCADE，这里是双保险
+		if err := tx.Where("cluster_id = ?", cluster.ID).
+			Delete(&model.NodeAnomaly{}).Error; err != nil {
+			s.logger.Error("Failed to delete node anomalies for cluster %s: %v", cluster.Name, err)
+			return fmt.Errorf("failed to delete node anomalies: %w", err)
+		}
+		s.logger.Info("Deleted node anomalies for cluster %s", cluster.Name)
+
+		// 3. 解除 Ansible 清单的集群关联
+		// 注意：数据库层面已配置 ON DELETE SET NULL（在 004 迁移中）
+		if err := tx.Model(&model.AnsibleInventory{}).
+			Where("cluster_id = ?", cluster.ID).
+			Update("cluster_id", nil).Error; err != nil {
+			s.logger.Error("Failed to unlink ansible inventories for cluster %s: %v", cluster.Name, err)
+			return fmt.Errorf("failed to unlink ansible inventories: %w", err)
+		}
+		s.logger.Info("Unlinked ansible inventories for cluster %s", cluster.Name)
+
+		// 4. 最后删除集群记录（软删除）
+		if err := tx.Delete(&cluster).Error; err != nil {
+			s.logger.Error("Failed to delete cluster %s: %v", cluster.Name, err)
+			return fmt.Errorf("failed to delete cluster: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		s.auditSvc.Log(audit.LogRequest{
 			UserID:       userID,
 			ClusterID:    &cluster.ID,
@@ -385,7 +423,7 @@ func (s *Service) Delete(id uint, userID uint) error {
 			Status:       model.AuditStatusFailed,
 			ErrorMsg:     err.Error(),
 		})
-		return fmt.Errorf("failed to delete cluster: %w", err)
+		return err
 	}
 
 	// 移除Kubernetes客户端
