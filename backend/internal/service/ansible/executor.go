@@ -154,7 +154,7 @@ func (e *TaskExecutor) ExecuteTask(taskID uint) error {
 		TaskID:      taskID,
 		Cancel:      cancel,
 		StartTime:   time.Now(),
-		LogChannel:  make(chan *model.AnsibleLog, 100),
+		LogChannel:  make(chan *model.AnsibleLog, 2000), // 增加到 2000（支持大规模主机，避免日志丢失）
 		LogBuffer:   &strings.Builder{},
 		LogSize:     0,
 		MaxLogSize:  10 * 1024 * 1024, // 10MB 日志大小限制
@@ -697,6 +697,12 @@ func (e *TaskExecutor) calculateBatchSize(task *model.AnsibleTask) int {
 // readOutput 读取命令输出
 func (e *TaskExecutor) readOutput(reader io.Reader, runningTask *RunningTask, logType model.AnsibleLogType) {
 	scanner := bufio.NewScanner(reader)
+	
+	// 增加 Scanner 缓冲区大小，支持超长行（默认 64KB，增加到 1MB）
+	// 避免在大规模主机输出时因行过长导致 Scanner 错误
+	buf := make([]byte, 0, 64*1024)           // 初始 64KB
+	scanner.Buffer(buf, 1024*1024)            // 最大 1MB
+	
 	lineNumber := 1
 
 	for scanner.Scan() {
@@ -715,10 +721,19 @@ func (e *TaskExecutor) readOutput(reader io.Reader, runningTask *RunningTask, lo
 		}
 
 		// 发送到日志通道
+		// 优先尝试非阻塞发送，失败则带超时阻塞发送，避免日志丢失
 		select {
 		case runningTask.LogChannel <- log:
+			// 成功发送
 		default:
-			e.logger.Warningf("Log channel full for task %d, dropping log line", runningTask.TaskID)
+			// 通道满，使用带超时的阻塞发送（等待 5 秒）
+			select {
+			case runningTask.LogChannel <- log:
+				// 成功发送
+			case <-time.After(5 * time.Second):
+				// 超时，日志丢弃（极端情况）
+				e.logger.Warningf("Log channel full for task %d, timeout waiting, dropping log line", runningTask.TaskID)
+			}
 		}
 
 		lineNumber++
