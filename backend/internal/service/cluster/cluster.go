@@ -72,8 +72,12 @@ func NewService(db *gorm.DB, logger *logger.Logger, auditSvc *audit.Service, k8s
 		healthChecker: NewHealthChecker(), // 初始化健康检查器
 	}
 
-	// 初始化已存在的集群客户端连接
-	service.initializeExistingClients()
+	// 异步初始化已存在的集群客户端连接（不阻塞服务启动）
+	// 这样即使有集群连接超时，也不会影响 HTTP 服务器启动和健康检查端点
+	go func() {
+		service.logger.Info("Starting asynchronous cluster initialization...")
+		service.initializeExistingClients()
+	}()
 
 	// 启动定期同步检查（每5分钟检查一次是否有未加载的集群）
 	go service.startPeriodicSyncCheck()
