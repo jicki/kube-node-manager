@@ -56,24 +56,26 @@ type PodEventHandler interface {
 
 // Service Informer 服务
 type Service struct {
-	logger      *logger.Logger
-	informers   map[string]informers.SharedInformerFactory // cluster -> informer
-	stoppers    map[string]chan struct{}                   // cluster -> stop channel
-	clients     map[string]*kubernetes.Clientset           // cluster -> clientset (用于自动清理操作)
-	handlers    []NodeEventHandler                         // 节点事件处理器列表
-	podHandlers []PodEventHandler                          // Pod 事件处理器列表
-	mu          sync.RWMutex
+	logger         *logger.Logger
+	informers      map[string]informers.SharedInformerFactory // cluster -> informer
+	stoppers       map[string]chan struct{}                   // cluster -> stop channel
+	clients        map[string]*kubernetes.Clientset           // cluster -> clientset (用于自动清理操作)
+	handlers       []NodeEventHandler                         // 节点事件处理器列表
+	podHandlers    []PodEventHandler                          // Pod 事件处理器列表
+	podInformers   map[string]cache.SharedIndexInformer       // cluster -> pod informer (用于检查同步状态)
+	mu             sync.RWMutex
 }
 
 // NewService 创建 Informer 服务
 func NewService(logger *logger.Logger) *Service {
 	return &Service{
-		logger:      logger,
-		informers:   make(map[string]informers.SharedInformerFactory),
-		stoppers:    make(map[string]chan struct{}),
-		clients:     make(map[string]*kubernetes.Clientset),
-		handlers:    make([]NodeEventHandler, 0),
-		podHandlers: make([]PodEventHandler, 0),
+		logger:       logger,
+		informers:    make(map[string]informers.SharedInformerFactory),
+		stoppers:     make(map[string]chan struct{}),
+		clients:      make(map[string]*kubernetes.Clientset),
+		handlers:     make([]NodeEventHandler, 0),
+		podHandlers:  make([]PodEventHandler, 0),
+		podInformers: make(map[string]cache.SharedIndexInformer),
 	}
 }
 
@@ -163,6 +165,7 @@ func (s *Service) StopInformer(clusterName string) {
 		delete(s.informers, clusterName)
 		delete(s.stoppers, clusterName)
 		delete(s.clients, clusterName)
+		delete(s.podInformers, clusterName)
 		s.logger.Infof("Stopped Informer for cluster: %s", clusterName)
 	}
 }
@@ -180,6 +183,7 @@ func (s *Service) StopAll() {
 	s.informers = make(map[string]informers.SharedInformerFactory)
 	s.stoppers = make(map[string]chan struct{})
 	s.clients = make(map[string]*kubernetes.Clientset)
+	s.podInformers = make(map[string]cache.SharedIndexInformer)
 	s.logger.Info("Stopped all Informers")
 }
 
@@ -408,10 +412,20 @@ func (s *Service) GetInformerStatus() map[string]bool {
 func (s *Service) GetPodsFromCache(clusterName, nodeName string) ([]*corev1.Pod, error) {
 	s.mu.RLock()
 	factory, exists := s.informers[clusterName]
+	podInformer, podInformerExists := s.podInformers[clusterName]
 	s.mu.RUnlock()
 
 	if !exists {
-		return nil, fmt.Errorf("informer not started for cluster %s", clusterName)
+		return nil, fmt.Errorf("node informer not started for cluster %s", clusterName)
+	}
+
+	if !podInformerExists {
+		return nil, fmt.Errorf("pod informer not started for cluster %s", clusterName)
+	}
+
+	// 检查 Pod Informer 是否已完成初始同步
+	if !podInformer.HasSynced() {
+		return nil, fmt.Errorf("pod informer not synced yet for cluster %s", clusterName)
 	}
 
 	// 获取 Pod Lister（从缓存读取，不调用 API）
@@ -439,10 +453,20 @@ func (s *Service) GetPodsFromCache(clusterName, nodeName string) ([]*corev1.Pod,
 func (s *Service) GetAllPodsFromCache(clusterName string) ([]*corev1.Pod, error) {
 	s.mu.RLock()
 	factory, exists := s.informers[clusterName]
+	podInformer, podInformerExists := s.podInformers[clusterName]
 	s.mu.RUnlock()
 
 	if !exists {
-		return nil, fmt.Errorf("informer not started for cluster %s", clusterName)
+		return nil, fmt.Errorf("node informer not started for cluster %s", clusterName)
+	}
+
+	if !podInformerExists {
+		return nil, fmt.Errorf("pod informer not started for cluster %s", clusterName)
+	}
+
+	// 检查 Pod Informer 是否已完成初始同步
+	if !podInformer.HasSynced() {
+		return nil, fmt.Errorf("pod informer not synced yet for cluster %s", clusterName)
 	}
 
 	// 获取 Pod Lister（从缓存读取，不调用 API）
@@ -499,6 +523,9 @@ func (s *Service) StartPodInformer(clusterName string) error {
 	if !cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced) {
 		return fmt.Errorf("failed to sync pod cache for cluster %s within 120s (cluster may have too many pods)", clusterName)
 	}
+
+	// 保存 Pod Informer 引用，用于后续检查同步状态
+	s.podInformers[clusterName] = podInformer
 
 	s.logger.Infof("Successfully started Pod Informer for cluster: %s", clusterName)
 
