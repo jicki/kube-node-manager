@@ -462,6 +462,39 @@ func (h *Handler) RefreshTaskStatus(c *gin.Context) {
 	})
 }
 
+// ReparseTaskStats 重新解析任务统计信息
+// @Summary 重新解析任务统计信息（修复旧任务的 RECAP 解析错误）
+// @Tags Ansible
+// @Accept json
+// @Produce json
+// @Param id path int true "任务ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/ansible/tasks/{id}/reparse [post]
+func (h *Handler) ReparseTaskStats(c *gin.Context) {
+	if !checkAdminPermission(c) {
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	task, err := h.service.ReparseTaskStats(uint(id))
+	if err != nil {
+		h.logger.Errorf("Failed to reparse task stats: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    200,
+		"message": "任务统计信息已重新解析",
+		"data":    task,
+	})
+}
+
 // GetStatistics 获取统计信息
 // @Summary 获取统计信息
 // @Tags Ansible

@@ -284,9 +284,18 @@
                   已执行 {{ getExecutedHosts(row) }}/{{ row.hosts_total }} 台
                   <el-tooltip 
                     effect="dark" 
-                    content="Playbook 使用了主机筛选，未执行完 Inventory 中的所有主机" 
                     placement="top"
                   >
+                    <template #content>
+                      <div style="max-width: 300px">
+                        <div>实际执行数与 Inventory 总数不一致</div>
+                        <div style="margin-top: 5px; font-size: 12px; opacity: 0.8">
+                          可能原因：<br/>
+                          1. Playbook 使用了 hosts 筛选条件（如 limit、tags）<br/>
+                          2. 部分主机不可达或 SSH 连接失败
+                        </div>
+                      </div>
+                    </template>
                     <el-icon style="margin-left: 4px; color: #E6A23C; cursor: help">
                       <QuestionFilled />
                     </el-icon>
@@ -724,9 +733,23 @@
                   (已执行 {{ getExecutedHosts(currentTask) }}/{{ currentTask.hosts_total }} 台)
                   <el-tooltip 
                     effect="dark" 
-                    content="Inventory 共 {{ currentTask.hosts_total }} 台主机，但 Playbook 使用了筛选条件，实际只执行了 {{ getExecutedHosts(currentTask) }} 台" 
                     placement="top"
                   >
+                    <template #content>
+                      <div style="max-width: 350px">
+                        <div><strong>实际执行数与 Inventory 总数不一致</strong></div>
+                        <div style="margin-top: 8px">
+                          Inventory 共 {{ currentTask.hosts_total }} 台主机，<br/>
+                          实际执行了 {{ getExecutedHosts(currentTask) }} 台
+                        </div>
+                        <div style="margin-top: 8px; font-size: 12px; opacity: 0.8; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px">
+                          <div style="margin-bottom: 3px"><strong>可能原因：</strong></div>
+                          <div>1. Playbook 使用了 hosts 筛选（如 --limit）</div>
+                          <div>2. 使用了 tags 或 when 条件跳过部分主机</div>
+                          <div>3. 部分主机 SSH 连接失败或不可达</div>
+                        </div>
+                      </div>
+                    </template>
                     <el-icon style="margin-left: 4px; cursor: help">
                       <QuestionFilled />
                     </el-icon>

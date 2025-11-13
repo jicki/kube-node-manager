@@ -624,6 +624,18 @@ func (s *Service) GetTaskStatus(taskID uint) (map[string]interface{}, error) {
 	return status, nil
 }
 
+// ReparseTaskStats 重新解析任务统计信息
+// 用于修复旧任务因 RECAP 解析 bug 导致的统计错误
+func (s *Service) ReparseTaskStats(taskID uint) (*model.AnsibleTask, error) {
+	// 调用 executor 重新解析
+	if err := s.executor.ReparseTaskStats(taskID); err != nil {
+		return nil, err
+	}
+
+	// 返回更新后的任务
+	return s.GetTask(taskID)
+}
+
 // GetStatistics 获取统计信息
 func (s *Service) GetStatistics(userID uint) (map[string]interface{}, error) {
 	stats := make(map[string]interface{})

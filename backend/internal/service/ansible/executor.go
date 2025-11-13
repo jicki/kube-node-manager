@@ -1054,3 +1054,34 @@ func (e *TaskExecutor) Cleanup() {
 	}
 }
 
+// ReparseTaskStats 重新解析已完成任务的统计信息
+// 用于修复旧任务因 RECAP 解析 bug 导致的统计错误
+func (e *TaskExecutor) ReparseTaskStats(taskID uint) error {
+	// 获取任务
+	var task model.AnsibleTask
+	if err := e.db.First(&task, taskID).Error; err != nil {
+		return fmt.Errorf("task not found: %w", err)
+	}
+
+	// 只重新解析已完成的任务
+	if task.Status != model.AnsibleTaskStatusSuccess && task.Status != model.AnsibleTaskStatusFailed {
+		return fmt.Errorf("can only reparse completed tasks, current status: %s", task.Status)
+	}
+
+	e.logger.Infof("Reparsing task %d stats (old: ok=%d, failed=%d, total=%d)", 
+		task.ID, task.HostsOk, task.HostsFailed, task.HostsTotal)
+
+	// 调用现有的 parseTaskStats 方法（使用修复后的逻辑）
+	e.parseTaskStats(&task)
+
+	// 保存更新后的统计信息
+	if err := e.db.Save(&task).Error; err != nil {
+		return fmt.Errorf("failed to save task: %w", err)
+	}
+
+	e.logger.Infof("Task %d stats reparsed successfully (new: ok=%d, failed=%d, total=%d)", 
+		task.ID, task.HostsOk, task.HostsFailed, task.HostsTotal)
+
+	return nil
+}
+

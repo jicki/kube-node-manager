@@ -384,6 +384,7 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		ansible.GET("/tasks/:id/preflight-checks", handlers.Ansible.GetPreflightChecks)
 		ansible.GET("/tasks/:id/logs", handlers.Ansible.GetTaskLogs)
 		ansible.POST("/tasks/:id/refresh", handlers.Ansible.RefreshTaskStatus)
+		ansible.POST("/tasks/:id/reparse", handlers.Ansible.ReparseTaskStats)
 
 		// 统计信息
 		ansible.GET("/statistics", handlers.Ansible.GetStatistics)
