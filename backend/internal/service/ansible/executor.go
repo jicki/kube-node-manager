@@ -915,12 +915,17 @@ func (e *TaskExecutor) parseTaskStats(task *model.AnsibleTask) {
 			continue
 		}
 
-		if inRecap && strings.TrimSpace(line) != "" {
-			// 检查是否还在 RECAP 部分（通常 RECAP 后面会有空行或新的部分）
-			if strings.HasPrefix(line, "TASK") || strings.HasPrefix(line, "PLAY") {
+		if inRecap {
+			trimmedLine := strings.TrimSpace(line)
+			// 如果遇到新的 PLAY 或 TASK 标记，停止读取
+			if strings.HasPrefix(trimmedLine, "PLAY [") || strings.HasPrefix(trimmedLine, "TASK [") {
 				break
 			}
-			recapBuffer.WriteString(line + "\n")
+			// 只要还在 RECAP 部分，就继续读取（包括空行）
+			// 因为主机列表可能很长，中间可能有空行
+			if trimmedLine != "" {
+				recapBuffer.WriteString(line + "\n")
+			}
 		}
 	}
 
