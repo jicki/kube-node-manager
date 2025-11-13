@@ -940,8 +940,8 @@ func (e *TaskExecutor) parseTaskStats(task *model.AnsibleTask) {
 		return
 	}
 
-	// 主机总数 = RECAP中的主机数量（清单中的主机数）
-	hostsTotal := len(matches)
+	// 实际执行的主机数量（从 RECAP 中统计）
+	hostsExecuted := len(matches)
 	hostsOk := 0      // 成功的主机数量
 	hostsFailed := 0  // 失败的主机数量
 	hostsSkipped := 0 // 完全跳过的主机数量（所有任务都跳过）
@@ -984,11 +984,18 @@ func (e *TaskExecutor) parseTaskStats(task *model.AnsibleTask) {
 		}
 	}
 
-	e.logger.Infof("Task %d stats parsed - Hosts: total=%d, ok=%d, failed=%d, skipped=%d | Tasks: total_ok=%d, total_failed=%d", 
-		task.ID, hostsTotal, hostsOk, hostsFailed, hostsSkipped, totalOk, totalFailed)
+	// 保留原始的 HostsTotal（从 Inventory 统计的主机总数）
+	// 如果原始值为 0（老任务或未设置），则使用实际执行的主机数
+	originalHostsTotal := task.HostsTotal
+	if originalHostsTotal == 0 {
+		originalHostsTotal = hostsExecuted
+	}
 
-	// 更新任务统计 - 使用主机级别的统计，而不是任务级别的统计
-	task.UpdateStats(hostsTotal, hostsOk, hostsFailed, hostsSkipped)
+	e.logger.Infof("Task %d stats parsed - Inventory hosts: %d, Executed hosts: %d (ok=%d, failed=%d, skipped=%d) | Tasks: total_ok=%d, total_failed=%d", 
+		task.ID, originalHostsTotal, hostsExecuted, hostsOk, hostsFailed, hostsSkipped, totalOk, totalFailed)
+
+	// 更新任务统计 - 保留原始的 HostsTotal（Inventory 中的主机总数），只更新执行结果统计
+	task.UpdateStats(originalHostsTotal, hostsOk, hostsFailed, hostsSkipped)
 }
 
 // handleTaskError 处理任务错误

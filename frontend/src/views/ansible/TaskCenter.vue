@@ -255,7 +255,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="进度" width="200">
+        <el-table-column label="进度" width="220">
           <template #default="{ row }">
             <div v-if="row.status === 'running'">
               <el-progress 
@@ -271,7 +271,20 @@
               </div>
             </div>
             <div v-else-if="row.status === 'success' || row.status === 'failed'">
-              {{ row.hosts_ok }}/{{ row.hosts_total }} 成功
+              <div>
+                <span :style="{ color: row.hosts_failed > 0 ? '#F56C6C' : '#67C23A' }">
+                  成功: {{ row.hosts_ok }}
+                </span>
+                <span v-if="row.hosts_failed > 0" style="color: #F56C6C; margin-left: 8px">
+                  失败: {{ row.hosts_failed }}
+                </span>
+              </div>
+              <div style="font-size: 12px; color: #909399; margin-top: 2px">
+                共 {{ row.hosts_total }} 台
+                <span v-if="getExecutedHosts(row) !== row.hosts_total" style="color: #E6A23C">
+                  (执行 {{ getExecutedHosts(row) }} 台)
+                </span>
+              </div>
               <div v-if="row.batch_config && row.batch_config.enabled" style="font-size: 12px; color: #909399">
                 (分{{ row.total_batches }}批执行)
               </div>
@@ -692,7 +705,16 @@
               </span>
               <span v-if="currentTask?.hosts_total" style="color: #909399; font-size: 13px">
                 <el-icon><Monitor /></el-icon>
-                主机: {{ currentTask.hosts_ok }}/{{ currentTask.hosts_total }}
+                主机: 成功 {{ currentTask.hosts_ok }}
+                <span v-if="currentTask.hosts_failed > 0" style="color: #F56C6C">
+                  / 失败 {{ currentTask.hosts_failed }}
+                </span>
+                <span v-if="getExecutedHosts(currentTask) !== currentTask.hosts_total" style="color: #E6A23C">
+                  (执行 {{ getExecutedHosts(currentTask) }}/{{ currentTask.hosts_total }})
+                </span>
+                <span v-else>
+                  / 共 {{ currentTask.hosts_total }}
+                </span>
               </span>
             </div>
           </div>
@@ -1691,6 +1713,11 @@ const getStatusText = (status) => {
 const calculateProgress = (task) => {
   if (task.hosts_total === 0) return 0
   return Math.round((task.hosts_ok + task.hosts_failed) / task.hosts_total * 100)
+}
+
+// 计算实际执行的主机数
+const getExecutedHosts = (task) => {
+  return (task.hosts_ok || 0) + (task.hosts_failed || 0) + (task.hosts_skipped || 0)
 }
 
 const formatDate = (dateStr) => {

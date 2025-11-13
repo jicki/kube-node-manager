@@ -7,6 +7,118 @@
 
 ---
 
+## [v2.30.10] - 2025-11-13
+
+### 🐛 问题修复 - Ansible 任务主机数统计不一致
+
+#### 问题描述
+
+**现象**：
+- Ansible 任务创建时显示主机清单有 222 台主机
+- 任务执行完成后显示 109/109 成功
+- 主机列表数量（222）与实际运行主机数量（109）不一致
+
+**根本原因**：
+1. 创建任务时，从 Inventory 文件统计主机总数并保存到 `HostsTotal` 字段（222台）
+2. 任务执行完成后，从 Ansible RECAP 解析实际执行的主机数（109台）
+3. `parseTaskStats` 方法用 RECAP 的主机数覆盖了 Inventory 的主机总数
+
+**为什么实际执行主机数少于 Inventory 主机数？**
+- Ansible playbook 使用了 `--limit` 参数限制执行范围
+- Playbook 中使用了 `hosts` 筛选条件
+- 部分主机在执行前被条件排除（when 条件）
+
+#### 修复内容
+
+**1. 后端修改** (`backend/internal/service/ansible/executor.go`)
+
+```go
+// 修改前：用 RECAP 的主机数覆盖 HostsTotal
+hostsTotal := len(matches)  // 从 RECAP 解析：109
+task.UpdateStats(hostsTotal, hostsOk, hostsFailed, hostsSkipped)
+
+// 修改后：保留原始的 HostsTotal
+originalHostsTotal := task.HostsTotal  // 保持 Inventory 的值：222
+if originalHostsTotal == 0 {
+    originalHostsTotal = hostsExecuted  // 兼容老任务
+}
+task.UpdateStats(originalHostsTotal, hostsOk, hostsFailed, hostsSkipped)
+```
+
+**修复要点**：
+- ✅ 保留 `HostsTotal` 为 Inventory 中定义的主机总数（不变）
+- ✅ 实际执行主机数通过 `HostsOk + HostsFailed + HostsSkipped` 计算
+- ✅ 增强日志输出，区分 Inventory 主机数和实际执行主机数
+
+**2. 前端显示优化** (`frontend/src/views/ansible/TaskCenter.vue`)
+
+```vue
+<!-- 任务列表进度列 -->
+<div v-else-if="row.status === 'success' || row.status === 'failed'">
+  <div>
+    <span :style="{ color: row.hosts_failed > 0 ? '#F56C6C' : '#67C23A' }">
+      成功: {{ row.hosts_ok }}
+    </span>
+    <span v-if="row.hosts_failed > 0" style="color: #F56C6C; margin-left: 8px">
+      失败: {{ row.hosts_failed }}
+    </span>
+  </div>
+  <div style="font-size: 12px; color: #909399; margin-top: 2px">
+    共 {{ row.hosts_total }} 台
+    <span v-if="getExecutedHosts(row) !== row.hosts_total" style="color: #E6A23C">
+      (执行 {{ getExecutedHosts(row) }} 台)
+    </span>
+  </div>
+</div>
+```
+
+**显示逻辑**：
+- ✅ 明确显示成功/失败主机数
+- ✅ 当实际执行主机数 < Inventory 主机数时，用橙色高亮显示 "(执行 X 台)"
+- ✅ 任务详情页同步优化显示格式
+
+**3. 添加辅助方法**
+
+```javascript
+// 计算实际执行的主机数
+const getExecutedHosts = (task) => {
+  return (task.hosts_ok || 0) + (task.hosts_failed || 0) + (task.hosts_skipped || 0)
+}
+```
+
+#### 数据字段说明
+
+| 字段名 | 类型 | 说明 | 数据来源 |
+|--------|------|------|----------|
+| `HostsTotal` | int | Inventory 中定义的主机总数 | 创建任务时从 Inventory 文件统计 |
+| `HostsOk` | int | 成功执行的主机数 | 任务完成后从 Ansible RECAP 解析 |
+| `HostsFailed` | int | 执行失败的主机数 | 任务完成后从 Ansible RECAP 解析 |
+| `HostsSkipped` | int | 跳过执行的主机数 | 任务完成后从 Ansible RECAP 解析 |
+
+**实际执行主机数 = HostsOk + HostsFailed + HostsSkipped**
+
+#### 影响范围
+
+**已有任务数据**：
+- 修复前创建并完成的任务，其 `HostsTotal` 可能已被实际执行主机数覆盖
+- 历史数据保持不变，无法恢复原始的 Inventory 主机数
+
+**新创建的任务**：
+- 从修复后开始，所有新任务都将正确保存 Inventory 主机总数
+- 前端会智能显示 Inventory 主机数和实际执行主机数的差异
+
+#### 日志示例
+
+```
+Task 153 stats parsed - Inventory hosts: 222, Executed hosts: 109 (ok=109, failed=0, skipped=0) | Tasks: total_ok=327, total_failed=0
+```
+
+#### 相关文档
+
+- 📄 详细修复说明：`backend/docs/fix-hosts-count-mismatch.md`
+
+---
+
 ## [v2.30.9] - 2025-11-12
 
 ### 🐛 问题修复 - Ansible 任务状态和进度统计
