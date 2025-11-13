@@ -402,6 +402,61 @@ func (s *Service) GetInformerStatus() map[string]bool {
 	return status
 }
 
+// GetPodsFromCache 从 Informer 缓存中获取指定节点的 Pod 列表
+// 这个方法不会调用 API，直接从本地缓存读取
+// 如果 Pod Informer 未启动或未同步，返回 nil 和 error
+func (s *Service) GetPodsFromCache(clusterName, nodeName string) ([]*corev1.Pod, error) {
+	s.mu.RLock()
+	factory, exists := s.informers[clusterName]
+	s.mu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("informer not started for cluster %s", clusterName)
+	}
+
+	// 获取 Pod Lister（从缓存读取，不调用 API）
+	podLister := factory.Core().V1().Pods().Lister()
+
+	// 列出所有 namespace 的 Pods
+	pods, err := podLister.List(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods from cache: %w", err)
+	}
+
+	// 过滤出指定节点上的 Pod
+	var nodePods []*corev1.Pod
+	for _, pod := range pods {
+		if pod.Spec.NodeName == nodeName {
+			nodePods = append(nodePods, pod)
+		}
+	}
+
+	return nodePods, nil
+}
+
+// GetAllPodsFromCache 从 Informer 缓存中获取所有 Pod 列表
+// 用于批量计算多个节点的 Pod 数量
+func (s *Service) GetAllPodsFromCache(clusterName string) ([]*corev1.Pod, error) {
+	s.mu.RLock()
+	factory, exists := s.informers[clusterName]
+	s.mu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("informer not started for cluster %s", clusterName)
+	}
+
+	// 获取 Pod Lister（从缓存读取，不调用 API）
+	podLister := factory.Core().V1().Pods().Lister()
+
+	// 列出所有 Pod
+	pods, err := podLister.List(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods from cache: %w", err)
+	}
+
+	return pods, nil
+}
+
 // StartPodInformer 为指定集群启动 Pod Informer
 // 注意：必须在 StartInformer 之后调用，因为需要复用 SharedInformerFactory
 func (s *Service) StartPodInformer(clusterName string) error {

@@ -3,6 +3,7 @@ package podcache
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"kube-node-manager/internal/informer"
@@ -21,6 +22,13 @@ type PodCountCache struct {
 	// Pod 索引: "cluster:podUID" -> nodeName
 	// 用于处理 Pod 删除和迁移场景
 	podToNode sync.Map
+
+	// 集群同步状态: cluster -> bool (true=已同步完成)
+	clusterSynced sync.Map
+
+	// 日志限速器: cluster -> lastLogTime
+	// 避免频繁输出 "not ready" 日志
+	logThrottle sync.Map
 
 	logger *logger.Logger
 	mu     sync.RWMutex
@@ -214,8 +222,14 @@ func (pc *PodCountCache) InvalidateCluster(cluster string) {
 	pc.logger.Infof("Invalidated pod count cache for cluster: %s", cluster)
 }
 
-// IsReady 检查缓存是否就绪（至少有一些数据）
+// IsReady 检查缓存是否就绪（已完成初始同步）
 func (pc *PodCountCache) IsReady(cluster string) bool {
+	// 优先检查明确的同步状态标记
+	if synced, ok := pc.clusterSynced.Load(cluster); ok {
+		return synced.(bool)
+	}
+	
+	// 兼容性回退：检查是否有数据（旧逻辑）
 	prefix := cluster + ":"
 	ready := false
 
@@ -229,6 +243,32 @@ func (pc *PodCountCache) IsReady(cluster string) bool {
 	})
 
 	return ready
+}
+
+// MarkSynced 标记指定集群的缓存已完成初始同步
+// 应在 Pod Informer 完成首次同步后调用
+func (pc *PodCountCache) MarkSynced(cluster string) {
+	pc.clusterSynced.Store(cluster, true)
+	pc.logger.Infof("✓ PodCountCache synced for cluster: %s", cluster)
+}
+
+// ShouldLogNotReady 检查是否应该输出 "not ready" 日志（带限速）
+// 同一集群的日志最多每 60 秒输出一次
+func (pc *PodCountCache) ShouldLogNotReady(cluster string) bool {
+	now := time.Now()
+	key := "log:" + cluster
+	
+	// 检查上次日志时间
+	if lastLog, ok := pc.logThrottle.Load(key); ok {
+		lastTime := lastLog.(time.Time)
+		if now.Sub(lastTime) < 60*time.Second {
+			return false // 60秒内已输出过，跳过
+		}
+	}
+	
+	// 更新最后日志时间
+	pc.logThrottle.Store(key, now)
+	return true
 }
 
 // incrementPodCount 递增节点 Pod 计数（原子操作）

@@ -1535,8 +1535,8 @@ func (s *Service) formatMemory(bytes int64) string {
 
 // getNodePodCount 获取节点上运行的 Pod 数量（Non-terminated Pods）
 func (s *Service) getNodePodCount(clusterName, nodeName string) (int, error) {
-	// 优先使用 PodCountCache（O(1) 时间复杂度，无 API 调用）
-	// 这样可以大幅减少对 API Server 的压力
+	// 策略1：优先使用 PodCountCache（O(1) 时间复杂度，无 API 调用）
+	// 这是最快的方式，完全不需要访问 K8s API
 	if s.podCountCache != nil {
 		// 检查缓存是否就绪
 		if s.podCountCache.IsReady(clusterName) {
@@ -1544,18 +1544,49 @@ func (s *Service) getNodePodCount(clusterName, nodeName string) (int, error) {
 			// 缓存命中，直接返回
 			return count, nil
 		}
-		// 缓存未就绪，记录日志并回退到 API 调用
-		s.logger.Debugf("PodCountCache not ready for cluster %s, falling back to API call", clusterName)
 	}
 
-	// 回退方案：直接调用 API（仅在缓存未就绪时使用）
+	// 策略2：尝试从 Informer 本地缓存获取（无 API 调用，避免给 API Server 压力）
+	// 即使 PodCountCache 未就绪，Informer 可能已经有缓存数据了
+	if s.realtimeManager != nil {
+		// 使用类型断言访问 PodCacheProvider 接口
+		type PodCacheProvider interface {
+			GetPodsFromCache(clusterName, nodeName string) ([]*corev1.Pod, error)
+		}
+		if rtMgr, ok := s.realtimeManager.(PodCacheProvider); ok {
+			pods, err := rtMgr.GetPodsFromCache(clusterName, nodeName)
+			if err == nil {
+				// 从 Informer 缓存成功获取，统计非终止状态的 Pod
+				count := 0
+				for _, pod := range pods {
+					if pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
+						count++
+					}
+				}
+				// 使用限速日志，提示正在使用 Informer 缓存（首次）
+				if s.podCountCache != nil && s.podCountCache.ShouldLogNotReady(clusterName) {
+					s.logger.Infof("Using Informer cache for cluster %s (PodCountCache syncing)", clusterName)
+				}
+				return count, nil
+			}
+			// Informer 缓存获取失败，记录原因并继续降级
+			s.logger.Debugf("Failed to get pods from Informer cache: %v, falling back to API", err)
+		}
+	}
+
+	// 策略3：最后的回退方案 - 直接调用 K8s API
+	// ⚠️ 这会给 API Server 带来压力，应该尽量避免
+	// 只有在前两种方式都不可用时才使用
+	s.logger.Warningf("Both PodCountCache and Informer cache unavailable for cluster %s, falling back to API call (this may impact API Server performance)", clusterName)
+	
 	client, err := s.getClient(clusterName)
 	if err != nil {
 		return 0, err
 	}
 
-	// 针对大规模集群增加超时时间到 20 秒
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	// 针对大规模集群增加超时时间到 30 秒（从 20s 增加到 30s）
+	// 在 Pod Informer 同步期间，API Server 负载较高，需要更长的超时时间
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// 使用 FieldSelector 获取指定节点上的 Pods
@@ -1581,11 +1612,12 @@ func (s *Service) getNodePodCount(clusterName, nodeName string) (int, error) {
 
 // getNodesPodCounts 批量获取多个节点的 Pod 数量（优先使用缓存）
 // 优化策略：
-// v3: 优先使用 PodCountCache（O(n) 时间复杂度，无 API 调用）
+// v4: 优先使用 PodCountCache（O(n) 时间复杂度，无 API 调用）
+// v3: 使用 Informer 本地缓存（O(n) 时间复杂度，无 API 调用）⭐ 新增
 // v2: 使用分页查询优化（页面大小 1000，支持 partial data）
 // v1: 直接查询所有 Pod
 func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[string]int {
-	// 优先使用 PodCountCache（大幅减少 API Server 压力）
+	// 策略1：优先使用 PodCountCache（最快，实时更新）
 	if s.podCountCache != nil && s.podCountCache.IsReady(clusterName) {
 		podCounts := make(map[string]int)
 		for _, nodeName := range nodeNames {
@@ -1598,8 +1630,54 @@ func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[
 		return podCounts
 	}
 
-	// 缓存未就绪，回退到 API 查询
-	s.logger.Debugf("PodCountCache not ready for cluster %s, falling back to paginated API call", clusterName)
+	// 策略2：尝试从 Informer 本地缓存批量获取（避免 API 调用）
+	if s.realtimeManager != nil {
+		// 使用类型断言访问 PodCacheProvider 接口
+		type PodCacheProvider interface {
+			GetAllPodsFromCache(clusterName string) ([]*corev1.Pod, error)
+		}
+		if rtMgr, ok := s.realtimeManager.(PodCacheProvider); ok {
+			pods, err := rtMgr.GetAllPodsFromCache(clusterName)
+			if err == nil {
+				// 初始化计数器
+				podCounts := make(map[string]int)
+				nodeSet := make(map[string]bool)
+				for _, nodeName := range nodeNames {
+					podCounts[nodeName] = 0
+					nodeSet[nodeName] = true
+				}
+
+				// 统计每个节点的 Pod 数量
+				for _, pod := range pods {
+					nodeName := pod.Spec.NodeName
+					if nodeName == "" {
+						continue // 未调度的 Pod
+					}
+					// 只统计请求的节点
+					if !nodeSet[nodeName] {
+						continue
+					}
+					// 排除终止状态的 Pod
+					if pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
+						podCounts[nodeName]++
+					}
+				}
+
+				// 使用限速日志
+				if s.podCountCache != nil && s.podCountCache.ShouldLogNotReady(clusterName) {
+					s.logger.Infof("Using Informer cache for batch pod count in cluster %s: %d nodes (PodCountCache syncing)", 
+						clusterName, len(nodeNames))
+				}
+				return podCounts
+			}
+			// Informer 缓存获取失败，记录原因并继续降级
+			s.logger.Debugf("Failed to get pods from Informer cache: %v, falling back to API", err)
+		}
+	}
+
+	// 策略3：最后的回退方案 - 使用分页 API 查询
+	// ⚠️ 这会给 API Server 带来压力，应该尽量避免
+	s.logger.Warningf("Both PodCountCache and Informer cache unavailable for cluster %s, falling back to paginated API call (this may impact API Server performance)", clusterName)
 
 	client, err := s.getClient(clusterName)
 	if err != nil {

@@ -6,13 +6,15 @@ import (
 	"sync"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+
 	"kube-node-manager/internal/informer"
+	"kube-node-manager/internal/podcache"
 	"kube-node-manager/internal/smartcache"
 	"kube-node-manager/internal/websocket"
 	"kube-node-manager/pkg/logger"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 // Manager 实时同步管理器
@@ -21,6 +23,7 @@ type Manager struct {
 	informerSvc   *informer.Service
 	smartCache    *smartcache.SmartCache
 	wsHub         *websocket.Hub
+	podCountCache *podcache.PodCountCache // PodCountCache 引用，用于标记同步状态
 	logger        *logger.Logger
 	mu            sync.RWMutex
 	clusterClients map[string]*kubernetes.Clientset // cluster -> clientset
@@ -53,6 +56,12 @@ func NewManager(logger *logger.Logger) *Manager {
 func (m *Manager) RegisterPodEventHandler(handler informer.PodEventHandler) {
 	m.informerSvc.RegisterPodHandler(handler)
 	m.logger.Infof("Registered Pod event handler: %T", handler)
+	
+	// 保存 PodCountCache 的引用（用于后续标记同步状态）
+	if cache, ok := handler.(*podcache.PodCountCache); ok {
+		m.podCountCache = cache
+		m.logger.Info("PodCountCache reference saved in Manager")
+	}
 }
 
 // Start 启动管理器
@@ -105,6 +114,12 @@ func (m *Manager) RegisterCluster(clusterName string, clientset *kubernetes.Clie
 			m.logger.Infof("Pod count will fall back to API query mode for cluster %s", clusterName)
 		} else {
 			m.logger.Infof("✓ Pod Informer ready for cluster: %s", clusterName)
+			
+			// 标记 PodCountCache 已完成同步
+			// 这样后续的 Pod 计数查询就可以直接使用缓存，避免 API 调用
+			if m.podCountCache != nil {
+				m.podCountCache.MarkSynced(clusterName)
+			}
 		}
 	}()
 
@@ -127,6 +142,17 @@ func (m *Manager) UnregisterCluster(clusterName string) {
 // GetSmartCache 获取智能缓存
 func (m *Manager) GetSmartCache() *smartcache.SmartCache {
 	return m.smartCache
+}
+
+// GetPodsFromCache 从 Informer 缓存中获取指定节点的 Pod 列表
+// 不会调用 API，直接从本地缓存读取
+func (m *Manager) GetPodsFromCache(clusterName, nodeName string) ([]*corev1.Pod, error) {
+	return m.informerSvc.GetPodsFromCache(clusterName, nodeName)
+}
+
+// GetAllPodsFromCache 从 Informer 缓存中获取所有 Pod 列表
+func (m *Manager) GetAllPodsFromCache(clusterName string) ([]*corev1.Pod, error) {
+	return m.informerSvc.GetAllPodsFromCache(clusterName)
 }
 
 // GetWebSocketHub 获取 WebSocket Hub
