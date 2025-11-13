@@ -1535,6 +1535,20 @@ func (s *Service) formatMemory(bytes int64) string {
 
 // getNodePodCount 获取节点上运行的 Pod 数量（Non-terminated Pods）
 func (s *Service) getNodePodCount(clusterName, nodeName string) (int, error) {
+	// 优先使用 PodCountCache（O(1) 时间复杂度，无 API 调用）
+	// 这样可以大幅减少对 API Server 的压力
+	if s.podCountCache != nil {
+		// 检查缓存是否就绪
+		if s.podCountCache.IsReady(clusterName) {
+			count := s.podCountCache.GetNodePodCount(clusterName, nodeName)
+			// 缓存命中，直接返回
+			return count, nil
+		}
+		// 缓存未就绪，记录日志并回退到 API 调用
+		s.logger.Debugf("PodCountCache not ready for cluster %s, falling back to API call", clusterName)
+	}
+
+	// 回退方案：直接调用 API（仅在缓存未就绪时使用）
 	client, err := s.getClient(clusterName)
 	if err != nil {
 		return 0, err
@@ -1565,12 +1579,28 @@ func (s *Service) getNodePodCount(clusterName, nodeName string) (int, error) {
 	return nonTerminatedCount, nil
 }
 
-// getNodesPodCounts 批量获取多个节点的 Pod 数量（使用分页查询优化）
-// 大规模集群优化（v2）：
-// - 页面大小从 500 增加到 1000（减少请求次数）
-// - 单页超时从 30 秒增加到 60 秒（更宽松的超时策略）
-// - 支持 partial data 早期返回（遇到错误时返回已统计的部分结果）
+// getNodesPodCounts 批量获取多个节点的 Pod 数量（优先使用缓存）
+// 优化策略：
+// v3: 优先使用 PodCountCache（O(n) 时间复杂度，无 API 调用）
+// v2: 使用分页查询优化（页面大小 1000，支持 partial data）
+// v1: 直接查询所有 Pod
 func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[string]int {
+	// 优先使用 PodCountCache（大幅减少 API Server 压力）
+	if s.podCountCache != nil && s.podCountCache.IsReady(clusterName) {
+		podCounts := make(map[string]int)
+		for _, nodeName := range nodeNames {
+			count := s.podCountCache.GetNodePodCount(clusterName, nodeName)
+			podCounts[nodeName] = count
+		}
+		// 缓存命中，直接返回
+		s.logger.Debugf("Batch pod count retrieved from cache for cluster %s: %d nodes", 
+			clusterName, len(nodeNames))
+		return podCounts
+	}
+
+	// 缓存未就绪，回退到 API 查询
+	s.logger.Debugf("PodCountCache not ready for cluster %s, falling back to paginated API call", clusterName)
+
 	client, err := s.getClient(clusterName)
 	if err != nil {
 		s.logger.Warningf("Failed to get client for cluster %s: %v", clusterName, err)
