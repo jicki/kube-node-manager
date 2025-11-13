@@ -280,9 +280,20 @@
                 </span>
               </div>
               <div style="font-size: 12px; color: #909399; margin-top: 2px">
-                共 {{ row.hosts_total }} 台
-                <span v-if="getExecutedHosts(row) !== row.hosts_total" style="color: #E6A23C">
-                  (执行 {{ getExecutedHosts(row) }} 台)
+                <span v-if="getExecutedHosts(row) !== row.hosts_total">
+                  已执行 {{ getExecutedHosts(row) }}/{{ row.hosts_total }} 台
+                  <el-tooltip 
+                    effect="dark" 
+                    content="Playbook 使用了主机筛选，未执行完 Inventory 中的所有主机" 
+                    placement="top"
+                  >
+                    <el-icon style="margin-left: 4px; color: #E6A23C; cursor: help">
+                      <QuestionFilled />
+                    </el-icon>
+                  </el-tooltip>
+                </span>
+                <span v-else>
+                  共执行 {{ row.hosts_total }} 台
                 </span>
               </div>
               <div v-if="row.batch_config && row.batch_config.enabled" style="font-size: 12px; color: #909399">
@@ -710,10 +721,19 @@
                   / 失败 {{ currentTask.hosts_failed }}
                 </span>
                 <span v-if="getExecutedHosts(currentTask) !== currentTask.hosts_total" style="color: #E6A23C">
-                  (执行 {{ getExecutedHosts(currentTask) }}/{{ currentTask.hosts_total }})
+                  (已执行 {{ getExecutedHosts(currentTask) }}/{{ currentTask.hosts_total }} 台)
+                  <el-tooltip 
+                    effect="dark" 
+                    content="Inventory 共 {{ currentTask.hosts_total }} 台主机，但 Playbook 使用了筛选条件，实际只执行了 {{ getExecutedHosts(currentTask) }} 台" 
+                    placement="top"
+                  >
+                    <el-icon style="margin-left: 4px; cursor: help">
+                      <QuestionFilled />
+                    </el-icon>
+                  </el-tooltip>
                 </span>
                 <span v-else>
-                  / 共 {{ currentTask.hosts_total }}
+                  / 共 {{ currentTask.hosts_total }} 台
                 </span>
               </span>
             </div>
