@@ -294,11 +294,11 @@ func (s *InventoryService) GenerateFromK8s(req model.GenerateInventoryRequest, u
 		return nil, fmt.Errorf("no nodes match the specified labels")
 	}
 
-	// 生成 inventory 内容（INI 格式），使用从 SSH 密钥获取的用户名
-	content := s.generateINIInventory(filteredNodes, cluster.Name, ansibleUser)
+	// 生成 inventory 内容（INI 格式），使用从 SSH 密钥获取的用户名和端口
+	content := s.generateINIInventory(filteredNodes, cluster.Name, ansibleUser, req.SSHPort)
 
-	// 生成结构化主机数据，使用从 SSH 密钥获取的用户名
-	hostsData := s.generateHostsData(filteredNodes, ansibleUser)
+	// 生成结构化主机数据，使用从 SSH 密钥获取的用户名和端口
+	hostsData := s.generateHostsData(filteredNodes, ansibleUser, req.SSHPort)
 
 	// 检查名称是否重复
 	var count int64
@@ -334,7 +334,8 @@ func (s *InventoryService) GenerateFromK8s(req model.GenerateInventoryRequest, u
 
 // generateINIInventory 生成 INI 格式的 inventory 内容
 // ansibleUser: Ansible 连接使用的用户名，从 SSH 密钥获取或默认为 root
-func (s *InventoryService) generateINIInventory(nodes []k8s.NodeInfo, clusterName string, ansibleUser string) string {
+// sshPort: SSH 连接端口（可选），如果为 nil 则不设置
+func (s *InventoryService) generateINIInventory(nodes []k8s.NodeInfo, clusterName string, ansibleUser string, sshPort *int) string {
 	var builder strings.Builder
 
 	// 使用 [all] 组作为默认组
@@ -353,8 +354,12 @@ func (s *InventoryService) generateINIInventory(nodes []k8s.NodeInfo, clusterNam
 			continue
 		}
 
-		// 格式: hostname ansible_host=ip ansible_user=<username>
-		builder.WriteString(fmt.Sprintf("%s ansible_host=%s ansible_user=%s\n", node.Name, ip, ansibleUser))
+		// 格式: hostname ansible_host=ip ansible_user=<username> [ansible_ssh_port=<port>]
+		hostLine := fmt.Sprintf("%s ansible_host=%s ansible_user=%s", node.Name, ip, ansibleUser)
+		if sshPort != nil && *sshPort > 0 {
+			hostLine = fmt.Sprintf("%s ansible_ssh_port=%d", hostLine, *sshPort)
+		}
+		builder.WriteString(hostLine + "\n")
 	}
 
 	// 写入变量组 [all:vars]
@@ -367,7 +372,8 @@ func (s *InventoryService) generateINIInventory(nodes []k8s.NodeInfo, clusterNam
 
 // generateHostsData 生成结构化主机数据
 // ansibleUser: Ansible 连接使用的用户名，从 SSH 密钥获取或默认为 root
-func (s *InventoryService) generateHostsData(nodes []k8s.NodeInfo, ansibleUser string) model.HostsData {
+// sshPort: SSH 连接端口（可选），如果为 nil 则不设置
+func (s *InventoryService) generateHostsData(nodes []k8s.NodeInfo, ansibleUser string, sshPort *int) model.HostsData {
 	hostsData := make(model.HostsData)
 	hosts := make([]map[string]interface{}, 0, len(nodes))
 
@@ -391,6 +397,11 @@ func (s *InventoryService) generateHostsData(nodes []k8s.NodeInfo, ansibleUser s
 			"version":      node.Version,
 			"os":           node.OS,
 			"ansible_user": ansibleUser, // 添加 ansible_user 信息
+		}
+		
+		// 如果指定了 SSH 端口，添加到主机数据中
+		if sshPort != nil && *sshPort > 0 {
+			host["ansible_ssh_port"] = *sshPort
 		}
 
 		hosts = append(hosts, host)
@@ -582,6 +593,32 @@ func (s *InventoryService) parseInventoryContent(content string) model.HostsData
 	return hostsData
 }
 
+// parseSSHPortFromInventory 从 inventory 内容中解析 SSH 端口
+func (s *InventoryService) parseSSHPortFromInventory(content string) *int {
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// 跳过空行、注释和组定义
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "[") {
+			continue
+		}
+		
+		// 查找 ansible_ssh_port=xxxx
+		if strings.Contains(line, "ansible_ssh_port=") {
+			parts := strings.Split(line, "ansible_ssh_port=")
+			if len(parts) >= 2 {
+				// 提取端口号（可能后面还有其他参数）
+				portStr := strings.Fields(parts[1])[0]
+				if port, err := strconv.Atoi(portStr); err == nil && port > 0 {
+					s.logger.Infof("Parsed SSH port from inventory: %d", port)
+					return &port
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // RefreshK8sInventory 刷新来自 K8s 的主机清单
 func (s *InventoryService) RefreshK8sInventory(id uint, userID uint) (*model.AnsibleInventory, error) {
 	var inventory model.AnsibleInventory
@@ -633,9 +670,12 @@ func (s *InventoryService) RefreshK8sInventory(id uint, userID uint) (*model.Ans
 		return nil, fmt.Errorf("no nodes found in cluster %s", inventory.Cluster.Name)
 	}
 
-	// 重新生成 inventory 内容，使用从 SSH 密钥获取的用户名
-	inventory.Content = s.generateINIInventory(nodes, inventory.Cluster.Name, ansibleUser)
-	inventory.HostsData = s.generateHostsData(nodes, ansibleUser)
+	// 从现有内容中解析 SSH 端口（如果有）
+	sshPort := s.parseSSHPortFromInventory(inventory.Content)
+	
+	// 重新生成 inventory 内容，使用从 SSH 密钥获取的用户名和端口
+	inventory.Content = s.generateINIInventory(nodes, inventory.Cluster.Name, ansibleUser, sshPort)
+	inventory.HostsData = s.generateHostsData(nodes, ansibleUser, sshPort)
 
 	if err := s.db.Save(&inventory).Error; err != nil {
 		s.logger.Errorf("Failed to update inventory %d: %v", id, err)

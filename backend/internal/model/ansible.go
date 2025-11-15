@@ -485,6 +485,7 @@ type GenerateInventoryRequest struct {
 	Description string            `json:"description"`
 	ClusterID   uint              `json:"cluster_id" binding:"required"`
 	SSHKeyID    *uint             `json:"ssh_key_id"`  // 关联的 SSH 密钥 ID
+	SSHPort     *int              `json:"ssh_port"`    // SSH 连接端口（可选）
 	NodeLabels  map[string]string `json:"node_labels"` // 用于筛选节点的标签
 }
 

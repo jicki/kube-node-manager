@@ -149,6 +149,19 @@
             选择用于连接主机的 SSH 密钥，不选则使用默认密钥
           </div>
         </el-form-item>
+        <el-form-item label="连接端口">
+          <el-input-number 
+            v-model="generateForm.ssh_port" 
+            placeholder="请输入 SSH 端口" 
+            :min="1" 
+            :max="65535" 
+            style="width: 100%"
+            clearable
+          />
+          <div style="color: #999; font-size: 12px; margin-top: 5px;">
+            填写端口后，将在生成的清单中添加 ansible_ssh_port=连接端口
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="generateDialogVisible = false">取消</el-button>
@@ -260,7 +273,8 @@ const generateForm = reactive({
   description: '',
   cluster_id: null,
   environment: 'dev',
-  ssh_key_id: null
+  ssh_key_id: null,
+  ssh_port: null
 })
 
 const clusters = ref([])
@@ -353,7 +367,8 @@ const showGenerateDialog = () => {
     description: '',
     cluster_id: null,
     environment: 'dev',
-    ssh_key_id: null
+    ssh_key_id: null,
+    ssh_port: null
   })
   generateDialogVisible.value = true
   loadClusters()
