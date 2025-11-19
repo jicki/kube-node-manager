@@ -351,11 +351,22 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 	for i, nodeName := range nodeNames {
 		wg.Add(1)
 		go func(index int, node string) {
-			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					dps.logger.Errorf("Panic while processing node %s: %v", node, r)
+					mu.Lock()
+					errors = append(errors, fmt.Sprintf("%s: panic: %v", node, r))
+					mu.Unlock()
+				}
+				wg.Done()
+				dps.logger.Infof("Goroutine for node %s completed", node)
+			}()
 
 			// 获取信号量
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
+
+			dps.logger.Infof("Starting to process node %s (index %d)", node, index)
 
 			// 先获取当前索引用于日志
 			mu.Lock()
@@ -363,10 +374,13 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 			currentIndex := processed
 			mu.Unlock()
 
+			dps.logger.Infof("Node %s assigned index %d/%d", node, currentIndex, total)
+
 			// 发送开始处理的进度消息
 			dps.UpdateProgress(taskID, currentIndex, node, userID)
 
 			// 处理节点
+			dps.logger.Infof("Calling ProcessNode for %s", node)
 			if err := processor.ProcessNode(ctx, node, index); err != nil {
 				mu.Lock()
 				errors = append(errors, fmt.Sprintf("%s: %v", node, err))
@@ -377,6 +391,7 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 			}
 
 			// 处理完成后再次更新进度，确保前端收到最新状态
+			dps.logger.Infof("Sending final progress update for node %s", node)
 			dps.UpdateProgress(taskID, currentIndex, node, userID)
 		}(i, nodeName)
 	}
