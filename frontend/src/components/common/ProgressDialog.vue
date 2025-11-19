@@ -362,37 +362,26 @@ const resetState = () => {
   }
 }
 
-// 监听taskId变化
-watch(() => props.taskId, (newTaskId, oldTaskId) => {
-  console.log('ProgressDialog taskId changed:', { oldTaskId, newTaskId, visible: props.modelValue })
+// 监听状态变化，使用数组形式避免双重触发
+watch([() => props.taskId, () => props.modelValue], ([newTaskId, newVisible], [oldTaskId, oldVisible]) => {
+  console.log('ProgressDialog state changed:', { newTaskId, newVisible, oldTaskId, oldVisible })
   
-  if (newTaskId && props.modelValue) {
-    // 新任务开始时，先关闭旧连接，重置状态，再建立新连接
+  if (newVisible && newTaskId) {
+    // 如果 ID 变化 或者 从不可见变为可见
+    if (newTaskId !== oldTaskId || !oldVisible) {
+      // 新任务开始时，先关闭旧连接，重置状态，再建立新连接
+      closeWebSocket()
+      resetState()
+      // 延迟一点时间确保旧连接完全关闭
+      nextTick(() => {
+        connectWebSocket()
+      })
+    }
+  } else if (!newVisible) {
+    // 如果不可见，关闭连接
     closeWebSocket()
-    resetState()
-    // 延迟一点时间确保旧连接完全关闭
-    nextTick(() => {
-      connectWebSocket()
-    })
   } else if (!newTaskId) {
-    // 如果taskId为空，关闭连接
-    closeWebSocket()
-  }
-})
-
-// 监听对话框显示状态
-watch(() => props.modelValue, (newVal) => {
-  console.log('ProgressDialog visibility changed:', newVal, 'taskId:', props.taskId)
-  
-  if (newVal && props.taskId) {
-    // 对话框打开且有taskId时，确保状态清理后再连接
-    closeWebSocket()
-    resetState()
-    nextTick(() => {
-      connectWebSocket()
-    })
-  } else if (!newVal) {
-    // 对话框关闭时，立即关闭连接
+    // 如果可见但没ID（理论上不应该发生），也关闭
     closeWebSocket()
   }
 })
