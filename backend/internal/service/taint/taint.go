@@ -407,7 +407,7 @@ func (s *Service) CreateTemplate(req TemplateCreateRequest, userID uint) (*Templ
 
 	// 检查是否存在同名但已软删除的记录，如果存在则硬删除
 	if err := s.db.Unscoped().Where("name = ? AND deleted_at IS NOT NULL", req.Name).Delete(&model.TaintTemplate{}).Error; err != nil {
-		s.logger.Warnf("Failed to clean up soft-deleted template with name %s: %v", req.Name, err)
+		s.logger.Warningf("Failed to clean up soft-deleted template with name %s: %v", req.Name, err)
 		// 不返回错误，继续创建
 	}
 
