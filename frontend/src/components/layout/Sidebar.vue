@@ -339,26 +339,11 @@ const handleClusterChange = async (clusterId) => {
     clusterStore.setCurrentCluster(cluster)
     ElMessage.success(`已切换到集群: ${cluster.name}`)
     
-    // 切换集群后立即刷新相关数据
-    try {
-      // 导入nodeStore来刷新节点数据
-      const { useNodeStore } = await import('@/store/modules/node')
-      const nodeStore = useNodeStore()
-      
-      // 清空当前节点数据和禁止调度历史，然后重新获取
-      nodeStore.clearCordonHistories()
-      await nodeStore.fetchNodes()
-      
-      // 如果当前页面是Dashboard，触发Dashboard数据刷新
-      if (route.path === '/dashboard') {
-        // 通过事件总线通知Dashboard刷新
-        window.dispatchEvent(new CustomEvent('cluster-changed', { 
-          detail: { cluster } 
-        }))
-      }
-    } catch (error) {
-      console.warn('Failed to refresh data after cluster switch:', error)
-    }
+    // 切换集群后立即刷新页面，确保所有数据都是最新的
+    // 使用 setTimeout 确保消息提示显示后再刷新
+    setTimeout(() => {
+      window.location.reload()
+    }, 300)
   }
 }
 

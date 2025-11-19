@@ -357,12 +357,13 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			// 更新进度
+			// 先获取当前索引用于日志
 			mu.Lock()
 			processed++
 			currentIndex := processed
 			mu.Unlock()
 
+			// 发送开始处理的进度消息
 			dps.UpdateProgress(taskID, currentIndex, node, userID)
 
 			// 处理节点
@@ -374,6 +375,9 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 			} else {
 				dps.logger.Infof("Successfully processed node %s (%d/%d)", node, currentIndex, total)
 			}
+
+			// 处理完成后再次更新进度，确保前端收到最新状态
+			dps.UpdateProgress(taskID, currentIndex, node, userID)
 		}(i, nodeName)
 	}
 
