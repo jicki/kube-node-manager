@@ -384,17 +384,30 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 	// 等待所有任务完成
 	wg.Wait()
 
+	dps.logger.Infof("All nodes processed for task %s, processed=%d, errors=%d", taskID, processed, len(errors))
+
+	// 确保最后一次进度更新显示 100%
+	if len(errors) == 0 {
+		dps.logger.Infof("Sending final 100%% progress update for task %s", taskID)
+		dps.UpdateProgress(taskID, total, "完成", userID)
+	}
+
 	// 处理结果
 	if len(errors) > 0 {
 		errorMsg := fmt.Sprintf("部分节点处理失败: %s", errors[0])
 		if len(errors) > 1 {
-			errorMsg = fmt.Sprintf("部分节点处理失败: %s 等 %d 个错误", errors[0], len(errors))
+			errorMsg := fmt.Sprintf("部分节点处理失败: %s 等 %d 个错误", errors[0], len(errors))
 		}
+		dps.logger.Errorf("Task %s failed with %d errors, calling ErrorTask", taskID, len(errors))
 		err := fmt.Errorf("%s", errorMsg)
 		dps.ErrorTask(taskID, err, userID)
 		return err
 	}
 
-	dps.CompleteTask(taskID, userID)
+	dps.logger.Infof("Task %s completed successfully, calling CompleteTask for user %d", taskID, userID)
+	if err := dps.CompleteTask(taskID, userID); err != nil {
+		dps.logger.Errorf("Failed to mark task %s as completed: %v", taskID, err)
+		return err
+	}
 	return nil
 }

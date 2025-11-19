@@ -817,17 +817,27 @@ func (s *Service) ProcessBatchWithProgress(
 	// 等待所有任务完成
 	wg.Wait()
 
+	s.logger.Infof("All nodes processed for task %s, processed=%d, errors=%d", taskID, processed, len(errors))
+
+	// 确保最后一次进度更新显示 100%
+	if len(errors) == 0 {
+		s.logger.Infof("Sending final 100%% progress update for task %s", taskID)
+		s.UpdateProgress(taskID, total, "完成", userID)
+	}
+
 	// 处理结果
 	if len(errors) > 0 {
 		errorMsg := fmt.Sprintf("部分节点处理失败: %s", errors[0])
 		if len(errors) > 1 {
 			errorMsg = fmt.Sprintf("部分节点处理失败: %s 等 %d 个错误", errors[0], len(errors))
 		}
+		s.logger.Errorf("Task %s failed with %d errors, calling ErrorTask", taskID, len(errors))
 		err := fmt.Errorf("%s", errorMsg)
 		s.ErrorTask(taskID, err, userID)
 		return err
 	}
 
+	s.logger.Infof("Task %s completed successfully, calling CompleteTask for user %d", taskID, userID)
 	s.CompleteTask(taskID, userID)
 	return nil
 }
