@@ -278,6 +278,8 @@ type TaintProcessor struct {
 }
 
 func (p *TaintProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
+	p.svc.logger.Infof("[ProcessNode] Starting for node %s (index %d)", nodeName, index)
+	
 	updateReq := UpdateTaintsRequest{
 		ClusterName: p.req.ClusterName,
 		NodeName:    nodeName,
@@ -285,7 +287,16 @@ func (p *TaintProcessor) ProcessNode(ctx context.Context, nodeName string, index
 		Operation:   p.req.Operation,
 	}
 
-	return p.svc.UpdateNodeTaints(updateReq, p.userID)
+	p.svc.logger.Infof("[ProcessNode] Calling UpdateNodeTaints for node %s", nodeName)
+	err := p.svc.UpdateNodeTaints(updateReq, p.userID)
+	
+	if err != nil {
+		p.svc.logger.Errorf("[ProcessNode] Failed for node %s: %v", nodeName, err)
+	} else {
+		p.svc.logger.Infof("[ProcessNode] Completed successfully for node %s", nodeName)
+	}
+	
+	return err
 }
 
 // BatchUpdateTaints 批量更新节点污点 (带进度推送)

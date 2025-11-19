@@ -120,9 +120,13 @@ func (s *Service) getClusterIDByName(clusterName string) (uint, error) {
 
 // UpdateNodeLabels 更新单个节点标签
 func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
+	s.logger.Infof("[UpdateNodeLabels] Starting for node %s in cluster %s", req.NodeName, req.ClusterName)
+	
 	// 获取当前节点信息，强制刷新缓存确保获取最新的标签
+	s.logger.Infof("[UpdateNodeLabels] Getting node info for %s", req.NodeName)
 	currentNode, err := s.k8sSvc.GetNodeWithCache(req.ClusterName, req.NodeName, true)
 	if err != nil {
+		s.logger.Errorf("[UpdateNodeLabels] Failed to get node %s: %v", req.NodeName, err)
 		s.logger.Errorf("Failed to get node %s in cluster %s: %v", req.NodeName, req.ClusterName, err)
 		var clusterID *uint
 		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
@@ -209,12 +213,14 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 
 	// 更新节点标签
 	s.logger.Infof("Final labels to apply: %+v", updatedLabels)
+	s.logger.Infof("[UpdateNodeLabels] Calling k8sSvc.UpdateNodeLabels for node %s", req.NodeName)
 	updateReq := k8s.LabelUpdateRequest{
 		NodeName: req.NodeName,
 		Labels:   updatedLabels,
 	}
 
 	if err := s.k8sSvc.UpdateNodeLabels(req.ClusterName, updateReq); err != nil {
+		s.logger.Errorf("[UpdateNodeLabels] k8sSvc.UpdateNodeLabels failed for node %s: %v", req.NodeName, err)
 		s.logger.Errorf("Failed to update node labels: %v", err)
 		var clusterID *uint
 		if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
@@ -234,6 +240,9 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 	}
 
 	// 成功日志已在k8s服务中记录，避免重复
+	s.logger.Infof("[UpdateNodeLabels] Successfully updated labels for node %s", req.NodeName)
+	
+	s.logger.Infof("[UpdateNodeLabels] Logging audit for node %s", req.NodeName)
 	var clusterID *uint
 	if cID, err := s.getClusterIDByName(req.ClusterName); err == nil {
 		clusterID = &cID
@@ -247,6 +256,8 @@ func (s *Service) UpdateNodeLabels(req UpdateLabelsRequest, userID uint) error {
 		Details:      fmt.Sprintf("Updated labels for node %s in cluster %s", req.NodeName, req.ClusterName),
 		Status:       model.AuditStatusSuccess,
 	})
+	
+	s.logger.Infof("[UpdateNodeLabels] Completed for node %s", req.NodeName)
 
 	return nil
 }
@@ -259,6 +270,8 @@ type LabelProcessor struct {
 }
 
 func (p *LabelProcessor) ProcessNode(ctx context.Context, nodeName string, index int) error {
+	p.svc.logger.Infof("[ProcessNode] Starting for node %s (index %d)", nodeName, index)
+	
 	updateReq := UpdateLabelsRequest{
 		ClusterName: p.req.ClusterName,
 		NodeName:    nodeName,
@@ -266,7 +279,16 @@ func (p *LabelProcessor) ProcessNode(ctx context.Context, nodeName string, index
 		Operation:   p.req.Operation,
 	}
 
-	return p.svc.UpdateNodeLabels(updateReq, p.userID)
+	p.svc.logger.Infof("[ProcessNode] Calling UpdateNodeLabels for node %s", nodeName)
+	err := p.svc.UpdateNodeLabels(updateReq, p.userID)
+	
+	if err != nil {
+		p.svc.logger.Errorf("[ProcessNode] Failed for node %s: %v", nodeName, err)
+	} else {
+		p.svc.logger.Infof("[ProcessNode] Completed successfully for node %s", nodeName)
+	}
+	
+	return err
 }
 
 // BatchUpdateLabels 批量更新节点标签 (带进度推送)
