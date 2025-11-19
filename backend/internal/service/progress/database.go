@@ -381,7 +381,9 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 
 			// 处理节点
 			dps.logger.Infof("Calling ProcessNode for %s", node)
-			if err := processor.ProcessNode(ctx, node, index); err != nil {
+			err := processor.ProcessNode(ctx, node, index)
+			dps.logger.Infof("ProcessNode returned for %s, err=%v", node, err)
+			if err != nil {
 				mu.Lock()
 				errors = append(errors, fmt.Sprintf("%s: %v", node, err))
 				mu.Unlock()
