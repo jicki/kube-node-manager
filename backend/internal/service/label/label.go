@@ -379,12 +379,18 @@ func (s *Service) BatchUpdateLabelsWithProgress(req BatchUpdateRequest, userID u
 
 // CreateTemplate 创建标签模板
 func (s *Service) CreateTemplate(req TemplateCreateRequest, userID uint) (*TemplateInfo, error) {
-	// 检查模板名称是否已存在
+	// 检查模板名称是否已存在（包括未删除的记录）
 	var existingTemplate model.LabelTemplate
 	if err := s.db.Where("name = ?", req.Name).First(&existingTemplate).Error; err == nil {
 		return nil, fmt.Errorf("template name already exists: %s", req.Name)
 	} else if err != gorm.ErrRecordNotFound {
 		return nil, fmt.Errorf("failed to check template name: %w", err)
+	}
+
+	// 检查是否存在同名但已软删除的记录，如果存在则硬删除
+	if err := s.db.Unscoped().Where("name = ? AND deleted_at IS NOT NULL", req.Name).Delete(&model.LabelTemplate{}).Error; err != nil {
+		s.logger.Warnf("Failed to clean up soft-deleted template with name %s: %v", req.Name, err)
+		// 不返回错误，继续创建
 	}
 
 	// 将labels转换为map[string]string格式（处理多值情况）
