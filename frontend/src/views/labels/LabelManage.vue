@@ -1257,45 +1257,34 @@ const handleApplyTemplate = async () => {
     console.log('即将发送给后端的数据:', applyData)
     console.log('标签数据详情:', JSON.stringify(labelsToApply, null, 2))
     
-    // 检查节点数量，如果大于5个则使用带进度的API
-    if (selectedNodes.value.length > 5) {
-      // 使用带进度推送的批量操作
-      // 确保在打开进度弹窗前重置状态
-      progressDialogVisible.value = false
+    // 统一使用带进度的批量操作，无论节点数量多少
+    // 确保在打开进度弹窗前重置状态
+    progressDialogVisible.value = false
+    
+    const progressResponse = await labelApi.batchAddLabelsWithProgress({
+      nodes: selectedNodes.value,
+      labels: Object.entries(labelsToApply).map(([key, value]) => ({ key, value })),
+      cluster: clusterName
+    })
+    
+    // 获取任务ID
+    console.log('API response:', progressResponse.data)
+    const taskId = progressResponse.data.data.task_id
+    
+    if (taskId) {
+      currentTaskId.value = taskId
+      console.log('Set currentTaskId to:', currentTaskId.value)
       
-      const progressResponse = await labelApi.batchAddLabelsWithProgress({
-        nodes: selectedNodes.value,
-        labels: Object.entries(labelsToApply).map(([key, value]) => ({ key, value })),
-        cluster: clusterName
+      // 确保DOM更新后再显示弹窗
+      nextTick(() => {
+        progressDialogVisible.value = true
+        console.log('Set progressDialogVisible to:', progressDialogVisible.value)
       })
       
-      // 获取任务ID
-      console.log('API response:', progressResponse.data)
-      const taskId = progressResponse.data.data.task_id
-      
-      if (taskId) {
-        currentTaskId.value = taskId
-        console.log('Set currentTaskId to:', currentTaskId.value)
-        
-        // 确保DOM更新后再显示弹窗
-        nextTick(() => {
-          progressDialogVisible.value = true
-          console.log('Set progressDialogVisible to:', progressDialogVisible.value)
-        })
-        
-        // 关闭应用对话框，但保持applying状态直到进度完成
-        // applyDialogVisible.value = false 在进度完成后再关闭
-      } else {
-        throw new Error('未获取到任务ID')
-      }
+      // 关闭应用对话框，但保持applying状态直到进度完成
+      // applyDialogVisible.value = false 在进度完成后再关闭
     } else {
-      // 对于少量节点，仍使用原有的同步方式
-      // 增加超时时间到60秒
-      await labelApi.applyTemplate(applyData, { timeout: 60000 })
-      ElMessage.success('模板应用成功')
-      applyDialogVisible.value = false
-      // 应用成功后刷新节点数据
-      refreshData(true)
+      throw new Error('未获取到任务ID')
     }
     
   } catch (error) {

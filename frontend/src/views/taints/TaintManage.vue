@@ -1335,32 +1335,35 @@ const handleApplyTemplate = async () => {
       taints: taintsToApply // 包含选定的污点值
     }
     
-    // 检查节点数量，如果大于5个则使用带进度的API
-    if (selectedNodes.value.length > 5) {
-      // 使用带进度推送的批量操作
-      const progressResponse = await taintApi.batchAddTaintsWithProgress({
-        nodes: selectedNodes.value,
-        taints: taintsToApply.map(taint => ({
-          key: taint.key,
-          value: taint.value,
-          effect: taint.effect
-        })),
-        cluster: clusterName
-      })
+    // 统一使用带进度的批量操作，无论节点数量多少
+    // 确保在打开进度弹窗前重置状态
+    progressDialogVisible.value = false
+    
+    const progressResponse = await taintApi.batchAddTaintsWithProgress({
+      nodes: selectedNodes.value,
+      taints: taintsToApply.map(taint => ({
+        key: taint.key,
+        value: taint.value,
+        effect: taint.effect
+      })),
+      cluster: clusterName
+    })
+    
+    // 获取任务ID
+    const taskId = progressResponse.data.data.task_id
+    
+    if (taskId) {
+      currentTaskId.value = taskId
       
-      // 获取任务ID
-      currentTaskId.value = progressResponse.data.data.task_id
-      progressDialogVisible.value = true
+      // 确保DOM更新后再显示弹窗
+      nextTick(() => {
+        progressDialogVisible.value = true
+      })
       
       // 关闭应用对话框，但保持applying状态直到进度完成
       // applyDialogVisible.value = false 在进度完成后再关闭
     } else {
-      // 对于少量节点，仍使用原有的同步方式
-      await taintApi.applyTemplate(applyData)
-      ElMessage.success('模板应用成功')
-      applyDialogVisible.value = false
-      // 应用成功后刷新节点数据
-      refreshData(true)
+      throw new Error('未获取到任务ID')
     }
     
   } catch (error) {
