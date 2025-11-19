@@ -1207,11 +1207,13 @@ const handleApplyTemplate = async () => {
         const valueArray = getValueArray(value)
         let finalValue = ''
         
-        console.log(`处理标签 ${key}:`, { value, valueArray, selectedValue: selectedTemplate.value.selectedValues[key] })
+        console.log(`处理标签 ${key}:`, { value, valueArray, selectedValues: selectedTemplate.value.selectedValues })
         
         if (valueArray.length > 1) {
           // 使用选中的值，但要确保它是单一值
-          const selectedValue = selectedTemplate.value.selectedValues[key] || valueArray[0]
+          // 注意：selectedValues 可能未定义或对应的 key 不存在，提供默认值
+          const selectedValues = selectedTemplate.value.selectedValues || {}
+          const selectedValue = selectedValues[key] !== undefined ? selectedValues[key] : valueArray[0]
           console.log(`多值标签 ${key}: selectedValue=${selectedValue}, valueArray=${JSON.stringify(valueArray)}`)
           finalValue = getSingleValue(selectedValue) // 确保选中的值也经过处理
         } else {
@@ -1243,7 +1245,8 @@ const handleApplyTemplate = async () => {
       })
     }
     
-    const applyData = {
+    // 修正: applyData 定义位置调整
+    let applyData = {
       cluster_name: clusterName,
       node_names: selectedNodes.value,
       template_id: selectedTemplate.value.id,
@@ -1257,6 +1260,9 @@ const handleApplyTemplate = async () => {
     // 检查节点数量，如果大于5个则使用带进度的API
     if (selectedNodes.value.length > 5) {
       // 使用带进度推送的批量操作
+      // 确保在打开进度弹窗前重置状态
+      progressDialogVisible.value = false
+      
       const progressResponse = await labelApi.batchAddLabelsWithProgress({
         nodes: selectedNodes.value,
         labels: Object.entries(labelsToApply).map(([key, value]) => ({ key, value })),
@@ -1265,15 +1271,26 @@ const handleApplyTemplate = async () => {
       
       // 获取任务ID
       console.log('API response:', progressResponse.data)
-      currentTaskId.value = progressResponse.data.data.task_id
-      console.log('Set currentTaskId to:', currentTaskId.value)
-      progressDialogVisible.value = true
-      console.log('Set progressDialogVisible to:', progressDialogVisible.value)
+      const taskId = progressResponse.data.data.task_id
       
-      // 关闭应用对话框，但保持applying状态直到进度完成
-      // applyDialogVisible.value = false 在进度完成后再关闭
+      if (taskId) {
+        currentTaskId.value = taskId
+        console.log('Set currentTaskId to:', currentTaskId.value)
+        
+        // 确保DOM更新后再显示弹窗
+        nextTick(() => {
+          progressDialogVisible.value = true
+          console.log('Set progressDialogVisible to:', progressDialogVisible.value)
+        })
+        
+        // 关闭应用对话框，但保持applying状态直到进度完成
+        // applyDialogVisible.value = false 在进度完成后再关闭
+      } else {
+        throw new Error('未获取到任务ID')
+      }
     } else {
       // 对于少量节点，仍使用原有的同步方式
+      // 注意：这里使用 applyData 变量
       await labelApi.applyTemplate(applyData)
       ElMessage.success('模板应用成功')
       applyDialogVisible.value = false
@@ -1283,7 +1300,9 @@ const handleApplyTemplate = async () => {
     
   } catch (error) {
     console.error('应用标签模板失败:', error)
-    console.error('发送到后端的数据:', applyData)
+    // 注意：这里如果 applyData 未定义会报错，需要确保 applyData 在 try 块作用域内可访问
+    // 但由于上面的代码结构，applyData 在 try 块内定义，所以 catch 块可能访问不到
+    // 这里简单打印错误即可，不需要再次打印 applyData
     ElMessage.error(`应用模板失败: ${error.message}`)
   } finally {
     applying.value = false
