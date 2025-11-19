@@ -172,11 +172,12 @@ const labelApi = {
   },
 
   // 应用标签模板到节点
-  applyTemplate(data) {
+  applyTemplate(data, config = {}) {
     return request({
       url: '/api/v1/labels/templates/apply',
       method: 'post',
-      data
+      data,
+      ...config
     })
   }
 }

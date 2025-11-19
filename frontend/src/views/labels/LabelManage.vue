@@ -1290,8 +1290,8 @@ const handleApplyTemplate = async () => {
       }
     } else {
       // 对于少量节点，仍使用原有的同步方式
-      // 注意：这里使用 applyData 变量
-      await labelApi.applyTemplate(applyData)
+      // 增加超时时间到60秒
+      await labelApi.applyTemplate(applyData, { timeout: 60000 })
       ElMessage.success('模板应用成功')
       applyDialogVisible.value = false
       // 应用成功后刷新节点数据
