@@ -150,8 +150,8 @@ const connectWebSocket = () => {
   // 先关闭已有连接（防止重复连接）
   if (websocket.value) {
     console.log('关闭已有的WebSocket连接以建立新连接')
-    websocket.value.close()
-    websocket.value = null
+    // 使用 closeWebSocket 确保移除监听器
+    closeWebSocket()
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
