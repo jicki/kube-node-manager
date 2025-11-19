@@ -693,42 +693,55 @@ func (s *Service) sendCurrentTaskStatus(userID uint) {
 
 			for _, task := range tasks {
 				var msgType string
+				var progress float64
+				var message string
+
 				if task.Status == model.TaskStatusRunning {
 					// 如果状态是运行中但进度已满，视为完成（修复潜在的状态不一致）
 					if task.Total > 0 && task.Current >= task.Total {
 						msgType = "complete"
+						progress = 100
+						message = fmt.Sprintf("批量操作完成，共处理 %d 个节点", task.Total)
 					} else {
 						msgType = "progress"
+						if task.Total > 0 {
+							progress = float64(task.Current) / float64(task.Total) * 100
+						}
+						message = fmt.Sprintf("正在处理 (%d/%d)", task.Current, task.Total)
 					}
 				} else if task.Status == model.TaskStatusCompleted {
 					msgType = "complete"
+					progress = 100
+					message = fmt.Sprintf("批量操作完成，共处理 %d 个节点", task.Total)
 				} else {
 					msgType = "error"
+					progress = task.Progress
+					message = task.ErrorMsg
 				}
 
 				// 构造消息
-				message := ProgressMessage{
+				progressMessage := ProgressMessage{
 					TaskID:      task.TaskID,
 					Type:        msgType,
 					Action:      task.Action,
 					Current:     task.Current,
 					Total:       task.Total,
-					Progress:    task.Progress,
+					Progress:    progress,
 					CurrentNode: task.CurrentNode,
-					Message:     task.Message,
+					Message:     message,
 					Error:       task.ErrorMsg,
 					Timestamp:   task.UpdatedAt,
 				}
 
-				// 如果是完成/失败状态，检查是否过期（例如只发送最近60秒内的）
+				// 对于完成/失败状态，延长过期时间到5分钟，确保用户有足够时间看到结果
 				if (msgType == "complete" || msgType == "error") && task.CompletedAt != nil {
-					if time.Since(*task.CompletedAt) > 60*time.Second {
+					if time.Since(*task.CompletedAt) > 5*time.Minute {
 						continue
 					}
 				}
 
-				s.sendToUser(userID, message)
-				s.logger.Infof("Sent recovery DB task status for %s to user %d: %s (%.1f%%)", task.TaskID, userID, msgType, task.Progress)
+				s.sendToUser(userID, progressMessage)
+				s.logger.Infof("Sent recovery DB task status for %s to user %d: %s (%.1f%%)", task.TaskID, userID, msgType, progress)
 				sentCount++
 			}
 		}

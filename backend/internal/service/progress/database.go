@@ -399,7 +399,9 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 	}
 
 	// 等待所有任务完成
+	dps.logger.Infof("Waiting for all goroutines to complete for task %s", taskID)
 	wg.Wait()
+	dps.logger.Infof("All goroutines completed for task %s", taskID)
 
 	dps.logger.Infof("All nodes processed for task %s, processed=%d, errors=%d", taskID, processed, len(errors))
 
