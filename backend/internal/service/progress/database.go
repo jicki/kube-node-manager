@@ -396,7 +396,7 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 	if len(errors) > 0 {
 		errorMsg := fmt.Sprintf("部分节点处理失败: %s", errors[0])
 		if len(errors) > 1 {
-			errorMsg := fmt.Sprintf("部分节点处理失败: %s 等 %d 个错误", errors[0], len(errors))
+			errorMsg = fmt.Sprintf("部分节点处理失败: %s 等 %d 个错误", errors[0], len(errors))
 		}
 		dps.logger.Errorf("Task %s failed with %d errors, calling ErrorTask", taskID, len(errors))
 		err := fmt.Errorf("%s", errorMsg)
