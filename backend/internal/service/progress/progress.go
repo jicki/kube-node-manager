@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/auth"
 	"kube-node-manager/pkg/logger"
 
@@ -182,6 +183,7 @@ func (s *Service) HandleWebSocket(c *gin.Context) {
 	})
 
 	// 检查是否有正在进行或刚完成的任务，发送状态更新
+	// 在多副本模式下，这一步至关重要，因为内存中可能没有任务状态
 	s.sendCurrentTaskStatus(userID)
 
 	// 如果启用了数据库模式，也检查数据库中的未处理消息
@@ -654,6 +656,60 @@ func (s *Service) sendCurrentTaskStatus(userID uint) {
 		sentCount++
 	}
 	s.taskMutex.RUnlock()
+
+	// 如果启用了数据库模式，检查数据库中的任务状态
+	if s.useDatabase && s.dbProgressService != nil {
+		// 获取所有相关状态的任务（运行中、已完成、失败）
+		statuses := []model.TaskStatus{
+			model.TaskStatusRunning,
+			model.TaskStatusCompleted,
+			model.TaskStatusFailed,
+		}
+
+		for _, status := range statuses {
+			tasks, err := s.dbProgressService.GetUserTasks(userID, status)
+			if err != nil {
+				s.logger.Errorf("Failed to get DB tasks for user %d (status: %s): %v", userID, status, err)
+				continue
+			}
+
+			for _, task := range tasks {
+				var msgType string
+				if task.Status == model.TaskStatusRunning {
+					msgType = "progress"
+				} else if task.Status == model.TaskStatusCompleted {
+					msgType = "complete"
+				} else {
+					msgType = "error"
+				}
+
+				// 构造消息
+				message := ProgressMessage{
+					TaskID:      task.TaskID,
+					Type:        msgType,
+					Action:      task.Action,
+					Current:     task.Current,
+					Total:       task.Total,
+					Progress:    task.Progress,
+					CurrentNode: task.CurrentNode,
+					Message:     task.Message,
+					Error:       task.ErrorMsg,
+					Timestamp:   task.UpdatedAt,
+				}
+
+				// 如果是完成/失败状态，检查是否过期（例如只发送最近60秒内的）
+				if (msgType == "complete" || msgType == "error") && task.CompletedAt != nil {
+					if time.Since(*task.CompletedAt) > 60*time.Second {
+						continue
+					}
+				}
+
+				s.sendToUser(userID, message)
+				s.logger.Infof("Sent recovery DB task status for %s to user %d: %s (%.1f%%)", task.TaskID, userID, msgType, task.Progress)
+				sentCount++
+			}
+		}
+	}
 
 	if sentCount == 0 {
 		s.logger.Infof("No pending tasks found for user %d on reconnection", userID)
