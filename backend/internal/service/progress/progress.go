@@ -113,9 +113,9 @@ func (s *Service) EnableDatabaseMode(db *gorm.DB, dbConfig *config.DatabaseConfi
 }
 
 // VerifyNotifier 验证通知器状态
-func (s *Service) VerifyNotifier() error {
+func (s *Service) VerifyNotifier() (*NotifierInfo, error) {
 	if !s.useDatabase || s.dbProgressService == nil {
-		return fmt.Errorf("database mode not enabled")
+		return nil, fmt.Errorf("database mode not enabled")
 	}
 	return s.dbProgressService.VerifyNotifier()
 }

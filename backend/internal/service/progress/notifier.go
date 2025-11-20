@@ -50,17 +50,32 @@ func NewPostgresNotifier(db *gorm.DB, dbConfig *config.DatabaseConfig, logger *l
 	)
 	
 	// 添加密码（如果存在）
+	hasPassword := false
 	if dbConfig.Password != "" {
 		dsn += fmt.Sprintf(" password=%s", dbConfig.Password)
+		hasPassword = true
 	}
 	
-	logger.Infof("Initializing PostgreSQL listener with host=%s port=%d dbname=%s", 
-		dbConfig.Host, dbConfig.Port, dbConfig.Database)
+	logger.Infof("Initializing PostgreSQL listener with host=%s port=%d dbname=%s sslmode=%s password_set=%v", 
+		dbConfig.Host, dbConfig.Port, dbConfig.Database, dbConfig.SSLMode, hasPassword)
+	
+	// 首先验证 GORM 数据库连接是否可用
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+	
+	if err := sqlDB.Ping(); err != nil {
+		return nil, fmt.Errorf("main database connection is unhealthy, cannot create listener: %w (host=%s port=%d)", 
+			err, dbConfig.Host, dbConfig.Port)
+	}
+	logger.Debugf("Main database connection verified, proceeding with listener setup")
 	
 	// 创建 PostgreSQL Listener
 	reportProblem := func(ev pq.ListenerEventType, err error) {
 		if err != nil {
-			logger.Errorf("PostgreSQL listener [%s]: %v", ev, err)
+			// 记录所有带错误的事件
+			logger.Errorf("PostgreSQL listener event [%s]: %v", ev, err)
 		}
 	}
 	
@@ -79,12 +94,26 @@ func NewPostgresNotifier(db *gorm.DB, dbConfig *config.DatabaseConfig, logger *l
 	case err := <-connected:
 		if err != nil {
 			listener.Close()
+			logger.Errorf("PostgreSQL listener connection failed")
+			logger.Errorf("  Host: %s:%d", dbConfig.Host, dbConfig.Port)
+			logger.Errorf("  Database: %s", dbConfig.Database)
+			logger.Errorf("  Username: %s", dbConfig.Username)
+			logger.Errorf("  SSL Mode: %s", dbConfig.SSLMode)
+			logger.Errorf("  Password set: %v", hasPassword)
+			logger.Errorf("  Error: %v", err)
+			logger.Errorf("Please check:")
+			logger.Errorf("  1. Network connectivity: can pods reach %s:%d?", dbConfig.Host, dbConfig.Port)
+			logger.Errorf("  2. Database credentials are correct")
+			logger.Errorf("  3. PostgreSQL server is running and accepting connections")
+			logger.Errorf("  4. Firewall rules allow connections from pods")
 			return nil, fmt.Errorf("failed to connect PostgreSQL listener: %w (host=%s port=%d)", 
 				err, dbConfig.Host, dbConfig.Port)
 		}
-		logger.Infof("PostgreSQL listener connected successfully (verified via ping)")
+		logger.Infof("✅ PostgreSQL listener connected successfully (verified via ping)")
 	case <-ctx.Done():
 		listener.Close()
+		logger.Errorf("PostgreSQL listener connection timeout after 10s (host=%s port=%d)", 
+			dbConfig.Host, dbConfig.Port)
 		return nil, fmt.Errorf("PostgreSQL listener connection timeout after 10s (host=%s port=%d)", 
 			dbConfig.Host, dbConfig.Port)
 	}
@@ -95,7 +124,7 @@ func NewPostgresNotifier(db *gorm.DB, dbConfig *config.DatabaseConfig, logger *l
 		listener: listener,
 	}
 	
-	logger.Info("PostgreSQL LISTEN/NOTIFY notifier initialized successfully")
+	logger.Infof("✅ PostgreSQL LISTEN/NOTIFY notifier initialized successfully")
 	return notifier, nil
 }
 

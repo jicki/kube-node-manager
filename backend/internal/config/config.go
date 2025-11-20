@@ -155,6 +155,16 @@ func LoadConfig() *Config {
 	viper.SetDefault("monitoring.cleanup.batch_size", 1000)
 
 	viper.AutomaticEnv()
+	
+	// 显式绑定数据库环境变量（支持 K8s 中常用的 DB_ 前缀）
+	// 这确保 PostgreSQL Listener 可以使用正确的连接参数
+	viper.BindEnv("database.host", "DB_HOST", "DATABASE_HOST")
+	viper.BindEnv("database.port", "DB_PORT", "DATABASE_PORT")
+	viper.BindEnv("database.database", "DB_DATABASE", "DATABASE_DATABASE", "DB_NAME", "DATABASE_NAME")
+	viper.BindEnv("database.username", "DB_USERNAME", "DATABASE_USERNAME", "DB_USER", "DATABASE_USER")
+	viper.BindEnv("database.password", "DB_PASSWORD", "DATABASE_PASSWORD")
+	viper.BindEnv("database.ssl_mode", "DB_SSL_MODE", "DATABASE_SSL_MODE", "DB_SSLMODE", "DATABASE_SSLMODE")
+	viper.BindEnv("database.type", "DB_TYPE", "DATABASE_TYPE")
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {

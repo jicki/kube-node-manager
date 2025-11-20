@@ -837,14 +837,27 @@ func min(a, b int) int {
 	return b
 }
 
+// NotifierInfo 通知器信息
+type NotifierInfo struct {
+	Type      string // postgres, redis, polling
+	IsHealthy bool   // 是否健康
+	IsFallback bool  // 是否是降级模式
+}
+
 // VerifyNotifier 验证通知器是否正常工作
-func (dps *DatabaseProgressService) VerifyNotifier() error {
+func (dps *DatabaseProgressService) VerifyNotifier() (*NotifierInfo, error) {
 	if dps.notifier == nil {
-		return fmt.Errorf("notifier is nil")
+		return nil, fmt.Errorf("notifier is nil")
 	}
 	
 	notifierType := dps.notifier.Type()
 	dps.logger.Infof("Verifying notifier type: %s", notifierType)
+	
+	info := &NotifierInfo{
+		Type:      notifierType,
+		IsHealthy: true,
+		IsFallback: dps.usePolling && notifierType == "polling",
+	}
 	
 	// 对于PostgreSQL和Redis通知器，尝试发送测试消息
 	if notifierType == "postgres" || notifierType == "redis" {
@@ -865,11 +878,19 @@ func (dps *DatabaseProgressService) VerifyNotifier() error {
 		
 		if err := dps.notifier.Notify(ctx, testMsg); err != nil {
 			dps.logger.Errorf("Notifier verification failed: %v", err)
-			return fmt.Errorf("failed to send test notification: %w", err)
+			info.IsHealthy = false
+			return info, fmt.Errorf("failed to send test notification: %w", err)
 		}
 		
 		dps.logger.Infof("✅ Notifier verification successful (type=%s)", notifierType)
+	} else if notifierType == "polling" {
+		// Polling 模式总是"健康"的，但如果是降级则需要警告
+		if info.IsFallback {
+			dps.logger.Warningf("⚠️  Using polling mode as fallback - real-time updates may be delayed")
+		} else {
+			dps.logger.Infof("✅ Polling mode verified (configured mode)")
+		}
 	}
 	
-	return nil
+	return info, nil
 }

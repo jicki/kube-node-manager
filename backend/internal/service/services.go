@@ -198,15 +198,36 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 		logger.Infof("Progress service database mode enabled for multi-replica support")
 		
 		// 验证通知器是否正常工作
-		if err := progressSvc.VerifyNotifier(); err != nil {
-			logger.Errorf("⚠️  PostgreSQL notifier verification failed: %v", err)
+		notifierInfo, err := progressSvc.VerifyNotifier()
+		if err != nil {
+			logger.Errorf("⚠️  Notifier verification failed: %v", err)
 			logger.Warningf("Progress updates may not work properly in multi-replica mode")
-			logger.Warningf("Please check:")
-			logger.Warningf("  1. Database connection parameters are correct")
-			logger.Warningf("  2. PostgreSQL LISTEN/NOTIFY is enabled")
-			logger.Warningf("  3. Network connectivity between replicas and database")
+			
+			// 根据通知器类型给出具体建议
+			if notifierInfo != nil {
+				switch notifierInfo.Type {
+				case "postgres":
+					logger.Warningf("Please check:")
+					logger.Warningf("  1. Database connection parameters (DB_HOST, DB_PORT, etc.)")
+					logger.Warningf("  2. PostgreSQL LISTEN/NOTIFY is enabled")
+					logger.Warningf("  3. Network connectivity between replicas and database")
+				case "redis":
+					logger.Warningf("Please check:")
+					logger.Warningf("  1. Redis connection parameters (REDIS_ADDR, REDIS_PASSWORD)")
+					logger.Warningf("  2. Redis server is running and accessible")
+					logger.Warningf("  3. Network connectivity between replicas and Redis")
+				}
+			}
 		} else {
-			logger.Infof("✅ PostgreSQL notifier verified successfully - multi-replica progress updates ready")
+			// 验证成功，显示实际使用的通知器类型
+			if notifierInfo != nil {
+				if notifierInfo.IsFallback {
+					logger.Warningf("⚠️  Using %s mode as fallback - real-time updates may be delayed in multi-replica environment", notifierInfo.Type)
+					logger.Warningf("Consider configuring PostgreSQL or Redis for better performance")
+				} else {
+					logger.Infof("✅ %s notifier verified successfully - multi-replica progress updates ready", notifierInfo.Type)
+				}
+			}
 		}
 	}
 
