@@ -32,7 +32,7 @@ type MigrationHistory struct {
 	Status        string    `gorm:"size:20;not null;default:'success'" json:"status"` // 状态: success/failed/pending
 	DurationMs    int64     `gorm:"default:0" json:"duration_ms"`                     // 执行耗时（毫秒）
 	ErrorMessage  string    `gorm:"type:text" json:"error_message,omitempty"`         // 错误信息
-	AppliedAt     time.Time `gorm:"not null;index" json:"applied_at"`                 // 应用时间
+	AppliedAt     time.Time `gorm:"not null;index:idx_migration_history_applied" json:"applied_at"` // 应用时间
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }

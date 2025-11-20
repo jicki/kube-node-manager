@@ -72,6 +72,7 @@ func NewCodeMigrationExecutor(db *gorm.DB) (*CodeMigrationExecutor, error) {
 	}
 	
 	// 确保迁移记录表存在
+	// 注意：约束冲突已在 CleanupLegacyConstraints 中处理
 	if err := db.AutoMigrate(&CodeMigrationRecord{}); err != nil {
 		return nil, fmt.Errorf("failed to create code_migration_records table: %w", err)
 	}

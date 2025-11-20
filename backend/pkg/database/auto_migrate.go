@@ -40,13 +40,25 @@ func AutoMigrateOnStartup(db *gorm.DB, models []interface{}, config AutoMigrateC
 		return nil
 	}
 	
-	// 2. 初始化 system_metadata 表
+	// 2. 清理旧的约束冲突（PostgreSQL）
+	if err := CleanupLegacyConstraints(db); err != nil {
+		log.Printf("Warning: Failed to cleanup legacy constraints: %v", err)
+		// 不阻止启动，继续执行
+	}
+	
+	// 重新创建有问题的表
+	if err := RecreateProblematicTables(db); err != nil {
+		log.Printf("Warning: Failed to recreate problematic tables: %v", err)
+		// 不阻止启动，继续执行
+	}
+	
+	// 3. 初始化 system_metadata 表
 	log.Println("Initializing system metadata...")
 	if err := InitSystemMetadata(db); err != nil {
 		return fmt.Errorf("failed to initialize system_metadata: %w", err)
 	}
 	
-	// 3. 检查是否需要从旧系统过渡
+	// 4. 检查是否需要从旧系统过渡
 	needsTransition, err := IsTransitionNeeded(db)
 	if err != nil {
 		return fmt.Errorf("failed to check transition need: %w", err)
@@ -60,14 +72,14 @@ func AutoMigrateOnStartup(db *gorm.DB, models []interface{}, config AutoMigrateC
 		log.Println("✓ Transition completed successfully")
 	}
 	
-	// 4. 执行 GORM AutoMigrate（所有模型）
+	// 5. 执行 GORM AutoMigrate（所有模型）
 	log.Println("\n--- Running GORM AutoMigrate ---")
 	if err := db.AutoMigrate(models...); err != nil {
 		return fmt.Errorf("GORM AutoMigrate failed: %w", err)
 	}
 	log.Println("✓ GORM AutoMigrate completed")
 	
-	// 5. 初始化版本管理器
+	// 6. 初始化版本管理器
 	log.Println("\n--- Initializing Version Manager ---")
 	versionManager, err := NewVersionManager(db, models)
 	if err != nil {
@@ -80,7 +92,7 @@ func AutoMigrateOnStartup(db *gorm.DB, models []interface{}, config AutoMigrateC
 	log.Printf("Current Schema (DB):    %s", info.DBVersion)
 	log.Printf("Target Schema (Code):   %s", info.LatestSchemaVersion)
 	
-	// 6. 计算并检查 schema 版本
+	// 7. 计算并检查 schema 版本
 	currentSchema := versionManager.GetCurrentSchemaVersion()
 	targetSchema := versionManager.GetTargetSchemaVersion()
 	
@@ -92,7 +104,7 @@ func AutoMigrateOnStartup(db *gorm.DB, models []interface{}, config AutoMigrateC
 		log.Println("✓ Schema version is up-to-date")
 	}
 	
-	// 7. 执行代码迁移（如果有）
+	// 8. 执行代码迁移（如果有）
 	log.Println("\n--- Executing Code Migrations ---")
 	executor, err := NewCodeMigrationExecutor(db)
 	if err != nil {
@@ -103,10 +115,10 @@ func AutoMigrateOnStartup(db *gorm.DB, models []interface{}, config AutoMigrateC
 		return fmt.Errorf("code migrations failed: %w", err)
 	}
 	
-	// 8. 获取数据库类型
+	// 9. 获取数据库类型
 	dbType := detectDatabaseType(db)
 	
-	// 9. 验证数据库结构（如果启用）
+	// 10. 验证数据库结构（如果启用）
 	if config.ValidateOnStartup {
 		log.Println("\n--- Validating Database Schema ---")
 		validator := NewSchemaValidator(db, dbType)
@@ -124,7 +136,7 @@ func AutoMigrateOnStartup(db *gorm.DB, models []interface{}, config AutoMigrateC
 				validationResult.WarningIssues,
 				validationResult.TotalIssues)
 			
-			// 10. 如有问题且启用自动修复，则执行修复
+			// 11. 如有问题且启用自动修复，则执行修复
 			if config.RepairOnStartup && (validationResult.CriticalIssues > 0 || validationResult.WarningIssues > 0) {
 				log.Println("\n--- Repairing Database Schema ---")
 				repairer := NewSchemaRepairer(db, dbType, false)
@@ -147,14 +159,14 @@ func AutoMigrateOnStartup(db *gorm.DB, models []interface{}, config AutoMigrateC
 		}
 	}
 	
-	// 11. 更新 system_metadata 中的 schema 版本
+	// 12. 更新 system_metadata 中的 schema 版本
 	log.Println("\n--- Updating Schema Version ---")
 	if err := versionManager.UpdateSchemaVersion(targetSchema); err != nil {
 		return fmt.Errorf("failed to update schema version: %w", err)
 	}
 	log.Printf("✓ Schema version set to: %s", targetSchema)
 	
-	// 12. 记录迁移历史
+	// 13. 记录迁移历史
 	if err := recordCodeMigrationHistory(db, info, startTime); err != nil {
 		log.Printf("Warning: Failed to record migration history: %v", err)
 		// 不阻止启动
