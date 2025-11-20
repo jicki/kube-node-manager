@@ -24,13 +24,13 @@ type CodeMigration struct {
 
 // CodeMigrationRecord 代码迁移执行记录
 type CodeMigrationRecord struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	MigrationID string  `gorm:"uniqueIndex;size:255;not null" json:"migration_id"`
-	Description string  `gorm:"type:text" json:"description"`
-	Status      string  `gorm:"size:20;not null;default:'success'" json:"status"` // success, failed, pending
-	DurationMs  int64   `gorm:"default:0" json:"duration_ms"`
-	ErrorMsg    string  `gorm:"type:text" json:"error_msg,omitempty"`
-	AppliedAt   time.Time `gorm:"not null;index" json:"applied_at"`
+	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	MigrationID string    `gorm:"uniqueIndex:idx_code_migration_id;size:255;not null" json:"migration_id"`
+	Description string    `gorm:"type:text" json:"description"`
+	Status      string    `gorm:"size:20;not null;default:'success'" json:"status"` // success, failed, pending
+	DurationMs  int64     `gorm:"default:0" json:"duration_ms"`
+	ErrorMsg    string    `gorm:"type:text" json:"error_msg,omitempty"`
+	AppliedAt   time.Time `gorm:"not null;index:idx_code_migration_applied" json:"applied_at"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
