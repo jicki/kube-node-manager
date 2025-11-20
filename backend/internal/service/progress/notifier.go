@@ -201,10 +201,18 @@ func (p *PostgresNotifier) Notify(ctx context.Context, message ProgressMessage) 
 	// 使用 pg_notify 发送通知
 	channel := "progress_update"  // 使用固定通道名
 	
-	// 只记录重要消息（complete, error），避免日志轰炸
+	// 记录所有通知（但使用合适的日志级别）
 	if message.Type == "complete" || message.Type == "error" {
 		p.logger.Infof("Sending PostgreSQL notification: task=%s type=%s user=%d", 
 			message.TaskID, message.Type, message.UserID)
+	} else if message.Type == "progress" {
+		// 记录进度通知（INFO 级别，便于观察进度流）
+		progress := int(message.Progress)
+		// 只在整十百分比时记录，避免日志过多
+		if progress%10 == 0 || message.Current == 1 || message.Current == message.Total {
+			p.logger.Infof("Sending progress notification: task=%s %d/%d (%.0f%%) node=%s", 
+				message.TaskID, message.Current, message.Total, message.Progress, message.CurrentNode)
+		}
 	}
 	
 	// 先检查 GORM DB 连接状态
@@ -262,22 +270,28 @@ func (p *PostgresNotifier) Subscribe(ctx context.Context) (<-chan ProgressMessag
 					continue
 				}
 				
-				var msg ProgressMessage
-				if err := json.Unmarshal([]byte(notification.Extra), &msg); err != nil {
-					p.logger.Errorf("Failed to unmarshal notification payload: %v", err)
-					continue
+			var msg ProgressMessage
+			if err := json.Unmarshal([]byte(notification.Extra), &msg); err != nil {
+				p.logger.Errorf("Failed to unmarshal notification payload: %v", err)
+				continue
+			}
+			
+			// 记录接收到的通知（使用合适的日志级别）
+			if msg.Type == "complete" || msg.Type == "error" {
+				p.logger.Infof("Received PostgreSQL notification: task=%s type=%s user=%d", 
+					msg.TaskID, msg.Type, msg.UserID)
+			} else if msg.Type == "progress" {
+				progress := int(msg.Progress)
+				// 只在整十百分比时记录
+				if progress%10 == 0 || msg.Current == 1 || msg.Current == msg.Total {
+					p.logger.Infof("Received progress notification: task=%s %d/%d (%.0f%%)", 
+						msg.TaskID, msg.Current, msg.Total, msg.Progress)
 				}
-				
-				// 只记录重要消息（complete, error）
-				if msg.Type == "complete" || msg.Type == "error" {
-					p.logger.Infof("Received PostgreSQL notification: task=%s type=%s user=%d", 
-						msg.TaskID, msg.Type, msg.UserID)
-				}
-				
+			}
+			
 			select {
 			case messageChan <- msg:
-				// 移除转发日志，避免日志轰炸
-				// 消息转发成功不需要记录日志
+				// 消息成功转发到通道，不需要记录日志
 			case <-ctx.Done():
 					p.logger.Info("Context cancelled while forwarding message")
 					return

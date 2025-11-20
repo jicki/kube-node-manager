@@ -175,8 +175,24 @@ func (dps *DatabaseProgressService) UpdateProgress(taskID string, current int, c
 		return err
 	}
 	
-	// 使用通知器发送实时通知（仅每10次发送一次，避免过多通知）
-	if !dps.usePolling && (task.Current%10 == 0 || task.Current == task.Total) {
+	// 使用通知器发送实时通知
+	// 根据任务规模决定通知频率：
+	// - 小规模任务（<10个节点）：每个节点都通知
+	// - 中等规模（10-50个节点）：每3个节点通知一次
+	// - 大规模任务（>50个节点）：每10个节点通知一次
+	shouldNotify := false
+	if task.Total < 10 {
+		// 小规模：每个节点都通知
+		shouldNotify = true
+	} else if task.Total <= 50 {
+		// 中等规模：每3个节点或最后一个
+		shouldNotify = (task.Current%3 == 0 || task.Current == task.Total)
+	} else {
+		// 大规模：每10个节点或最后一个
+		shouldNotify = (task.Current%10 == 0 || task.Current == task.Total)
+	}
+	
+	if !dps.usePolling && shouldNotify {
 		// 解析成功和失败节点列表
 		var successNodes []string
 		var failedNodes []model.NodeError
@@ -288,32 +304,15 @@ func (dps *DatabaseProgressService) CompleteTask(taskID string, userID uint) err
 	dps.logger.Infof("Task %s completed successfully in database (success=%d, failed=%d)", 
 		taskID, len(successNodes), len(failedNodes))
 
-	// 立即尝试推送完成消息，不等待轮询（降级方案）
-	go func() {
-		for i := 0; i < 5; i++ { // 重试5次
-			time.Sleep(200 * time.Millisecond * time.Duration(i)) // 递增延迟
-
-			// 检查是否有WebSocket连接
-			dps.wsService.connMutex.RLock()
-			hasConnection := false
-			if _, exists := dps.wsService.connections[userID]; exists {
-				hasConnection = true
-			}
-			dps.wsService.connMutex.RUnlock()
-
-			if hasConnection {
-				// 立即处理未发送的消息
-				dps.processUnsentMessages()
-				dps.logger.Debugf("Force pushed completion message for task %s", taskID)
-				break
-			} else {
-				// 减少日志噪音，只记录最后一次尝试
-				if i == 4 {
-					dps.logger.Warningf("No WebSocket connection after 5 attempts for task %s", taskID)
-				}
-			}
-		}
-	}()
+	// 注释掉强制推送逻辑，避免重复发送完成消息
+	// PostgreSQL LISTEN/NOTIFY 或轮询机制已经会处理消息推送
+	// 如果 LISTEN/NOTIFY 工作正常，消息会立即推送
+	// 如果失败，轮询机制（10秒间隔）会作为降级方案
+	
+	// 旧的强制推送逻辑会导致重复消息：
+	// - LISTEN/NOTIFY 发送一次
+	// - 强制推送 processUnsentMessages() 再发送一次
+	// 结果是前端收到多个重复的完成消息
 
 	// 设置延时清理
 	go func() {
@@ -625,14 +624,22 @@ func (dps *DatabaseProgressService) startNotificationSubscription() {
 			}
 			dps.wsService.connMutex.RUnlock()
 			
-			if hasConnection {
-				// 直接通过 WebSocket 推送消息
-				dps.wsService.sendToUser(msg.UserID, msg)
-				// 只记录重要消息
-				if msg.Type == "complete" || msg.Type == "error" {
-					dps.logger.Infof("Forwarded %s notification for task %s to user %d", msg.Type, msg.TaskID, msg.UserID)
+		if hasConnection {
+			// 记录转发的通知（使用合适的日志级别）
+			if msg.Type == "complete" || msg.Type == "error" {
+				dps.logger.Infof("Forwarding %s notification for task %s to user %d", msg.Type, msg.TaskID, msg.UserID)
+			} else if msg.Type == "progress" {
+				progress := int(msg.Progress)
+				// 只在整十百分比时记录
+				if progress%10 == 0 || msg.Current == 1 || msg.Current == msg.Total {
+					dps.logger.Infof("Forwarding progress for task %s to user %d: %d/%d (%.0f%%)", 
+						msg.TaskID, msg.UserID, msg.Current, msg.Total, msg.Progress)
 				}
 			}
+			
+			// 直接通过 WebSocket 推送消息
+			dps.wsService.sendToUser(msg.UserID, msg)
+		}
 		}
 	}
 }
@@ -740,7 +747,7 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 	var mu sync.Mutex
 	var failedNodes []model.NodeError
 	var successNodes []string
-	processed := 0
+	completed := 0 // 已完成的节点数（成功或失败）
 
 	for i, nodeName := range nodeNames {
 		wg.Add(1)
@@ -753,8 +760,12 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 						NodeName: node,
 						Error:    fmt.Sprintf("panic: %v", r),
 					})
+					completed++ // 即使 panic 也算完成
+					currentCompleted := completed
 					dps.UpdateNodeLists(taskID, successNodes, failedNodes)
 					mu.Unlock()
+					// 更新进度
+					dps.UpdateProgress(taskID, currentCompleted, node, userID)
 				}
 				wg.Done()
 			}()
@@ -763,47 +774,48 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			// 先获取当前索引用于日志
-			mu.Lock()
-			processed++
-			currentIndex := processed
-			mu.Unlock()
-
-			// 发送开始处理的进度消息
-			dps.UpdateProgress(taskID, currentIndex, node, userID)
-
 			// 处理节点
 			err := processor.ProcessNode(ctx, node, index)
+			
+			// 处理完成后更新计数和进度
+			mu.Lock()
 			if err != nil {
-				mu.Lock()
 				failedNodes = append(failedNodes, model.NodeError{
 					NodeName: node,
 					Error:    err.Error(),
 				})
-				dps.UpdateNodeLists(taskID, successNodes, failedNodes)
-				mu.Unlock()
 				dps.logger.Errorf("Failed to process node %s: %v", node, err)
 			} else {
-				mu.Lock()
 				successNodes = append(successNodes, node)
-				dps.UpdateNodeLists(taskID, successNodes, failedNodes)
-				mu.Unlock()
-				// 减少日志频率：每10个节点或最后一个节点记录一次
-				if currentIndex%10 == 0 || currentIndex == total {
-					dps.logger.Infof("Progress: %d/%d nodes processed successfully", currentIndex, total)
-				}
 			}
+			completed++ // 在处理完成后才递增
+			currentCompleted := completed
+			dps.UpdateNodeLists(taskID, successNodes, failedNodes)
+			mu.Unlock()
 
-			// 处理完成后再次更新进度，确保前端收到最新状态（不记录日志避免轰炸）
-			dps.UpdateProgress(taskID, currentIndex, node, userID)
+			// 发送进度更新（在节点处理完成后）
+			dps.UpdateProgress(taskID, currentCompleted, node, userID)
+			
+			// 每10个节点或最后一个节点记录进度日志
+			if currentCompleted%10 == 0 || currentCompleted == total {
+				dps.logger.Infof("Progress: %d/%d nodes processed (success=%d, failed=%d)", 
+					currentCompleted, total, len(successNodes), len(failedNodes))
+			}
 		}(i, nodeName)
 	}
 
 	// 等待所有任务完成
 	wg.Wait()
 
+	// 获取最终统计
+	mu.Lock()
+	finalSuccess := len(successNodes)
+	finalFailed := len(failedNodes)
+	finalCompleted := completed
+	mu.Unlock()
+
 	dps.logger.Infof("Task %s completed: processed=%d, success=%d, failed=%d", 
-		taskID, processed, len(successNodes), len(failedNodes))
+		taskID, finalCompleted, finalSuccess, finalFailed)
 
 	// 确保最后一次进度更新显示 100%
 	if len(failedNodes) == 0 {

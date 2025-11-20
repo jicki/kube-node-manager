@@ -2,6 +2,7 @@ package progress
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -706,11 +707,15 @@ func (s *Service) sendCurrentTaskStatus(userID uint) {
 
 	// 如果启用了数据库模式，检查数据库中的任务状态
 	if s.useDatabase && s.dbProgressService != nil {
+		// 使用 map 去重，确保每个任务只发送一次最新状态
+		tasksSent := make(map[string]bool)
+		
 		// 获取所有相关状态的任务（运行中、已完成、失败）
+		// 注意：优先级从高到低处理，确保最终状态优先
 		statuses := []model.TaskStatus{
-			model.TaskStatusRunning,
-			model.TaskStatusCompleted,
-			model.TaskStatusFailed,
+			model.TaskStatusCompleted, // 优先发送已完成的任务
+			model.TaskStatusFailed,    // 其次是失败的
+			model.TaskStatusRunning,   // 最后是运行中的
 		}
 
 		for _, status := range statuses {
@@ -721,11 +726,23 @@ func (s *Service) sendCurrentTaskStatus(userID uint) {
 			}
 
 			for _, task := range tasks {
+				// 如果任务已经发送过，跳过（避免重复发送和进度倒退）
+				if tasksSent[task.TaskID] {
+					continue
+				}
+				
 				var msgType string
 				var progress float64
 				var message string
 
 				if task.Status == model.TaskStatusRunning {
+					// 对于运行中的任务，检查最近更新时间
+					// 如果超过 10 秒没有更新，可能任务已卡住或完成但状态未更新
+					if time.Since(task.UpdatedAt) > 30*time.Second {
+						s.logger.Warningf("Task %s has not been updated for %v, might be stalled", 
+							task.TaskID, time.Since(task.UpdatedAt))
+					}
+					
 					// 如果状态是运行中但进度已满，视为完成（修复潜在的状态不一致）
 					if task.Total > 0 && task.Current >= task.Total {
 						msgType = "complete"
@@ -748,20 +765,6 @@ func (s *Service) sendCurrentTaskStatus(userID uint) {
 					message = task.ErrorMsg
 				}
 
-				// 构造消息
-				progressMessage := ProgressMessage{
-					TaskID:      task.TaskID,
-					Type:        msgType,
-					Action:      task.Action,
-					Current:     task.Current,
-					Total:       task.Total,
-					Progress:    progress,
-					CurrentNode: task.CurrentNode,
-					Message:     message,
-					Error:       task.ErrorMsg,
-					Timestamp:   task.UpdatedAt,
-				}
-
 				// 对于完成/失败状态，延长过期时间到5分钟，确保用户有足够时间看到结果
 				if (msgType == "complete" || msgType == "error") && task.CompletedAt != nil {
 					if time.Since(*task.CompletedAt) > 5*time.Minute {
@@ -769,9 +772,36 @@ func (s *Service) sendCurrentTaskStatus(userID uint) {
 					}
 				}
 
+				// 解析节点列表
+				var successNodes []string
+				var failedNodes []model.NodeError
+				if task.SuccessNodes != "" {
+					json.Unmarshal([]byte(task.SuccessNodes), &successNodes)
+				}
+				if task.FailedNodes != "" {
+					json.Unmarshal([]byte(task.FailedNodes), &failedNodes)
+				}
+
+				// 构造消息
+				progressMessage := ProgressMessage{
+					TaskID:       task.TaskID,
+					Type:         msgType,
+					Action:       task.Action,
+					Current:      task.Current,
+					Total:        task.Total,
+					Progress:     progress,
+					CurrentNode:  task.CurrentNode,
+					Message:      message,
+					Error:        task.ErrorMsg,
+					SuccessNodes: successNodes,
+					FailedNodes:  failedNodes,
+					Timestamp:    task.UpdatedAt,
+				}
+
 				s.sendToUser(userID, progressMessage)
 				s.logger.Infof("Sent recovery DB task status for %s to user %d: %s (%.1f%%)", task.TaskID, userID, msgType, progress)
 				sentCount++
+				tasksSent[task.TaskID] = true // 标记已发送
 			}
 		}
 	}

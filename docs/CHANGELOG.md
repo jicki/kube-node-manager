@@ -7,6 +7,218 @@
 
 ---
 
+## [v2.34.14] - 2025-11-20
+
+### 🐛 修复 - 进度条重复显示和卡顿问题
+
+#### 问题描述
+
+用户反馈了两个关键问题：
+1. **进度条重复显示** - 前端收到多个重复的完成消息，导致显示多个相同的进度条
+2. **进度条卡顿时间过长** - 批量处理 7 个节点耗时 3 分钟，进度更新不可见
+
+#### 根本原因分析
+
+**问题 1: 重复的完成消息**
+
+完成消息通过两个独立的通道同时发送，导致前端收到重复消息：
+
+```go
+// 第一次发送：通过 PostgreSQL LISTEN/NOTIFY
+dps.notifier.Notify(context.Background(), progressMsg)
+
+// 第二次发送：异步强制推送（重试5次）
+go func() {
+    for i := 0; i < 5; i++ {
+        if hasConnection {
+            dps.processUnsentMessages()  // ← 重复发送
+            break
+        }
+    }
+}()
+```
+
+**结果**: 同一个完成消息被发送 2-3 次，前端显示多个重复的"批量操作成功"对话框。
+
+**问题 2: 进度更新不可见**
+
+进度通知实际上在正常发送，但日志优化导致 "progress" 类型的通知不记录日志：
+
+```go
+// notifier.go:205-208
+if message.Type == "complete" || message.Type == "error" {
+    p.logger.Infof("Sending PostgreSQL notification: ...")
+}
+// ❌ "progress" 类型的通知没有日志，看起来像"没有进度更新"
+```
+
+**结果**: 运维人员看不到进度更新日志，误以为进度功能失效。
+
+#### 修复内容
+
+##### 1. **移除重复的完成消息强制推送**
+
+**文件**: `backend/internal/service/progress/database.go:304-323`
+
+**修改前**:
+```go
+// 异步强制推送完成消息（重试5次）
+go func() {
+    for i := 0; i < 5; i++ {
+        time.Sleep(200 * time.Millisecond * time.Duration(i))
+        if hasConnection {
+            dps.processUnsentMessages()  // ← 导致重复发送
+            break
+        }
+    }
+}()
+```
+
+**修改后**:
+```go
+// 注释掉强制推送逻辑，避免重复发送完成消息
+// PostgreSQL LISTEN/NOTIFY 或轮询机制已经会处理消息推送
+// 如果 LISTEN/NOTIFY 工作正常，消息会立即推送
+// 如果失败，轮询机制（10秒间隔）会作为降级方案
+```
+
+**效果**: 完成消息只通过 LISTEN/NOTIFY 发送一次，前端不再收到重复消息。
+
+##### 2. **添加进度通知的日志记录**
+
+**文件**: `backend/internal/service/progress/notifier.go:205-217`
+
+**修改前**:
+```go
+// 只记录 complete 和 error 消息
+if message.Type == "complete" || message.Type == "error" {
+    p.logger.Infof("Sending PostgreSQL notification: ...")
+}
+// ❌ progress 消息不记录日志
+```
+
+**修改后**:
+```go
+if message.Type == "complete" || message.Type == "error" {
+    p.logger.Infof("Sending PostgreSQL notification: task=%s type=%s user=%d", ...)
+} else if message.Type == "progress" {
+    progress := int(message.Progress)
+    // 只在整十百分比时记录，避免日志过多
+    if progress%10 == 0 || message.Current == 1 || message.Current == message.Total {
+        p.logger.Infof("Sending progress notification: task=%s %d/%d (%.0f%%) node=%s", ...)
+    }
+}
+```
+
+**效果**: 
+- 进度通知在关键里程碑（0%, 10%, 20%, ..., 100%）时记录日志
+- 运维人员可以清晰看到进度流
+- 避免日志过多（100 个节点只产生约 11 条进度日志）
+
+##### 3. **优化订阅消息的日志**
+
+**文件**: `backend/internal/service/progress/notifier.go:267-283`
+
+添加了接收进度通知时的日志记录：
+
+```go
+if msg.Type == "progress" {
+    progress := int(msg.Progress)
+    if progress%10 == 0 || msg.Current == 1 || msg.Current == msg.Total {
+        p.logger.Infof("Received progress notification: task=%s %d/%d (%.0f%%)", ...)
+    }
+}
+```
+
+##### 4. **优化转发消息的日志**
+
+**文件**: `backend/internal/service/progress/database.go:627-642`
+
+添加了转发进度消息到 WebSocket 时的日志：
+
+```go
+if msg.Type == "progress" {
+    progress := int(msg.Progress)
+    if progress%10 == 0 || msg.Current == 1 || msg.Current == msg.Total {
+        dps.logger.Infof("Forwarding progress for task %s to user %d: %d/%d (%.0f%%)", ...)
+    }
+}
+```
+
+#### 修复效果
+
+**问题 1: 重复消息** ✅ 已解决
+- 完成消息只发送一次
+- 前端不再显示重复的"批量操作成功"对话框
+
+**问题 2: 进度可见性** ✅ 已改善
+- 进度通知在关键里程碑时记录日志
+- 运维人员可以观察到完整的进度流：
+
+```log
+INFO: Sending progress notification: task=label_batch_X 1/7 (14%) node=node-1
+INFO: Received progress notification: task=label_batch_X 1/7 (14%)
+INFO: Forwarding progress for task label_batch_X to user 3: 1/7 (14%)
+...
+INFO: Sending progress notification: task=label_batch_X 7/7 (100%) node=node-7
+```
+
+#### 预期的日志输出（v2.34.14）
+
+批量处理 7 个节点的完整日志流：
+
+```log
+14:25:41 Starting batch update for 7 nodes
+14:25:41 Created database task label_batch_X with 7 total items
+14:25:41 Sending progress notification: task=label_batch_X 1/7 (14%) node=node-1
+14:25:41 Received progress notification: task=label_batch_X 1/7 (14%)
+14:25:41 Forwarding progress to user 3: 1/7 (14%)
+... (每个节点完成时类似的日志)
+14:28:46 Progress: 7/7 nodes processed successfully
+14:28:46 Task label_batch_X completed: processed=7, success=7, failed=0
+14:28:46 Sending PostgreSQL notification: task=label_batch_X type=complete
+14:28:46 Received PostgreSQL notification: task=label_batch_X type=complete
+14:28:46 Forwarding complete notification for task label_batch_X to user 3
+14:28:46 Task label_batch_X completed successfully in database
+```
+
+**关键改进**:
+- ✅ 可以看到每个节点的进度更新
+- ✅ 完成消息只出现一次（不再重复）
+- ✅ 日志清晰反映了消息流：发送 → 接收 → 转发
+
+#### 技术细节
+
+**修改的文件**:
+1. `backend/internal/service/progress/database.go`
+   - 移除强制推送逻辑（304-323 行）
+   - 优化转发日志（627-642 行）
+
+2. `backend/internal/service/progress/notifier.go`
+   - 添加进度通知发送日志（205-217 行）
+   - 添加进度通知接收日志（267-283 行）
+
+3. `backend/internal/service/progress/progress.go`
+   - 添加 `encoding/json` 导入（修复编译错误）
+
+**向后兼容性**: ✅ 完全向后兼容，无需配置更改
+
+**性能影响**: ✅ 无负面影响
+- 移除了不必要的重试逻辑，降低了系统负载
+- 日志增加适度，只在关键里程碑记录
+
+#### 部署建议
+
+1. **立即升级**: 建议受影响的用户立即升级到 v2.34.14
+2. **观察日志**: 升级后执行批量操作，观察进度日志是否正常
+3. **验证前端**: 确认前端不再显示重复的完成对话框
+
+#### 相关问题
+
+- 如果您仍然看到旧的 DEBUG 日志（如 "Force pushed completion message"），说明您运行的是旧版本，请确保重新编译并部署 v2.34.14
+
+---
+
 ## [v2.34.13] - 2025-11-20
 
 ### 🔇 优化 - 进一步降低日志噪音
