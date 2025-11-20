@@ -63,26 +63,24 @@ func RecreateProblematicTables(db *gorm.DB) error {
 	
 	log.Println("Checking for problematic tables...")
 	
-	// 检查 code_migration_records 表是否存在且有问题
+	// 对于 code_migration_records 表，如果存在就直接删除重建
+	// 这是因为旧的表可能有不兼容的约束名
 	if db.Migrator().HasTable("code_migration_records") {
-		// 检查是否存在旧的约束
-		var count int64
-		query := `
-			SELECT COUNT(*) 
-			FROM information_schema.table_constraints 
-			WHERE table_name = 'code_migration_records' 
-			AND constraint_name LIKE 'uni_code_migration_records_%'
-		`
-		if err := db.Raw(query).Scan(&count).Error; err == nil && count > 0 {
-			log.Println("Found problematic code_migration_records table, dropping...")
-			
-			// 删除表
+		log.Println("Found existing code_migration_records table, dropping for clean recreation...")
+		
+		// 删除表（使用 CASCADE 确保删除所有依赖）
+		if err := db.Exec("DROP TABLE IF EXISTS code_migration_records CASCADE").Error; err != nil {
+			log.Printf("Warning: Failed to drop code_migration_records table: %v", err)
+			// 尝试强制删除约束
+			db.Exec("ALTER TABLE code_migration_records DROP CONSTRAINT IF EXISTS uni_code_migration_records_migration_id CASCADE")
+			db.Exec("ALTER TABLE code_migration_records DROP CONSTRAINT IF EXISTS code_migration_records_pkey CASCADE")
+			// 再次尝试删除表
 			if err := db.Exec("DROP TABLE IF EXISTS code_migration_records CASCADE").Error; err != nil {
 				return fmt.Errorf("failed to drop code_migration_records table: %w", err)
 			}
-			
-			log.Println("✓ Dropped problematic code_migration_records table")
 		}
+		
+		log.Println("✓ Dropped code_migration_records table for clean recreation")
 	}
 	
 	return nil
