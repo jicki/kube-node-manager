@@ -71,52 +71,115 @@ func NewPostgresNotifier(db *gorm.DB, dbConfig *config.DatabaseConfig, logger *l
 	}
 	logger.Debugf("Main database connection verified, proceeding with listener setup")
 	
+	// 检查数据库连接数统计
+	var stats struct {
+		MaxConns  int
+		OpenConns int
+		InUse     int
+		Idle      int
+	}
+	dbStats := sqlDB.Stats()
+	stats.MaxConns = dbStats.MaxOpenConnections
+	stats.OpenConns = dbStats.OpenConnections
+	stats.InUse = dbStats.InUse
+	stats.Idle = dbStats.Idle
+	logger.Infof("Database connection pool stats: max=%d open=%d inUse=%d idle=%d", 
+		stats.MaxConns, stats.OpenConns, stats.InUse, stats.Idle)
+	
 	// 创建 PostgreSQL Listener
 	reportProblem := func(ev pq.ListenerEventType, err error) {
 		if err != nil {
 			// 记录所有带错误的事件
 			logger.Errorf("PostgreSQL listener event [%s]: %v", ev, err)
+		} else {
+			// 记录重要的非错误事件
+			logger.Debugf("PostgreSQL listener event [%s]", ev)
 		}
 	}
 	
+	logger.Debugf("Creating pq.Listener with minReconnectInterval=10s maxReconnectInterval=1m")
 	listener := pq.NewListener(dsn, 10*time.Second, time.Minute, reportProblem)
 	
-	// 尝试立即 ping 验证连接
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// 使用更长的超时和重试机制验证连接
+	maxRetries := 3
+	var lastErr error
 	
-	connected := make(chan error, 1)
-	go func() {
-		connected <- listener.Ping()
-	}()
-	
-	select {
-	case err := <-connected:
-		if err != nil {
-			listener.Close()
-			logger.Errorf("PostgreSQL listener connection failed")
-			logger.Errorf("  Host: %s:%d", dbConfig.Host, dbConfig.Port)
-			logger.Errorf("  Database: %s", dbConfig.Database)
-			logger.Errorf("  Username: %s", dbConfig.Username)
-			logger.Errorf("  SSL Mode: %s", dbConfig.SSLMode)
-			logger.Errorf("  Password set: %v", hasPassword)
-			logger.Errorf("  Error: %v", err)
-			logger.Errorf("Please check:")
-			logger.Errorf("  1. Network connectivity: can pods reach %s:%d?", dbConfig.Host, dbConfig.Port)
-			logger.Errorf("  2. Database credentials are correct")
-			logger.Errorf("  3. PostgreSQL server is running and accepting connections")
-			logger.Errorf("  4. Firewall rules allow connections from pods")
-			return nil, fmt.Errorf("failed to connect PostgreSQL listener: %w (host=%s port=%d)", 
-				err, dbConfig.Host, dbConfig.Port)
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		logger.Infof("Attempting to connect PostgreSQL listener (attempt %d/%d)...", attempt, maxRetries)
+		
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		
+		connected := make(chan error, 1)
+		go func() {
+			// 尝试 Ping 多次
+			for i := 0; i < 3; i++ {
+				if i > 0 {
+					time.Sleep(time.Second)
+				}
+				err := listener.Ping()
+				if err == nil {
+					connected <- nil
+					return
+				}
+				logger.Debugf("Listener ping attempt %d/3 failed: %v", i+1, err)
+				lastErr = err
+			}
+			connected <- lastErr
+		}()
+		
+		select {
+		case err := <-connected:
+			cancel()
+			if err == nil {
+				logger.Infof("✅ PostgreSQL listener connected successfully (verified via ping after %d attempt(s))", attempt)
+				goto connected_success
+			}
+			lastErr = err
+			logger.Warningf("PostgreSQL listener connection attempt %d failed: %v", attempt, err)
+			
+		case <-ctx.Done():
+			cancel()
+			lastErr = fmt.Errorf("connection timeout after 15s")
+			logger.Warningf("PostgreSQL listener connection attempt %d timeout", attempt)
 		}
-		logger.Infof("✅ PostgreSQL listener connected successfully (verified via ping)")
-	case <-ctx.Done():
-		listener.Close()
-		logger.Errorf("PostgreSQL listener connection timeout after 10s (host=%s port=%d)", 
-			dbConfig.Host, dbConfig.Port)
-		return nil, fmt.Errorf("PostgreSQL listener connection timeout after 10s (host=%s port=%d)", 
-			dbConfig.Host, dbConfig.Port)
+		
+		// 如果不是最后一次尝试,等待后重试
+		if attempt < maxRetries {
+			waitTime := time.Duration(attempt) * 2 * time.Second
+			logger.Infof("Waiting %v before retry...", waitTime)
+			time.Sleep(waitTime)
+		}
 	}
+	
+	// 所有尝试都失败
+	listener.Close()
+	logger.Errorf("PostgreSQL listener connection failed after %d attempts", maxRetries)
+	logger.Errorf("  Host: %s:%d", dbConfig.Host, dbConfig.Port)
+	logger.Errorf("  Database: %s", dbConfig.Database)
+	logger.Errorf("  Username: %s", dbConfig.Username)
+	logger.Errorf("  SSL Mode: %s", dbConfig.SSLMode)
+	logger.Errorf("  Password set: %v", hasPassword)
+	logger.Errorf("  Last error: %v", lastErr)
+	logger.Errorf("")
+	logger.Errorf("Common causes:")
+	logger.Errorf("  1. PostgreSQL max_connections limit reached")
+	logger.Errorf("     Solution: Check 'SHOW max_connections;' and current usage")
+	logger.Errorf("  2. Connection pooler (pgbouncer) interfering with LISTEN/NOTIFY")
+	logger.Errorf("     Solution: Connect directly to PostgreSQL, not through pooler")
+	logger.Errorf("  3. User '%s' lacks LISTEN/NOTIFY permissions", dbConfig.Username)
+	logger.Errorf("     Solution: Grant appropriate permissions")
+	logger.Errorf("  4. Network/firewall blocking additional connections")
+	logger.Errorf("     Solution: Verify network connectivity and firewall rules")
+	logger.Errorf("")
+	logger.Errorf("For multi-replica deployments, consider using 'polling' mode:")
+	logger.Errorf("  progress:")
+	logger.Errorf("    notify_type: \"polling\"")
+	logger.Errorf("    poll_interval: 5000  # 5 seconds")
+	
+	return nil, fmt.Errorf("failed to connect PostgreSQL listener after %d attempts: %w (host=%s port=%d)", 
+		maxRetries, lastErr, dbConfig.Host, dbConfig.Port)
+
+connected_success:
 	
 	notifier := &PostgresNotifier{
 		db:       db,
