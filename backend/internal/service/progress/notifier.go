@@ -109,20 +109,37 @@ func (p *PostgresNotifier) Notify(ctx context.Context, message ProgressMessage) 
 	// 使用 pg_notify 发送通知
 	channel := "progress_update"  // 使用固定通道名
 	
-	// 记录发送详情（用于调试）
-	p.logger.Debugf("Publishing to PostgreSQL channel '%s': task=%s type=%s user=%d success=%d failed=%d", 
-		channel, message.TaskID, message.Type, message.UserID, 
-		len(message.SuccessNodes), len(message.FailedNodes))
+	// 只记录重要消息（complete, error），避免日志轰炸
+	if message.Type == "complete" || message.Type == "error" {
+		p.logger.Infof("Sending PostgreSQL notification: task=%s type=%s user=%d", 
+			message.TaskID, message.Type, message.UserID)
+	}
 	
-	result := p.db.Exec("SELECT pg_notify(?, ?)", channel, string(payload))
+	// 先检查 GORM DB 连接状态
+	sqlDB, err := p.db.DB()
+	if err != nil {
+		p.logger.Errorf("Failed to get underlying sql.DB: %v", err)
+		return fmt.Errorf("failed to get database: %w", err)
+	}
+	
+	// 检查连接是否健康
+	if err := sqlDB.Ping(); err != nil {
+		p.logger.Errorf("Database connection unhealthy: %v", err)
+		return fmt.Errorf("database connection error: %w", err)
+	}
+	
+	// 使用原生 SQL 执行 pg_notify（使用 $1, $2 占位符而不是 ?）
+	result := p.db.WithContext(ctx).Exec("SELECT pg_notify($1, $2)", channel, string(payload))
 	
 	if result.Error != nil {
 		p.logger.Errorf("Failed to send PostgreSQL notification: %v", result.Error)
 		return fmt.Errorf("failed to notify: %w", result.Error)
 	}
 	
-	p.logger.Debugf("Successfully sent PostgreSQL notification to channel '%s' (payload size: %d bytes)", 
-		channel, len(payload))
+	// 只记录重要消息的成功发送
+	if message.Type == "complete" || message.Type == "error" {
+		p.logger.Debugf("PostgreSQL notification sent successfully (payload: %d bytes)", len(payload))
+	}
 	return nil
 }
 
@@ -152,27 +169,28 @@ func (p *PostgresNotifier) Subscribe(ctx context.Context) (<-chan ProgressMessag
 			case notification := <-p.listener.Notify:
 				if notification == nil {
 					// nil notification can occur during reconnection
-					p.logger.Debug("Received nil notification (listener reconnecting)")
 					continue
 				}
-				
-				p.logger.Debugf("Received notification on channel '%s': payload size=%d bytes", 
-					notification.Channel, len(notification.Extra))
 				
 				var msg ProgressMessage
 				if err := json.Unmarshal([]byte(notification.Extra), &msg); err != nil {
-					p.logger.Errorf("Failed to unmarshal notification payload: %v (payload: %s)", 
-						err, notification.Extra[:min(100, len(notification.Extra))])
+					p.logger.Errorf("Failed to unmarshal notification payload: %v", err)
 					continue
 				}
 				
-				p.logger.Debugf("Parsed notification: task=%s type=%s user=%d success=%d failed=%d", 
-					msg.TaskID, msg.Type, msg.UserID, len(msg.SuccessNodes), len(msg.FailedNodes))
+				// 只记录重要消息（complete, error）
+				if msg.Type == "complete" || msg.Type == "error" {
+					p.logger.Infof("Received PostgreSQL notification: task=%s type=%s user=%d", 
+						msg.TaskID, msg.Type, msg.UserID)
+				}
 				
 				select {
 				case messageChan <- msg:
-					p.logger.Debugf("Successfully forwarded notification for task %s (type=%s) to WebSocket", 
-						msg.TaskID, msg.Type)
+					// 只记录重要消息的转发
+					if msg.Type == "complete" || msg.Type == "error" {
+						p.logger.Debugf("Forwarded %s notification for task %s to WebSocket", 
+							msg.Type, msg.TaskID)
+					}
 				case <-ctx.Done():
 					p.logger.Info("Context cancelled while forwarding message")
 					return
@@ -181,12 +199,10 @@ func (p *PostgresNotifier) Subscribe(ctx context.Context) (<-chan ProgressMessag
 				}
 				
 			case <-time.After(90 * time.Second):
-				// 定期 ping 以保持连接
+				// 定期 ping 以保持连接（不记录成功日志，避免日志轰炸）
 				go func() {
 					if err := p.listener.Ping(); err != nil {
-						p.logger.Warningf("PostgreSQL listener ping failed (connection may be lost): %v", err)
-					} else {
-						p.logger.Debug("PostgreSQL listener ping successful")
+						p.logger.Warningf("PostgreSQL listener ping failed: %v", err)
 					}
 				}()
 			}
