@@ -33,6 +33,7 @@ type Service struct {
 	podCountCache   *podcache.PodCountCache  // 轻量级 Pod 统计缓存（基于 Informer）
 	realtimeManager interface{}              // 实时同步管理器（使用接口避免循环依赖）
 	connPool        *ConnectionPool          // 连接池统计和管理
+	logLimiter      *logRateLimiter          // 日志限速器，避免重复日志刷屏
 }
 
 // NodeInfo Kubernetes节点信息
@@ -112,6 +113,38 @@ type ClusterInfo struct {
 	LastSync  time.Time  `json:"last_sync"`
 }
 
+// logRateLimiter 日志限速器，避免重复日志刷屏
+type logRateLimiter struct {
+	mu           sync.RWMutex
+	lastLogTimes map[string]time.Time // key: 日志标识符，value: 最后一次输出时间
+	interval     time.Duration        // 限速间隔
+}
+
+// newLogRateLimiter 创建日志限速器
+func newLogRateLimiter(interval time.Duration) *logRateLimiter {
+	return &logRateLimiter{
+		lastLogTimes: make(map[string]time.Time),
+		interval:     interval,
+	}
+}
+
+// shouldLog 判断是否应该输出日志
+// key: 日志的唯一标识符（例如 "cache_fallback_cluster1"）
+func (l *logRateLimiter) shouldLog(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now := time.Now()
+	lastTime, exists := l.lastLogTimes[key]
+	
+	if !exists || now.Sub(lastTime) >= l.interval {
+		l.lastLogTimes[key] = now
+		return true
+	}
+	
+	return false
+}
+
 // NewService 创建新的Kubernetes服务实例
 func NewService(logger *logger.Logger, realtimeMgr interface{}) *Service {
 	return &Service{
@@ -121,7 +154,8 @@ func NewService(logger *logger.Logger, realtimeMgr interface{}) *Service {
 		cache:           cache.NewK8sCache(logger),
 		podCountCache:   podcache.NewPodCountCache(logger),
 		realtimeManager: realtimeMgr,
-		connPool:        NewConnectionPool(), // 初始化连接池
+		connPool:        NewConnectionPool(),               // 初始化连接池
+		logLimiter:      newLogRateLimiter(30 * time.Second), // 限速间隔30秒
 	}
 }
 
@@ -1470,7 +1504,7 @@ func (s *Service) enrichNodeWithMetrics(clusterName string, node *NodeInfo) {
 		Pods:   fmt.Sprintf("%d", podCount),
 	}
 
-	s.logger.Debugf("Enriched node %s with metrics for cluster %s", node.Name, clusterName)
+	// 移除频繁的 DEBUG 日志，减少日志噪音
 }
 
 // formatCPU 格式化 CPU 资源，将毫核转换为核心数
@@ -1569,15 +1603,21 @@ func (s *Service) getNodePodCount(clusterName, nodeName string) (int, error) {
 				}
 				return count, nil
 			}
-			// Informer 缓存获取失败，记录原因并继续降级
-			s.logger.Debugf("Failed to get pods from Informer cache: %v, falling back to API", err)
+			// Informer 缓存获取失败，使用限速日志记录
+			logKey := fmt.Sprintf("informer_cache_failed_%s", clusterName)
+			if s.logLimiter.shouldLog(logKey) {
+				s.logger.Debugf("Failed to get pods from Informer cache for cluster %s: %v, falling back to API", clusterName, err)
+			}
 		}
 	}
 
 	// 策略3：最后的回退方案 - 直接调用 K8s API
 	// ⚠️ 这会给 API Server 带来压力，应该尽量避免
 	// 只有在前两种方式都不可用时才使用
-	s.logger.Warningf("Both PodCountCache and Informer cache unavailable for cluster %s, falling back to API call (this may impact API Server performance)", clusterName)
+	logKey := fmt.Sprintf("cache_fallback_%s", clusterName)
+	if s.logLimiter.shouldLog(logKey) {
+		s.logger.Warningf("Both PodCountCache and Informer cache unavailable for cluster %s, falling back to API call (this may impact API Server performance)", clusterName)
+	}
 	
 	client, err := s.getClient(clusterName)
 	if err != nil {
@@ -1670,14 +1710,20 @@ func (s *Service) getNodesPodCounts(clusterName string, nodeNames []string) map[
 				}
 				return podCounts
 			}
-			// Informer 缓存获取失败，记录原因并继续降级
-			s.logger.Debugf("Failed to get pods from Informer cache: %v, falling back to API", err)
+			// Informer 缓存获取失败，使用限速日志记录
+			logKey := fmt.Sprintf("informer_cache_failed_batch_%s", clusterName)
+			if s.logLimiter.shouldLog(logKey) {
+				s.logger.Debugf("Failed to get pods from Informer cache for cluster %s (batch): %v, falling back to API", clusterName, err)
+			}
 		}
 	}
 
 	// 策略3：最后的回退方案 - 使用分页 API 查询
 	// ⚠️ 这会给 API Server 带来压力，应该尽量避免
-	s.logger.Warningf("Both PodCountCache and Informer cache unavailable for cluster %s, falling back to paginated API call (this may impact API Server performance)", clusterName)
+	logKey := fmt.Sprintf("cache_fallback_batch_%s", clusterName)
+	if s.logLimiter.shouldLog(logKey) {
+		s.logger.Warningf("Both PodCountCache and Informer cache unavailable for cluster %s, falling back to paginated API call (this may impact API Server performance)", clusterName)
+	}
 
 	client, err := s.getClient(clusterName)
 	if err != nil {
