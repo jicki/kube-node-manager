@@ -1,320 +1,339 @@
-# 数据库迁移管理系统
+# 基于代码的数据库迁移系统
+
+> **版本**: v2.34.2+  
+> **状态**: ✅ 生产就绪
+
+## 概述
+
+从 v2.34.2 开始，Kube Node Manager 采用全新的基于代码的数据库迁移系统：
+
+- ✅ **表结构来自 GORM 模型**：不再维护重复的 schema 定义
+- ✅ **版本号自动生成**：基于表结构 checksum，无需手动维护
+- ✅ **迁移代码化**：使用 Go 函数而非 SQL 文件
+- ✅ **版本存数据库**：在 `system_metadata` 表中，不依赖 VERSION 文件
+- ✅ **自动过渡**：从旧的 SQL 迁移系统平滑过渡
 
 ## 快速开始
 
-### ⭐ 自动迁移（推荐）
+### 自动迁移（推荐）
 
-从 **v2.34.0** 开始，数据库迁移在应用启动时自动执行，无需手动运行迁移工具。
+应用启动时自动执行迁移，无需任何操作：
 
-**默认行为：**
-- ✅ 启动时自动检测数据库版本
-- ✅ 自动执行待迁移脚本
-- ✅ 验证数据库结构
-- ✅ 自动修复结构问题
-- ✅ 迁移失败时退出程序
+```bash
+# 启动应用即可
+./kube-node-manager
+```
 
-**配置项：**（在 `config.yaml` 中）
+**启动日志示例：**
+
+```
+========================================
+Starting Code-Based Database Migration
+========================================
+Initializing system metadata...
+--- Running GORM AutoMigrate ---
+✓ GORM AutoMigrate completed
+--- Initializing Version Manager ---
+Application Version:    v2.34.2
+Current Schema (DB):    a1b2c3d4
+Target Schema (Code):   a1b2c3d4
+✓ Schema version is up-to-date
+--- Executing Code Migrations ---
+✓ No pending code migrations
+--- Validating Database Schema ---
+✓ Database schema validation passed
+========================================
+Database Migration Completed in 0.85s
+✓ Database is ready and up-to-date
+========================================
+```
+
+### 配置选项
+
+在 `config.yaml` 中：
 
 ```yaml
 database:
+  type: postgres
+  # ... 其他数据库配置 ...
+  
+  # 自动迁移配置
   auto_migrate: true            # 启动时自动迁移（默认: true）
   validate_on_startup: true     # 启动时验证结构（默认: true）
   repair_on_startup: true       # 启动时自动修复（默认: true）
   migration_timeout: 300        # 迁移超时（秒，默认: 300）
 ```
 
-**健康检查接口：**
+### 健康检查接口
 
 ```bash
-# 查看数据库健康状态和版本信息
+# 数据库版本信息
 curl http://localhost:8080/api/health/database
 
-# 查看迁移状态和历史
+# 迁移状态和历史
 curl http://localhost:8080/api/health/migration
 
-# 验证数据库结构
+# 数据库结构验证
 curl http://localhost:8080/api/health/schema
 ```
 
-### 手动迁移（可选）
+## 核心概念
 
-如需手动管理迁移，可使用命令行工具：
+### 1. Schema Checksum
 
-```bash
-# 查看版本信息
-go run backend/tools/migrate.go -cmd version
+每次应用启动时，系统会：
+1. 从 GORM 模型提取所有表结构
+2. 计算表结构的 SHA256 checksum（取前 8 位 hex）
+3. 与数据库中存储的版本号对比
+4. 如不一致，执行必要的迁移
 
-# 运行迁移
-go run backend/tools/migrate.go -cmd migrate
+**示例 checksum**: `a1b2c3d4`
 
-# 验证数据库结构
-go run backend/tools/migrate.go -cmd validate
+### 2. System Metadata 表
 
-# 修复数据库结构（干运行）
-go run backend/tools/migrate.go -cmd repair --dry-run
+替代 VERSION 文件，所有版本信息存储在数据库中：
 
-# 修复数据库结构（实际执行）
-go run backend/tools/migrate.go -cmd repair
+| Key | Value | 说明 |
+|-----|-------|------|
+| `schema_version` | `a1b2c3d4` | 当前 schema checksum |
+| `app_version` | `v2.34.2` | 应用版本 |
+| `migration_system` | `code_based` | 迁移系统类型 |
+| `last_sql_migration` | `023` | 最后的 SQL 迁移（过渡用） |
+
+### 3. 代码迁移
+
+使用 Go 函数定义迁移，而非 SQL 文件：
+
+```go
+// 在 pkg/database/code_migrations.go 中
+var CodeMigrations = []CodeMigration{
+    {
+        ID:          "M001",
+        Description: "添加示例字段",
+        DependsOn:   []string{},
+        UpFunc: func(db *gorm.DB) error {
+            return db.Exec("ALTER TABLE example ADD COLUMN new_field VARCHAR(255)").Error
+        },
+        DownFunc: func(db *gorm.DB) error {
+            return db.Exec("ALTER TABLE example DROP COLUMN new_field").Error
+        },
+        CreatedAt: time.Date(2024, 11, 20, 0, 0, 0, 0, time.UTC),
+    },
+}
 ```
 
 ## 核心模块
 
 | 模块 | 文件 | 功能 |
 |------|------|------|
-| **自动迁移启动** ⭐ | `auto_migrate.go` | **启动时自动迁移主流程** |
-| 表结构定义 | `schema_definition.go` | 定义所有表的完整结构 |
-| 版本管理器 | `version_manager.go` | 版本跟踪和迁移路径计算 |
-| 结构验证器 | `schema_validator.go` | 验证数据库结构一致性 |
-| 自动修复引擎 | `schema_repair.go` | 生成并执行修复 SQL |
-| 迁移注册表 | `migration_registry.go` | 管理 23 个迁移脚本 |
-| 迁移管理器 | `migration.go` | 执行 SQL 迁移文件 |
-| 迁移服务层 | 在 `internal/service/migration_service.go` | 提供迁移状态查询接口 |
-| 健康检查接口 | 在 `internal/handler/health/health.go` | HTTP 接口查看迁移状态 |
-| 数据库初始化 | `database.go` | 初始化数据库连接 |
-
-## 主要功能
-
-### ⭐ 自动启动迁移（v2.34.0 新增）
-- **启动时自动执行**：无需手动运行迁移工具
-- **智能检测**：自动判断是否需要迁移
-- **完整流程**：GORM AutoMigrate → SQL 迁移 → 结构验证 → 自动修复
-- **失败保护**：迁移失败时退出程序，确保数据完整性
-- **历史记录**：所有迁移操作记录到 `migration_histories` 表
-- **超时控制**：可配置超时时间，防止迁移hang住
-- **配置灵活**：可通过配置启用/禁用各项功能
-
-### ✅ 健康检查接口（v2.34.0 新增）
-- **版本信息**：`GET /api/health/database` - 查看应用和数据库版本
-- **迁移状态**：`GET /api/health/migration` - 查看迁移状态和历史
-- **结构验证**：`GET /api/health/schema` - 验证数据库结构
-
-### ✅ 表结构定义和验证
-- 28 个表的完整定义
-- 支持 PostgreSQL 和 SQLite
-- 运行时结构验证
-
-### ✅ 版本管理
-- 基于 VERSION 文件的版本跟踪
-- 应用版本 → 数据库架构版本映射
-- 自动检测待执行迁移
-
-### ✅ 结构验证
-- 表、字段、索引验证
-- 类型匹配检查
-- 分级问题报告（Critical/Warning/Info）
-
-### ✅ 自动修复
-- 创建缺失的表和字段
-- 添加缺失的索引
-- 支持干运行模式
-
-### ✅ 迁移注册
-- 23 个迁移脚本的元信息
-- 依赖关系管理
-- 按分类和版本查询
+| **System Metadata** | `system_metadata.go` | 系统元数据表和辅助函数 |
+| **Schema Extraction** | `schema_definition.go` | 从 GORM 模型提取表结构 |
+| **Code Migrations** | `code_migrations.go` | 代码迁移注册和执行 |
+| **Version Manager** | `version_manager.go` | 版本管理（基于 checksum） |
+| **Auto Migration** | `auto_migrate.go` | 启动时自动迁移流程 |
+| **Migration Service** | `internal/service/migration_service.go` | 迁移服务API |
+| **Health Check** | `internal/handler/health/health.go` | HTTP健康检查接口 |
 
 ## 使用示例
 
-### ⭐ 自动迁移（推荐）
+### 添加新的代码迁移
 
-在应用启动时自动执行：
+1. 在 `pkg/database/code_migrations.go` 中注册：
 
 ```go
-import "kube-node-manager/pkg/database"
-
-func main() {
-    // 1. 初始化数据库
-    db, err := database.InitDatabase(dbConfig)
-    if err != nil {
-        log.Fatal("Failed to initialize database:", err)
-    }
-    
-    // 2. 运行 GORM AutoMigrate
-    if err := model.AutoMigrate(db); err != nil {
-        log.Fatal("Failed to run GORM auto-migrations:", err)
-    }
-    
-    // 3. 自动执行数据库迁移（包含验证和修复）
-    autoMigrateConfig := database.AutoMigrateConfig{
-        Enabled:           true,
-        ValidateOnStartup: true,
-        RepairOnStartup:   true,
-        MigrationTimeout:  300, // 5分钟
-    }
-    
-    if err := database.AutoMigrateOnStartup(db, autoMigrateConfig); err != nil {
-        log.Fatal("Database migration failed:", err)
-    }
-    
-    log.Println("✓ Database is ready and up-to-date")
-    
-    // 4. 启动应用服务...
+var CodeMigrations = []CodeMigration{
+    {
+        ID:          "M002",  // 唯一ID
+        Description: "为用户表添加手机号字段",
+        DependsOn:   []string{},  // 依赖的迁移ID
+        UpFunc: func(db *gorm.DB) error {
+            // 升级逻辑
+            return db.Exec(`
+                ALTER TABLE users 
+                ADD COLUMN phone VARCHAR(20)
+            `).Error
+        },
+        DownFunc: func(db *gorm.DB) error {
+            // 回滚逻辑（可选）
+            return db.Exec(`
+                ALTER TABLE users 
+                DROP COLUMN phone
+            `).Error
+        },
+        CreatedAt: time.Now(),
+    },
 }
 ```
+
+2. 重启应用，迁移自动执行
 
 ### 查询迁移状态
 
 通过 HTTP 接口：
 
 ```bash
-# 查看数据库健康状态
-curl http://localhost:8080/api/health/database
-
-# 返回示例
-{
-  "status": "healthy",
-  "timestamp": "2024-11-20T10:30:00Z",
-  "details": {
-    "connection": {
-      "status": "healthy",
-      "data": {...}
-    },
-    "version": {
-      "app_version": "v2.34.1",
-      "db_version": "023",
-      "latest_schema": "023",
-      "needs_migration": false,
-      "migrations_applied": 23,
-      "last_migration": "023_add_node_tracking_to_progress.sql",
-      "last_migration_time": "2024-11-20T10:00:00Z"
-    }
-  }
-}
-
-# 查看迁移历史
 curl http://localhost:8080/api/health/migration
+```
 
-# 返回示例
+响应示例：
+
+```json
 {
   "status": "healthy",
-  "timestamp": "2024-11-20T10:30:00Z",
-  "app_version": "v2.34.1",
-  "db_version": "023",
+  "app_version": "v2.34.2",
+  "db_version": "a1b2c3d4",
+  "latest_schema": "a1b2c3d4",
   "needs_migration": false,
-  "migrations_applied": 23,
+  "migrations_applied": 2,
   "pending_migrations": 0,
   "recent_history": [
     {
-      "id": 5,
-      "app_version": "v2.34.1",
-      "db_version": "023",
-      "migration_type": "auto_startup",
+      "id": 1,
+      "migration_id": "M001",
+      "description": "添加示例字段",
       "status": "success",
-      "duration_ms": 1234,
+      "duration_ms": 123,
       "applied_at": "2024-11-20T10:00:00Z"
     }
   ]
 }
 ```
 
-### 手动验证和修复
+### 修改表结构
+
+1. 修改 `internal/model` 中的 GORM 模型：
 
 ```go
-import "kube-node-manager/pkg/database"
-
-func main() {
-    // 初始化数据库
-    db, _ := database.InitDatabase(dbConfig)
-    
-    // 执行验证和修复
-    dbType := database.DatabaseTypePostgreSQL
-    err := database.ValidateAndRepair(db, dbType, false)
-    if err != nil {
-        log.Fatal(err)
-    }
+type User struct {
+    ID       uint   `gorm:"primaryKey"`
+    Username string `gorm:"uniqueIndex;not null"`
+    Email    string `gorm:"uniqueIndex;not null"`
+    Phone    string `gorm:"size:20"`  // 新增字段
+    // ...
 }
 ```
 
-### 检查版本信息
+2. 重启应用
+3. GORM AutoMigrate 自动添加字段
+4. Schema checksum 自动更新
 
-```go
-vm, _ := database.NewVersionManager(db, "./VERSION")
-info := vm.GetVersionInfo()
-fmt.Printf("App: %s, DB: %s\n", info.AppVersion, info.DBVersion)
-```
+## 从旧系统迁移
 
-### 生成修复 SQL
+### 自动过渡
 
-```go
-sqlStatements, _ := database.GenerateRepairSQL(db, dbType)
-for _, sql := range sqlStatements {
-    fmt.Println(sql)
-}
-```
+系统会自动检测并执行过渡，无需任何操作。
 
-## 测试
+首次启动时会：
+1. 检测 `system_metadata` 表是否存在
+2. 如不存在且 `schema_migrations` 存在，执行过渡
+3. 从 `schema_migrations` 读取最后的 SQL 迁移版本
+4. 保存到 `system_metadata` 表
+5. 标记迁移系统为 `code_based`
 
-运行集成测试：
+### 手动过渡（如需要）
+
+如果自动过渡失败，可以手动执行：
 
 ```bash
-cd backend/pkg/database
-go test -v
+# PostgreSQL
+psql -U username -d database_name -f backend/migrations/000_transition_to_code_based.sql
+
+# SQLite
+sqlite3 database.db < backend/migrations/000_transition_to_code_based.sql
 ```
 
-测试覆盖：
-- 表结构定义完整性
-- 版本管理器功能
-- 结构验证器
-- 修复器（干运行模式）
-- 迁移注册表
-- 端到端迁移流程
+## 与旧系统的区别
 
-## 版本映射
+| 特性 | 旧系统（SQL 文件） | 新系统（基于代码） |
+|------|-------------------|-------------------|
+| 表结构定义 | 手动维护 schema_definition.go | 自动从 GORM 模型提取 |
+| 版本号 | 手动维护 VERSION 文件 + VersionMapping | 自动计算 checksum |
+| 迁移脚本 | SQL 文件 (001_xxx.sql) | Go 函数 (CodeMigration) |
+| 版本存储 | schema_migrations 表 + VERSION 文件 | system_metadata 表 |
+| 迁移注册 | migration_registry.go | code_migrations.go |
+| 执行时机 | 启动时读取 SQL 文件 | 启动时执行 Go 函数 |
 
-| 应用版本 | 数据库架构版本 | 迁移数量 |
-|----------|----------------|----------|
-| v2.34.1  | 023            | 23       |
-| v2.34.0  | 022            | 22       |
-| v2.33.0  | 021            | 21       |
-| v2.32.0  | 019            | 19       |
-| v2.31.0  | 017            | 17       |
+## 故障排查
 
-完整版本映射见 `version_manager.go` 中的 `VersionMapping`。
+### 迁移失败
 
-## 文档
+**症状**: 应用启动失败，日志显示 "Database migration failed"
 
-详细文档：[database-migration-system.md](../../../docs/database-migration-system.md)
+**排查步骤**:
+1. 查看详细错误日志
+2. 检查数据库连接
+3. 检查数据库用户权限
+4. 查看 `system_metadata` 表
+5. 查看 `code_migration_records` 表
 
-包含：
-- 详细功能说明
-- 所有命令用法
-- 使用场景和最佳实践
-- 故障排查指南
-- 性能优化建议
-- 安全注意事项
+**解决方案**:
 
-## 架构设计
+```sql
+-- 查看当前版本
+SELECT * FROM system_metadata WHERE key = 'schema_version';
 
-### 设计原则
+-- 查看迁移记录
+SELECT * FROM code_migration_records ORDER BY applied_at DESC;
 
-1. **向后兼容**：不破坏现有的 MigrationManager
-2. **渐进式采用**：可逐步从 GORM AutoMigrate 迁移
-3. **安全优先**：所有操作支持 Dry Run
-4. **数据库无关**：支持多种数据库类型
-5. **版本追踪**：使用 VERSION 文件作为主版本号
-
-### 工作流程
-
+-- 查看失败的迁移
+SELECT * FROM code_migration_records WHERE status = 'failed';
 ```
-1. 读取 VERSION 文件 → 应用版本
-2. 查询 schema_migrations → 数据库版本
-3. 比较版本 → 确定待执行迁移
-4. 验证数据库结构 → 生成差异报告
-5. 执行修复操作 → 创建表/字段/索引
-6. 记录迁移日志 → 更新版本信息
+
+### Schema 版本不匹配
+
+**症状**: 日志显示 "Schema version mismatch"
+
+**原因**: 代码中的表结构与数据库不一致
+
+**解决方案**:
+1. 让自动修复功能处理（`repair_on_startup: true`）
+2. 或手动验证：
+
+```bash
+curl http://localhost:8080/api/health/schema
 ```
+
+### 回滚到旧系统
+
+**不推荐**，但如果必须：
+
+```sql
+-- 1. 备份数据库
+-- 2. 删除新系统的表
+DROP TABLE IF EXISTS system_metadata;
+DROP TABLE IF EXISTS code_migration_records;
+
+-- 3. 使用旧版本应用
+```
+
+## 最佳实践
+
+1. **Always 备份**: 执行迁移前备份数据库
+2. **测试环境先行**: 在测试环境验证后再部署生产
+3. **监控迁移**: 使用健康检查接口监控迁移状态
+4. **代码审查**: 所有迁移代码需要 code review
+5. **回滚准备**: 提供 DownFunc 以支持回滚
+
+## 相关文档
+
+- [自动迁移文档](../../../docs/auto-migration.md) - 详细的自动迁移说明
+- [SQL 迁移历史](../../migrations/README.md) - 旧的 SQL 迁移文件（已废弃）
+- [健康检查 API](../../../docs/api/health-check.md) - 健康检查接口文档
 
 ## 贡献
 
-添加新迁移：
+添加新功能或修复 bug 时：
 
-1. 创建 SQL 文件：`backend/migrations/024_description.sql`
-2. 注册迁移：在 `migration_registry.go` 添加条目
-3. 更新版本映射：在 `version_manager.go` 更新 `VersionMapping`
-4. 运行测试：`go test -v`
-5. 更新文档
+1. 修改 GORM 模型 (`internal/model`)
+2. 如需数据迁移，在 `code_migrations.go` 中注册
+3. 运行测试
+4. 提交 PR
 
 ## 许可证
 
 与主项目相同
 
+---
+
+**最后更新**: 2024-11-20  
+**维护者**: Kube Node Manager Team

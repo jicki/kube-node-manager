@@ -4,8 +4,9 @@ import (
 	"gorm.io/gorm"
 )
 
-func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+// GetAllModels 返回所有 GORM 模型实例（用于新的代码迁移系统）
+func GetAllModels() []interface{} {
+	return []interface{}{
 		&User{},
 		&Cluster{},
 		&LabelTemplate{},
@@ -33,7 +34,12 @@ func AutoMigrate(db *gorm.DB) error {
 		&AnsibleTaskTag{},
 		&AnsibleWorkflow{},
 		&AnsibleWorkflowExecution{},
-	)
+	}
+}
+
+// AutoMigrate 执行 GORM 自动迁移（保留用于向后兼容）
+func AutoMigrate(db *gorm.DB) error {
+	return db.AutoMigrate(GetAllModels()...)
 }
 
 func SeedDefaultData(db *gorm.DB) error {

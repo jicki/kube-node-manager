@@ -13,10 +13,10 @@ type MigrationService struct {
 	versionManager *database.VersionManager
 }
 
-// NewMigrationService 创建迁移服务
+// NewMigrationService 创建迁移服务（新版本 - 基于代码）
 func NewMigrationService(db *gorm.DB) (*MigrationService, error) {
-	versionPath := database.DetectVersionPath()
-	versionManager, err := database.NewVersionManager(db, versionPath)
+	// 创建版本管理器（不传入模型列表，使用当前数据库版本）
+	versionManager, err := database.NewVersionManager(db, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create version manager: %w", err)
 	}

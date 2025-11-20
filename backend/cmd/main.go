@@ -62,12 +62,10 @@ func main() {
 		log.Fatal("Failed to initialize database:", err)
 	}
 
-	// 运行 GORM 自动迁移（创建/更新表结构）
-	if err := model.AutoMigrate(db); err != nil {
-		log.Fatal("Failed to run GORM auto-migrations:", err)
-	}
-
-	// 自动执行数据库迁移（启动时）
+	// 获取所有 GORM 模型
+	models := model.GetAllModels()
+	
+	// 自动执行数据库迁移（基于代码的新系统）
 	autoMigrateConfig := database.AutoMigrateConfig{
 		Enabled:           cfg.Database.AutoMigrate,
 		ValidateOnStartup: cfg.Database.ValidateOnStartup,
@@ -75,7 +73,7 @@ func main() {
 		MigrationTimeout:  cfg.Database.MigrationTimeout,
 	}
 	
-	if err := database.AutoMigrateOnStartup(db, autoMigrateConfig); err != nil {
+	if err := database.AutoMigrateOnStartup(db, models, autoMigrateConfig); err != nil {
 		log.Fatal("Database migration failed:", err)
 	}
 

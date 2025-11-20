@@ -1,7 +1,12 @@
 package database
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"sort"
+	"strings"
+
+	"gorm.io/gorm"
 )
 
 // DatabaseType 数据库类型
@@ -932,5 +937,160 @@ func GetTableNames() []string {
 		names[i] = schema.Name
 	}
 	return names
+}
+
+// ========================================
+// GORM 模型反射和 Schema 提取
+// ========================================
+
+// GetAllModels 返回所有 GORM 模型实例
+// 注意：这些模型需要与 internal/model/migrate.go 中的 AutoMigrate 保持一致
+func GetAllModels(db *gorm.DB) []interface{} {
+	// 导入 model 包需要在文件头部添加，这里只是占位
+	// 实际使用时需要确保所有模型类型都已导入
+	// 为了避免循环依赖，我们将在调用侧传入模型列表
+	return nil
+}
+
+// ExtractTableSchemaFromModel 从 GORM 模型提取表结构
+func ExtractTableSchemaFromModel(db *gorm.DB, model interface{}) (TableSchema, error) {
+	stmt := &gorm.Statement{DB: db}
+	if err := stmt.Parse(model); err != nil {
+		return TableSchema{}, fmt.Errorf("failed to parse model: %w", err)
+	}
+	
+	schema := TableSchema{
+		Name:    stmt.Schema.Table,
+		Columns: []ColumnDefinition{},
+		Indexes: []IndexDefinition{},
+	}
+	
+	// 提取字段定义
+	for _, field := range stmt.Schema.Fields {
+		// 跳过没有数据库列名的字段（通常是关系字段）
+		if field.DBName == "" {
+			continue
+		}
+		
+		col := ColumnDefinition{
+			Name:       field.DBName,
+			Type:       string(field.DataType),
+			Nullable:   !field.NotNull,
+			PrimaryKey: field.PrimaryKey,
+			Unique:     field.Unique,
+			AutoIncr:   field.AutoIncrement,
+			Comment:    field.Comment,
+		}
+		
+		// 处理默认值
+		if field.DefaultValue != "" {
+			defaultVal := field.DefaultValue
+			col.DefaultValue = &defaultVal
+		}
+		
+		schema.Columns = append(schema.Columns, col)
+	}
+	
+	// 提取索引定义
+	for _, idx := range stmt.Schema.ParseIndexes() {
+		index := IndexDefinition{
+			Name:    idx.Name,
+			Columns: []string{},
+			Unique:  idx.Class == "UNIQUE",
+		}
+		
+		for _, field := range idx.Fields {
+			index.Columns = append(index.Columns, field.DBName)
+		}
+		
+		if len(index.Columns) > 0 {
+			schema.Indexes = append(schema.Indexes, index)
+		}
+	}
+	
+	return schema, nil
+}
+
+// ExtractSchemaFromModels 从所有 GORM 模型提取表结构
+func ExtractSchemaFromModels(db *gorm.DB, models []interface{}) (map[string]TableSchema, error) {
+	schemas := make(map[string]TableSchema)
+	
+	for _, model := range models {
+		schema, err := ExtractTableSchemaFromModel(db, model)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract schema from model: %w", err)
+		}
+		
+		schemas[schema.Name] = schema
+	}
+	
+	return schemas, nil
+}
+
+// CalculateSchemaChecksum 计算 schema checksum
+// 使用所有表结构的规范化表示计算 SHA256，返回前 8 位 hex
+func CalculateSchemaChecksum(schemas map[string]TableSchema) string {
+	// 1. 收集并排序表名
+	tableNames := make([]string, 0, len(schemas))
+	for name := range schemas {
+		tableNames = append(tableNames, name)
+	}
+	sort.Strings(tableNames)
+	
+	// 2. 构建规范化的 schema 表示
+	var builder strings.Builder
+	
+	for _, tableName := range tableNames {
+		schema := schemas[tableName]
+		
+		// 表名
+		builder.WriteString(fmt.Sprintf("TABLE:%s\n", schema.Name))
+		
+		// 排序字段
+		columns := make([]ColumnDefinition, len(schema.Columns))
+		copy(columns, schema.Columns)
+		sort.Slice(columns, func(i, j int) bool {
+			return columns[i].Name < columns[j].Name
+		})
+		
+		// 字段定义
+		for _, col := range columns {
+			builder.WriteString(fmt.Sprintf("  COL:%s,%s,%v,%v,%v,%v\n",
+				col.Name,
+				col.Type,
+				col.Nullable,
+				col.PrimaryKey,
+				col.Unique,
+				col.AutoIncr,
+			))
+			if col.DefaultValue != nil {
+				builder.WriteString(fmt.Sprintf("    DEFAULT:%s\n", *col.DefaultValue))
+			}
+		}
+		
+		// 排序索引
+		indexes := make([]IndexDefinition, len(schema.Indexes))
+		copy(indexes, schema.Indexes)
+		sort.Slice(indexes, func(i, j int) bool {
+			return indexes[i].Name < indexes[j].Name
+		})
+		
+		// 索引定义
+		for _, idx := range indexes {
+			builder.WriteString(fmt.Sprintf("  IDX:%s,%v,%v\n",
+				idx.Name,
+				idx.Unique,
+				strings.Join(idx.Columns, ","),
+			))
+		}
+		
+		builder.WriteString("\n")
+	}
+	
+	// 3. 计算 SHA256
+	hash := sha256.Sum256([]byte(builder.String()))
+	
+	// 4. 返回前 8 位 hex
+	return fmt.Sprintf("%x", hash[:4])
 }
 
