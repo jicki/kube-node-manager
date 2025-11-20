@@ -248,20 +248,18 @@ func (dps *DatabaseProgressService) CompleteTask(taskID string, userID uint) err
 		var notifySuccessNodes []string
 		var notifyFailedNodes []model.NodeError
 		if task.SuccessNodes != "" {
-			if err := json.Unmarshal([]byte(task.SuccessNodes), &notifySuccessNodes); err != nil {
-				dps.logger.Errorf("Failed to unmarshal success nodes for task %s: %v (data: %s)", 
-					taskID, err, task.SuccessNodes[:min(100, len(task.SuccessNodes))])
-			} else {
-				dps.logger.Debugf("Task %s: Unmarshaled %d success nodes", taskID, len(notifySuccessNodes))
-			}
+		if err := json.Unmarshal([]byte(task.SuccessNodes), &notifySuccessNodes); err != nil {
+			dps.logger.Errorf("Failed to unmarshal success nodes for task %s: %v (data: %s)", 
+				taskID, err, task.SuccessNodes[:min(100, len(task.SuccessNodes))])
+		}
+		// 移除成功解析的 DEBUG 日志，避免日志轰炸
 		}
 		if task.FailedNodes != "" {
-			if err := json.Unmarshal([]byte(task.FailedNodes), &notifyFailedNodes); err != nil {
-				dps.logger.Errorf("Failed to unmarshal failed nodes for task %s: %v (data: %s)", 
-					taskID, err, task.FailedNodes[:min(100, len(task.FailedNodes))])
-			} else {
-				dps.logger.Debugf("Task %s: Unmarshaled %d failed nodes", taskID, len(notifyFailedNodes))
-			}
+		if err := json.Unmarshal([]byte(task.FailedNodes), &notifyFailedNodes); err != nil {
+			dps.logger.Errorf("Failed to unmarshal failed nodes for task %s: %v (data: %s)", 
+				taskID, err, task.FailedNodes[:min(100, len(task.FailedNodes))])
+		}
+		// 移除成功解析的 DEBUG 日志，避免日志轰炸
 		}
 		
 		progressMsg := ProgressMessage{

@@ -476,10 +476,14 @@ func (s *Service) UpdateProgress(taskID string, current int, currentNode string,
 		}
 
 		s.sendToUser(userID, message)
-		s.logger.Infof("Progress updated for task %s: %d/%d", taskID, current, task.Total)
+		// 只在关键进度节点记录日志（每10%或最后一个节点）
+		progressPercent := int(progress)
+		if progressPercent%10 == 0 || current == task.Total || current == 1 {
+			s.logger.Infof("Progress updated for task %s: %d/%d (%.1f%%)", taskID, current, task.Total, progress)
+		}
 	} else {
 		// 只在关键节点记录连接缺失（减少日志噪音）
-		if current == task.Total || current%5 == 0 {
+		if current == task.Total || current%10 == 0 {
 			s.logger.Infof("Progress update for task %s (%d/%d) - no WebSocket connection for user %d", taskID, current, task.Total, userID)
 		}
 	}
@@ -856,18 +860,19 @@ func (s *Service) ProcessBatchWithProgress(
 			} else {
 				mu.Lock()
 				successNodes = append(successNodes, node)
-				// 更新任务的成功节点列表
-				s.taskMutex.RLock()
-				if task, exists := s.tasks[taskID]; exists {
-					task.SuccessNodes = successNodes
-				}
-				s.taskMutex.RUnlock()
-				mu.Unlock()
-				s.logger.Infof("Successfully processed node %s (%d/%d)", node, currentIndex, total)
+			// 更新任务的成功节点列表
+			s.taskMutex.RLock()
+			if task, exists := s.tasks[taskID]; exists {
+				task.SuccessNodes = successNodes
 			}
+			s.taskMutex.RUnlock()
+			mu.Unlock()
+			// 移除单个节点处理日志，避免日志轰炸
+			// 汇总日志将在任务完成时统一输出
+		}
 
-			// 处理完成后再次更新进度，确保前端收到最新状态
-			s.UpdateProgress(taskID, currentIndex, node, userID)
+		// 处理完成后再次更新进度，确保前端收到最新状态
+		s.UpdateProgress(taskID, currentIndex, node, userID)
 		}(i, nodeName)
 	}
 

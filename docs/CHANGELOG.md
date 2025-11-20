@@ -7,6 +7,159 @@
 
 ---
 
+## [v2.34.13] - 2025-11-20
+
+### 🔇 优化 - 进一步降低日志噪音
+
+#### 优化目标
+针对用户反馈"大量的 DEBUG 日志"进行全面优化，显著减少高频日志输出。
+
+#### 主要优化内容
+
+##### 1. **移除单个节点处理日志**
+**文件**：`backend/internal/service/progress/progress.go`
+
+**修改前**：
+```go
+s.logger.Infof("Successfully processed node %s (%d/%d)", node, currentIndex, total)
+```
+- **问题**：批量处理 100 个节点时产生 100 条 INFO 日志
+- **影响**：严重的日志轰炸，难以查看关键信息
+
+**修改后**：
+```go
+// 移除单个节点处理日志，避免日志轰炸
+// 汇总日志将在任务完成时统一输出
+```
+- **效果**：单个节点处理不再产生日志
+- **保留**：任务完成时的汇总日志（成功/失败数量）
+
+##### 2. **进度更新日志增加阈值**
+**文件**：`backend/internal/service/progress/progress.go`
+
+**修改前**：
+```go
+s.logger.Infof("Progress updated for task %s: %d/%d", taskID, current, task.Total)
+```
+- **问题**：每次进度更新都记录日志
+
+**修改后**：
+```go
+// 只在关键进度节点记录日志（每10%或最后一个节点）
+progressPercent := int(progress)
+if progressPercent%10 == 0 || current == task.Total || current == 1 {
+    s.logger.Infof("Progress updated for task %s: %d/%d (%.1f%%)", taskID, current, task.Total, progress)
+}
+```
+- **效果**：100 个节点仅产生约 10 条进度日志
+- **触发条件**：
+  - 第一个节点（0%）
+  - 每 10% 进度里程碑
+  - 最后一个节点（100%）
+
+##### 3. **移除 PostgreSQL 通知成功日志**
+**文件**：`backend/internal/service/progress/notifier.go`
+
+**修改**：
+```go
+// 移除成功发送的 DEBUG 日志，避免日志轰炸
+// 只在出错时记录（已在上面的 Errorf 中处理）
+```
+- **效果**：不再记录每次成功的 `pg_notify` 调用
+- **保留**：只记录失败的通知（ERROR 级别）
+
+##### 4. **移除消息转发日志**
+**文件**：`backend/internal/service/progress/notifier.go`
+
+**修改**：
+```go
+// 移除转发日志，避免日志轰炸
+// 消息转发成功不需要记录日志
+```
+- **效果**：不再记录每次消息转发到 WebSocket 的 DEBUG 日志
+
+##### 5. **移除 JSON 解析成功日志**
+**文件**：`backend/internal/service/progress/database.go`
+
+**修改前**：
+```go
+dps.logger.Debugf("Task %s: Unmarshaled %d success nodes", taskID, len(notifySuccessNodes))
+dps.logger.Debugf("Task %s: Unmarshaled %d failed nodes", taskID, len(notifyFailedNodes))
+```
+
+**修改后**：
+```go
+// 移除成功解析的 DEBUG 日志，避免日志轰炸
+```
+- **效果**：不再记录成功的 JSON 解析操作
+- **保留**：只记录解析失败的错误（ERROR 级别）
+
+##### 6. **优化连接丢失日志频率**
+**文件**：`backend/internal/service/progress/progress.go`
+
+**修改**：
+```go
+// 只在关键节点记录连接缺失（减少日志噪音）
+if current == task.Total || current%10 == 0 {
+    s.logger.Infof("Progress update for task %s (%d/%d) - no WebSocket connection for user %d", 
+        taskID, current, task.Total, userID)
+}
+```
+- **效果**：从每 5 个节点记录一次改为每 10 个节点记录一次
+
+#### 优化效果对比
+
+| 场景 | 优化前 | 优化后 | 减少比例 |
+|------|--------|--------|----------|
+| 处理 100 个节点 | ~300 条日志 | ~15 条日志 | **95%** ↓ |
+| 每次进度更新 | 1 条 INFO | 0~1 条 INFO | **90%** ↓ |
+| PostgreSQL 通知 | 1 条 DEBUG | 0 条 | **100%** ↓ |
+| JSON 解析 | 2 条 DEBUG | 0 条 | **100%** ↓ |
+
+#### 保留的关键日志
+
+**仍会记录的重要日志**：
+- ✅ 任务创建和完成（INFO）
+- ✅ 重大错误和警告（ERROR/WARNING）
+- ✅ 服务初始化和关闭（INFO）
+- ✅ 关键进度里程碑（10%、20%...100%）
+- ✅ PostgreSQL Listener 连接状态（INFO/ERROR）
+- ✅ WebSocket 连接建立和断开（INFO）
+
+**移除的冗余日志**：
+- ❌ 每个节点的处理详情
+- ❌ 每次进度更新的详情
+- ❌ 每次成功的通知/消息转发
+- ❌ 每次成功的 JSON 解析
+- ❌ 常规的数据库操作成功日志
+
+#### 用户操作建议
+
+**立即生效**：
+1. 无需配置更改
+2. 升级到 v2.34.13 后自动生效
+3. 日志文件大小将显著减小
+
+**日志级别调整**（如需要）：
+```yaml
+# 如果需要更详细的调试信息，可以临时启用 DEBUG 级别
+log_level: "DEBUG"  # 默认为 "INFO"
+```
+
+**注意事项**：
+- 日志优化不影响功能
+- 所有错误和警告仍会完整记录
+- 关键事件的日志仍然保留
+- 如需详细日志可临时调整日志级别
+
+#### 相关文件
+
+- `backend/internal/service/progress/progress.go` - 主要进度服务
+- `backend/internal/service/progress/notifier.go` - PostgreSQL 通知器
+- `backend/internal/service/progress/database.go` - 数据库进度服务
+
+---
+
 ## [v2.34.10] - 2025-11-20
 
 ### 🔧 优化 - PostgreSQL Notifier 连接健壮性与日志降噪

@@ -228,10 +228,8 @@ func (p *PostgresNotifier) Notify(ctx context.Context, message ProgressMessage) 
 		return fmt.Errorf("failed to notify: %w", result.Error)
 	}
 	
-	// 只记录重要消息的成功发送
-	if message.Type == "complete" || message.Type == "error" {
-		p.logger.Debugf("PostgreSQL notification sent successfully (payload: %d bytes)", len(payload))
-	}
+	// 移除成功发送的 DEBUG 日志，避免日志轰炸
+	// 只在出错时记录（已在上面的 Errorf 中处理）
 	return nil
 }
 
@@ -276,14 +274,11 @@ func (p *PostgresNotifier) Subscribe(ctx context.Context) (<-chan ProgressMessag
 						msg.TaskID, msg.Type, msg.UserID)
 				}
 				
-				select {
-				case messageChan <- msg:
-					// 只记录重要消息的转发
-					if msg.Type == "complete" || msg.Type == "error" {
-						p.logger.Debugf("Forwarded %s notification for task %s to WebSocket", 
-							msg.Type, msg.TaskID)
-					}
-				case <-ctx.Done():
+			select {
+			case messageChan <- msg:
+				// 移除转发日志，避免日志轰炸
+				// 消息转发成功不需要记录日志
+			case <-ctx.Done():
 					p.logger.Info("Context cancelled while forwarding message")
 					return
 				default:
