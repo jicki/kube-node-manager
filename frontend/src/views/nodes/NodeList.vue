@@ -1361,8 +1361,8 @@ const confirmBatchCordon = async () => {
     const { reason, nodes } = cordonReasonForm.value
     const nodeNames = nodes.map(node => node.name)
     
-    // 检查节点数量，如果大于5个则使用带进度的API
-    if (nodeNames.length > 5) {
+    // 检查节点数量，如果大于等于2个则使用带进度的API
+    if (nodeNames.length >= 2) {
       // 使用带进度推送的批量操作
       const progressResponse = await nodeApi.batchCordonWithProgress(
         nodeNames, 
@@ -1391,7 +1391,7 @@ const confirmBatchCordon = async () => {
     }
   } catch (error) {
     ElMessage.error(`批量禁止调度失败: ${error.message}`)
-    if (cordonReasonForm.value.nodes.length <= 5) {
+    if (cordonReasonForm.value.nodes.length < 2) {
       batchLoading.cordon = false
     }
   }
@@ -1404,8 +1404,8 @@ const batchUncordon = async () => {
     batchLoading.uncordon = true
     const nodeNames = selectedNodes.value.map(node => node.name)
     
-    // 检查节点数量，如果大于5个则使用带进度的API
-    if (nodeNames.length > 5) {
+    // 检查节点数量，如果大于等于2个则使用带进度的API
+    if (nodeNames.length >= 2) {
       // 使用带进度推送的批量操作
       const progressResponse = await nodeApi.batchUncordonWithProgress(
         nodeNames, 
@@ -1431,7 +1431,7 @@ const batchUncordon = async () => {
     }
   } catch (error) {
     ElMessage.error(`批量解除调度失败: ${error.message}`)
-    if (selectedNodes.value.length <= 5) {
+    if (selectedNodes.value.length < 2) {
       batchLoading.uncordon = false
     }
   }
@@ -1488,8 +1488,8 @@ const confirmBatchDrain = async () => {
     const nodeNames = drainReasonForm.value.nodes.map(node => node.name)
     const reason = drainReasonForm.value.reason
     
-    // 检查节点数量，如果大于5个则使用带进度的API
-    if (nodeNames.length > 5) {
+    // 检查节点数量，如果大于等于2个则使用带进度的API
+    if (nodeNames.length >= 2) {
       // 使用带进度推送的批量操作
       const progressResponse = await nodeApi.batchDrainWithProgress(
         nodeNames, 
@@ -1517,7 +1517,7 @@ const confirmBatchDrain = async () => {
     }
   } catch (error) {
     ElMessage.error(`批量驱逐节点失败: ${error.message}`)
-    if (drainReasonForm.value.nodes.length <= 5) {
+    if (drainReasonForm.value.nodes.length < 2) {
       batchLoading.drain = false
     }
   }
@@ -1560,8 +1560,8 @@ const confirmBatchDeleteLabels = async () => {
       cluster_name: clusterStore.currentClusterName
     }
 
-    // 检查节点数量，如果大于5个则使用带进度的API
-    if (selectedNodes.value.length > 5) {
+    // 检查节点数量，如果大于等于2个则使用带进度的API
+    if (selectedNodes.value.length >= 2) {
       // 使用带进度推送的批量删除
       const progressResponse = await labelApi.batchDeleteLabelsWithProgress(requestData)
       
@@ -1589,7 +1589,7 @@ const confirmBatchDeleteLabels = async () => {
   } catch (error) {
     ElMessage.error(`批量删除标签失败: ${error.message || '未知错误'}`)
   } finally {
-    if (selectedNodes.value.length <= 5) {
+    if (selectedNodes.value.length < 2) {
       batchLoading.deleteLabels = false
     }
   }
@@ -1627,8 +1627,8 @@ const confirmBatchDeleteTaints = async () => {
       cluster_name: clusterStore.currentClusterName
     }
 
-    // 检查节点数量，如果大于5个则使用带进度的API
-    if (selectedNodes.value.length > 5) {
+    // 检查节点数量，如果大于等于2个则使用带进度的API
+    if (selectedNodes.value.length >= 2) {
       // 使用带进度推送的批量删除
       const progressResponse = await taintApi.batchDeleteTaintsWithProgress(requestData)
       
@@ -1656,7 +1656,7 @@ const confirmBatchDeleteTaints = async () => {
   } catch (error) {
     ElMessage.error(`批量删除污点失败: ${error.message || '未知错误'}`)
   } finally {
-    if (selectedNodes.value.length <= 5) {
+    if (selectedNodes.value.length < 2) {
       batchLoading.deleteTaints = false
     }
   }

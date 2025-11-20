@@ -51,7 +51,17 @@ type LDAPConfig struct {
 }
 
 type ProgressConfig struct {
-	EnableDatabase bool `mapstructure:"enable_database"` // 启用数据库模式用于多副本支持
+	EnableDatabase bool          `mapstructure:"enable_database"` // 启用数据库模式用于多副本支持
+	NotifyType     string        `mapstructure:"notify_type"`     // 通知方式：polling, postgres, redis
+	Redis          RedisConfig   `mapstructure:"redis"`           // Redis 配置
+	PollInterval   int           `mapstructure:"poll_interval"`   // 轮询间隔（毫秒），仅 polling 模式使用
+}
+
+type RedisConfig struct {
+	Enabled  bool   `mapstructure:"enabled"`  // 启用 Redis
+	Addr     string `mapstructure:"addr"`     // Redis 地址 (host:port)
+	Password string `mapstructure:"password"` // Redis 密码
+	DB       int    `mapstructure:"db"`       // Redis 数据库编号
 }
 
 type MonitoringConfig struct {
@@ -113,6 +123,12 @@ func LoadConfig() *Config {
 	viper.SetDefault("ldap.enabled", false)
 	viper.SetDefault("ldap.port", 389)
 	viper.SetDefault("progress.enable_database", false)
+	viper.SetDefault("progress.notify_type", "polling") // polling, postgres, redis
+	viper.SetDefault("progress.poll_interval", 500)     // 500ms
+	viper.SetDefault("progress.redis.enabled", false)
+	viper.SetDefault("progress.redis.addr", "localhost:6379")
+	viper.SetDefault("progress.redis.password", "")
+	viper.SetDefault("progress.redis.db", 0)
 	viper.SetDefault("monitoring.enabled", true)
 	viper.SetDefault("monitoring.interval", 60)
 	viper.SetDefault("monitoring.report_scheduler_enabled", true)

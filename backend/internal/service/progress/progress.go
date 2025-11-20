@@ -24,16 +24,19 @@ var upgrader = websocket.Upgrader{
 
 // ProgressMessage 进度消息结构
 type ProgressMessage struct {
-	TaskID      string    `json:"task_id"`
-	Type        string    `json:"type"`            // progress, complete, error
-	Action      string    `json:"action"`          // batch_label, batch_taint
-	Current     int       `json:"current"`         // 当前完成数量
-	Total       int       `json:"total"`           // 总数量
-	Progress    float64   `json:"progress"`        // 进度百分比 (0-100)
-	CurrentNode string    `json:"current_node"`    // 当前处理的节点
-	Message     string    `json:"message"`         // 消息内容
-	Error       string    `json:"error,omitempty"` // 错误信息
-	Timestamp   time.Time `json:"timestamp"`
+	TaskID       string              `json:"task_id"`
+	UserID       uint                `json:"user_id"`         // 用户ID（用于通知路由）
+	Type         string              `json:"type"`            // progress, complete, error
+	Action       string              `json:"action"`          // batch_label, batch_taint
+	Current      int                 `json:"current"`         // 当前完成数量
+	Total        int                 `json:"total"`           // 总数量
+	Progress     float64             `json:"progress"`        // 进度百分比 (0-100)
+	CurrentNode  string              `json:"current_node"`    // 当前处理的节点
+	SuccessNodes []string            `json:"success_nodes"`   // 成功节点列表
+	FailedNodes  []model.NodeError   `json:"failed_nodes"`    // 失败节点列表
+	Message      string              `json:"message"`         // 消息内容
+	Error        string              `json:"error,omitempty"` // 错误信息
+	Timestamp    time.Time           `json:"timestamp"`
 }
 
 // TaskProgress 任务进度
@@ -47,7 +50,9 @@ type TaskProgress struct {
 	Completed       bool
 	CompletedAt     time.Time
 	UserID          uint
-	PendingMessages []ProgressMessage // 待发送的消息队列
+	SuccessNodes    []string            // 成功节点列表
+	FailedNodes     []model.NodeError   // 失败节点列表
+	PendingMessages []ProgressMessage   // 待发送的消息队列
 }
 
 // Connection WebSocket连接
@@ -100,10 +105,10 @@ func NewService(logger *logger.Logger) *Service {
 }
 
 // EnableDatabaseMode 启用数据库模式（用于多副本环境）
-func (s *Service) EnableDatabaseMode(db *gorm.DB) {
-	s.dbProgressService = NewDatabaseProgressService(db, s.logger, s)
+func (s *Service) EnableDatabaseMode(db *gorm.DB, notifyType string, pollInterval int, redisAddr, redisPassword string, redisDB int) {
+	s.dbProgressService = NewDatabaseProgressService(db, s.logger, s, notifyType, pollInterval, redisAddr, redisPassword, redisDB)
 	s.useDatabase = true
-	s.logger.Infof("Progress service enabled database mode for multi-replica support")
+	s.logger.Infof("Progress service enabled database mode for multi-replica support with %s notification", notifyType)
 }
 
 // SetAuthService 设置认证服务
@@ -414,6 +419,8 @@ func (s *Service) CreateTask(taskID, action string, total int, userID uint) {
 		IsRunning:       true,
 		Completed:       false,
 		UserID:          userID,
+		SuccessNodes:    make([]string, 0),
+		FailedNodes:     make([]model.NodeError, 0),
 		PendingMessages: make([]ProgressMessage, 0),
 	}
 
@@ -446,15 +453,17 @@ func (s *Service) UpdateProgress(taskID string, current int, currentNode string,
 
 	if hasConnection {
 		message := ProgressMessage{
-			TaskID:      taskID,
-			Type:        "progress",
-			Action:      task.Action,
-			Current:     current,
-			Total:       task.Total,
-			Progress:    progress,
-			CurrentNode: currentNode,
-			Message:     fmt.Sprintf("正在处理节点 %s (%d/%d)", currentNode, current, task.Total),
-			Timestamp:   time.Now(),
+			TaskID:       taskID,
+			Type:         "progress",
+			Action:       task.Action,
+			Current:      current,
+			Total:        task.Total,
+			Progress:     progress,
+			CurrentNode:  currentNode,
+			SuccessNodes: task.SuccessNodes,
+			FailedNodes:  task.FailedNodes,
+			Message:      fmt.Sprintf("正在处理节点 %s (%d/%d)", currentNode, current, task.Total),
+			Timestamp:    time.Now(),
 		}
 
 		s.sendToUser(userID, message)
@@ -489,14 +498,16 @@ func (s *Service) CompleteTask(taskID string, userID uint) {
 	}
 
 	message := ProgressMessage{
-		TaskID:    taskID,
-		Type:      "complete",
-		Action:    task.Action,
-		Current:   task.Total,
-		Total:     task.Total,
-		Progress:  100,
-		Message:   fmt.Sprintf("批量操作完成，共处理 %d 个节点", task.Total),
-		Timestamp: time.Now(),
+		TaskID:       taskID,
+		Type:         "complete",
+		Action:       task.Action,
+		Current:      task.Total,
+		Total:        task.Total,
+		Progress:     100,
+		SuccessNodes: task.SuccessNodes,
+		FailedNodes:  task.FailedNodes,
+		Message:      fmt.Sprintf("批量操作完成，共处理 %d 个节点", task.Total),
+		Timestamp:    time.Now(),
 	}
 
 	// 检查连接状态并发送完成消息
@@ -556,12 +567,17 @@ func (s *Service) ErrorTask(taskID string, err error, userID uint) {
 	}
 
 	message := ProgressMessage{
-		TaskID:    taskID,
-		Type:      "error",
-		Action:    task.Action,
-		Message:   "批量操作失败",
-		Error:     err.Error(),
-		Timestamp: time.Now(),
+		TaskID:       taskID,
+		Type:         "error",
+		Action:       task.Action,
+		Current:      task.Current,
+		Total:        task.Total,
+		Progress:     float64(task.Current) / float64(task.Total) * 100,
+		SuccessNodes: task.SuccessNodes,
+		FailedNodes:  task.FailedNodes,
+		Message:      fmt.Sprintf("批量操作完成：%d个成功，%d个失败", len(task.SuccessNodes), len(task.FailedNodes)),
+		Error:        err.Error(),
+		Timestamp:    time.Now(),
 	}
 
 	s.sendToUser(userID, message)
@@ -791,7 +807,8 @@ func (s *Service) ProcessBatchWithProgress(
 	semaphore := make(chan struct{}, maxConcurrency)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	var errors []string
+	var failedNodes []model.NodeError
+	var successNodes []string
 	processed := 0
 
 	for i, nodeName := range nodeNames {
@@ -815,10 +832,28 @@ func (s *Service) ProcessBatchWithProgress(
 			// 处理节点
 			if err := processor.ProcessNode(ctx, node, index); err != nil {
 				mu.Lock()
-				errors = append(errors, fmt.Sprintf("%s: %v", node, err))
+				failedNodes = append(failedNodes, model.NodeError{
+					NodeName: node,
+					Error:    err.Error(),
+				})
+				// 更新任务的失败节点列表
+				s.taskMutex.RLock()
+				if task, exists := s.tasks[taskID]; exists {
+					task.FailedNodes = failedNodes
+				}
+				s.taskMutex.RUnlock()
 				mu.Unlock()
 				s.logger.Errorf("Failed to process node %s: %v", node, err)
 			} else {
+				mu.Lock()
+				successNodes = append(successNodes, node)
+				// 更新任务的成功节点列表
+				s.taskMutex.RLock()
+				if task, exists := s.tasks[taskID]; exists {
+					task.SuccessNodes = successNodes
+				}
+				s.taskMutex.RUnlock()
+				mu.Unlock()
 				s.logger.Infof("Successfully processed node %s (%d/%d)", node, currentIndex, total)
 			}
 
@@ -830,21 +865,19 @@ func (s *Service) ProcessBatchWithProgress(
 	// 等待所有任务完成
 	wg.Wait()
 
-	s.logger.Infof("All nodes processed for task %s, processed=%d, errors=%d", taskID, processed, len(errors))
+	s.logger.Infof("All nodes processed for task %s, processed=%d, success=%d, failed=%d", 
+		taskID, processed, len(successNodes), len(failedNodes))
 
 	// 确保最后一次进度更新显示 100%
-	if len(errors) == 0 {
+	if len(failedNodes) == 0 {
 		s.logger.Infof("Sending final 100%% progress update for task %s", taskID)
 		s.UpdateProgress(taskID, total, "完成", userID)
 	}
 
 	// 处理结果
-	if len(errors) > 0 {
-		errorMsg := fmt.Sprintf("部分节点处理失败: %s", errors[0])
-		if len(errors) > 1 {
-			errorMsg = fmt.Sprintf("部分节点处理失败: %s 等 %d 个错误", errors[0], len(errors))
-		}
-		s.logger.Errorf("Task %s failed with %d errors, calling ErrorTask", taskID, len(errors))
+	if len(failedNodes) > 0 {
+		errorMsg := fmt.Sprintf("部分节点处理失败: %d个成功, %d个失败", len(successNodes), len(failedNodes))
+		s.logger.Errorf("Task %s completed with %d failures", taskID, len(failedNodes))
 		err := fmt.Errorf("%s", errorMsg)
 		s.ErrorTask(taskID, err, userID)
 		return err

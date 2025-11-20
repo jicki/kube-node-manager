@@ -2,6 +2,7 @@ package progress
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -17,24 +18,76 @@ type DatabaseProgressService struct {
 	db                *gorm.DB
 	logger            *logger.Logger
 	wsService         *Service // 原有的WebSocket服务
+	notifier          ProgressNotifier // 通知器（PostgreSQL/Redis/Polling）
 	stopPolling       chan struct{}
 	pollingWg         sync.WaitGroup
 	lastProcessedTime time.Time
 	pollInterval      time.Duration
+	usePolling        bool // 是否使用轮询模式
 }
 
 // NewDatabaseProgressService 创建数据库进度服务
-func NewDatabaseProgressService(db *gorm.DB, logger *logger.Logger, wsService *Service) *DatabaseProgressService {
+func NewDatabaseProgressService(db *gorm.DB, logger *logger.Logger, wsService *Service, notifyType string, pollInterval int, redisAddr, redisPassword string, redisDB int) *DatabaseProgressService {
 	dps := &DatabaseProgressService{
 		db:           db,
 		logger:       logger,
 		wsService:    wsService,
 		stopPolling:  make(chan struct{}),
-		pollInterval: 1 * time.Second, // 每秒检查一次新消息
+		pollInterval: time.Duration(pollInterval) * time.Millisecond,
+		usePolling:   false,
 	}
 
-	// 启动消息轮询
-	go dps.startMessagePolling()
+	// 根据配置创建相应的通知器
+	var notifier ProgressNotifier
+	var err error
+	
+	switch notifyType {
+	case "postgres":
+		notifier, err = NewPostgresNotifier(db, logger)
+		if err != nil {
+			logger.Errorf("Failed to create PostgreSQL notifier, falling back to polling: %v", err)
+			notifier = NewPollingNotifier(dps.pollInterval, logger)
+			dps.usePolling = true
+		} else {
+			logger.Info("Using PostgreSQL LISTEN/NOTIFY for real-time progress updates")
+		}
+		
+	case "redis":
+		notifier, err = NewRedisNotifier(redisAddr, redisPassword, redisDB, logger)
+		if err != nil {
+			logger.Errorf("Failed to create Redis notifier, falling back to polling: %v", err)
+			notifier = NewPollingNotifier(dps.pollInterval, logger)
+			dps.usePolling = true
+		} else {
+			logger.Info("Using Redis Pub/Sub for real-time progress updates")
+		}
+		
+	case "polling":
+		notifier = NewPollingNotifier(dps.pollInterval, logger)
+		dps.usePolling = true
+		logger.Info("Using polling mode for progress updates")
+		
+	default:
+		logger.Warningf("Unknown notify type '%s', falling back to polling", notifyType)
+		notifier = NewPollingNotifier(dps.pollInterval, logger)
+		dps.usePolling = true
+	}
+	
+	dps.notifier = notifier
+
+	// 如果使用实时通知（非轮询），启动订阅处理
+	if !dps.usePolling {
+		go dps.startNotificationSubscription()
+	}
+	
+	// 无论使用哪种模式，都启动轮询作为降级方案
+	// 但如果使用实时通知，轮询间隔会更长（作为备份）
+	if dps.usePolling {
+		go dps.startMessagePolling()
+	} else {
+		// 实时通知模式下，使用更长的轮询间隔作为降级（每 10 秒）
+		go dps.startFallbackPolling()
+	}
 
 	return dps
 }
@@ -63,6 +116,31 @@ func (dps *DatabaseProgressService) CreateTask(taskID, action string, total int,
 	return nil
 }
 
+// UpdateNodeLists 更新成功和失败节点列表
+func (dps *DatabaseProgressService) UpdateNodeLists(taskID string, successNodes []string, failedNodes []model.NodeError) error {
+	var task model.ProgressTask
+	if err := dps.db.Where("task_id = ?", taskID).First(&task).Error; err != nil {
+		return err
+	}
+
+	// 转换为JSON
+	if len(successNodes) > 0 {
+		successJSON, err := json.Marshal(successNodes)
+		if err == nil {
+			task.SuccessNodes = string(successJSON)
+		}
+	}
+
+	if len(failedNodes) > 0 {
+		failedJSON, err := json.Marshal(failedNodes)
+		if err == nil {
+			task.FailedNodes = string(failedJSON)
+		}
+	}
+
+	return dps.db.Save(&task).Error
+}
+
 // UpdateProgress 更新任务进度
 func (dps *DatabaseProgressService) UpdateProgress(taskID string, current int, currentNode string, userID uint) error {
 	var task model.ProgressTask
@@ -80,8 +158,45 @@ func (dps *DatabaseProgressService) UpdateProgress(taskID string, current int, c
 		return err
 	}
 
-	// 创建进度消息
-	return dps.createProgressMessage(&task, "progress")
+	// 创建进度消息并通知
+	if err := dps.createProgressMessage(&task, "progress"); err != nil {
+		return err
+	}
+	
+	// 使用通知器发送实时通知
+	if !dps.usePolling {
+		// 解析成功和失败节点列表
+		var successNodes []string
+		var failedNodes []model.NodeError
+		if task.SuccessNodes != "" {
+			json.Unmarshal([]byte(task.SuccessNodes), &successNodes)
+		}
+		if task.FailedNodes != "" {
+			json.Unmarshal([]byte(task.FailedNodes), &failedNodes)
+		}
+		
+		progressMsg := ProgressMessage{
+			TaskID:       task.TaskID,
+			UserID:       userID,
+			Type:         "progress",
+			Action:       task.Action,
+			Current:      task.Current,
+			Total:        task.Total,
+			Progress:     task.Progress,
+			CurrentNode:  task.CurrentNode,
+			Message:      task.Message,
+			Error:        task.ErrorMsg,
+			Timestamp:    time.Now(),
+			SuccessNodes: successNodes,
+			FailedNodes:  failedNodes,
+		}
+		if err := dps.notifier.Notify(context.Background(), progressMsg); err != nil {
+			dps.logger.Warningf("Failed to send notification: %v", err)
+			// 通知失败不返回错误，会通过轮询降级
+		}
+	}
+	
+	return nil
 }
 
 // CompleteTask 完成任务
@@ -101,14 +216,46 @@ func (dps *DatabaseProgressService) CompleteTask(taskID string, userID uint) err
 		return err
 	}
 
-	// 创建完成消息
+	// 创建完成消息并通知
 	if err := dps.createProgressMessage(&task, "complete"); err != nil {
 		return err
+	}
+	
+	// 使用通知器发送实时通知
+	if !dps.usePolling {
+		// 解析成功和失败节点列表
+		var successNodes []string
+		var failedNodes []model.NodeError
+		if task.SuccessNodes != "" {
+			json.Unmarshal([]byte(task.SuccessNodes), &successNodes)
+		}
+		if task.FailedNodes != "" {
+			json.Unmarshal([]byte(task.FailedNodes), &failedNodes)
+		}
+		
+		progressMsg := ProgressMessage{
+			TaskID:       task.TaskID,
+			UserID:       userID,
+			Type:         "complete",
+			Action:       task.Action,
+			Current:      task.Current,
+			Total:        task.Total,
+			Progress:     task.Progress,
+			CurrentNode:  task.CurrentNode,
+			Message:      task.Message,
+			Error:        task.ErrorMsg,
+			Timestamp:    time.Now(),
+			SuccessNodes: successNodes,
+			FailedNodes:  failedNodes,
+		}
+		if err := dps.notifier.Notify(context.Background(), progressMsg); err != nil {
+			dps.logger.Warningf("Failed to send completion notification: %v", err)
+		}
 	}
 
 	dps.logger.Infof("Task %s completed successfully in database", taskID)
 
-	// 立即尝试推送完成消息，不等待轮询
+	// 立即尝试推送完成消息，不等待轮询（降级方案）
 	go func() {
 		for i := 0; i < 5; i++ { // 重试5次
 			time.Sleep(200 * time.Millisecond * time.Duration(i)) // 递增延迟
@@ -158,22 +305,61 @@ func (dps *DatabaseProgressService) ErrorTask(taskID string, err error, userID u
 		return dbErr
 	}
 
-	// 创建错误消息
-	return dps.createProgressMessage(&task, "error")
+	// 创建错误消息并通知
+	if err := dps.createProgressMessage(&task, "error"); err != nil {
+		return err
+	}
+	
+	// 使用通知器发送实时通知
+	if !dps.usePolling {
+		// 解析成功和失败节点列表
+		var successNodes []string
+		var failedNodes []model.NodeError
+		if task.SuccessNodes != "" {
+			json.Unmarshal([]byte(task.SuccessNodes), &successNodes)
+		}
+		if task.FailedNodes != "" {
+			json.Unmarshal([]byte(task.FailedNodes), &failedNodes)
+		}
+		
+		progressMsg := ProgressMessage{
+			TaskID:       task.TaskID,
+			UserID:       userID,
+			Type:         "error",
+			Action:       task.Action,
+			Current:      task.Current,
+			Total:        task.Total,
+			Progress:     task.Progress,
+			CurrentNode:  task.CurrentNode,
+			Message:      task.Message,
+			Error:        task.ErrorMsg,
+			Timestamp:    time.Now(),
+			SuccessNodes: successNodes,
+			FailedNodes:  failedNodes,
+		}
+		if err := dps.notifier.Notify(context.Background(), progressMsg); err != nil {
+			dps.logger.Warningf("Failed to send error notification: %v", err)
+		}
+	}
+	
+	return nil
 }
 
 // createProgressMessage 创建进度消息
 func (dps *DatabaseProgressService) createProgressMessage(task *model.ProgressTask, msgType string) error {
 	msg := &model.ProgressMessage{
-		UserID:   task.UserID,
-		TaskID:   task.TaskID,
-		Type:     msgType,
-		Action:   task.Action,
-		Current:  task.Current,
-		Total:    task.Total,
-		Progress: task.Progress,
-		Message:  task.Message,
-		ErrorMsg: task.ErrorMsg,
+		UserID:       task.UserID,
+		TaskID:       task.TaskID,
+		Type:         msgType,
+		Action:       task.Action,
+		Current:      task.Current,
+		Total:        task.Total,
+		Progress:     task.Progress,
+		CurrentNode:  task.CurrentNode,
+		SuccessNodes: task.SuccessNodes,
+		FailedNodes:  task.FailedNodes,
+		Message:      task.Message,
+		ErrorMsg:     task.ErrorMsg,
 	}
 
 	if err := dps.db.Create(msg).Error; err != nil {
@@ -227,18 +413,32 @@ func (dps *DatabaseProgressService) processUnsentMessages() {
 
 	completedCount := 0
 	for _, msg := range messages {
+		// 解析成功和失败节点列表
+		var successNodes []string
+		var failedNodes []model.NodeError
+		
+		if msg.SuccessNodes != "" {
+			json.Unmarshal([]byte(msg.SuccessNodes), &successNodes)
+		}
+		
+		if msg.FailedNodes != "" {
+			json.Unmarshal([]byte(msg.FailedNodes), &failedNodes)
+		}
+		
 		// 转换为WebSocket消息格式
 		wsMessage := ProgressMessage{
-			TaskID:      msg.TaskID,
-			Type:        msg.Type,
-			Action:      msg.Action,
-			Current:     msg.Current,
-			Total:       msg.Total,
-			Progress:    msg.Progress,
-			CurrentNode: "", // 这个字段在数据库中没有存储
-			Message:     msg.Message,
-			Error:       msg.ErrorMsg,
-			Timestamp:   msg.CreatedAt,
+			TaskID:       msg.TaskID,
+			Type:         msg.Type,
+			Action:       msg.Action,
+			Current:      msg.Current,
+			Total:        msg.Total,
+			Progress:     msg.Progress,
+			CurrentNode:  msg.CurrentNode,
+			SuccessNodes: successNodes,
+			FailedNodes:  failedNodes,
+			Message:      msg.Message,
+			Error:        msg.ErrorMsg,
+			Timestamp:    msg.CreatedAt,
 		}
 
 		// 检查WebSocket连接状态
@@ -321,7 +521,150 @@ func (dps *DatabaseProgressService) GetUserTasks(userID uint, status model.TaskS
 func (dps *DatabaseProgressService) Stop() {
 	close(dps.stopPolling)
 	dps.pollingWg.Wait()
+	
+	// 关闭通知器
+	if dps.notifier != nil {
+		if err := dps.notifier.Close(); err != nil {
+			dps.logger.Errorf("Failed to close notifier: %v", err)
+		}
+	}
+	
 	dps.logger.Infof("Database progress service stopped")
+}
+
+// startNotificationSubscription 启动实时通知订阅处理
+func (dps *DatabaseProgressService) startNotificationSubscription() {
+	dps.pollingWg.Add(1)
+	defer dps.pollingWg.Done()
+	
+	ctx := context.Background()
+	messageChan, err := dps.notifier.Subscribe(ctx)
+	if err != nil {
+		dps.logger.Errorf("Failed to subscribe to notifications: %v, falling back to polling", err)
+		dps.usePolling = true
+		go dps.startMessagePolling()
+		return
+	}
+	
+	dps.logger.Infof("Started %s notification subscription", dps.notifier.Type())
+	
+	for {
+		select {
+		case <-dps.stopPolling:
+			dps.logger.Info("Notification subscription stopped")
+			return
+			
+		case msg, ok := <-messageChan:
+			if !ok {
+				dps.logger.Warning("Notification channel closed, restarting subscription")
+				time.Sleep(5 * time.Second)
+				
+				// 尝试重新订阅
+				messageChan, err = dps.notifier.Subscribe(ctx)
+				if err != nil {
+					dps.logger.Errorf("Failed to resubscribe: %v, falling back to polling", err)
+					dps.usePolling = true
+					go dps.startMessagePolling()
+					return
+				}
+				continue
+			}
+			
+			// 检查用户是否有活跃连接
+			dps.wsService.connMutex.RLock()
+			hasConnection := false
+			if _, exists := dps.wsService.connections[msg.UserID]; exists {
+				hasConnection = true
+			}
+			dps.wsService.connMutex.RUnlock()
+			
+			if hasConnection {
+				// 直接通过 WebSocket 推送消息
+				dps.wsService.sendToUser(msg.UserID, msg)
+				dps.logger.Debugf("Forwarded %s notification for task %s to user %d", msg.Type, msg.TaskID, msg.UserID)
+			}
+		}
+	}
+}
+
+// startFallbackPolling 启动降级轮询（仅在使用实时通知时作为备份）
+func (dps *DatabaseProgressService) startFallbackPolling() {
+	dps.pollingWg.Add(1)
+	defer dps.pollingWg.Done()
+	
+	// 使用更长的轮询间隔（10 秒）作为降级
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	
+	dps.logger.Info("Started fallback polling (10s interval)")
+	
+	for {
+		select {
+		case <-dps.stopPolling:
+			dps.logger.Info("Fallback polling stopped")
+			return
+		case <-ticker.C:
+			// 只处理重要消息（complete, error）
+			dps.processFallbackMessages()
+		}
+	}
+}
+
+// processFallbackMessages 处理降级消息（仅处理重要消息）
+func (dps *DatabaseProgressService) processFallbackMessages() {
+	var messages []model.ProgressMessage
+	
+	// 只查询完成和错误消息
+	cutoff := time.Now().Add(-30 * time.Second) // 只处理最近 30 秒的消息
+	query := dps.db.Where("processed = ? AND type IN (?) AND created_at > ?", 
+		false, 
+		[]string{"complete", "error"}, 
+		cutoff,
+	).Order("created_at ASC").Limit(50)
+	
+	if err := query.Find(&messages).Error; err != nil {
+		dps.logger.Errorf("Failed to query fallback messages: %v", err)
+		return
+	}
+	
+	if len(messages) == 0 {
+		return
+	}
+	
+	dps.logger.Infof("Processing %d fallback messages", len(messages))
+	
+	for _, msg := range messages {
+		// 解析节点列表
+		var successNodes []string
+		var failedNodes []model.NodeError
+		
+		if msg.SuccessNodes != "" {
+			json.Unmarshal([]byte(msg.SuccessNodes), &successNodes)
+		}
+		if msg.FailedNodes != "" {
+			json.Unmarshal([]byte(msg.FailedNodes), &failedNodes)
+		}
+		
+		wsMessage := ProgressMessage{
+			TaskID:       msg.TaskID,
+			Type:         msg.Type,
+			Action:       msg.Action,
+			Current:      msg.Current,
+			Total:        msg.Total,
+			Progress:     msg.Progress,
+			CurrentNode:  msg.CurrentNode,
+			SuccessNodes: successNodes,
+			FailedNodes:  failedNodes,
+			Message:      msg.Message,
+			Error:        msg.ErrorMsg,
+			Timestamp:    msg.CreatedAt,
+		}
+		
+		// 发送并标记
+		dps.wsService.sendToUser(msg.UserID, wsMessage)
+		dps.db.Model(&msg).Update("processed", true)
+		dps.logger.Infof("Sent fallback %s message for task %s", msg.Type, msg.TaskID)
+	}
 }
 
 // ProcessBatchWithProgress 带数据库持久化的批量处理
@@ -345,7 +688,8 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 	semaphore := make(chan struct{}, maxConcurrency)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	var errors []string
+	var failedNodes []model.NodeError
+	var successNodes []string
 	processed := 0
 
 	for i, nodeName := range nodeNames {
@@ -355,7 +699,11 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 				if r := recover(); r != nil {
 					dps.logger.Errorf("Panic while processing node %s: %v", node, r)
 					mu.Lock()
-					errors = append(errors, fmt.Sprintf("%s: panic: %v", node, r))
+					failedNodes = append(failedNodes, model.NodeError{
+						NodeName: node,
+						Error:    fmt.Sprintf("panic: %v", r),
+					})
+					dps.UpdateNodeLists(taskID, successNodes, failedNodes)
 					mu.Unlock()
 				}
 				wg.Done()
@@ -385,10 +733,18 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 			dps.logger.Infof("ProcessNode returned for %s, err=%v", node, err)
 			if err != nil {
 				mu.Lock()
-				errors = append(errors, fmt.Sprintf("%s: %v", node, err))
+				failedNodes = append(failedNodes, model.NodeError{
+					NodeName: node,
+					Error:    err.Error(),
+				})
+				dps.UpdateNodeLists(taskID, successNodes, failedNodes)
 				mu.Unlock()
 				dps.logger.Errorf("Failed to process node %s: %v", node, err)
 			} else {
+				mu.Lock()
+				successNodes = append(successNodes, node)
+				dps.UpdateNodeLists(taskID, successNodes, failedNodes)
+				mu.Unlock()
 				dps.logger.Infof("Successfully processed node %s (%d/%d)", node, currentIndex, total)
 			}
 
@@ -403,21 +759,19 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 	wg.Wait()
 	dps.logger.Infof("All goroutines completed for task %s", taskID)
 
-	dps.logger.Infof("All nodes processed for task %s, processed=%d, errors=%d", taskID, processed, len(errors))
+	dps.logger.Infof("All nodes processed for task %s, processed=%d, success=%d, failed=%d", 
+		taskID, processed, len(successNodes), len(failedNodes))
 
 	// 确保最后一次进度更新显示 100%
-	if len(errors) == 0 {
+	if len(failedNodes) == 0 {
 		dps.logger.Infof("Sending final 100%% progress update for task %s", taskID)
 		dps.UpdateProgress(taskID, total, "完成", userID)
 	}
 
 	// 处理结果
-	if len(errors) > 0 {
-		errorMsg := fmt.Sprintf("部分节点处理失败: %s", errors[0])
-		if len(errors) > 1 {
-			errorMsg = fmt.Sprintf("部分节点处理失败: %s 等 %d 个错误", errors[0], len(errors))
-		}
-		dps.logger.Errorf("Task %s failed with %d errors, calling ErrorTask", taskID, len(errors))
+	if len(failedNodes) > 0 {
+		errorMsg := fmt.Sprintf("部分节点处理失败: %d个成功, %d个失败", len(successNodes), len(failedNodes))
+		dps.logger.Errorf("Task %s completed with %d failures", taskID, len(failedNodes))
 		err := fmt.Errorf("%s", errorMsg)
 		dps.ErrorTask(taskID, err, userID)
 		return err

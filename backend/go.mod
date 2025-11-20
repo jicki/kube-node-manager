@@ -13,7 +13,9 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.0.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/larksuite/oapi-sdk-go/v3 v3.4.25
+	github.com/lib/pq v1.10.9
 	github.com/rakyll/statik v0.1.7
+	github.com/redis/go-redis/v9 v9.17.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/viper v1.17.0
 	golang.org/x/crypto v0.36.0
@@ -30,8 +32,10 @@ require (
 require (
 	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/bytedance/sonic v1.9.1 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect

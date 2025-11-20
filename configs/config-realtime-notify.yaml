@@ -1,0 +1,78 @@
+# Kube Node Manager 配置文件 - 实时通知示例
+
+server:
+  port: "8080"
+  mode: "release"  # debug, release
+
+# 数据库配置
+database:
+  type: "postgres"  # sqlite 或 postgres
+  host: "localhost"
+  port: 5432
+  database: "kube_node_manager"
+  username: "postgres"
+  password: "your_password"
+  ssl_mode: "disable"
+  max_open_conns: 25
+  max_idle_conns: 10
+  max_lifetime: 3600
+
+# JWT 配置
+jwt:
+  secret: "your-secret-key-change-in-production"
+  expire_time: 86400  # 24小时
+
+# 进度服务配置（多副本环境）
+progress:
+  enable_database: true  # 启用数据库模式用于多副本支持
+  
+  # 通知方式：polling（轮询）、postgres（PostgreSQL LISTEN/NOTIFY）、redis（Redis Pub/Sub）
+  notify_type: "postgres"  # 推荐使用 postgres 或 redis
+  
+  # 轮询间隔（毫秒），仅在 notify_type=polling 时生效
+  poll_interval: 500
+  
+  # Redis 配置（仅在 notify_type=redis 时需要）
+  redis:
+    enabled: false
+    addr: "localhost:6379"
+    password: ""
+    db: 0
+
+# LDAP 配置（可选）
+ldap:
+  enabled: false
+  host: "ldap.example.com"
+  port: 389
+  base_dn: "dc=example,dc=com"
+  user_filter: "(uid=%s)"
+  admin_dn: "cn=admin,dc=example,dc=com"
+  admin_pass: "admin_password"
+
+# 监控配置
+monitoring:
+  enabled: true
+  interval: 60  # 监控周期（秒）
+  report_scheduler_enabled: true
+  
+  # 缓存配置
+  cache:
+    enabled: true
+    type: "postgres"  # postgres, memory, none
+    postgres:
+      table_name: "cache_entries"
+      cleanup_interval: 300
+      use_unlogged: true
+    ttl:
+      statistics: 300
+      active: 30
+      clusters: 600
+      type_stats: 300
+  
+  # 清理配置
+  cleanup:
+    enabled: true
+    retention_days: 90
+    cleanup_time: "02:00"
+    batch_size: 1000
+

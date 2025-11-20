@@ -16,41 +16,52 @@ const (
 	TaskStatusCancelled TaskStatus = "cancelled"
 )
 
+// NodeError 节点错误信息
+type NodeError struct {
+	NodeName string `json:"node_name"`
+	Error    string `json:"error"`
+}
+
 // ProgressTask 进度任务模型 - 用于多副本环境下的状态共享
 type ProgressTask struct {
-	ID          uint           `json:"id" gorm:"primarykey"`
-	TaskID      string         `json:"task_id" gorm:"uniqueIndex;not null"` // 任务唯一标识
-	UserID      uint           `json:"user_id" gorm:"not null;index"`       // 所属用户
-	Action      string         `json:"action" gorm:"not null"`              // 操作类型 batch_label, batch_taint
-	Status      TaskStatus     `json:"status" gorm:"not null;index"`        // 任务状态
-	Current     int            `json:"current" gorm:"default:0"`            // 当前完成数量
-	Total       int            `json:"total" gorm:"not null"`               // 总数量
-	Progress    float64        `json:"progress" gorm:"default:0"`           // 进度百分比
-	CurrentNode string         `json:"current_node"`                        // 当前处理的节点
-	Message     string         `json:"message"`                             // 状态消息
-	ErrorMsg    string         `json:"error_msg"`                           // 错误消息
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	CompletedAt *time.Time     `json:"completed_at"` // 完成时间
-	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+	ID           uint           `json:"id" gorm:"primarykey"`
+	TaskID       string         `json:"task_id" gorm:"uniqueIndex;not null"` // 任务唯一标识
+	UserID       uint           `json:"user_id" gorm:"not null;index"`       // 所属用户
+	Action       string         `json:"action" gorm:"not null"`              // 操作类型 batch_label, batch_taint
+	Status       TaskStatus     `json:"status" gorm:"not null;index"`        // 任务状态
+	Current      int            `json:"current" gorm:"default:0"`            // 当前完成数量
+	Total        int            `json:"total" gorm:"not null"`               // 总数量
+	Progress     float64        `json:"progress" gorm:"default:0"`           // 进度百分比
+	CurrentNode  string         `json:"current_node"`                        // 当前处理的节点
+	SuccessNodes string         `json:"success_nodes" gorm:"type:text"`      // 成功节点列表(JSON)
+	FailedNodes  string         `json:"failed_nodes" gorm:"type:text"`       // 失败节点列表(JSON)
+	Message      string         `json:"message"`                             // 状态消息
+	ErrorMsg     string         `json:"error_msg"`                           // 错误消息
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	CompletedAt  *time.Time     `json:"completed_at"` // 完成时间
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // ProgressMessage 待发送的进度消息模型
 type ProgressMessage struct {
-	ID        uint           `json:"id" gorm:"primarykey"`
-	UserID    uint           `json:"user_id" gorm:"not null;index"`
-	TaskID    string         `json:"task_id" gorm:"not null;index"`
-	Type      string         `json:"type" gorm:"not null"`                 // progress, complete, error
-	Action    string         `json:"action"`                               // batch_label, batch_taint
-	Current   int            `json:"current"`                              // 当前完成数量
-	Total     int            `json:"total"`                                // 总数量
-	Progress  float64        `json:"progress"`                             // 进度百分比
-	Message   string         `json:"message"`                              // 消息内容
-	ErrorMsg  string         `json:"error_msg"`                            // 错误信息
-	Processed bool           `json:"processed" gorm:"default:false;index"` // 是否已处理
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	ID           uint           `json:"id" gorm:"primarykey"`
+	UserID       uint           `json:"user_id" gorm:"not null;index"`
+	TaskID       string         `json:"task_id" gorm:"not null;index"`
+	Type         string         `json:"type" gorm:"not null"`                 // progress, complete, error
+	Action       string         `json:"action"`                               // batch_label, batch_taint
+	Current      int            `json:"current"`                              // 当前完成数量
+	Total        int            `json:"total"`                                // 总数量
+	Progress     float64        `json:"progress"`                             // 进度百分比
+	CurrentNode  string         `json:"current_node"`                         // 当前处理的节点
+	SuccessNodes string         `json:"success_nodes" gorm:"type:text"`       // 成功节点列表(JSON)
+	FailedNodes  string         `json:"failed_nodes" gorm:"type:text"`        // 失败节点列表(JSON)
+	Message      string         `json:"message"`                              // 消息内容
+	ErrorMsg     string         `json:"error_msg"`                            // 错误信息
+	Processed    bool           `json:"processed" gorm:"default:false;index"` // 是否已处理
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // ToProgressMessage 转换为进度消息
@@ -63,15 +74,18 @@ func (pt *ProgressTask) ToProgressMessage() *ProgressMessage {
 	}
 
 	return &ProgressMessage{
-		UserID:   pt.UserID,
-		TaskID:   pt.TaskID,
-		Type:     msgType,
-		Action:   pt.Action,
-		Current:  pt.Current,
-		Total:    pt.Total,
-		Progress: pt.Progress,
-		Message:  pt.Message,
-		ErrorMsg: pt.ErrorMsg,
+		UserID:       pt.UserID,
+		TaskID:       pt.TaskID,
+		Type:         msgType,
+		Action:       pt.Action,
+		Current:      pt.Current,
+		Total:        pt.Total,
+		Progress:     pt.Progress,
+		CurrentNode:  pt.CurrentNode,
+		SuccessNodes: pt.SuccessNodes,
+		FailedNodes:  pt.FailedNodes,
+		Message:      pt.Message,
+		ErrorMsg:     pt.ErrorMsg,
 	}
 }
 

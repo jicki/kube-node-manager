@@ -1,0 +1,60 @@
+# Kube Node Manager 配置文件 - Redis 实时通知示例
+
+server:
+  port: "8080"
+  mode: "release"
+
+# 数据库配置
+database:
+  type: "postgres"
+  host: "localhost"
+  port: 5432
+  database: "kube_node_manager"
+  username: "postgres"
+  password: "your_password"
+  ssl_mode: "disable"
+  max_open_conns: 25
+  max_idle_conns: 10
+  max_lifetime: 3600
+
+jwt:
+  secret: "your-secret-key-change-in-production"
+  expire_time: 86400
+
+# 进度服务配置 - 使用 Redis Pub/Sub 实现实时通知
+progress:
+  enable_database: true
+  notify_type: "redis"  # 使用 Redis 实时通知
+  poll_interval: 500    # 降级轮询间隔
+  
+  redis:
+    enabled: true
+    addr: "localhost:6379"  # Redis 地址
+    password: ""            # Redis 密码（如有）
+    db: 0                   # Redis 数据库编号
+
+ldap:
+  enabled: false
+
+monitoring:
+  enabled: true
+  interval: 60
+  report_scheduler_enabled: true
+  cache:
+    enabled: true
+    type: "postgres"
+    postgres:
+      table_name: "cache_entries"
+      cleanup_interval: 300
+      use_unlogged: true
+    ttl:
+      statistics: 300
+      active: 30
+      clusters: 600
+      type_stats: 300
+  cleanup:
+    enabled: true
+    retention_days: 90
+    cleanup_time: "02:00"
+    batch_size: 1000
+

@@ -186,7 +186,14 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 
 	// 检查是否启用数据库模式（用于多副本环境）
 	if cfg.Progress.EnableDatabase {
-		progressSvc.EnableDatabaseMode(db)
+		progressSvc.EnableDatabaseMode(
+			db,
+			cfg.Progress.NotifyType,
+			cfg.Progress.PollInterval,
+			cfg.Progress.Redis.Addr,
+			cfg.Progress.Redis.Password,
+			cfg.Progress.Redis.DB,
+		)
 		logger.Infof("Progress service database mode enabled for multi-replica support")
 	}
 

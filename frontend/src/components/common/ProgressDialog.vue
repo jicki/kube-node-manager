@@ -2,56 +2,157 @@
   <el-dialog
     v-model="visible"
     title="批量操作进度"
-    width="500px"
-    :close-on-click-modal="true"
-    :close-on-press-escape="true"
-    :show-close="true"
+    width="800px"
+    :close-on-click-modal="false"
+    :close-on-press-escape="false"
+    :show-close="false"
     @close="handleClose"
   >
     <div class="progress-content">
-      <!-- 进度条 -->
+      <!-- 顶部进度条区域 -->
       <div class="progress-bar-container">
         <el-progress
           :percentage="roundedProgress"
           :status="progressStatus"
-          :stroke-width="8"
+          :stroke-width="10"
           :show-text="true"
         />
         <div class="progress-text">
-          {{ progressData.current || 0 }} / {{ progressData.total || 0 }}
+          {{ progressData.current || 0 }} / {{ progressData.total || 0 }} 个节点已完成
         </div>
       </div>
 
-      <!-- 当前操作信息 -->
-      <div class="current-operation" v-if="progressData.current_node">
-        <el-icon><Loading /></el-icon>
-        <span>正在处理节点: {{ progressData.current_node }}</span>
-      </div>
+      <!-- 三栏节点状态展示 -->
+      <el-row :gutter="16" class="nodes-status-row">
+        <!-- 处理中 -->
+        <el-col :span="8">
+          <el-card class="status-card processing-card" shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <el-icon class="header-icon processing-icon"><Loading /></el-icon>
+                <span class="header-title">处理中 ({{ processingNodes.length }})</span>
+              </div>
+            </template>
+            <div class="node-list">
+              <div v-if="processingNodes.length === 0" class="empty-text">
+                暂无处理中的节点
+              </div>
+              <transition-group name="node-list">
+                <div
+                  v-for="node in processingNodes"
+                  :key="node"
+                  class="node-item processing-item"
+                >
+                  <el-icon class="node-icon rotating"><Loading /></el-icon>
+                  <span class="node-name">{{ node }}</span>
+                </div>
+              </transition-group>
+            </div>
+          </el-card>
+        </el-col>
 
-      <!-- 状态消息 -->
-      <div class="status-message">
-        <div :class="messageClass">
-          {{ progressData.message || '准备开始批量操作...' }}
-        </div>
-        <div v-if="progressData.error" class="error-message">
-          错误: {{ progressData.error }}
-        </div>
-      </div>
+        <!-- 已成功 -->
+        <el-col :span="8">
+          <el-card class="status-card success-card" shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <el-icon class="header-icon success-icon"><CircleCheck /></el-icon>
+                <span class="header-title">已成功 ({{ successNodes.length }})</span>
+              </div>
+            </template>
+            <div class="node-list">
+              <div v-if="successNodes.length === 0" class="empty-text">
+                暂无成功节点
+              </div>
+              <transition-group name="node-list">
+                <div
+                  v-for="node in successNodes"
+                  :key="node"
+                  class="node-item success-item"
+                >
+                  <el-icon class="node-icon"><CircleCheck /></el-icon>
+                  <span class="node-name">{{ node }}</span>
+                </div>
+              </transition-group>
+            </div>
+          </el-card>
+        </el-col>
 
-      <!-- 操作详情 -->
-      <div class="operation-details" v-if="progressData.action">
-        <div class="detail-item">
-          <span class="label">操作类型:</span>
-          <span class="value">{{ getActionText(progressData.action) }}</span>
-        </div>
-        <!-- 任务ID已隐藏，优化用户界面 -->
+        <!-- 已失败 -->
+        <el-col :span="8">
+          <el-card class="status-card failed-card" shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <el-icon class="header-icon failed-icon"><CircleClose /></el-icon>
+                <span class="header-title">已失败 ({{ failedNodes.length }})</span>
+              </div>
+            </template>
+            <div class="node-list">
+              <div v-if="failedNodes.length === 0" class="empty-text">
+                暂无失败节点
+              </div>
+              <transition-group name="node-list">
+                <div
+                  v-for="(nodeError, index) in failedNodes"
+                  :key="nodeError.node_name || index"
+                  class="node-item failed-item"
+                >
+                  <el-icon class="node-icon"><CircleClose /></el-icon>
+                  <el-popover
+                    placement="top"
+                    :width="300"
+                    trigger="hover"
+                  >
+                    <template #reference>
+                      <span class="node-name error-trigger">{{ nodeError.node_name }}</span>
+                    </template>
+                    <div class="error-detail">
+                      <div class="error-title">错误详情:</div>
+                      <div class="error-message">{{ nodeError.error }}</div>
+                    </div>
+                  </el-popover>
+                </div>
+              </transition-group>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <!-- 底部统计信息 -->
+      <div class="summary-info" v-if="isCompleted || isError">
+        <el-alert
+          :title="summaryTitle"
+          :type="isError ? 'warning' : 'success'"
+          :closable="false"
+          show-icon
+        >
+          <template #default>
+            <div class="summary-detail">
+              总计 {{ progressData.total }} 个节点：
+              <span class="success-count">成功 {{ successNodes.length }} 个</span>
+              <span v-if="failedNodes.length > 0" class="failed-count">，失败 {{ failedNodes.length }} 个</span>
+            </div>
+          </template>
+        </el-alert>
       </div>
     </div>
 
     <template #footer>
       <div class="dialog-footer">
-        <el-button @click="handleClose">关闭</el-button>
-        <el-button v-if="!isCompleted && !isError" @click="handleCancel" type="danger">取消任务</el-button>
+        <el-button
+          v-if="!isCompleted && !isError"
+          @click="handleCancel"
+          :disabled="true"
+        >
+          取消任务
+        </el-button>
+        <el-button
+          type="primary"
+          @click="handleClose"
+          :disabled="!isCompleted && !isError"
+        >
+          关闭
+        </el-button>
       </div>
     </template>
   </el-dialog>
@@ -60,7 +161,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { getToken } from '@/utils/auth'
 
 const props = defineProps({
@@ -89,6 +190,8 @@ const progressData = ref({
   total: 0,
   progress: 0,
   current_node: '',
+  success_nodes: [],
+  failed_nodes: [],
   message: '',
   error: '',
   timestamp: null
@@ -99,9 +202,9 @@ const isError = ref(false)
 const websocket = ref(null)
 const completionTimer = ref(null)
 const reconnectCount = ref(0)
-const maxReconnectAttempts = 5 // 最大重连次数
+const maxReconnectAttempts = 5
 
-// 计算进度百分比（四舍五入为整数）
+// 计算进度百分比
 const roundedProgress = computed(() => {
   return Math.round(progressData.value.progress || 0)
 })
@@ -113,25 +216,44 @@ const progressStatus = computed(() => {
   return undefined
 })
 
-// 消息样式
-const messageClass = computed(() => ({
-  'message': true,
-  'success-message': isCompleted.value,
-  'error-message': isError.value,
-  'processing-message': !isCompleted.value && !isError.value
-}))
+// 成功节点列表
+const successNodes = computed(() => {
+  return progressData.value.success_nodes || []
+})
 
-// 获取操作类型文本
-const getActionText = (action) => {
-  switch (action) {
-    case 'batch_label':
-      return '批量标签操作'
-    case 'batch_taint':
-      return '批量污点操作'
-    default:
-      return '批量操作'
+// 失败节点列表
+const failedNodes = computed(() => {
+  const nodes = progressData.value.failed_nodes || []
+  // 确保返回正确格式的对象数组
+  return nodes.map(node => {
+    if (typeof node === 'string') {
+      return { node_name: node, error: '未知错误' }
+    }
+    return node
+  })
+})
+
+// 处理中节点列表
+const processingNodes = computed(() => {
+  const current = progressData.value.current_node
+  if (!current || isCompleted.value || isError.value) {
+    return []
   }
-}
+  // 如果当前节点不在成功或失败列表中，则认为正在处理
+  if (!successNodes.value.includes(current) && 
+      !failedNodes.value.some(n => n.node_name === current)) {
+    return [current]
+  }
+  return []
+})
+
+// 汇总标题
+const summaryTitle = computed(() => {
+  if (isError.value && failedNodes.value.length > 0) {
+    return `批量操作完成（部分失败）`
+  }
+  return '批量操作成功完成'
+})
 
 // 建立WebSocket连接
 const connectWebSocket = () => {
@@ -140,17 +262,14 @@ const connectWebSocket = () => {
     return
   }
 
-  // 检查是否超过最大重连次数
   if (reconnectCount.value >= maxReconnectAttempts) {
     console.log('已达到最大重连次数限制，停止重连')
     ElMessage.warning('WebSocket 连接超时，请刷新页面重试')
     return
   }
 
-  // 先关闭已有连接（防止重复连接）
   if (websocket.value) {
     console.log('关闭已有的WebSocket连接以建立新连接')
-    // 使用 closeWebSocket 确保移除监听器
     closeWebSocket()
   }
 
@@ -168,7 +287,7 @@ const connectWebSocket = () => {
 
     websocket.value.onopen = () => {
       console.log('WebSocket连接已建立')
-      reconnectCount.value = 0 // 连接成功后重置重连计数
+      reconnectCount.value = 0
     }
 
     websocket.value.onmessage = (event) => {
@@ -183,22 +302,19 @@ const connectWebSocket = () => {
     websocket.value.onclose = (event) => {
       console.log('WebSocket连接已关闭', { code: event.code, reason: event.reason, wasClean: event.wasClean })
 
-      // 如果任务已完成或出错，不再重连
       if (isCompleted.value || isError.value) {
         console.log('任务已完成或出错，不再重连')
         return
       }
 
-      // 检查是否需要重连
       const shouldReconnect = !isCompleted.value && !isError.value && visible.value && props.taskId
       const isNearCompletion = progressData.value.progress >= 100 && !isCompleted.value
 
       if ((shouldReconnect || isNearCompletion) && reconnectCount.value < maxReconnectAttempts) {
         reconnectCount.value++
-        const reconnectDelay = Math.min(1000 * reconnectCount.value, 3000) // 递增延迟，最大3秒
+        const reconnectDelay = Math.min(1000 * reconnectCount.value, 3000)
         console.log(`任务未完成，${reconnectDelay}ms 后尝试第 ${reconnectCount.value} 次重连`)
         setTimeout(() => {
-          // 重连前再次检查状态
           if ((!isCompleted.value && !isError.value && visible.value && props.taskId) ||
               (progressData.value.progress >= 100 && !isCompleted.value)) {
             connectWebSocket()
@@ -209,7 +325,6 @@ const connectWebSocket = () => {
 
     websocket.value.onerror = (error) => {
       console.error('WebSocket错误:', error)
-      // 不要立即显示错误消息，因为可能是正常的连接替换
       console.warn('WebSocket连接遇到错误')
     }
   } catch (error) {
@@ -220,7 +335,6 @@ const connectWebSocket = () => {
 
 // 处理进度更新
 const handleProgressUpdate = (data) => {
-  // 只处理当前任务的消息
   if (data.task_id && data.task_id !== props.taskId) {
     return
   }
@@ -233,7 +347,6 @@ const handleProgressUpdate = (data) => {
     case 'progress':
       progressData.value = { ...data }
 
-      // 如果进度达到100%，启动完成检查定时器
       if (data.progress >= 100 && !isCompleted.value && !isError.value) {
         console.log('进度达到100%，启动完成检查定时器')
         if (completionTimer.value) {
@@ -244,7 +357,7 @@ const handleProgressUpdate = (data) => {
             console.log('进度100%后未收到完成消息，尝试重连获取状态')
             connectWebSocket()
           }
-        }, 3000) // 3秒后检查
+        }, 3000)
       }
       break
 
@@ -252,38 +365,38 @@ const handleProgressUpdate = (data) => {
       progressData.value = { ...data }
       isCompleted.value = true
 
-      // 清理完成检查定时器
       if (completionTimer.value) {
         clearTimeout(completionTimer.value)
         completionTimer.value = null
       }
 
-      // 任务完成后立即关闭 WebSocket 连接，避免重连
       console.log('任务完成，关闭 WebSocket 连接')
       closeWebSocket()
 
-      ElMessage.success(data.message || '批量操作完成')
+      const successCount = data.success_nodes?.length || 0
+      const failedCount = data.failed_nodes?.length || 0
+      
+      if (failedCount > 0) {
+        ElMessage.warning(`批量操作完成：${successCount}个成功，${failedCount}个失败`)
+      } else {
+        ElMessage.success(data.message || '批量操作完成')
+      }
+      
       emit('completed', data)
-
-      // 3秒后自动关闭弹窗
-      setTimeout(() => {
-        if (isCompleted.value) {
-          emit('update:modelValue', false)
-        }
-      }, 3000)
       break
 
     case 'error':
       progressData.value = { ...data }
       isError.value = true
 
-      // 清理完成检查定时器
       if (completionTimer.value) {
         clearTimeout(completionTimer.value)
         completionTimer.value = null
       }
 
-      ElMessage.error(data.message || '批量操作失败')
+      const successCnt = data.success_nodes?.length || 0
+      const failedCnt = data.failed_nodes?.length || 0
+      ElMessage.error(`批量操作完成：${successCnt}个成功，${failedCnt}个失败`)
       emit('error', data)
       break
 
@@ -296,22 +409,17 @@ const handleProgressUpdate = (data) => {
 const handleClose = () => {
   console.log('关闭进度对话框')
   
-  // 如果任务正在进行中，给用户提示
   if (!isCompleted.value && !isError.value && progressData.value.task_id) {
     console.log('任务仍在进行中，但用户选择关闭弹窗')
   }
   
-  // 关闭弹窗
   emit('update:modelValue', false)
-  
-  // 清理资源
   closeWebSocket()
   resetState()
 }
 
 // 取消操作
 const handleCancel = () => {
-  // TODO: 实现取消操作的API调用
   ElMessage.warning('取消功能正在开发中')
   emit('cancelled')
   handleClose()
@@ -322,13 +430,10 @@ const closeWebSocket = () => {
   if (websocket.value) {
     console.log('正在关闭WebSocket连接')
     try {
-      // 移除事件监听器，防止触发不必要的重连
       websocket.value.onclose = null
       websocket.value.onerror = null
       websocket.value.onmessage = null
       websocket.value.onopen = null
-      
-      // 正常关闭连接
       websocket.value.close(1000, 'Normal closure')
     } catch (error) {
       console.error('关闭WebSocket时出错:', error)
@@ -347,41 +452,36 @@ const resetState = () => {
     total: 0,
     progress: 0,
     current_node: '',
+    success_nodes: [],
+    failed_nodes: [],
     message: '',
     error: '',
     timestamp: null
   }
   isCompleted.value = false
   isError.value = false
-  reconnectCount.value = 0 // 重置重连计数
+  reconnectCount.value = 0
 
-  // 清理完成检查定时器
   if (completionTimer.value) {
     clearTimeout(completionTimer.value)
     completionTimer.value = null
   }
 }
 
-// 监听状态变化，使用数组形式避免双重触发
 watch([() => props.taskId, () => props.modelValue], ([newTaskId, newVisible], [oldTaskId, oldVisible]) => {
   console.log('ProgressDialog state changed:', { newTaskId, newVisible, oldTaskId, oldVisible })
   
   if (newVisible && newTaskId) {
-    // 如果 ID 变化 或者 从不可见变为可见
     if (newTaskId !== oldTaskId || !oldVisible) {
-      // 新任务开始时，先关闭旧连接，重置状态，再建立新连接
       closeWebSocket()
       resetState()
-      // 延迟一点时间确保旧连接完全关闭
       nextTick(() => {
         connectWebSocket()
       })
     }
   } else if (!newVisible) {
-    // 如果不可见，关闭连接
     closeWebSocket()
   } else if (!newTaskId) {
-    // 如果可见但没ID（理论上不应该发生），也关闭
     closeWebSocket()
   }
 })
@@ -404,28 +504,146 @@ onUnmounted(() => {
 }
 
 .progress-bar-container {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .progress-text {
   text-align: center;
   margin-top: 8px;
   font-size: 14px;
-  color: #666;
+  color: #606266;
+  font-weight: 500;
 }
 
-.current-operation {
+.nodes-status-row {
+  margin-bottom: 20px;
+}
+
+.status-card {
+  height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+.status-card :deep(.el-card__header) {
+  padding: 12px 16px;
+  background-color: #f5f7fa;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.status-card :deep(.el-card__body) {
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+}
+
+.card-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 15px;
-  padding: 10px;
-  background-color: #f0f9ff;
-  border-radius: 4px;
-  border-left: 4px solid #409eff;
 }
 
-.current-operation .el-icon {
+.header-icon {
+  font-size: 20px;
+}
+
+.processing-icon {
+  color: #409eff;
+}
+
+.success-icon {
+  color: #67c23a;
+}
+
+.failed-icon {
+  color: #f56c6c;
+}
+
+.header-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
+
+.node-list {
+  height: 100%;
+  padding: 12px;
+  overflow-y: auto;
+  max-height: 240px;
+}
+
+.empty-text {
+  text-align: center;
+  color: #909399;
+  font-size: 13px;
+  padding: 40px 0;
+}
+
+.node-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: all 0.3s ease;
+}
+
+.node-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.node-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.processing-item {
+  background-color: #ecf5ff;
+  border-left: 3px solid #409eff;
+  color: #409eff;
+}
+
+.success-item {
+  background-color: #f0f9ff;
+  border-left: 3px solid #67c23a;
+  color: #67c23a;
+}
+
+.failed-item {
+  background-color: #fef0f0;
+  border-left: 3px solid #f56c6c;
+  color: #f56c6c;
+}
+
+.error-trigger {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.error-detail {
+  padding: 4px;
+}
+
+.error-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #303133;
+}
+
+.error-message {
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.rotating {
   animation: spin 1s linear infinite;
 }
 
@@ -434,65 +652,62 @@ onUnmounted(() => {
   to { transform: rotate(360deg); }
 }
 
-.status-message {
-  margin-bottom: 15px;
+.node-list-enter-active,
+.node-list-leave-active {
+  transition: all 0.3s ease;
 }
 
-.message {
-  padding: 8px 12px;
-  border-radius: 4px;
+.node-list-enter-from {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+.node-list-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.summary-info {
+  margin-top: 16px;
+}
+
+.summary-detail {
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.6;
 }
 
-.success-message {
-  background-color: #f0f9ff;
-  color: #067f23;
-  border: 1px solid #b3d8ff;
+.success-count {
+  color: #67c23a;
+  font-weight: 600;
 }
 
-.error-message {
-  background-color: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
-}
-
-.processing-message {
-  background-color: #f8fafc;
-  color: #374151;
-  border: 1px solid #e5e7eb;
-}
-
-.operation-details {
-  padding: 12px;
-  background-color: #f9fafb;
-  border-radius: 4px;
-  border: 1px solid #e5e7eb;
-}
-
-.detail-item {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.detail-item:last-child {
-  margin-bottom: 0;
-}
-
-.label {
-  font-weight: 500;
-  color: #6b7280;
-}
-
-.value {
-  color: #374151;
-  font-family: monospace;
+.failed-count {
+  color: #f56c6c;
+  font-weight: 600;
 }
 
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+/* 自定义滚动条 */
+.node-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.node-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.node-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.node-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 </style>
