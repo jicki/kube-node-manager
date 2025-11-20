@@ -67,16 +67,16 @@ func main() {
 		log.Fatal("Failed to run GORM auto-migrations:", err)
 	}
 
-	// 运行 SQL 迁移文件（自动检测并执行待执行的迁移）
-	// 智能检测迁移目录位置
-	migrationsPath := detectMigrationsPath()
-	migrationManager := database.NewMigrationManager(db, database.MigrationConfig{
-		MigrationsPath: migrationsPath,
-		UseEmbed:       false,
-	})
-
-	if err := migrationManager.AutoMigrate(); err != nil {
-		log.Fatal("Failed to run SQL migrations:", err)
+	// 自动执行数据库迁移（启动时）
+	autoMigrateConfig := database.AutoMigrateConfig{
+		Enabled:           cfg.Database.AutoMigrate,
+		ValidateOnStartup: cfg.Database.ValidateOnStartup,
+		RepairOnStartup:   cfg.Database.RepairOnStartup,
+		MigrationTimeout:  cfg.Database.MigrationTimeout,
+	}
+	
+	if err := database.AutoMigrateOnStartup(db, autoMigrateConfig); err != nil {
+		log.Fatal("Database migration failed:", err)
 	}
 
 	// 初始化默认数据
@@ -155,6 +155,17 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		healthGroup.GET("/live", healthHandler.LivenessProbe)           // K8s 存活探针
 		healthGroup.GET("/ready", healthHandler.ReadinessProbe)         // K8s 就绪探针
 		healthGroup.GET("/detailed", healthHandler.DetailedHealthCheck) // 详细健康检查
+		healthGroup.GET("/database", healthHandler.DatabaseHealth)      // 数据库健康检查
+		healthGroup.GET("/migration", healthHandler.MigrationHealth)    // 迁移状态检查
+	}
+	
+	// API 健康检查端点（与上面保持一致）
+	apiHealthGroup := router.Group("/api/health")
+	{
+		apiHealthGroup.GET("/", healthHandler.HealthCheck)
+		apiHealthGroup.GET("/database", healthHandler.DatabaseHealth)
+		apiHealthGroup.GET("/migration", healthHandler.MigrationHealth)
+		apiHealthGroup.GET("/schema", healthHandler.SchemaValidation) // 数据库结构验证
 	}
 
 	// 监控指标端点
@@ -621,25 +632,3 @@ func (k *klogAdapter) WithName(name string) logr.LogSink {
 	}
 }
 
-// detectMigrationsPath 智能检测迁移文件目录位置
-func detectMigrationsPath() string {
-	// 尝试的路径列表（按优先级排序）
-	possiblePaths := []string{
-		"./migrations",                    // 当前目录下的 migrations
-		"./backend/migrations",            // 项目根目录下的 backend/migrations
-		"../migrations",                   // 父目录下的 migrations
-		"/app/migrations",                 // 容器中的绝对路径
-		"/app/backend/migrations",         // 容器中的另一个可能路径
-	}
-
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			log.Printf("Found migrations directory at: %s", path)
-			return path
-		}
-	}
-
-	// 如果都找不到，返回默认路径（让迁移管理器处理）
-	log.Println("Warning: migrations directory not found, using default path: ./migrations")
-	return "./migrations"
-}

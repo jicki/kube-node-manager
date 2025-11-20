@@ -16,10 +16,30 @@ import (
 	"gorm.io/gorm"
 )
 
-// SchemaMigration 记录已执行的迁移
+// SchemaMigration 记录已执行的迁移（旧格式，保持兼容）
 type SchemaMigration struct {
 	Version   string    `gorm:"primaryKey"`
 	AppliedAt time.Time `gorm:"not null"`
+}
+
+// MigrationHistory 迁移历史记录（新格式，包含更多信息）
+type MigrationHistory struct {
+	ID            uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	Version       string    `gorm:"size:255" json:"version"`                          // 迁移版本号
+	AppVersion    string    `gorm:"size:50" json:"app_version"`                       // 应用版本
+	DBVersion     string    `gorm:"size:50" json:"db_version"`                        // 数据库架构版本
+	MigrationType string    `gorm:"size:50;not null" json:"migration_type"`           // 迁移类型: sql/auto_repair/gorm/auto_startup
+	Status        string    `gorm:"size:20;not null;default:'success'" json:"status"` // 状态: success/failed/pending
+	DurationMs    int64     `gorm:"default:0" json:"duration_ms"`                     // 执行耗时（毫秒）
+	ErrorMessage  string    `gorm:"type:text" json:"error_message,omitempty"`         // 错误信息
+	AppliedAt     time.Time `gorm:"not null;index" json:"applied_at"`                 // 应用时间
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// TableName 指定表名
+func (MigrationHistory) TableName() string {
+	return "migration_histories"
 }
 
 // MigrationConfig 迁移配置

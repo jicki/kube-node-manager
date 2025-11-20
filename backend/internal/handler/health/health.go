@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"fmt"
+	"kube-node-manager/internal/service"
 	"net/http"
 	"os"
 	"runtime"
@@ -14,7 +15,8 @@ import (
 )
 
 type HealthHandler struct {
-	DB *gorm.DB
+	DB               *gorm.DB
+	migrationService *service.MigrationService
 }
 
 type HealthStatus struct {
@@ -37,8 +39,15 @@ var (
 )
 
 func NewHealthHandler(db *gorm.DB) *HealthHandler {
+	migrationService, err := service.NewMigrationService(db)
+	if err != nil {
+		// 迁移服务初始化失败不影响基础健康检查
+		fmt.Printf("Warning: Failed to initialize migration service: %v\n", err)
+	}
+	
 	return &HealthHandler{
-		DB: db,
+		DB:               db,
+		migrationService: migrationService,
 	}
 }
 
@@ -261,4 +270,129 @@ func getVersion() string {
 // bToMb 将字节转换为MB
 func bToMb(b uint64) uint64 {
 	return b / 1024 / 1024
+}
+
+// DatabaseHealth 数据库健康检查（包含版本信息）
+func (h *HealthHandler) DatabaseHealth(c *gin.Context) {
+	details := make(map[string]interface{})
+	overallStatus := "healthy"
+
+	// 基础连接检查
+	dbHealth := h.checkDatabase()
+	details["connection"] = dbHealth
+	if dbHealth.Status != "healthy" {
+		overallStatus = "unhealthy"
+	}
+
+	// 版本信息
+	if h.migrationService != nil {
+		versionInfo := h.migrationService.GetVersionInfo()
+		details["version"] = map[string]interface{}{
+			"app_version":          versionInfo.AppVersion,
+			"db_version":           versionInfo.DBVersion,
+			"latest_schema":        versionInfo.LatestSchemaVersion,
+			"needs_migration":      versionInfo.NeedsMigration,
+			"migrations_applied":   versionInfo.MigrationCount,
+			"last_migration":       versionInfo.LastMigration,
+			"last_migration_time":  versionInfo.LastMigrationTime,
+		}
+
+		// 如果需要迁移，标记为需要注意
+		if versionInfo.NeedsMigration {
+			overallStatus = "needs_migration"
+		}
+	}
+
+	httpStatus := http.StatusOK
+	if overallStatus == "unhealthy" {
+		httpStatus = http.StatusServiceUnavailable
+	}
+
+	c.JSON(httpStatus, gin.H{
+		"status":    overallStatus,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"details":   details,
+	})
+}
+
+// MigrationHealth 迁移状态检查
+func (h *HealthHandler) MigrationHealth(c *gin.Context) {
+	if h.migrationService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "unavailable",
+			"message": "Migration service not initialized",
+		})
+		return
+	}
+
+	// 获取迁移状态
+	migrationStatus, err := h.migrationService.GetMigrationStatus()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": fmt.Sprintf("Failed to get migration status: %v", err),
+		})
+		return
+	}
+
+	// 获取最近的迁移历史
+	histories, err := h.migrationService.GetMigrationHistory(10)
+	if err != nil {
+		// 历史记录获取失败不影响整体状态
+		fmt.Printf("Warning: Failed to get migration history: %v\n", err)
+	} else {
+		migrationStatus["recent_history"] = histories
+	}
+
+	// 获取迁移统计
+	stats := h.migrationService.GetMigrationStatistics()
+	migrationStatus["statistics"] = stats
+
+	// 确定状态
+	status := "healthy"
+	if needsMigration, ok := migrationStatus["needs_migration"].(bool); ok && needsMigration {
+		status = "needs_migration"
+	}
+
+	migrationStatus["status"] = status
+	migrationStatus["timestamp"] = time.Now().UTC().Format(time.RFC3339)
+
+	c.JSON(http.StatusOK, migrationStatus)
+}
+
+// SchemaValidation 数据库结构验证
+func (h *HealthHandler) SchemaValidation(c *gin.Context) {
+	if h.migrationService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "unavailable",
+			"message": "Migration service not initialized",
+		})
+		return
+	}
+
+	// 验证数据库结构
+	validationResult, err := h.migrationService.ValidateSchema()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": fmt.Sprintf("Validation failed: %v", err),
+		})
+		return
+	}
+
+	status := "valid"
+	if !validationResult.Valid {
+		status = "invalid"
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":           status,
+		"valid":            validationResult.Valid,
+		"critical_issues":  validationResult.CriticalIssues,
+		"warnings":         validationResult.WarningIssues,
+		"total_issues":     validationResult.TotalIssues,
+		"missing_tables":   validationResult.MissingTables,
+		"extra_tables":     validationResult.ExtraTables,
+		"timestamp":        time.Now().UTC().Format(time.RFC3339),
+	})
 }

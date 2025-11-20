@@ -22,17 +22,21 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	Type         string `mapstructure:"type"` // sqlite, postgres
-	DSN          string `mapstructure:"dsn"`
-	Host         string `mapstructure:"host"`
-	Port         int    `mapstructure:"port"`
-	Database     string `mapstructure:"database"`
-	Username     string `mapstructure:"username"`
-	Password     string `mapstructure:"password"`
-	SSLMode      string `mapstructure:"ssl_mode"`
-	MaxOpenConns int    `mapstructure:"max_open_conns"`
-	MaxIdleConns int    `mapstructure:"max_idle_conns"`
-	MaxLifetime  int    `mapstructure:"max_lifetime"` // seconds
+	Type              string `mapstructure:"type"` // sqlite, postgres
+	DSN               string `mapstructure:"dsn"`
+	Host              string `mapstructure:"host"`
+	Port              int    `mapstructure:"port"`
+	Database          string `mapstructure:"database"`
+	Username          string `mapstructure:"username"`
+	Password          string `mapstructure:"password"`
+	SSLMode           string `mapstructure:"ssl_mode"`
+	MaxOpenConns      int    `mapstructure:"max_open_conns"`
+	MaxIdleConns      int    `mapstructure:"max_idle_conns"`
+	MaxLifetime       int    `mapstructure:"max_lifetime"`        // seconds
+	AutoMigrate       bool   `mapstructure:"auto_migrate"`        // 启动时自动迁移，默认 true
+	ValidateOnStartup bool   `mapstructure:"validate_on_startup"` // 启动时验证结构，默认 true
+	RepairOnStartup   bool   `mapstructure:"repair_on_startup"`   // 启动时自动修复，默认 true
+	MigrationTimeout  int    `mapstructure:"migration_timeout"`   // 迁移超时（秒），0 表示不限制，默认 300
 }
 
 type JWTConfig struct {
@@ -118,6 +122,10 @@ func LoadConfig() *Config {
 	viper.SetDefault("database.max_open_conns", 25)
 	viper.SetDefault("database.max_idle_conns", 10)
 	viper.SetDefault("database.max_lifetime", 3600)
+	viper.SetDefault("database.auto_migrate", true)
+	viper.SetDefault("database.validate_on_startup", true)
+	viper.SetDefault("database.repair_on_startup", true)
+	viper.SetDefault("database.migration_timeout", 300)
 	viper.SetDefault("jwt.secret", "your-secret-key-change-in-production")
 	viper.SetDefault("jwt.expire_time", 86400)
 	viper.SetDefault("ldap.enabled", false)

@@ -29,6 +29,12 @@ database:
   max_open_conns: 50    # 最大打开连接数（多副本建议提高）
   max_idle_conns: 20    # 最大空闲连接数（多副本建议提高）
   max_lifetime: 7200    # 连接最大生存时间 (秒)
+  
+  # ⭐ 自动迁移配置（v2.34.0+）
+  auto_migrate: true            # 启动时自动执行数据库迁移（默认: true）
+  validate_on_startup: true     # 启动时验证数据库结构（默认: true）
+  repair_on_startup: true       # 启动时自动修复结构问题（默认: true）
+  migration_timeout: 300        # 迁移超时时间（秒），0 表示不限制（默认: 300）
 
 # Progress 服务配置（批量操作进度推送）
 progress:
