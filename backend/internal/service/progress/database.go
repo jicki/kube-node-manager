@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"kube-node-manager/internal/config"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/pkg/logger"
 
@@ -27,7 +28,7 @@ type DatabaseProgressService struct {
 }
 
 // NewDatabaseProgressService 创建数据库进度服务
-func NewDatabaseProgressService(db *gorm.DB, logger *logger.Logger, wsService *Service, notifyType string, pollInterval int, redisAddr, redisPassword string, redisDB int) *DatabaseProgressService {
+func NewDatabaseProgressService(db *gorm.DB, dbConfig *config.DatabaseConfig, logger *logger.Logger, wsService *Service, notifyType string, pollInterval int, redisAddr, redisPassword string, redisDB int) *DatabaseProgressService {
 	dps := &DatabaseProgressService{
 		db:           db,
 		logger:       logger,
@@ -43,7 +44,7 @@ func NewDatabaseProgressService(db *gorm.DB, logger *logger.Logger, wsService *S
 	
 	switch notifyType {
 	case "postgres":
-		notifier, err = NewPostgresNotifier(db, logger)
+		notifier, err = NewPostgresNotifier(db, dbConfig, logger)
 		if err != nil {
 			logger.Errorf("Failed to create PostgreSQL notifier, falling back to polling: %v", err)
 			notifier = NewPollingNotifier(dps.pollInterval, logger)
@@ -120,6 +121,7 @@ func (dps *DatabaseProgressService) CreateTask(taskID, action string, total int,
 func (dps *DatabaseProgressService) UpdateNodeLists(taskID string, successNodes []string, failedNodes []model.NodeError) error {
 	var task model.ProgressTask
 	if err := dps.db.Where("task_id = ?", taskID).First(&task).Error; err != nil {
+		dps.logger.Errorf("Failed to find task %s for node list update: %v", taskID, err)
 		return err
 	}
 
@@ -128,6 +130,9 @@ func (dps *DatabaseProgressService) UpdateNodeLists(taskID string, successNodes 
 		successJSON, err := json.Marshal(successNodes)
 		if err == nil {
 			task.SuccessNodes = string(successJSON)
+			dps.logger.Debugf("Task %s: Updated success nodes (count=%d)", taskID, len(successNodes))
+		} else {
+			dps.logger.Errorf("Failed to marshal success nodes for task %s: %v", taskID, err)
 		}
 	}
 
@@ -135,10 +140,20 @@ func (dps *DatabaseProgressService) UpdateNodeLists(taskID string, successNodes 
 		failedJSON, err := json.Marshal(failedNodes)
 		if err == nil {
 			task.FailedNodes = string(failedJSON)
+			dps.logger.Debugf("Task %s: Updated failed nodes (count=%d)", taskID, len(failedNodes))
+		} else {
+			dps.logger.Errorf("Failed to marshal failed nodes for task %s: %v", taskID, err)
 		}
 	}
 
-	return dps.db.Save(&task).Error
+	if err := dps.db.Save(&task).Error; err != nil {
+		dps.logger.Errorf("Failed to save task %s with updated node lists: %v", taskID, err)
+		return err
+	}
+
+	dps.logger.Debugf("Task %s: Successfully saved node lists (success=%d, failed=%d)", 
+		taskID, len(successNodes), len(failedNodes))
+	return nil
 }
 
 // UpdateProgress 更新任务进度
@@ -221,17 +236,40 @@ func (dps *DatabaseProgressService) CompleteTask(taskID string, userID uint) err
 		return err
 	}
 	
+	// 解析成功和失败节点列表（用于日志）
+	var successNodes []string
+	var failedNodes []model.NodeError
+	if task.SuccessNodes != "" {
+		json.Unmarshal([]byte(task.SuccessNodes), &successNodes)
+	}
+	if task.FailedNodes != "" {
+		json.Unmarshal([]byte(task.FailedNodes), &failedNodes)
+	}
+	
 	// 使用通知器发送实时通知
 	if !dps.usePolling {
-		// 解析成功和失败节点列表
-		var successNodes []string
-		var failedNodes []model.NodeError
+		// 重新解析以确保数据完整
+		var notifySuccessNodes []string
+		var notifyFailedNodes []model.NodeError
 		if task.SuccessNodes != "" {
-			json.Unmarshal([]byte(task.SuccessNodes), &successNodes)
+			if err := json.Unmarshal([]byte(task.SuccessNodes), &notifySuccessNodes); err != nil {
+				dps.logger.Errorf("Failed to unmarshal success nodes for task %s: %v (data: %s)", 
+					taskID, err, task.SuccessNodes[:min(100, len(task.SuccessNodes))])
+			} else {
+				dps.logger.Debugf("Task %s: Unmarshaled %d success nodes", taskID, len(notifySuccessNodes))
+			}
 		}
 		if task.FailedNodes != "" {
-			json.Unmarshal([]byte(task.FailedNodes), &failedNodes)
+			if err := json.Unmarshal([]byte(task.FailedNodes), &notifyFailedNodes); err != nil {
+				dps.logger.Errorf("Failed to unmarshal failed nodes for task %s: %v (data: %s)", 
+					taskID, err, task.FailedNodes[:min(100, len(task.FailedNodes))])
+			} else {
+				dps.logger.Debugf("Task %s: Unmarshaled %d failed nodes", taskID, len(notifyFailedNodes))
+			}
 		}
+		
+		dps.logger.Infof("Task %s completion: sending notification with success=%d failed=%d", 
+			taskID, len(notifySuccessNodes), len(notifyFailedNodes))
 		
 		progressMsg := ProgressMessage{
 			TaskID:       task.TaskID,
@@ -240,20 +278,23 @@ func (dps *DatabaseProgressService) CompleteTask(taskID string, userID uint) err
 			Action:       task.Action,
 			Current:      task.Current,
 			Total:        task.Total,
-			Progress:     task.Progress,
+			Progress:     100.0,
 			CurrentNode:  task.CurrentNode,
 			Message:      task.Message,
 			Error:        task.ErrorMsg,
 			Timestamp:    time.Now(),
-			SuccessNodes: successNodes,
-			FailedNodes:  failedNodes,
+			SuccessNodes: notifySuccessNodes,
+			FailedNodes:  notifyFailedNodes,
 		}
 		if err := dps.notifier.Notify(context.Background(), progressMsg); err != nil {
-			dps.logger.Warningf("Failed to send completion notification: %v", err)
+			dps.logger.Errorf("Failed to send completion notification for task %s: %v", taskID, err)
+		} else {
+			dps.logger.Infof("Successfully sent completion notification for task %s", taskID)
 		}
 	}
 
-	dps.logger.Infof("Task %s completed successfully in database", taskID)
+	dps.logger.Infof("Task %s completed successfully in database (success=%d, failed=%d)", 
+		taskID, len(successNodes), len(failedNodes))
 
 	// 立即尝试推送完成消息，不等待轮询（降级方案）
 	go func() {
@@ -781,5 +822,50 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 		dps.logger.Errorf("Failed to mark task %s as completed: %v", taskID, err)
 		return err
 	}
+	return nil
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// VerifyNotifier 验证通知器是否正常工作
+func (dps *DatabaseProgressService) VerifyNotifier() error {
+	if dps.notifier == nil {
+		return fmt.Errorf("notifier is nil")
+	}
+	
+	notifierType := dps.notifier.Type()
+	dps.logger.Infof("Verifying notifier type: %s", notifierType)
+	
+	// 对于PostgreSQL和Redis通知器，尝试发送测试消息
+	if notifierType == "postgres" || notifierType == "redis" {
+		testMsg := ProgressMessage{
+			TaskID:    "test_" + fmt.Sprintf("%d", time.Now().Unix()),
+			UserID:    0,
+			Type:      "test",
+			Action:    "verification",
+			Current:   0,
+			Total:     1,
+			Progress:  0,
+			Message:   "Notifier verification test",
+			Timestamp: time.Now(),
+		}
+		
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		
+		if err := dps.notifier.Notify(ctx, testMsg); err != nil {
+			dps.logger.Errorf("Notifier verification failed: %v", err)
+			return fmt.Errorf("failed to send test notification: %w", err)
+		}
+		
+		dps.logger.Infof("✅ Notifier verification successful (type=%s)", notifierType)
+	}
+	
 	return nil
 }

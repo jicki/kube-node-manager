@@ -7,6 +7,204 @@
 
 ---
 
+## [v2.34.9] - 2025-11-20
+
+### 🐛 Bug 修复 - 多副本环境消息路由问题
+
+#### 问题背景
+
+**用户报告**：
+- 环境：Kubernetes 多副本部署 + PostgreSQL
+- 现象：批量标签操作进度条显示不正确，完成后显示"成功0个"
+- 日志：`PostgreSQL listener problem: dial tcp 127.0.0.1:5432: connect: connection refused`
+
+**根本原因**：
+
+PostgreSQL LISTEN/NOTIFY 通知器在创建独立连接时，从环境变量读取配置。如果环境变量未设置，会使用默认值 `localhost:5432`，导致在 Kubernetes Pod 中连接失败。
+
+#### 修复内容
+
+##### 1. 修复 PostgreSQL Listener 连接配置
+
+**问题代码** (`notifier.go:41-51`)：
+```go
+func NewPostgresNotifier(db *gorm.DB, logger *logger.Logger) (*PostgresNotifier, error) {
+    // ❌ 从环境变量读取，默认值为 localhost
+    host := getEnvOrDefault("DB_HOST", "localhost")
+    port := getEnvOrDefault("DB_PORT", "5432")
+    ...
+}
+```
+
+**修复后**：
+```go
+func NewPostgresNotifier(db *gorm.DB, dbConfig *config.DatabaseConfig, logger *logger.Logger) (*PostgresNotifier, error) {
+    // ✅ 从配置对象读取，与主应用使用相同配置
+    dsn := fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=%s",
+        dbConfig.Host, dbConfig.Port, dbConfig.Username, dbConfig.Database, dbConfig.SSLMode)
+    ...
+}
+```
+
+**影响文件**：
+- `backend/internal/service/progress/notifier.go`
+- `backend/internal/service/progress/database.go`
+- `backend/internal/service/progress/progress.go`
+- `backend/internal/service/services.go`
+
+##### 2. 增强连接验证和错误处理
+
+**新增功能**：
+- PostgreSQL Listener 创建时等待连接建立（10秒超时）
+- 改进错误日志，显示详细的连接参数和失败原因
+- Subscribe 方法增强消息处理和错误恢复能力
+- Notify 方法记录详细的发送日志（任务ID、节点列表计数等）
+
+**代码示例** (`notifier.go:65-74`)：
+```go
+// 等待初始连接建立（超时10秒）
+timeout := time.After(10 * time.Second)
+select {
+case <-listener.ConnectedNotify():
+    logger.Info("PostgreSQL listener connected successfully")
+case <-timeout:
+    listener.Close()
+    return nil, fmt.Errorf("failed to connect PostgreSQL listener within 10s timeout")
+}
+```
+
+##### 3. 修复节点列表数据传递
+
+**问题**：完成消息中成功/失败节点列表为空，前端显示"成功0个"
+
+**修复点**：
+- `UpdateNodeLists`: 添加 JSON 序列化日志和错误处理
+- `CompleteTask`: 增强节点列表解析日志，记录解析前后的数据
+- 确保 `SuccessNodes` 和 `FailedNodes` 正确传递到 `ProgressMessage`
+
+**代码示例** (`database.go:217-250`)：
+```go
+// 解析成功和失败节点列表
+var successNodes []string
+var failedNodes []model.NodeError
+if task.SuccessNodes != "" {
+    if err := json.Unmarshal([]byte(task.SuccessNodes), &successNodes); err != nil {
+        dps.logger.Errorf("Failed to unmarshal success nodes: %v", err)
+    } else {
+        dps.logger.Debugf("Task %s: Unmarshaled %d success nodes", taskID, len(successNodes))
+    }
+}
+```
+
+##### 4. 前端容错增强
+
+**修改文件**：`frontend/src/components/common/ProgressDialog.vue`
+
+**增强功能**：
+- 成功/失败节点列表数组类型验证
+- 完成和错误消息增加详细的 console.log
+- 显示节点统计信息（成功数、失败数）
+
+**代码示例**：
+```javascript
+const successNodes = computed(() => {
+  const nodes = progressData.value.success_nodes || []
+  console.log('✅ Success nodes:', nodes, 'Type:', typeof nodes, 'IsArray:', Array.isArray(nodes))
+  
+  if (!Array.isArray(nodes)) {
+    console.error('❌ success_nodes is not an array:', nodes)
+    return []
+  }
+  return nodes
+})
+```
+
+##### 5. 启动验证
+
+**新增功能**：应用启动时自动验证 PostgreSQL 通知器
+
+**代码位置**：`services.go:189-206`
+
+```go
+// 验证通知器是否正常工作
+if err := progressSvc.VerifyNotifier(); err != nil {
+    logger.Errorf("⚠️  PostgreSQL notifier verification failed: %v", err)
+    logger.Warningf("Progress updates may not work properly in multi-replica mode")
+    logger.Warningf("Please check:")
+    logger.Warningf("  1. Database connection parameters are correct")
+    logger.Warningf("  2. PostgreSQL LISTEN/NOTIFY is enabled")
+    logger.Warningf("  3. Network connectivity between replicas and database")
+} else {
+    logger.Infof("✅ PostgreSQL notifier verified successfully - multi-replica progress updates ready")
+}
+```
+
+##### 6. 配置和文档更新
+
+**更新文件**：
+- `configs/config-multi-replica.yaml`: 添加详细的配置说明和注释
+- `deploy/k8s/k8s-statefulset.yaml`: 添加数据库环境变量配置示例
+- `deploy/k8s/README.md`: 更新多副本部署说明
+- **新增**：`docs/multi-replica-postgresql-setup.md` - 完整的多副本配置指南
+
+**配置示例** (`config-multi-replica.yaml`)：
+```yaml
+database:
+  type: "postgres"
+  # ⚠️  关键：使用 K8s Service 名称或外部数据库地址
+  host: "postgres-service.default.svc.cluster.local"
+  port: 5432
+  database: "kube_node_manager"
+  username: "postgres"
+  password: "your_password"
+
+progress:
+  enable_database: true
+  notify_type: "postgres"  # 使用 PostgreSQL LISTEN/NOTIFY
+  poll_interval: 10000  # 降级轮询间隔
+```
+
+#### 影响范围
+
+- ✅ 多副本环境批量标签操作
+- ✅ 多副本环境批量污点操作
+- ✅ 多副本环境 Ansible 任务（如果使用进度推送）
+- ✅ PostgreSQL LISTEN/NOTIFY 实时通知
+- ⚠️  不影响单副本部署
+- ⚠️  不影响 Redis 通知方式
+
+#### 升级建议
+
+**必须升级的用户**：
+- 使用 Kubernetes 多副本部署（2+ 副本）
+- 使用 PostgreSQL 数据库
+- 启用了 `progress.enable_database: true`
+- 遇到进度显示问题或 PostgreSQL listener 连接错误
+
+**升级步骤**：
+1. 更新镜像到 `v2.34.9`
+2. 确保配置文件或环境变量中 `database.host` 设置正确
+3. 验证启动日志中 `PostgreSQL listener connected successfully`
+4. 测试批量操作功能
+
+**验证方法**：
+```bash
+# 检查日志确认连接成功
+kubectl logs -l app=kube-node-mgr | grep "PostgreSQL listener"
+
+# 应该看到：
+# INFO: PostgreSQL listener connected successfully
+# INFO: ✅ PostgreSQL notifier verified successfully
+```
+
+#### 相关文档
+
+- [多副本 PostgreSQL 配置指南](./multi-replica-postgresql-setup.md)
+- [实时通知系统架构](./realtime-notification-system.md)
+- [批量操作多副本分析](./batch-operations-multi-replica-analysis.md)
+
+---
+
 ## [v2.31.5] - 2025-11-13
 
 ### 🐛 Bug 修复 - Ansible 大规模主机任务日志丢失

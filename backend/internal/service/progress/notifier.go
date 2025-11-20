@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"kube-node-manager/internal/config"
 	"kube-node-manager/pkg/logger"
 
 	"github.com/lib/pq"
@@ -38,26 +39,55 @@ type PostgresNotifier struct {
 }
 
 // NewPostgresNotifier 创建 PostgreSQL 通知器
-func NewPostgresNotifier(db *gorm.DB, logger *logger.Logger) (*PostgresNotifier, error) {
-	// 从环境变量或默认值构建 DSN
-	host := getEnvOrDefault("DB_HOST", "localhost")
-	port := getEnvOrDefault("DB_PORT", "5432")
-	user := getEnvOrDefault("DB_USERNAME", "postgres")
-	password := getEnvOrDefault("DB_PASSWORD", "")
-	dbname := getEnvOrDefault("DB_DATABASE", "kube_node_manager")
-	sslmode := getEnvOrDefault("DB_SSL_MODE", "disable")
+func NewPostgresNotifier(db *gorm.DB, dbConfig *config.DatabaseConfig, logger *logger.Logger) (*PostgresNotifier, error) {
+	// 从配置构建 DSN（与主应用使用相同的配置）
+	dsn := fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=%s",
+		dbConfig.Host,
+		dbConfig.Port,
+		dbConfig.Username,
+		dbConfig.Database,
+		dbConfig.SSLMode,
+	)
 	
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		host, port, user, password, dbname, sslmode)
+	// 添加密码（如果存在）
+	if dbConfig.Password != "" {
+		dsn += fmt.Sprintf(" password=%s", dbConfig.Password)
+	}
+	
+	logger.Infof("Initializing PostgreSQL listener with host=%s port=%d dbname=%s", 
+		dbConfig.Host, dbConfig.Port, dbConfig.Database)
 	
 	// 创建 PostgreSQL Listener
 	reportProblem := func(ev pq.ListenerEventType, err error) {
 		if err != nil {
-			logger.Errorf("PostgreSQL listener problem: %v", err)
+			logger.Errorf("PostgreSQL listener [%s]: %v", ev, err)
 		}
 	}
 	
 	listener := pq.NewListener(dsn, 10*time.Second, time.Minute, reportProblem)
+	
+	// 尝试立即 ping 验证连接
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	connected := make(chan error, 1)
+	go func() {
+		connected <- listener.Ping()
+	}()
+	
+	select {
+	case err := <-connected:
+		if err != nil {
+			listener.Close()
+			return nil, fmt.Errorf("failed to connect PostgreSQL listener: %w (host=%s port=%d)", 
+				err, dbConfig.Host, dbConfig.Port)
+		}
+		logger.Infof("PostgreSQL listener connected successfully (verified via ping)")
+	case <-ctx.Done():
+		listener.Close()
+		return nil, fmt.Errorf("PostgreSQL listener connection timeout after 10s (host=%s port=%d)", 
+			dbConfig.Host, dbConfig.Port)
+	}
 	
 	notifier := &PostgresNotifier{
 		db:       db,
@@ -65,7 +95,7 @@ func NewPostgresNotifier(db *gorm.DB, logger *logger.Logger) (*PostgresNotifier,
 		listener: listener,
 	}
 	
-	logger.Info("PostgreSQL LISTEN/NOTIFY notifier initialized")
+	logger.Info("PostgreSQL LISTEN/NOTIFY notifier initialized successfully")
 	return notifier, nil
 }
 
@@ -78,21 +108,29 @@ func (p *PostgresNotifier) Notify(ctx context.Context, message ProgressMessage) 
 	
 	// 使用 pg_notify 发送通知
 	channel := "progress_update"  // 使用固定通道名
+	
+	// 记录发送详情（用于调试）
+	p.logger.Debugf("Publishing to PostgreSQL channel '%s': task=%s type=%s user=%d success=%d failed=%d", 
+		channel, message.TaskID, message.Type, message.UserID, 
+		len(message.SuccessNodes), len(message.FailedNodes))
+	
 	result := p.db.Exec("SELECT pg_notify(?, ?)", channel, string(payload))
 	
 	if result.Error != nil {
+		p.logger.Errorf("Failed to send PostgreSQL notification: %v", result.Error)
 		return fmt.Errorf("failed to notify: %w", result.Error)
 	}
 	
-	p.logger.Debugf("Sent PostgreSQL notification to channel %s", channel)
+	p.logger.Debugf("Successfully sent PostgreSQL notification to channel '%s' (payload size: %d bytes)", 
+		channel, len(payload))
 	return nil
 }
 
 // Subscribe 订阅通知
 func (p *PostgresNotifier) Subscribe(ctx context.Context) (<-chan ProgressMessage, error) {
-	// 监听所有 progress_update 相关的通道
-	// 使用通配符模式：progress_update_*
+	// 监听 progress_update 通道
 	if err := p.listener.Listen("progress_update"); err != nil {
+		p.logger.Errorf("Failed to listen on channel 'progress_update': %v", err)
 		return nil, fmt.Errorf("failed to listen: %w", err)
 	}
 	
@@ -103,43 +141,59 @@ func (p *PostgresNotifier) Subscribe(ctx context.Context) (<-chan ProgressMessag
 	
 	go func() {
 		defer close(messageChan)
+		p.logger.Info("PostgreSQL notification subscription loop started")
 		
 		for {
 			select {
 			case <-ctx.Done():
-				p.logger.Info("PostgreSQL notifier subscription stopped")
+				p.logger.Info("PostgreSQL notifier subscription stopped (context cancelled)")
 				return
 				
 			case notification := <-p.listener.Notify:
 				if notification == nil {
+					// nil notification can occur during reconnection
+					p.logger.Debug("Received nil notification (listener reconnecting)")
 					continue
 				}
+				
+				p.logger.Debugf("Received notification on channel '%s': payload size=%d bytes", 
+					notification.Channel, len(notification.Extra))
 				
 				var msg ProgressMessage
 				if err := json.Unmarshal([]byte(notification.Extra), &msg); err != nil {
-					p.logger.Errorf("Failed to unmarshal notification: %v", err)
+					p.logger.Errorf("Failed to unmarshal notification payload: %v (payload: %s)", 
+						err, notification.Extra[:min(100, len(notification.Extra))])
 					continue
 				}
 				
+				p.logger.Debugf("Parsed notification: task=%s type=%s user=%d success=%d failed=%d", 
+					msg.TaskID, msg.Type, msg.UserID, len(msg.SuccessNodes), len(msg.FailedNodes))
+				
 				select {
 				case messageChan <- msg:
-					p.logger.Debugf("Forwarded notification for task %s", msg.TaskID)
+					p.logger.Debugf("Successfully forwarded notification for task %s (type=%s) to WebSocket", 
+						msg.TaskID, msg.Type)
 				case <-ctx.Done():
+					p.logger.Info("Context cancelled while forwarding message")
 					return
+				default:
+					p.logger.Warningf("Message channel full, dropping notification for task %s", msg.TaskID)
 				}
 				
 			case <-time.After(90 * time.Second):
 				// 定期 ping 以保持连接
 				go func() {
 					if err := p.listener.Ping(); err != nil {
-						p.logger.Warningf("PostgreSQL listener ping failed: %v", err)
+						p.logger.Warningf("PostgreSQL listener ping failed (connection may be lost): %v", err)
+					} else {
+						p.logger.Debug("PostgreSQL listener ping successful")
 					}
 				}()
 			}
 		}
 	}()
 	
-	p.logger.Info("PostgreSQL notifier subscription started")
+	p.logger.Info("PostgreSQL notifier subscription started successfully")
 	return messageChan, nil
 }
 

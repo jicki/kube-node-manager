@@ -73,10 +73,24 @@ kubectl logs -l app=kube-node-manager -f
 
 应用通过以下环境变量进行配置：
 
+**基础配置：**
 - `JWT_SECRET`: JWT 密钥（来自 Secret）
 - `LDAP_*`: LDAP 配置（来自 ConfigMap/Secret）
-- `DATABASE_DSN`: 数据库路径
 - `GIN_MODE`: 运行模式
+
+**数据库配置（多副本环境）：**
+- `DB_HOST`: PostgreSQL 主机地址（如：`postgres-service.default.svc.cluster.local`）
+- `DB_PORT`: PostgreSQL 端口（默认：5432）
+- `DB_USERNAME`: 数据库用户名
+- `DB_PASSWORD`: 数据库密码（来自 Secret）
+- `DB_DATABASE`: 数据库名称
+- `DB_SSL_MODE`: SSL 模式（disable/require/verify-ca/verify-full）
+
+**⚠️  多副本部署重要提示：**
+1. 必须使用 PostgreSQL 数据库（SQLite 不支持多副本）
+2. 确保所有环境变量正确设置，特别是 `DB_HOST`
+3. PostgreSQL Listener 会使用这些环境变量建立独立连接
+4. 建议配置文件中也设置相同的数据库参数以保持一致性
 
 ### 持久化存储
 

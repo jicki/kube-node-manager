@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"kube-node-manager/internal/config"
 	"kube-node-manager/internal/model"
 	"kube-node-manager/internal/service/auth"
 	"kube-node-manager/pkg/logger"
@@ -105,10 +106,18 @@ func NewService(logger *logger.Logger) *Service {
 }
 
 // EnableDatabaseMode 启用数据库模式（用于多副本环境）
-func (s *Service) EnableDatabaseMode(db *gorm.DB, notifyType string, pollInterval int, redisAddr, redisPassword string, redisDB int) {
-	s.dbProgressService = NewDatabaseProgressService(db, s.logger, s, notifyType, pollInterval, redisAddr, redisPassword, redisDB)
+func (s *Service) EnableDatabaseMode(db *gorm.DB, dbConfig *config.DatabaseConfig, notifyType string, pollInterval int, redisAddr, redisPassword string, redisDB int) {
+	s.dbProgressService = NewDatabaseProgressService(db, dbConfig, s.logger, s, notifyType, pollInterval, redisAddr, redisPassword, redisDB)
 	s.useDatabase = true
 	s.logger.Infof("Progress service enabled database mode for multi-replica support with %s notification", notifyType)
+}
+
+// VerifyNotifier 验证通知器状态
+func (s *Service) VerifyNotifier() error {
+	if !s.useDatabase || s.dbProgressService == nil {
+		return fmt.Errorf("database mode not enabled")
+	}
+	return s.dbProgressService.VerifyNotifier()
 }
 
 // SetAuthService 设置认证服务

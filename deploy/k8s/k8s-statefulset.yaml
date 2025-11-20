@@ -46,8 +46,24 @@ spec:
             configMapKeyRef:
               name: kube-node-mgr-config
               key: gin-mode
-        - name: DATABASE_DSN
-          value: "/app/data/kube-node-mgr.db"
+        # ⚠️  多副本环境必须使用 PostgreSQL
+        # 注意：如果使用配置文件，以下环境变量可以省略
+        # 但建议显式设置以确保 PostgreSQL Listener 使用正确的连接参数
+        - name: DB_HOST
+          value: "postgres-service.default.svc.cluster.local"  # ← PostgreSQL Service 地址
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_USERNAME
+          value: "postgres"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        - name: DB_DATABASE
+          value: "kube_node_manager"
+        - name: DB_SSL_MODE
+          value: "disable"
         # JWT配置
         - name: JWT_SECRET
           valueFrom:

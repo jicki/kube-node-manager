@@ -188,6 +188,7 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	if cfg.Progress.EnableDatabase {
 		progressSvc.EnableDatabaseMode(
 			db,
+			&cfg.Database,
 			cfg.Progress.NotifyType,
 			cfg.Progress.PollInterval,
 			cfg.Progress.Redis.Addr,
@@ -195,6 +196,18 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 			cfg.Progress.Redis.DB,
 		)
 		logger.Infof("Progress service database mode enabled for multi-replica support")
+		
+		// 验证通知器是否正常工作
+		if err := progressSvc.VerifyNotifier(); err != nil {
+			logger.Errorf("⚠️  PostgreSQL notifier verification failed: %v", err)
+			logger.Warningf("Progress updates may not work properly in multi-replica mode")
+			logger.Warningf("Please check:")
+			logger.Warningf("  1. Database connection parameters are correct")
+			logger.Warningf("  2. PostgreSQL LISTEN/NOTIFY is enabled")
+			logger.Warningf("  3. Network connectivity between replicas and database")
+		} else {
+			logger.Infof("✅ PostgreSQL notifier verified successfully - multi-replica progress updates ready")
+		}
 	}
 
 	// 创建服务实例

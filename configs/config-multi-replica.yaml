@@ -40,6 +40,17 @@ database:
 progress:
   enable_database: true  # ✅ 启用数据库存储，多副本环境必须开启
   # 说明：将 progress 消息存储到 PostgreSQL，确保跨副本的消息一致性
+  
+  # 通知方式：postgres（PostgreSQL LISTEN/NOTIFY）、redis（Redis Pub/Sub）、polling（轮询）
+  notify_type: "postgres"  # ⚠️  推荐使用 postgres，无需额外组件，延迟 < 100ms
+  poll_interval: 10000  # 降级轮询间隔（毫秒），作为备份机制
+  
+  # Redis 配置（仅在 notify_type=redis 时需要）
+  redis:
+    enabled: false  # 使用 PostgreSQL 时设为 false
+    addr: "redis-service.default.svc.cluster.local:6379"
+    password: ""
+    db: 0
 
 jwt:
   secret: "your-jwt-secret-change-in-production"

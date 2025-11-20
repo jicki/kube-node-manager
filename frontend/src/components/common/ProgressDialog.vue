@@ -218,12 +218,26 @@ const progressStatus = computed(() => {
 
 // 成功节点列表
 const successNodes = computed(() => {
-  return progressData.value.success_nodes || []
+  const nodes = progressData.value.success_nodes || []
+  console.log('✅ Success nodes:', nodes, 'Type:', typeof nodes, 'IsArray:', Array.isArray(nodes))
+  
+  if (!Array.isArray(nodes)) {
+    console.error('❌ success_nodes is not an array:', nodes)
+    return []
+  }
+  return nodes
 })
 
 // 失败节点列表
 const failedNodes = computed(() => {
   const nodes = progressData.value.failed_nodes || []
+  console.log('❌ Failed nodes:', nodes, 'Type:', typeof nodes, 'IsArray:', Array.isArray(nodes))
+  
+  if (!Array.isArray(nodes)) {
+    console.error('❌ failed_nodes is not an array:', nodes)
+    return []
+  }
+  
   // 确保返回正确格式的对象数组
   return nodes.map(node => {
     if (typeof node === 'string') {
@@ -362,6 +376,17 @@ const handleProgressUpdate = (data) => {
       break
 
     case 'complete':
+      console.log('📦 Complete message received:', {
+        task_id: data.task_id,
+        success_count: data.success_nodes?.length,
+        failed_count: data.failed_nodes?.length,
+        success_nodes: data.success_nodes,
+        failed_nodes: data.failed_nodes,
+        progress: data.progress,
+        current: data.current,
+        total: data.total
+      })
+      
       progressData.value = { ...data }
       isCompleted.value = true
 
@@ -376,6 +401,8 @@ const handleProgressUpdate = (data) => {
       const successCount = data.success_nodes?.length || 0
       const failedCount = data.failed_nodes?.length || 0
       
+      console.log(`✅ 批量操作完成统计: 成功=${successCount}, 失败=${failedCount}`)
+      
       if (failedCount > 0) {
         ElMessage.warning(`批量操作完成：${successCount}个成功，${failedCount}个失败`)
       } else {
@@ -386,6 +413,14 @@ const handleProgressUpdate = (data) => {
       break
 
     case 'error':
+      console.log('❌ Error message received:', {
+        task_id: data.task_id,
+        success_count: data.success_nodes?.length,
+        failed_count: data.failed_nodes?.length,
+        error: data.error,
+        message: data.message
+      })
+      
       progressData.value = { ...data }
       isError.value = true
 
@@ -396,6 +431,7 @@ const handleProgressUpdate = (data) => {
 
       const successCnt = data.success_nodes?.length || 0
       const failedCnt = data.failed_nodes?.length || 0
+      console.log(`❌ 批量操作错误统计: 成功=${successCnt}, 失败=${failedCnt}`)
       ElMessage.error(`批量操作完成：${successCnt}个成功，${failedCnt}个失败`)
       emit('error', data)
       break
