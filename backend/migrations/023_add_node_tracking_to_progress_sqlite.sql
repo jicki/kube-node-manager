@@ -1,17 +1,15 @@
--- 023_add_node_tracking_to_progress_sqlite.sql
--- 为进度追踪添加成功/失败节点列表字段 (SQLite版本)
+-- +migrate Up
+-- 为 progress_tasks 和 progress_messages 表添加节点跟踪字段（SQLite 版本）
 
--- SQLite 不支持 IF NOT EXISTS 在 ALTER TABLE ADD COLUMN 中，需要检查后添加
--- 为 progress_tasks 表添加节点追踪字段
-ALTER TABLE progress_tasks ADD COLUMN success_nodes TEXT DEFAULT '';
-ALTER TABLE progress_tasks ADD COLUMN failed_nodes TEXT DEFAULT '';
+-- 注意：这个迁移文件仅用于 SQLite 数据库
+-- 如果使用 PostgreSQL，请使用 023_add_node_tracking_to_progress.sql
 
--- 为 progress_messages 表添加节点追踪字段
-ALTER TABLE progress_messages ADD COLUMN current_node VARCHAR(255) DEFAULT '';
-ALTER TABLE progress_messages ADD COLUMN success_nodes TEXT DEFAULT '';
-ALTER TABLE progress_messages ADD COLUMN failed_nodes TEXT DEFAULT '';
+ALTER TABLE progress_tasks ADD COLUMN success_nodes TEXT DEFAULT '[]';
+ALTER TABLE progress_tasks ADD COLUMN failed_nodes TEXT DEFAULT '[]';
+ALTER TABLE progress_messages ADD COLUMN success_nodes TEXT DEFAULT '[]';
+ALTER TABLE progress_messages ADD COLUMN failed_nodes TEXT DEFAULT '[]';
 
--- 添加索引以提高查询性能
-CREATE INDEX IF NOT EXISTS idx_progress_tasks_user_status ON progress_tasks(user_id, status);
-CREATE INDEX IF NOT EXISTS idx_progress_messages_user_processed ON progress_messages(user_id, processed);
-
+-- +migrate Down
+-- SQLite 不支持直接删除列，需要重建表
+-- 为简化起见，在开发环境中可以保留这些列
+-- 生产环境建议使用 PostgreSQL

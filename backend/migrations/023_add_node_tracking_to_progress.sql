@@ -1,23 +1,51 @@
--- 023_add_node_tracking_to_progress.sql
--- 为进度追踪添加成功/失败节点列表字段
+-- +migrate Up
+-- 为 progress_tasks 和 progress_messages 表添加节点跟踪字段（PostgreSQL 版本）
 
--- 为 ProgressTask 表添加节点追踪字段
-ALTER TABLE progress_tasks ADD COLUMN IF NOT EXISTS success_nodes TEXT DEFAULT '';
-ALTER TABLE progress_tasks ADD COLUMN IF NOT EXISTS failed_nodes TEXT DEFAULT '';
+-- 添加列前先检查是否存在，避免重复添加
+DO $$ 
+BEGIN
+    -- 为 progress_tasks 添加 success_nodes 列
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='progress_tasks' AND column_name='success_nodes'
+    ) THEN
+        ALTER TABLE progress_tasks ADD COLUMN success_nodes JSONB DEFAULT '[]'::JSONB;
+    END IF;
 
--- 为 ProgressMessage 表添加节点追踪字段
-ALTER TABLE progress_messages ADD COLUMN IF NOT EXISTS current_node VARCHAR(255) DEFAULT '';
-ALTER TABLE progress_messages ADD COLUMN IF NOT EXISTS success_nodes TEXT DEFAULT '';
-ALTER TABLE progress_messages ADD COLUMN IF NOT EXISTS failed_nodes TEXT DEFAULT '';
+    -- 为 progress_tasks 添加 failed_nodes 列
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='progress_tasks' AND column_name='failed_nodes'
+    ) THEN
+        ALTER TABLE progress_tasks ADD COLUMN failed_nodes JSONB DEFAULT '[]'::JSONB;
+    END IF;
 
--- 添加索引以提高查询性能
-CREATE INDEX IF NOT EXISTS idx_progress_tasks_user_status ON progress_tasks(user_id, status);
-CREATE INDEX IF NOT EXISTS idx_progress_messages_user_processed ON progress_messages(user_id, processed);
+    -- 为 progress_messages 添加 success_nodes 列
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='progress_messages' AND column_name='success_nodes'
+    ) THEN
+        ALTER TABLE progress_messages ADD COLUMN success_nodes JSONB DEFAULT '[]'::JSONB;
+    END IF;
 
--- 注释
-COMMENT ON COLUMN progress_tasks.success_nodes IS '成功处理的节点列表（JSON格式）';
-COMMENT ON COLUMN progress_tasks.failed_nodes IS '失败的节点列表（JSON格式，包含错误信息）';
-COMMENT ON COLUMN progress_messages.current_node IS '当前正在处理的节点名称';
-COMMENT ON COLUMN progress_messages.success_nodes IS '成功处理的节点列表（JSON格式）';
-COMMENT ON COLUMN progress_messages.failed_nodes IS '失败的节点列表（JSON格式，包含错误信息）';
+    -- 为 progress_messages 添加 failed_nodes 列
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='progress_messages' AND column_name='failed_nodes'
+    ) THEN
+        ALTER TABLE progress_messages ADD COLUMN failed_nodes JSONB DEFAULT '[]'::JSONB;
+    END IF;
+END $$;
 
+-- 添加注释
+COMMENT ON COLUMN progress_tasks.success_nodes IS '成功处理的节点列表（JSON 数组）';
+COMMENT ON COLUMN progress_tasks.failed_nodes IS '失败处理的节点列表（JSON 数组，包含节点名和错误信息）';
+COMMENT ON COLUMN progress_messages.success_nodes IS '成功处理的节点列表（JSON 数组）';
+COMMENT ON COLUMN progress_messages.failed_nodes IS '失败处理的节点列表（JSON 数组，包含节点名和错误信息）';
+
+-- +migrate Down
+-- 回滚：删除添加的列
+ALTER TABLE progress_tasks DROP COLUMN IF EXISTS success_nodes;
+ALTER TABLE progress_tasks DROP COLUMN IF EXISTS failed_nodes;
+ALTER TABLE progress_messages DROP COLUMN IF EXISTS success_nodes;
+ALTER TABLE progress_messages DROP COLUMN IF EXISTS failed_nodes;
