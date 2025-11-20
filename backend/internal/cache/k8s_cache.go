@@ -289,7 +289,7 @@ func (c *K8sCache) PrefetchNodeDetails(cluster string, nodeNames []string, limit
 		limit = len(nodeNames)
 	}
 
-	c.logger.Infof("Prefetching %d node details for cluster %s", limit, cluster)
+	c.logger.Debugf("Prefetching %d node details for cluster %s", limit, cluster)
 
 	// 限制并发预取数量
 	sem := make(chan struct{}, 5) // 最多5个并发
@@ -335,7 +335,7 @@ func (c *K8sCache) PrefetchNodeDetails(cluster string, nodeNames []string, limit
 	}
 
 	wg.Wait()
-	c.logger.Infof("Prefetch completed for cluster %s", cluster)
+	c.logger.Debugf("Prefetch completed for cluster %s", cluster)
 }
 
 // InvalidateCluster 清除指定集群的所有缓存
@@ -428,7 +428,7 @@ func (c *K8sCache) GetPodCounts(cluster string, nodeNames []string, fetchFunc fu
 	}
 
 	// 缓存未命中或过期太久，异步加载并返回空map
-	c.logger.Infof("Pod count cache miss: cluster=%s, triggering async load", cluster)
+	c.logger.Debugf("Pod count cache miss: cluster=%s, triggering async load", cluster)
 	go c.asyncRefreshPodCounts(cluster, fetchFunc)
 
 	// 返回空map，不阻塞节点列表查询
@@ -446,7 +446,7 @@ func (c *K8sCache) SetPodCounts(cluster string, podCounts map[string]int) {
 		UpdatedAt: time.Now(),
 	}
 	c.podCountCache.Store(cluster, entry)
-	c.logger.Infof("Pod count cache updated: cluster=%s, nodes=%d", cluster, len(podCounts))
+	c.logger.Debugf("Pod count cache updated: cluster=%s, nodes=%d", cluster, len(podCounts))
 }
 
 // asyncRefreshPodCounts 异步刷新Pod数量缓存
@@ -472,7 +472,7 @@ func (c *K8sCache) asyncRefreshPodCounts(cluster string, fetchFunc func() map[st
 	}
 
 	// 执行刷新
-	c.logger.Infof("Starting async pod count refresh for cluster: %s", cluster)
+	c.logger.Debugf("Starting async pod count refresh for cluster: %s", cluster)
 	podCounts := fetchFunc()
 
 	// 更新缓存
@@ -484,7 +484,7 @@ func (c *K8sCache) asyncRefreshPodCounts(cluster string, fetchFunc func() map[st
 		if len(podCounts) > 0 {
 			entry.Data = podCounts
 			entry.UpdatedAt = time.Now()
-			c.logger.Infof("Pod count cache async refreshed: cluster=%s, nodes=%d", cluster, len(podCounts))
+			c.logger.Debugf("Pod count cache async refreshed: cluster=%s, nodes=%d", cluster, len(podCounts))
 		} else {
 			c.logger.Warningf("Pod count cache async refresh returned empty: cluster=%s", cluster)
 		}

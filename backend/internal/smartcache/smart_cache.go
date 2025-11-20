@@ -68,7 +68,7 @@ func (sc *SmartCache) handleNodeAdd(event informer.NodeEvent) {
 	// 更新集群节点列表
 	sc.addNodeToCluster(event.ClusterName, event.Node.Name)
 
-	sc.logger.Infof("SmartCache: Added node %s to cluster %s", event.Node.Name, event.ClusterName)
+	sc.logger.Debugf("SmartCache: Added node %s to cluster %s", event.Node.Name, event.ClusterName)
 }
 
 // handleNodeUpdate 处理节点更新事件
@@ -96,7 +96,7 @@ func (sc *SmartCache) handleNodeDelete(event informer.NodeEvent) {
 	// 从集群节点列表中移除
 	sc.removeNodeFromCluster(event.ClusterName, event.Node.Name)
 
-	sc.logger.Infof("SmartCache: Deleted node %s from cluster %s", event.Node.Name, event.ClusterName)
+	sc.logger.Debugf("SmartCache: Deleted node %s from cluster %s", event.Node.Name, event.ClusterName)
 }
 
 // GetNode 获取单个节点

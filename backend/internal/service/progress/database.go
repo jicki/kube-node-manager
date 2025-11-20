@@ -367,7 +367,10 @@ func (dps *DatabaseProgressService) createProgressMessage(task *model.ProgressTa
 		return err
 	}
 
-	dps.logger.Infof("Created %s message for task %s, user %d", msgType, task.TaskID, task.UserID)
+	// 只记录完成和错误消息，避免进度消息日志噪音
+	if msgType == "complete" || msgType == "error" {
+		dps.logger.Infof("Created %s message for task %s, user %d", msgType, task.TaskID, task.UserID)
+	}
 	return nil
 }
 
@@ -452,7 +455,10 @@ func (dps *DatabaseProgressService) processUnsentMessages() {
 		if hasConnection {
 			// 有连接时直接发送
 			dps.wsService.sendToUser(msg.UserID, wsMessage)
-			dps.logger.Infof("Sent %s message to connected user %d for task %s", msg.Type, msg.UserID, msg.TaskID)
+			// 只记录重要消息的发送日志
+			if msg.Type == "complete" || msg.Type == "error" {
+				dps.logger.Infof("Sent %s message to connected user %d for task %s", msg.Type, msg.UserID, msg.TaskID)
+			}
 		} else if msg.Type == "complete" || msg.Type == "error" {
 			// 没有连接但是重要消息，等待一下再重试
 			dps.logger.Warningf("No connection for important message type %s, will retry", msg.Type)
@@ -460,17 +466,17 @@ func (dps *DatabaseProgressService) processUnsentMessages() {
 			// 再次检查连接
 			dps.wsService.sendToUser(msg.UserID, wsMessage)
 		} else {
-			// 普通进度消息，没有连接就跳过
-			dps.logger.Infof("Skipping progress message for disconnected user %d", msg.UserID)
+			// 普通进度消息，没有连接就跳过 - 不记录日志避免噪音
 		}
 
 		// 标记为已处理
 		if err := dps.db.Model(&msg).Update("processed", true).Error; err != nil {
 			dps.logger.Errorf("Failed to mark message %d as processed: %v", msg.ID, err)
 		} else {
-			dps.logger.Infof("Marked message %d (%s) as processed for user %d", msg.ID, msg.Type, msg.UserID)
+			// 只记录完成消息的处理
 			if msg.Type == "complete" {
 				completedCount++
+				dps.logger.Infof("Marked completion message %d as processed for user %d", msg.ID, msg.UserID)
 			}
 		}
 	}
@@ -707,14 +713,11 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 					mu.Unlock()
 				}
 				wg.Done()
-				dps.logger.Infof("Goroutine for node %s completed", node)
 			}()
 
 			// 获取信号量
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-
-			dps.logger.Infof("Starting to process node %s (index %d)", node, index)
 
 			// 先获取当前索引用于日志
 			mu.Lock()
@@ -722,15 +725,11 @@ func (dps *DatabaseProgressService) ProcessBatchWithProgress(
 			currentIndex := processed
 			mu.Unlock()
 
-			dps.logger.Infof("Node %s assigned index %d/%d", node, currentIndex, total)
-
 			// 发送开始处理的进度消息
 			dps.UpdateProgress(taskID, currentIndex, node, userID)
 
 			// 处理节点
-			dps.logger.Infof("Calling ProcessNode for %s", node)
 			err := processor.ProcessNode(ctx, node, index)
-			dps.logger.Infof("ProcessNode returned for %s, err=%v", node, err)
 			if err != nil {
 				mu.Lock()
 				failedNodes = append(failedNodes, model.NodeError{

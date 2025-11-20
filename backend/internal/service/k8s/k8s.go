@@ -329,11 +329,11 @@ func (s *Service) ListNodesWithCache(clusterName string, forceRefresh bool) ([]N
 							nodeInfo := s.nodeToNodeInfo(k8sNode)
 							nodes = append(nodes, nodeInfo)
 						}
-						s.logger.Infof("Retrieved %d nodes from smart cache for cluster %s", len(nodes), clusterName)
+						s.logger.Debugf("Retrieved %d nodes from smart cache for cluster %s", len(nodes), clusterName)
 						return nodes, nil
 					}
 					// SmartCache 未就绪或无数据，回退到传统方式
-					s.logger.Infof("SmartCache not ready for cluster %s, falling back to API", clusterName)
+					s.logger.Debugf("SmartCache not ready for cluster %s, falling back to API", clusterName)
 				}
 			}
 		}
@@ -416,7 +416,7 @@ func (s *Service) fetchNodesFromAPI(clusterName string) ([]NodeInfo, error) {
 		return nil, fmt.Errorf("failed to list nodes in cluster %s: %w", clusterName, err)
 	}
 
-	s.logger.Infof("Successfully retrieved %d nodes from cluster %s (uncached)", len(nodeList.Items), clusterName)
+	s.logger.Debugf("Retrieved %d nodes from API for cluster %s", len(nodeList.Items), clusterName)
 
 	var nodes []NodeInfo
 	gpuNodeCount := 0
@@ -443,7 +443,7 @@ func (s *Service) fetchNodesFromAPI(clusterName string) ([]NodeInfo, error) {
 
 	// 输出 GPU 资源汇总日志
 	if gpuNodeCount > 0 {
-		s.logger.Infof("Cluster %s: Found %d GPU nodes with total %d GPUs", clusterName, gpuNodeCount, totalGPUCount)
+		s.logger.Debugf("Cluster %s: Found %d GPU nodes with total %d GPUs", clusterName, gpuNodeCount, totalGPUCount)
 	}
 
 	// 记录成功到连接池
@@ -1415,7 +1415,7 @@ func (s *Service) enrichNodesWithMetrics(clusterName string, nodes []NodeInfo) {
 		}
 	}
 
-	s.logger.Infof("Successfully enriched %d nodes with metrics for cluster %s", len(nodes), clusterName)
+	s.logger.Debugf("Enriched %d nodes with metrics for cluster %s", len(nodes), clusterName)
 }
 
 // getPodCountsWithFallback 获取 Pod 数量（带降级策略）
@@ -1470,7 +1470,7 @@ func (s *Service) enrichNodeWithMetrics(clusterName string, node *NodeInfo) {
 		Pods:   fmt.Sprintf("%d", podCount),
 	}
 
-	s.logger.Infof("Successfully enriched node %s with metrics for cluster %s", node.Name, clusterName)
+	s.logger.Debugf("Enriched node %s with metrics for cluster %s", node.Name, clusterName)
 }
 
 // formatCPU 格式化 CPU 资源，将毫核转换为核心数
