@@ -202,8 +202,8 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 	// WebSocket 节点实时同步 (节点状态实时推送)
 	api.GET("/nodes/ws", handlers.WebSocket.HandleWebSocket)
 	
-	// WebSocket 终端 (Admin only)
-	api.GET("/terminal/ws", handlers.Terminal.HandleWebSocket)
+	// WebSocket 终端 (Admin only) - 使用认证中间件，支持从query参数读取token
+	api.GET("/terminal/ws", handlers.Auth.AuthMiddleware(), handlers.Terminal.HandleWebSocket)
 
 	users := protected.Group("/users")
 	{

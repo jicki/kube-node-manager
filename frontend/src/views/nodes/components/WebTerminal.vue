@@ -85,6 +85,7 @@ import 'xterm/css/xterm.css'
 import { Setting } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import axios from '@/utils/request' // Correct import path
+import { getToken } from '@/utils/auth' // 导入token获取函数
 
 const props = defineProps({
   modelValue: Boolean,
@@ -243,7 +244,8 @@ const connectWebSocket = () => {
   connectionStatus.value = 'connecting'
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
-  const wsUrl = `${protocol}//${host}/api/v1/terminal/ws?cluster_name=${props.clusterName}&node_name=${props.nodeName}`
+  const token = getToken() // 获取认证token
+  const wsUrl = `${protocol}//${host}/api/v1/terminal/ws?cluster_name=${props.clusterName}&node_name=${props.nodeName}&token=${encodeURIComponent(token)}`
 
   socket = new WebSocket(wsUrl)
 
