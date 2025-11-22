@@ -32,19 +32,26 @@
         <el-form-item label="SSH端口">
           <el-input-number v-model="sshConfig.ssh_port" :min="1" :max="65535" />
         </el-form-item>
-        <el-form-item label="SSH用户">
-          <el-input v-model="sshConfig.ssh_user" placeholder="默认为System Key用户" />
-        </el-form-item>
         <el-form-item label="使用密钥">
-           <el-select v-model="sshConfig.system_ssh_key_id" placeholder="默认使用系统默认密钥" clearable style="width: 100%">
+           <el-select 
+             v-model="sshConfig.system_ssh_key_id" 
+             placeholder="默认使用系统默认密钥" 
+             clearable 
+             style="width: 100%"
+             @change="handleKeyChange"
+           >
               <el-option 
                 v-for="key in sshKeys" 
                 :key="key.id" 
-                :label="key.name" 
+                :label="`${key.name}${key.is_default ? ' (默认)' : ''}`" 
                 :value="key.id" 
               />
            </el-select>
            <div class="help-text">如果不选择，将使用标记为"默认"的系统密钥</div>
+        </el-form-item>
+        <el-form-item label="SSH用户">
+          <el-input v-model="sshConfig.ssh_user" placeholder="默认为System Key用户" />
+          <div class="help-text">留空将使用选中密钥的用户名</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -106,13 +113,20 @@ let resizeObserver = null
 // 获取SSH配置和密钥列表
 const fetchConfig = async () => {
   try {
-    // 获取SSH Keys
-    const keysRes = await axios.get('/api/v1/ssh-keys')
+    // 获取SSH Keys - 不分页，获取所有密钥
+    const keysRes = await axios.get('/api/v1/ssh-keys', {
+      params: {
+        page: 1,
+        page_size: 1000  // 获取所有密钥
+      }
+    })
+    // API返回格式: { data: [...], total: N }
     sshKeys.value = keysRes.data.data || []
 
     // 获取当前节点配置
     const configRes = await axios.get(`/api/v1/nodes/ssh-config/${props.nodeName}?cluster_name=${props.clusterName}`)
-    if (configRes.data.data) {
+    // API返回格式: { data: {...} }
+    if (configRes.data && configRes.data.data) {
       const data = configRes.data.data
       sshConfig.value = {
         ssh_port: data.ssh_port || 22,
@@ -122,7 +136,24 @@ const fetchConfig = async () => {
     }
   } catch (err) {
     console.error('Failed to load config:', err)
-    ElMessage.error('加载配置失败')
+    ElMessage.error('加载配置失败: ' + (err.response?.data?.error || err.message))
+  }
+}
+
+// 当密钥选择改变时，自动填充用户名
+const handleKeyChange = (keyId) => {
+  if (!keyId) {
+    // 清空密钥时，不改变用户名
+    return
+  }
+  
+  // 查找选中的密钥
+  const selectedKey = sshKeys.value.find(k => k.id === keyId)
+  if (selectedKey && selectedKey.username) {
+    // 如果当前SSH用户为空，自动填充密钥的用户名
+    if (!sshConfig.value.ssh_user) {
+      sshConfig.value.ssh_user = selectedKey.username
+    }
   }
 }
 
@@ -135,7 +166,7 @@ const saveConfig = async () => {
     closeTerminal()
     setTimeout(() => initTerminal(), 500)
   } catch (err) {
-    ElMessage.error('保存配置失败: ' + err.message)
+    ElMessage.error('保存配置失败: ' + (err.response?.data?.error || err.message))
   }
 }
 

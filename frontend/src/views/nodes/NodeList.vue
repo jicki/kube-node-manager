@@ -538,7 +538,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button type="text" size="small" @click="viewNodeDetail(row)">
