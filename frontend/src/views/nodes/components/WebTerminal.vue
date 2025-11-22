@@ -111,7 +111,7 @@ const fetchConfig = async () => {
     sshKeys.value = keysRes.data.data || []
 
     // 获取当前节点配置
-    const configRes = await axios.get(`/api/v1/nodes/${props.nodeName}/ssh-config?cluster_name=${props.clusterName}`)
+    const configRes = await axios.get(`/api/v1/nodes/ssh-config/${props.nodeName}?cluster_name=${props.clusterName}`)
     if (configRes.data.data) {
       const data = configRes.data.data
       sshConfig.value = {
@@ -128,7 +128,7 @@ const fetchConfig = async () => {
 
 const saveConfig = async () => {
   try {
-    await axios.put(`/api/v1/nodes/${props.nodeName}/ssh-config?cluster_name=${props.clusterName}`, sshConfig.value)
+    await axios.put(`/api/v1/nodes/ssh-config/${props.nodeName}?cluster_name=${props.clusterName}`, sshConfig.value)
     ElMessage.success('配置保存成功')
     showConfig.value = false
     // Reconnect
