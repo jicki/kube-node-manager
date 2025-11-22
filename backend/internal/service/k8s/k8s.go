@@ -568,8 +568,8 @@ func (s *Service) fetchNodeFromAPIWithContext(ctx context.Context, clusterName, 
 
 	nodeInfo := s.nodeToNodeInfo(node)
 
-	// 尝试获取单个节点的资源使用情况
-	s.enrichNodeWithMetrics(clusterName, &nodeInfo)
+	// 尝试获取单个节点的资源使用情况（传入context以支持超时）
+	s.enrichNodeWithMetricsContext(ctx, clusterName, &nodeInfo)
 
 	return &nodeInfo, nil
 }
@@ -1480,17 +1480,22 @@ func (s *Service) getPodCountsWithFallback(clusterName string, nodeNames []strin
 }
 
 // enrichNodeWithMetrics 为单个节点添加资源使用情况
+// enrichNodeWithMetrics 为单个节点添加资源使用情况（使用默认超时）
 func (s *Service) enrichNodeWithMetrics(clusterName string, node *NodeInfo) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s.enrichNodeWithMetricsContext(ctx, clusterName, node)
+}
+
+// enrichNodeWithMetricsContext 为单个节点添加资源使用情况（带context）
+func (s *Service) enrichNodeWithMetricsContext(ctx context.Context, clusterName string, node *NodeInfo) {
 	metricsClient, err := s.getMetricsClient(clusterName)
 	if err != nil {
 		s.logger.Warningf("Failed to get metrics client for cluster %s: %v", clusterName, err)
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// 获取单个节点的metrics
+	// 获取单个节点的metrics（使用传入的context）
 	nodeMetrics, err := metricsClient.MetricsV1beta1().NodeMetricses().Get(ctx, node.Name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Warningf("Failed to get metrics for node %s in cluster %s: %v", node.Name, clusterName, err)

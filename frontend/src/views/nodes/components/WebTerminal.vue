@@ -2,12 +2,13 @@
   <el-dialog
     v-model="dialogVisible"
     :title="`Web Terminal - ${nodeName} (${clusterName})`"
-    width="90%"
+    width="95%"
     :close-on-click-modal="false"
     @opened="initTerminal"
     @closed="closeTerminal"
     class="terminal-dialog"
-    top="3vh"
+    top="2vh"
+    :fullscreen="false"
   >
     <div class="terminal-toolbar">
       <div class="status-indicator">
@@ -311,7 +312,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .terminal-dialog :deep(.el-dialog__body) {
   padding: 0;
-  height: 80vh;
+  height: 88vh;
   display: flex;
   flex-direction: column;
   background-color: #1e1e1e;
