@@ -145,11 +145,6 @@
           <template #title>主机清单</template>
         </el-menu-item>
 
-        <el-menu-item index="/ansible-ssh-keys">
-          <el-icon><Key /></el-icon>
-          <template #title>SSH 密钥</template>
-        </el-menu-item>
-
         <el-menu-item index="/ansible-schedules">
           <el-icon><Timer /></el-icon>
           <template #title>定时任务</template>
@@ -288,7 +283,7 @@ const defaultOpeneds = computed(() => {
     openedMenus.push('feishu')
   }
 
-  if (['/ansible-tasks', '/ansible-templates', '/ansible-inventories', '/ansible-ssh-keys', '/ansible-schedules'].includes(path) || path.startsWith('/ansible/workflow')) {
+  if (['/ansible-tasks', '/ansible-templates', '/ansible-inventories', '/ansible-schedules'].includes(path) || path.startsWith('/ansible/workflow')) {
     openedMenus.push('ansible')
   }
 
