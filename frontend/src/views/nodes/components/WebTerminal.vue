@@ -63,7 +63,7 @@ import { WebLinksAddon } from 'xterm-addon-web-links'
 import 'xterm/css/xterm.css'
 import { Setting } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import axios from '@/api/axios' // Use existing axios instance
+import axios from '@/utils/request' // Correct import path
 
 const props = defineProps({
   modelValue: Boolean,
