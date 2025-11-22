@@ -64,7 +64,7 @@
            </el-alert>
         </el-form-item>
         <el-form-item label="SSH用户">
-          <el-input v-model="sshConfig.ssh_user" placeholder="默认为System Key用户" />
+          <el-input v-model="sshConfig.ssh_user" placeholder="默认为root用户" />
           <div class="help-text">留空将使用选中密钥的用户名</div>
         </el-form-item>
       </el-form>
@@ -134,11 +134,23 @@ const fetchConfig = async () => {
         page_size: 1000  // 获取所有密钥
       }
     })
-    // API返回格式: { data: [...], total: N }
-    sshKeys.value = keysRes.data.data || []
+    
+    // 调试日志
+    console.log('SSH Keys Response:', keysRes.data)
+    
+    // API返回格式: { data: [...], total: N, page: 1, size: 1000 }
+    if (keysRes.data && Array.isArray(keysRes.data.data)) {
+      sshKeys.value = keysRes.data.data
+      console.log('Loaded SSH Keys:', sshKeys.value.length, 'keys')
+    } else {
+      console.warn('Unexpected SSH keys response format:', keysRes.data)
+      sshKeys.value = []
+    }
 
     // 获取当前节点配置
     const configRes = await axios.get(`/api/v1/nodes/ssh-config/${props.nodeName}?cluster_name=${props.clusterName}`)
+    console.log('Node SSH Config Response:', configRes.data)
+    
     // API返回格式: { data: {...} }
     if (configRes.data && configRes.data.data) {
       const data = configRes.data.data
@@ -150,6 +162,7 @@ const fetchConfig = async () => {
     }
   } catch (err) {
     console.error('Failed to load config:', err)
+    console.error('Error response:', err.response)
     ElMessage.error('加载配置失败: ' + (err.response?.data?.error || err.message))
   }
 }

@@ -538,7 +538,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="350" fixed="right">
+        <el-table-column label="操作" min-width="480" fixed="right">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button type="text" size="small" @click="viewNodeDetail(row)">
@@ -554,7 +554,7 @@
                 title="打开Web终端连接到节点"
               >
                 <el-icon><Platform /></el-icon>
-                Web终端
+                Web Terminal
               </el-button>
               
               <el-button
@@ -579,40 +579,37 @@
                 解除调度
               </el-button>
               
-              <el-dropdown 
-                @command="(cmd) => handleNodeAction(cmd, row)"
+              <el-button
+                type="text"
+                size="small"
+                @click="handleNodeAction('labels', row)"
+                title="管理节点标签"
               >
-                <el-button 
-                  type="text" 
-                  size="small" 
-                  class="more-actions-btn"
-                  title="更多操作"
-                >
-                  <el-icon><MoreFilled /></el-icon>
-                  <span class="btn-text">更多</span>
-                  <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item 
-                      v-if="authStore.role === 'admin'"
-                      command="drain"
-                      divided
-                    >
-                      <el-icon style="color: #f56c6c;"><VideoPlay /></el-icon>
-                      <span style="color: #f56c6c;">驱逐节点</span>
-                    </el-dropdown-item>
-                    <el-dropdown-item command="labels">
-                      <el-icon><CollectionTag /></el-icon>
-                      管理标签
-                    </el-dropdown-item>
-                    <el-dropdown-item command="taints">
-                      <el-icon><WarningFilled /></el-icon>
-                      管理污点
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+                <el-icon><CollectionTag /></el-icon>
+                管理标签
+              </el-button>
+              
+              <el-button
+                type="text"
+                size="small"
+                @click="handleNodeAction('taints', row)"
+                title="管理节点污点"
+              >
+                <el-icon><WarningFilled /></el-icon>
+                管理污点
+              </el-button>
+              
+              <el-button
+                v-if="authStore.role === 'admin'"
+                type="text"
+                size="small"
+                @click="handleNodeAction('drain', row)"
+                title="驱逐节点上的所有Pod"
+                style="color: #f56c6c;"
+              >
+                <el-icon style="color: #f56c6c;"><VideoPlay /></el-icon>
+                驱逐节点
+              </el-button>
             </div>
           </template>
         </el-table-column>
@@ -2804,21 +2801,22 @@ onActivated(async () => {
 
 .action-buttons {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   width: 100%;
   justify-content: flex-start;
 }
 
 .action-buttons .el-button {
-  padding: 4px 8px;
-  font-size: 12px;
-  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  border-radius: 4px;
   border: 1px solid transparent;
   font-weight: 500;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.1px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .action-buttons .el-button--text {
