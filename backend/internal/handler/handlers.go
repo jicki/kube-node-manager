@@ -11,6 +11,7 @@ import (
 	"kube-node-manager/internal/handler/label"
 	"kube-node-manager/internal/handler/node"
 	"kube-node-manager/internal/handler/progress"
+	"kube-node-manager/internal/handler/sshkey"
 	"kube-node-manager/internal/handler/taint"
 	"kube-node-manager/internal/handler/user"
 	"kube-node-manager/internal/handler/websocket"
@@ -30,8 +31,8 @@ type Handlers struct {
 	Gitlab            *gitlab.Handler
 	Feishu            *feishu.Handler
 	Anomaly           *anomaly.Handler
-	AnomalyReport     *anomaly.ReportHandler
 	WebSocket         *websocket.Handler
+	SSHKey            *sshkey.Handler
 	Ansible           *ansibleHandler.Handler
 	AnsibleTemplate   *ansibleHandler.TemplateHandler
 	AnsibleInventory  *ansibleHandler.InventoryHandler
@@ -62,8 +63,8 @@ func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
 		Gitlab:           gitlab.NewHandler(services.Gitlab, logger),
 		Feishu:           feishu.NewHandler(services.Feishu, services.Audit, logger),
 		Anomaly:          anomaly.NewHandler(services.Anomaly, services.Anomaly.GetCleanupService(), logger),
-		AnomalyReport:    anomaly.NewReportHandler(services.AnomalyReport),
 		WebSocket:        websocket.NewHandler(services.WSHub, logger),
+		SSHKey:           sshkey.NewHandler(services.SSHKey, logger),
 		Ansible:          ansibleMainHandler,
 		AnsibleTemplate:  ansibleHandler.NewTemplateHandler(services.Ansible.GetTemplateService(), logger),
 		AnsibleInventory: ansibleHandler.NewInventoryHandler(services.Ansible.GetInventoryService(), logger),

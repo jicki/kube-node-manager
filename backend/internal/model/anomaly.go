@@ -187,34 +187,3 @@ type CalendarDataPoint struct {
 	Value int64  `json:"value"` // 异常数量
 }
 
-// ReportFrequency 报告频率
-type ReportFrequency string
-
-const (
-	ReportFrequencyDaily   ReportFrequency = "daily"
-	ReportFrequencyWeekly  ReportFrequency = "weekly"
-	ReportFrequencyMonthly ReportFrequency = "monthly"
-)
-
-// AnomalyReportConfig 异常报告配置
-type AnomalyReportConfig struct {
-	ID              uint            `json:"id" gorm:"primaryKey"`
-	Enabled         bool            `json:"enabled" gorm:"default:false;index"`
-	ReportName      string          `json:"report_name" gorm:"size:100;not null"`
-	Schedule        string          `json:"schedule" gorm:"size:50"`      // Cron 表达式
-	Frequency       ReportFrequency `json:"frequency" gorm:"size:20"`     // daily/weekly/monthly
-	ClusterIDs      string          `json:"cluster_ids" gorm:"type:text"` // JSON 数组，空为全部
-	FeishuEnabled   bool            `json:"feishu_enabled" gorm:"default:false"`
-	FeishuWebhook   string          `json:"feishu_webhook" gorm:"size:500"`
-	EmailEnabled    bool            `json:"email_enabled" gorm:"default:false"`
-	EmailRecipients string          `json:"email_recipients" gorm:"type:text"` // JSON 数组
-	LastRunTime     *time.Time      `json:"last_run_time"`
-	NextRunTime     *time.Time      `json:"next_run_time"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
-}
-
-// TableName 指定表名
-func (AnomalyReportConfig) TableName() string {
-	return "anomaly_report_configs"
-}

@@ -20,6 +20,7 @@ import (
 	"kube-node-manager/internal/service/ldap"
 	"kube-node-manager/internal/service/node"
 	"kube-node-manager/internal/service/progress"
+	"kube-node-manager/internal/service/sshkey"
 	"kube-node-manager/internal/service/taint"
 	"kube-node-manager/internal/service/user"
 	"kube-node-manager/internal/websocket"
@@ -42,8 +43,8 @@ type Services struct {
 	Gitlab        *gitlab.Service
 	Feishu        *feishu.Service
 	Anomaly       *anomaly.Service
-	AnomalyReport *anomaly.ReportService
 	Ansible       *ansible.Service    // Ansible 任务服务
+	SSHKey        *sshkey.Service     // 系统级 SSH 密钥服务
 	Realtime      *realtime.Manager   // 实时同步管理器
 	WSHub         *websocket.Hub      // WebSocket Hub（导出供 handler 使用）
 }
@@ -289,16 +290,14 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	feishuSvc.SetTaintService(taintAdapter)
 	feishuSvc.SetAnomalyService(anomalyAdapter)
 
-	// 创建异常报告服务
-	reportEnabled := false
-	if cfg.Monitoring.ReportSchedulerEnabled {
-		reportEnabled = true
-	}
-	anomalyReportSvc := anomaly.NewReportService(db, logger, anomalySvc, reportEnabled)
-
-	// 创建 Ansible 服务
+	// 创建 Ansible 和 SSH 密钥服务
 	// 从环境变量获取加密密钥
-	encryptionKey := os.Getenv("ANSIBLE_ENCRYPTION_KEY")
+	encryptionKey := os.Getenv("SSH_ENCRYPTION_KEY")
+	if encryptionKey == "" {
+		// 兼容旧的环境变量名
+		encryptionKey = os.Getenv("ANSIBLE_ENCRYPTION_KEY")
+	}
+	sshKeySvc := sshkey.NewService(db, logger, encryptionKey)
 	ansibleSvc := ansible.NewService(db, logger, k8sSvc, realtimeMgr.GetWebSocketHub(), encryptionKey)
 
 	return &Services{
@@ -315,8 +314,8 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 		Gitlab:        gitlab.NewService(db, logger),
 		Feishu:        feishuSvc,
 		Anomaly:       anomalySvc,
-		AnomalyReport: anomalyReportSvc,
 		Ansible:       ansibleSvc,
+		SSHKey:        sshKeySvc,
 		Realtime:      realtimeMgr,
 		WSHub:         realtimeMgr.GetWebSocketHub(),
 	}

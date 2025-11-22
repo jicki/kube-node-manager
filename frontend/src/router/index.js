@@ -90,6 +90,12 @@ const router = createRouter({
           meta: { title: '飞书配置', icon: 'Setting', requiresAuth: true, permission: 'admin' }
         },
         {
+          path: 'ssh-keys',
+          name: 'SSHKeyManage',
+          component: () => import('@/views/system/SSHKeyManage.vue'),
+          meta: { title: 'SSH 密钥', icon: 'Key', requiresAuth: true, permission: 'admin' }
+        },
+        {
           path: 'feishu-groups',
           name: 'FeishuGroups',
           component: () => import('@/views/feishu/FeishuGroups.vue'),
@@ -106,12 +112,6 @@ const router = createRouter({
           name: 'AnomalyDetail',
           component: () => import('@/views/analytics/AnomalyDetail.vue'),
           meta: { title: '异常详情', icon: 'Document', requiresAuth: true }
-        },
-        {
-          path: 'analytics-report-settings',
-          name: 'AnalyticsReportSettings',
-          component: () => import('@/views/analytics/ReportSettings.vue'),
-          meta: { title: '分析报告配置', icon: 'DataAnalysis', requiresAuth: true, permission: 'admin' }
         },
         {
           path: 'ansible-tasks',

@@ -96,9 +96,6 @@ func main() {
 	// 启动节点异常监控服务
 	services.Anomaly.StartMonitoring()
 
-	// 启动异常报告调度器
-	services.AnomalyReport.StartScheduler()
-
 	// 启动 Ansible 定时任务调度服务
 	if err := services.Ansible.GetScheduleService().Start(); err != nil {
 		logger.Error("Failed to start Ansible schedule service: " + err.Error())
@@ -317,6 +314,16 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		gitlab.GET("/pipelines/:project_id/:pipeline_id/jobs", handlers.Gitlab.GetPipelineJobs)
 	}
 
+	// System SSH Keys routes (系统级 SSH 密钥管理)
+	sshkeys := protected.Group("/ssh-keys")
+	{
+		sshkeys.GET("", handlers.SSHKey.List)
+		sshkeys.GET("/:id", handlers.SSHKey.Get)
+		sshkeys.POST("", handlers.SSHKey.Create)
+		sshkeys.PUT("/:id", handlers.SSHKey.Update)
+		sshkeys.DELETE("/:id", handlers.SSHKey.Delete)
+	}
+
 	// Feishu routes (使用长连接模式，无需 webhook)
 	feishu := protected.Group("/feishu")
 	{
@@ -361,18 +368,6 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 
 		// 根据ID获取单个异常记录（必须放在最后，避免与其他路由冲突）
 		anomalies.GET("/:id", handlers.Anomaly.GetByID)
-	}
-
-	// Anomaly Report routes (异常报告配置管理)
-	anomalyReports := protected.Group("/anomaly-reports")
-	{
-		anomalyReports.GET("/configs", handlers.AnomalyReport.GetReportConfigs)
-		anomalyReports.GET("/configs/:id", handlers.AnomalyReport.GetReportConfig)
-		anomalyReports.POST("/configs", handlers.AnomalyReport.CreateReportConfig)
-		anomalyReports.PUT("/configs/:id", handlers.AnomalyReport.UpdateReportConfig)
-		anomalyReports.DELETE("/configs/:id", handlers.AnomalyReport.DeleteReportConfig)
-		anomalyReports.POST("/configs/:id/test", handlers.AnomalyReport.TestReportSend)
-		anomalyReports.POST("/configs/:id/run", handlers.AnomalyReport.RunReportNow)
 	}
 
 	// Ansible routes (Ansible 任务管理)
@@ -507,11 +502,6 @@ func gracefulShutdown(srv *http.Server, db *gorm.DB, logger *logger.Logger, serv
 	// 停止节点异常监控服务
 	if services != nil && services.Anomaly != nil {
 		services.Anomaly.StopMonitoring()
-	}
-
-	// 停止异常报告调度器
-	if services != nil && services.AnomalyReport != nil {
-		services.AnomalyReport.StopScheduler()
 	}
 
 	// 停止 Ansible 定时任务调度服务

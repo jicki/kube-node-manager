@@ -204,10 +204,10 @@
 
         <el-menu-item
           v-if="hasPermission('admin')"
-          index="/analytics-report-settings"
+          index="/ssh-keys"
         >
-          <el-icon><DataAnalysis /></el-icon>
-          <template #title>分析报告</template>
+          <el-icon><Key /></el-icon>
+          <template #title>SSH 密钥</template>
         </el-menu-item>
       </el-sub-menu>
     </el-menu>
@@ -276,7 +276,7 @@ const defaultOpeneds = computed(() => {
     openedMenus.push('node-management')
   }
 
-  if (['/clusters', '/audit', '/users', '/gitlab-settings', '/feishu-settings', '/analytics-report-settings'].includes(path)) {
+  if (['/clusters', '/audit', '/users', '/gitlab-settings', '/feishu-settings', '/ssh-keys'].includes(path)) {
     openedMenus.push('system-config')
   }
 
