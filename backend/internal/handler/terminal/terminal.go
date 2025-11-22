@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -82,16 +83,48 @@ func (h *Handler) HandleWebSocket(c *gin.Context) {
 	}
 	defer ws.Close()
 
-	// 4. 获取 SSH 配置
+	// 4. 获取 SSH 配置 (带超时)
 	h.logger.Infof("Attempting to get SSH config for node %s in cluster %s", nodeName, clusterName)
-	sshKey, host, err := h.nodeSvc.GetNodeSSHConfig(clusterName, nodeName)
-	if err != nil {
-		h.logger.Errorf("Failed to get SSH config: %v", err)
-		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n[ERROR] 获取SSH配置失败: %v\r\n", err)))
+	ws.WriteMessage(websocket.TextMessage, []byte("\r\n[INFO] 正在获取节点SSH配置...\r\n"))
+	
+	// 创建带超时的context
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	// 使用channel接收结果
+	type sshConfigResult struct {
+		sshKey *model.SystemSSHKey
+		host   string
+		err    error
+	}
+	resultChan := make(chan sshConfigResult, 1)
+	
+	go func() {
+		sshKey, host, err := h.nodeSvc.GetNodeSSHConfig(clusterName, nodeName)
+		resultChan <- sshConfigResult{sshKey: sshKey, host: host, err: err}
+	}()
+	
+	var sshKey *model.SystemSSHKey
+	var host string
+	
+	select {
+	case result := <-resultChan:
+		if result.err != nil {
+			h.logger.Errorf("Failed to get SSH config: %v", result.err)
+			ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n[ERROR] 获取SSH配置失败: %v\r\n", result.err)))
+			return
+		}
+		sshKey = result.sshKey
+		host = result.host
+	case <-ctx.Done():
+		h.logger.Errorf("Timeout getting SSH config for node %s", nodeName)
+		ws.WriteMessage(websocket.TextMessage, []byte("\r\n[ERROR] 获取SSH配置超时（30秒）\r\n可能原因:\r\n1. Kubernetes API响应缓慢\r\n2. 网络连接问题\r\n3. 集群负载过高\r\n"))
 		return
 	}
+	
 	h.logger.Infof("SSH config retrieved: host=%s, port=%d, user=%s, keyType=%s", 
 		host, sshKey.Port, sshKey.Username, sshKey.Type)
+	ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n[INFO] SSH配置已加载: %s:%d (用户: %s)\r\n", host, sshKey.Port, sshKey.Username)))
 
 	// 5. 建立 SSH 连接
 	authMethods := []ssh.AuthMethod{}

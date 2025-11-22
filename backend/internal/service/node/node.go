@@ -155,14 +155,16 @@ func (s *Service) SaveNodeSettings(settings *model.NodeSettings) error {
 
 // GetNodeSSHConfig 获取节点 SSH 配置（包括解析 SystemSSHKey）
 func (s *Service) GetNodeSSHConfig(clusterName, nodeName string) (*model.SystemSSHKey, string, error) {
-	s.logger.Infof("GetNodeSSHConfig: cluster=%s, node=%s", clusterName, nodeName)
+	s.logger.Infof("GetNodeSSHConfig START: cluster=%s, node=%s", clusterName, nodeName)
 	
 	// 1. 获取节点IP
+	s.logger.Infof("Step 1: Calling k8sSvc.GetNode for %s/%s", clusterName, nodeName)
 	nodeInfo, err := s.k8sSvc.GetNode(clusterName, nodeName)
 	if err != nil {
-		s.logger.Errorf("Failed to get node info: %v", err)
+		s.logger.Errorf("Step 1 FAILED: Failed to get node info: %v", err)
 		return nil, "", fmt.Errorf("failed to get node info: %v", err)
 	}
+	s.logger.Infof("Step 1 SUCCESS: Got node info for %s", nodeName)
 
 	// 优先使用 InternalIP，其次 ExternalIP
 	host := nodeInfo.InternalIP
