@@ -217,66 +217,60 @@ func (s *Service) Update(id uint, req model.SSHKeyUpdateRequest, userID uint) (*
 	// 更新字段
 	updates := make(map[string]interface{})
 
-	if req.Name != nil {
+	if req.Name != "" {
 		// 检查名称唯一性
 		var count int64
-		if err := s.db.Model(&model.SystemSSHKey{}).Where("name = ? AND id != ?", *req.Name, id).Count(&count).Error; err != nil {
+		if err := s.db.Model(&model.SystemSSHKey{}).Where("name = ? AND id != ?", req.Name, id).Count(&count).Error; err != nil {
 			return nil, err
 		}
 		if count > 0 {
 			return nil, fmt.Errorf("SSH key name already exists")
 		}
-		updates["name"] = *req.Name
+		updates["name"] = req.Name
 	}
 
-	if req.Description != nil {
-		updates["description"] = *req.Description
+	if req.Description != "" {
+		updates["description"] = req.Description
 	}
 
-	if req.Type != nil {
-		updates["type"] = *req.Type
+	if req.Username != "" {
+		updates["username"] = req.Username
 	}
 
-	if req.Username != nil {
-		updates["username"] = *req.Username
+	if req.Port > 0 {
+		updates["port"] = req.Port
 	}
 
-	if req.Port != nil {
-		updates["port"] = *req.Port
-	}
-
-	if req.PrivateKey != nil && *req.PrivateKey != "" {
-		encrypted, err := s.encrypt(*req.PrivateKey)
+	if req.PrivateKey != "" {
+		encrypted, err := s.encrypt(req.PrivateKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt private key: %w", err)
 		}
 		updates["private_key"] = encrypted
 	}
 
-	if req.Passphrase != nil && *req.Passphrase != "" {
-		encrypted, err := s.encrypt(*req.Passphrase)
+	if req.Passphrase != "" {
+		encrypted, err := s.encrypt(req.Passphrase)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt passphrase: %w", err)
 		}
 		updates["passphrase"] = encrypted
 	}
 
-	if req.Password != nil && *req.Password != "" {
-		encrypted, err := s.encrypt(*req.Password)
+	if req.Password != "" {
+		encrypted, err := s.encrypt(req.Password)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt password: %w", err)
 		}
 		updates["password"] = encrypted
 	}
 
-	if req.IsDefault != nil && *req.IsDefault {
+	if req.IsDefault {
 		// 如果设置为默认，取消其他密钥的默认状态
 		if err := s.db.Model(&model.SystemSSHKey{}).Where("is_default = ? AND id != ?", true, id).Update("is_default", false).Error; err != nil {
 			return nil, err
 		}
 		updates["is_default"] = true
-	} else if req.IsDefault != nil && !*req.IsDefault {
-		updates["is_default"] = false
 	}
 
 	// 执行更新
