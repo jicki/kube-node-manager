@@ -157,14 +157,15 @@ func (s *Service) SaveNodeSettings(settings *model.NodeSettings) error {
 func (s *Service) GetNodeSSHConfig(clusterName, nodeName string) (*model.SystemSSHKey, string, error) {
 	s.logger.Infof("GetNodeSSHConfig START: cluster=%s, node=%s", clusterName, nodeName)
 	
-	// 1. 获取节点IP
-	s.logger.Infof("Step 1: Calling k8sSvc.GetNode for %s/%s", clusterName, nodeName)
-	nodeInfo, err := s.k8sSvc.GetNode(clusterName, nodeName)
+	// 1. 获取节点IP - 优先使用缓存，避免API调用超时
+	s.logger.Infof("Step 1: Getting node info for %s/%s (using cache)", clusterName, nodeName)
+	// 使用GetNodeWithCache，强制刷新设为false以优先使用缓存
+	nodeInfo, err := s.k8sSvc.GetNodeWithCache(clusterName, nodeName, false)
 	if err != nil {
 		s.logger.Errorf("Step 1 FAILED: Failed to get node info: %v", err)
 		return nil, "", fmt.Errorf("failed to get node info: %v", err)
 	}
-	s.logger.Infof("Step 1 SUCCESS: Got node info for %s", nodeName)
+	s.logger.Infof("Step 1 SUCCESS: Got node info for %s from cache", nodeName)
 
 	// 优先使用 InternalIP，其次 ExternalIP
 	host := nodeInfo.InternalIP
