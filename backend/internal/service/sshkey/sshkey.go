@@ -130,11 +130,13 @@ func (s *Service) GetByID(id uint) (*model.SSHKeyResponse, error) {
 
 // GetDecryptedByID 获取解密后的 SSH 密钥（用于实际使用，先查system_ssh_keys，如无则查ansible_ssh_keys）
 func (s *Service) GetDecryptedByID(id uint) (*model.SystemSSHKey, error) {
+	s.logger.Infof("GetDecryptedByID: attempting to fetch SSH key with ID=%d", id)
 	var key model.SystemSSHKey
 	
 	// 先查询 system_ssh_keys 表
 	err := s.db.First(&key, id).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		s.logger.Errorf("Database error when querying system_ssh_keys: %v", err)
 		return nil, err
 	}
 	
@@ -145,10 +147,15 @@ func (s *Service) GetDecryptedByID(id uint) (*model.SystemSSHKey, error) {
 		var ansibleKey model.AnsibleSSHKey
 		if err := s.db.First(&ansibleKey, id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
+				s.logger.Errorf("SSH key %d not found in both system_ssh_keys and ansible_ssh_keys tables", id)
 				return nil, fmt.Errorf("SSH key not found")
 			}
+			s.logger.Errorf("Database error when querying ansible_ssh_keys: %v", err)
 			return nil, err
 		}
+		
+		s.logger.Infof("Found key %d in ansible_ssh_keys: name=%s, type=%s, user=%s, port=%d", 
+			ansibleKey.ID, ansibleKey.Name, ansibleKey.Type, ansibleKey.Username, ansibleKey.Port)
 		
 		// 将 AnsibleSSHKey 转换为 SystemSSHKey 格式
 		key = model.SystemSSHKey{
@@ -166,33 +173,44 @@ func (s *Service) GetDecryptedByID(id uint) (*model.SystemSSHKey, error) {
 			CreatedAt:   ansibleKey.CreatedAt,
 			UpdatedAt:   ansibleKey.UpdatedAt,
 		}
+	} else {
+		s.logger.Infof("Found key %d in system_ssh_keys: name=%s, type=%s, user=%s, port=%d", 
+			key.ID, key.Name, key.Type, key.Username, key.Port)
 	}
 
 	// 解密敏感信息
 	if key.PrivateKey != "" {
+		s.logger.Infof("Decrypting private key for key %d", id)
 		decrypted, err := s.decrypt(key.PrivateKey)
 		if err != nil {
+			s.logger.Errorf("Failed to decrypt private key for key %d: %v", id, err)
 			return nil, fmt.Errorf("failed to decrypt private key: %w", err)
 		}
 		key.PrivateKey = decrypted
+		s.logger.Infof("Private key decrypted successfully, length=%d bytes", len(decrypted))
 	}
 
 	if key.Passphrase != "" {
+		s.logger.Infof("Decrypting passphrase for key %d", id)
 		decrypted, err := s.decrypt(key.Passphrase)
 		if err != nil {
+			s.logger.Errorf("Failed to decrypt passphrase for key %d: %v", id, err)
 			return nil, fmt.Errorf("failed to decrypt passphrase: %w", err)
 		}
 		key.Passphrase = decrypted
 	}
 
 	if key.Password != "" {
+		s.logger.Infof("Decrypting password for key %d", id)
 		decrypted, err := s.decrypt(key.Password)
 		if err != nil {
+			s.logger.Errorf("Failed to decrypt password for key %d: %v", id, err)
 			return nil, fmt.Errorf("failed to decrypt password: %w", err)
 		}
 		key.Password = decrypted
 	}
 
+	s.logger.Infof("Successfully retrieved and decrypted SSH key %d", id)
 	return &key, nil
 }
 

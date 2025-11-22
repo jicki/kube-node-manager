@@ -83,28 +83,36 @@ func (h *Handler) HandleWebSocket(c *gin.Context) {
 	defer ws.Close()
 
 	// 4. 获取 SSH 配置
+	h.logger.Infof("Attempting to get SSH config for node %s in cluster %s", nodeName, clusterName)
 	sshKey, host, err := h.nodeSvc.GetNodeSSHConfig(clusterName, nodeName)
 	if err != nil {
-		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\nError: %v\r\n", err)))
+		h.logger.Errorf("Failed to get SSH config: %v", err)
+		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n[ERROR] 获取SSH配置失败: %v\r\n", err)))
 		return
 	}
+	h.logger.Infof("SSH config retrieved: host=%s, port=%d, user=%s, keyType=%s", 
+		host, sshKey.Port, sshKey.Username, sshKey.Type)
 
 	// 5. 建立 SSH 连接
 	authMethods := []ssh.AuthMethod{}
 	if sshKey.Type == model.SSHKeyTypePrivateKey {
+		h.logger.Info("Using private key authentication")
 		signer, err := ssh.ParsePrivateKey([]byte(sshKey.PrivateKey))
 		if err != nil {
 			// 尝试带密码的私钥
 			if sshKey.Passphrase != "" {
+				h.logger.Info("Private key requires passphrase, trying with passphrase")
 				signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(sshKey.PrivateKey), []byte(sshKey.Passphrase))
 			}
 		}
 		if err != nil {
-			ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\nError parsing private key: %v\r\n", err)))
+			h.logger.Errorf("Failed to parse private key: %v", err)
+			ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n[ERROR] 解析私钥失败: %v\r\n私钥可能已损坏或密码错误\r\n", err)))
 			return
 		}
 		authMethods = append(authMethods, ssh.PublicKeys(signer))
 	} else {
+		h.logger.Info("Using password authentication")
 		authMethods = append(authMethods, ssh.Password(sshKey.Password))
 	}
 
@@ -116,12 +124,17 @@ func (h *Handler) HandleWebSocket(c *gin.Context) {
 	}
 
 	addr := fmt.Sprintf("%s:%d", host, sshKey.Port)
+	h.logger.Infof("Attempting to connect to %s with user %s", addr, sshKey.Username)
+	ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n[INFO] 正在连接到 %s ...\r\n", addr)))
+	
 	client, err := ssh.Dial("tcp", addr, sshConfig)
 	if err != nil {
-		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\nFailed to connect to %s: %v\r\n", addr, err)))
+		h.logger.Errorf("Failed to establish SSH connection to %s: %v", addr, err)
+		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n[ERROR] SSH连接失败: %s\r\n错误详情: %v\r\n\r\n可能的原因:\r\n1. SSH端口(%d)不正确\r\n2. SSH服务未运行\r\n3. 网络不可达\r\n4. 认证失败(用户名或密钥错误)\r\n", addr, err, sshKey.Port)))
 		return
 	}
 	defer client.Close()
+	h.logger.Info("SSH connection established successfully")
 
 	// 6. 创建 Session
 	session, err := client.NewSession()

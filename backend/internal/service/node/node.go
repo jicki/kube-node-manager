@@ -155,9 +155,12 @@ func (s *Service) SaveNodeSettings(settings *model.NodeSettings) error {
 
 // GetNodeSSHConfig 获取节点 SSH 配置（包括解析 SystemSSHKey）
 func (s *Service) GetNodeSSHConfig(clusterName, nodeName string) (*model.SystemSSHKey, string, error) {
+	s.logger.Infof("GetNodeSSHConfig: cluster=%s, node=%s", clusterName, nodeName)
+	
 	// 1. 获取节点IP
 	nodeInfo, err := s.k8sSvc.GetNode(clusterName, nodeName)
 	if err != nil {
+		s.logger.Errorf("Failed to get node info: %v", err)
 		return nil, "", fmt.Errorf("failed to get node info: %v", err)
 	}
 
@@ -167,13 +170,23 @@ func (s *Service) GetNodeSSHConfig(clusterName, nodeName string) (*model.SystemS
 		host = nodeInfo.ExternalIP
 	}
 	if host == "" {
+		s.logger.Errorf("No valid IP address found for node %s", nodeName)
 		return nil, "", fmt.Errorf("no valid IP address found for node %s", nodeName)
 	}
+	s.logger.Infof("Node IP: %s", host)
 
 	// 2. 获取节点配置
 	settings, err := s.GetNodeSettings(clusterName, nodeName)
 	if err != nil {
+		s.logger.Errorf("Failed to get node settings: %v", err)
 		return nil, "", fmt.Errorf("failed to get node settings: %v", err)
+	}
+
+	if settings != nil {
+		s.logger.Infof("Node settings found: ssh_port=%d, ssh_user=%s, key_id=%v", 
+			settings.SSHPort, settings.SSHUser, settings.SystemSSHKeyID)
+	} else {
+		s.logger.Info("No node settings found, will use defaults")
 	}
 
 	var sshKey *model.SystemSSHKey
@@ -181,22 +194,33 @@ func (s *Service) GetNodeSSHConfig(clusterName, nodeName string) (*model.SystemS
 	// 3. 确定使用的 Key
 	if settings != nil && settings.SystemSSHKeyID != nil {
 		// 使用配置的 Key，需要解密
+		s.logger.Infof("Fetching SSH key with ID: %d", *settings.SystemSSHKeyID)
 		sshKey, err = s.sshKeySvc.GetDecryptedByID(*settings.SystemSSHKeyID)
 		if err != nil {
+			s.logger.Errorf("Failed to get SSH key %d: %v", *settings.SystemSSHKeyID, err)
 			return nil, "", fmt.Errorf("failed to get system ssh key %d: %v", *settings.SystemSSHKeyID, err)
 		}
+		s.logger.Infof("SSH key retrieved: id=%d, name=%s, type=%s, user=%s, port=%d", 
+			sshKey.ID, sshKey.Name, sshKey.Type, sshKey.Username, sshKey.Port)
 	} else {
 		// 使用默认 Key，需要解密
+		s.logger.Info("No specific key configured, fetching default key")
 		sshKey, err = s.sshKeySvc.GetDefault()
 		if err != nil {
+			s.logger.Errorf("Failed to get default SSH key: %v", err)
 			return nil, "", fmt.Errorf("failed to get default system ssh key: %v", err)
 		}
 		if sshKey == nil {
+			s.logger.Error("No default SSH key found")
 			return nil, "", fmt.Errorf("no default system ssh key found and no specific key configured")
 		}
+		s.logger.Infof("Default SSH key retrieved: id=%d, name=%s", sshKey.ID, sshKey.Name)
 	}
 
 	// 4. 覆盖配置 (Port / User)
+	originalPort := sshKey.Port
+	originalUser := sshKey.Username
+	
 	if settings != nil {
 		if settings.SSHPort != 0 {
 			sshKey.Port = settings.SSHPort
@@ -210,6 +234,9 @@ func (s *Service) GetNodeSSHConfig(clusterName, nodeName string) (*model.SystemS
 	if sshKey.Port == 0 {
 		sshKey.Port = 22
 	}
+
+	s.logger.Infof("Final SSH config: host=%s, port=%d (original=%d), user=%s (original=%s)", 
+		host, sshKey.Port, originalPort, sshKey.Username, originalUser)
 
 	return sshKey, host, nil
 }
