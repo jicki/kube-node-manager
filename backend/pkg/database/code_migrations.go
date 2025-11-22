@@ -43,19 +43,74 @@ func (CodeMigrationRecord) TableName() string {
 // CodeMigrations 代码迁移注册表
 // 未来的代码迁移在这里注册
 var CodeMigrations = []CodeMigration{
-	// 示例：
-	// {
-	//     ID:          "M001",
-	//     Description: "添加示例字段",
-	//     DependsOn:   []string{},
-	//     UpFunc: func(db *gorm.DB) error {
-	//         return db.Exec("ALTER TABLE example ADD COLUMN new_field VARCHAR(255)").Error
-	//     },
-	//     DownFunc: func(db *gorm.DB) error {
-	//         return db.Exec("ALTER TABLE example DROP COLUMN new_field").Error
-	//     },
-	//     CreatedAt: time.Date(2024, 11, 20, 0, 0, 0, 0, time.UTC),
-	// },
+	{
+		ID:          "M001_remove_node_settings_fk",
+		Description: "删除node_settings表的外键约束，允许引用ansible_ssh_keys或system_ssh_keys",
+		DependsOn:   []string{},
+		UpFunc: func(db *gorm.DB) error {
+			// 获取数据库类型
+			dialectName := db.Dialector.Name()
+			
+			if dialectName == "postgres" {
+				// PostgreSQL: 删除外键约束
+				log.Println("  Removing foreign key constraint from node_settings table (PostgreSQL)")
+				
+				// 查询是否存在外键约束
+				var constraintExists bool
+				err := db.Raw(`
+					SELECT EXISTS (
+						SELECT 1 FROM information_schema.table_constraints 
+						WHERE constraint_name LIKE '%node_settings%ssh_key%'
+						AND table_name = 'node_settings'
+						AND constraint_type = 'FOREIGN KEY'
+					)
+				`).Scan(&constraintExists).Error
+				
+				if err != nil {
+					return fmt.Errorf("failed to check constraint existence: %w", err)
+				}
+				
+				if constraintExists {
+					// 获取约束名称
+					var constraintName string
+					err = db.Raw(`
+						SELECT constraint_name 
+						FROM information_schema.table_constraints 
+						WHERE constraint_name LIKE '%node_settings%ssh_key%'
+						AND table_name = 'node_settings'
+						AND constraint_type = 'FOREIGN KEY'
+						LIMIT 1
+					`).Scan(&constraintName).Error
+					
+					if err != nil {
+						return fmt.Errorf("failed to get constraint name: %w", err)
+					}
+					
+					if constraintName != "" {
+						// 删除外键约束
+						sql := fmt.Sprintf("ALTER TABLE node_settings DROP CONSTRAINT %s", constraintName)
+						if err := db.Exec(sql).Error; err != nil {
+							return fmt.Errorf("failed to drop constraint %s: %w", constraintName, err)
+						}
+						log.Printf("  ✓ Dropped foreign key constraint: %s", constraintName)
+					}
+				} else {
+					log.Println("  ✓ No foreign key constraint found (already removed or not exists)")
+				}
+				
+				return nil
+			} else if dialectName == "sqlite" {
+				// SQLite不直接支持删除外键，但我们可以忽略它
+				// 因为GORM模型已经移除了外键定义，新创建的表不会有外键
+				log.Println("  SQLite: Foreign key constraint will be ignored in model definition")
+				return nil
+			}
+			
+			return nil
+		},
+		DownFunc: nil, // 不支持回滚（外键约束删除后不应该恢复）
+		CreatedAt: time.Date(2025, 1, 22, 0, 0, 0, 0, time.UTC),
+	},
 }
 
 // CodeMigrationExecutor 代码迁移执行器
