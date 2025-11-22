@@ -2,12 +2,12 @@
   <el-dialog
     v-model="dialogVisible"
     :title="`Web Terminal - ${nodeName} (${clusterName})`"
-    width="80%"
+    width="90%"
     :close-on-click-modal="false"
     @opened="initTerminal"
     @closed="closeTerminal"
     class="terminal-dialog"
-    top="5vh"
+    top="3vh"
   >
     <div class="terminal-toolbar">
       <div class="status-indicator">
@@ -207,12 +207,14 @@ const initTerminal = async () => {
 
   term = new Terminal({
     cursorBlink: true,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Menlo, Monaco, "Courier New", monospace',
     theme: {
       background: '#1e1e1e',
       foreground: '#f0f0f0'
-    }
+    },
+    scrollback: 10000, // 增加回滚缓冲区
+    fastScrollModifier: 'shift' // Shift+滚轮快速滚动
   })
 
   fitAddon = new FitAddon()
@@ -309,7 +311,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .terminal-dialog :deep(.el-dialog__body) {
   padding: 0;
-  height: 70vh;
+  height: 80vh;
   display: flex;
   flex-direction: column;
   background-color: #1e1e1e;

@@ -135,7 +135,7 @@ func (h *Handler) HandleWebSocket(c *gin.Context) {
 		User:            sshKey.Username,
 		Auth:            authMethods,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 注意：生产环境应验证 Host Key
-		Timeout:         10 * time.Second,
+		Timeout:         5 * time.Second, // 优化：从10秒减少到5秒
 	}
 
 	addr := fmt.Sprintf("%s:%d", host, sshKey.Port)
@@ -165,7 +165,8 @@ func (h *Handler) HandleWebSocket(c *gin.Context) {
 		ssh.TTY_OP_ISPEED: 14400,
 		ssh.TTY_OP_OSPEED: 14400,
 	}
-	if err := session.RequestPty("xterm", 24, 80, modes); err != nil {
+	// 优化：增大初始终端尺寸以匹配更大的窗口 (40行x120列)
+	if err := session.RequestPty("xterm-256color", 40, 120, modes); err != nil {
 		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\nFailed to request PTY: %v\r\n", err)))
 		return
 	}
