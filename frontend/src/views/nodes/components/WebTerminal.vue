@@ -47,7 +47,21 @@
                 :value="key.id" 
               />
            </el-select>
-           <div class="help-text">如果不选择，将使用标记为"默认"的系统密钥</div>
+           <div class="help-text" v-if="sshKeys.length > 0">如果不选择，将使用标记为"默认"的系统密钥</div>
+           <el-alert 
+             v-else
+             title="系统中暂无SSH密钥" 
+             type="warning" 
+             :closable="false"
+             style="margin-top: 8px"
+           >
+             <template #default>
+               <div style="font-size: 12px; line-height: 1.6;">
+                 请先在 SSH密钥管理 页面中创建系统SSH密钥。
+                 <br/>创建后需要设置一个密钥为"默认"密钥才能使用Web终端。
+               </div>
+             </template>
+           </el-alert>
         </el-form-item>
         <el-form-item label="SSH用户">
           <el-input v-model="sshConfig.ssh_user" placeholder="默认为System Key用户" />

@@ -538,7 +538,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column label="操作" width="350" fixed="right">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button type="text" size="small" @click="viewNodeDetail(row)">
@@ -2806,15 +2806,19 @@ onActivated(async () => {
   display: flex;
   gap: 6px;
   align-items: center;
+  flex-wrap: nowrap;
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .action-buttons .el-button {
-  padding: 6px 12px;
-  font-size: 13px;
+  padding: 4px 8px;
+  font-size: 12px;
   border-radius: 6px;
   border: 1px solid transparent;
   font-weight: 500;
   letter-spacing: 0.2px;
+  flex-shrink: 0;
 }
 
 .action-buttons .el-button--text {
