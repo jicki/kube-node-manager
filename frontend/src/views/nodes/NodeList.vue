@@ -538,7 +538,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" min-width="480" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button type="text" size="small" @click="viewNodeDetail(row)">
@@ -555,60 +555,6 @@
               >
                 <el-icon><Platform /></el-icon>
                 Web Terminal
-              </el-button>
-              
-              <el-button
-                v-if="row.schedulable"
-                type="text"
-                size="small"
-                @click="cordonNode(row)"
-                :title="getSchedulingStatus(row).value === 'limited' ? '节点有污点但仍可调度，禁止调度后完全不可调度' : '禁止调度节点使其不可调度'"
-              >
-                <el-icon><Lock /></el-icon>
-                禁止调度
-              </el-button>
-              
-              <el-button
-                v-else
-                type="text"
-                size="small"
-                @click="uncordonNode(row)"
-                title="解除调度限制使节点恢复调度能力"
-              >
-                <el-icon><Unlock /></el-icon>
-                解除调度
-              </el-button>
-              
-              <el-button
-                type="text"
-                size="small"
-                @click="handleNodeAction('labels', row)"
-                title="管理节点标签"
-              >
-                <el-icon><CollectionTag /></el-icon>
-                管理标签
-              </el-button>
-              
-              <el-button
-                type="text"
-                size="small"
-                @click="handleNodeAction('taints', row)"
-                title="管理节点污点"
-              >
-                <el-icon><WarningFilled /></el-icon>
-                管理污点
-              </el-button>
-              
-              <el-button
-                v-if="authStore.role === 'admin'"
-                type="text"
-                size="small"
-                @click="handleNodeAction('drain', row)"
-                title="驱逐节点上的所有Pod"
-                style="color: #f56c6c;"
-              >
-                <el-icon style="color: #f56c6c;"><VideoPlay /></el-icon>
-                驱逐节点
               </el-button>
             </div>
           </template>

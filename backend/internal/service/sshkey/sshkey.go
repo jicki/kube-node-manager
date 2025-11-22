@@ -37,11 +37,12 @@ func NewService(db *gorm.DB, logger *logger.Logger, encryptionKey string) *Servi
 	}
 }
 
-// List 获取 SSH 密钥列表
+// List 获取 SSH 密钥列表（查询system_ssh_keys表，如果为空则回退到ansible_ssh_keys表）
 func (s *Service) List(req model.SSHKeyListRequest) ([]model.SSHKeyResponse, int64, error) {
-	var keys []model.SystemSSHKey
+	var systemKeys []model.SystemSSHKey
 	var total int64
 
+	// 先查询 system_ssh_keys 表
 	query := s.db.Model(&model.SystemSSHKey{})
 
 	// 关键字搜索
@@ -66,13 +67,48 @@ func (s *Service) List(req model.SSHKeyListRequest) ([]model.SSHKeyResponse, int
 	}
 
 	// 查询
-	if err := query.Order("created_at DESC").Find(&keys).Error; err != nil {
+	if err := query.Order("created_at DESC").Find(&systemKeys).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// 转换为响应格式
-	responses := make([]model.SSHKeyResponse, len(keys))
-	for i, key := range keys {
+	// 如果 system_ssh_keys 表为空，尝试从 ansible_ssh_keys 表读取（向后兼容）
+	if len(systemKeys) == 0 {
+		s.logger.Info("system_ssh_keys is empty, falling back to ansible_ssh_keys")
+		var ansibleKeys []model.AnsibleSSHKey
+		
+		ansibleQuery := s.db.Model(&model.AnsibleSSHKey{})
+		if req.Keyword != "" {
+			ansibleQuery = ansibleQuery.Where("name LIKE ? OR description LIKE ?", "%"+req.Keyword+"%", "%"+req.Keyword+"%")
+		}
+		if req.Type != "" {
+			ansibleQuery = ansibleQuery.Where("type = ?", req.Type)
+		}
+		
+		if err := ansibleQuery.Count(&total).Error; err != nil {
+			return nil, 0, err
+		}
+		
+		if req.Page > 0 && req.PageSize > 0 {
+			offset := (req.Page - 1) * req.PageSize
+			ansibleQuery = ansibleQuery.Offset(offset).Limit(req.PageSize)
+		}
+		
+		if err := ansibleQuery.Order("created_at DESC").Find(&ansibleKeys).Error; err != nil {
+			return nil, 0, err
+		}
+		
+		// 转换 AnsibleSSHKey 为响应格式
+		responses := make([]model.SSHKeyResponse, len(ansibleKeys))
+		for i, key := range ansibleKeys {
+			responses[i] = *key.ToResponse()
+		}
+		
+		return responses, total, nil
+	}
+
+	// 转换 SystemSSHKey 为响应格式
+	responses := make([]model.SSHKeyResponse, len(systemKeys))
+	for i, key := range systemKeys {
 		responses[i] = *key.ToResponse()
 	}
 
@@ -92,14 +128,44 @@ func (s *Service) GetByID(id uint) (*model.SSHKeyResponse, error) {
 	return key.ToResponse(), nil
 }
 
-// GetDecryptedByID 获取解密后的 SSH 密钥（用于实际使用）
+// GetDecryptedByID 获取解密后的 SSH 密钥（用于实际使用，先查system_ssh_keys，如无则查ansible_ssh_keys）
 func (s *Service) GetDecryptedByID(id uint) (*model.SystemSSHKey, error) {
 	var key model.SystemSSHKey
-	if err := s.db.First(&key, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("SSH key not found")
-		}
+	
+	// 先查询 system_ssh_keys 表
+	err := s.db.First(&key, id).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
+	}
+	
+	// 如果 system_ssh_keys 表没有该密钥，尝试从 ansible_ssh_keys 表读取
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		s.logger.Infof("Key %d not found in system_ssh_keys, checking ansible_ssh_keys", id)
+		
+		var ansibleKey model.AnsibleSSHKey
+		if err := s.db.First(&ansibleKey, id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, fmt.Errorf("SSH key not found")
+			}
+			return nil, err
+		}
+		
+		// 将 AnsibleSSHKey 转换为 SystemSSHKey 格式
+		key = model.SystemSSHKey{
+			ID:          ansibleKey.ID,
+			Name:        ansibleKey.Name,
+			Description: ansibleKey.Description,
+			Type:        ansibleKey.Type,
+			Username:    ansibleKey.Username,
+			PrivateKey:  ansibleKey.PrivateKey,
+			Passphrase:  ansibleKey.Passphrase,
+			Password:    ansibleKey.Password,
+			Port:        ansibleKey.Port,
+			IsDefault:   ansibleKey.IsDefault,
+			CreatedBy:   ansibleKey.CreatedBy,
+			CreatedAt:   ansibleKey.CreatedAt,
+			UpdatedAt:   ansibleKey.UpdatedAt,
+		}
 	}
 
 	// 解密敏感信息
@@ -310,14 +376,44 @@ func (s *Service) Delete(id uint) error {
 	return s.db.Delete(&key).Error
 }
 
-// GetDefault 获取默认 SSH 密钥
+// GetDefault 获取默认 SSH 密钥（先查system_ssh_keys，如无则查ansible_ssh_keys）
 func (s *Service) GetDefault() (*model.SystemSSHKey, error) {
 	var key model.SystemSSHKey
-	if err := s.db.Where("is_default = ?", true).First(&key).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // 没有默认密钥不是错误
-		}
+	
+	// 先查询 system_ssh_keys 表
+	err := s.db.Where("is_default = ?", true).First(&key).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
+	}
+	
+	// 如果 system_ssh_keys 表没有默认密钥，尝试从 ansible_ssh_keys 表读取
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		s.logger.Info("No default key in system_ssh_keys, checking ansible_ssh_keys")
+		
+		var ansibleKey model.AnsibleSSHKey
+		if err := s.db.Where("is_default = ?", true).First(&ansibleKey).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, nil // 没有默认密钥不是错误
+			}
+			return nil, err
+		}
+		
+		// 将 AnsibleSSHKey 转换为 SystemSSHKey 格式
+		key = model.SystemSSHKey{
+			ID:          ansibleKey.ID,
+			Name:        ansibleKey.Name,
+			Description: ansibleKey.Description,
+			Type:        ansibleKey.Type,
+			Username:    ansibleKey.Username,
+			PrivateKey:  ansibleKey.PrivateKey,
+			Passphrase:  ansibleKey.Passphrase,
+			Password:    ansibleKey.Password,
+			Port:        ansibleKey.Port,
+			IsDefault:   ansibleKey.IsDefault,
+			CreatedBy:   ansibleKey.CreatedBy,
+			CreatedAt:   ansibleKey.CreatedAt,
+			UpdatedAt:   ansibleKey.UpdatedAt,
+		}
 	}
 
 	// 解密敏感信息
