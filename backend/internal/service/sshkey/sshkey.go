@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -24,16 +25,22 @@ type Service struct {
 
 // NewService 创建 SSH 密钥服务
 func NewService(db *gorm.DB, logger *logger.Logger, encryptionKey string) *Service {
-	// 如果未提供加密密钥，生成一个默认密钥（生产环境必须配置）
+	// 如果未提供加密密钥，使用与Ansible Service兼容的默认密钥（生产环境必须配置）
 	if encryptionKey == "" {
 		logger.Warning("SSH key encryption key not configured, using default key (NOT SECURE for production)")
-		encryptionKey = "default-ssh-key-32-bytes-long!!" // 32 bytes for AES-256
+		// 使用与 ansible.Service 相同的默认密钥以确保兼容性
+		encryptionKey = "default-encryption-key-change-in-production"
 	}
+	
+	// 使用 SHA256 哈希生成32字节密钥，与 pkg/crypto/crypto.go 的 NewEncryptor 保持一致
+	// 这样就能兼容 ansible_ssh_keys 表中用 Ansible Service 创建的密钥
+	hash := sha256.Sum256([]byte(encryptionKey))
+	hashedKey := string(hash[:])
 	
 	return &Service{
 		db:            db,
 		logger:        logger,
-		encryptionKey: encryptionKey,
+		encryptionKey: hashedKey,
 	}
 }
 
