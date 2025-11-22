@@ -547,6 +547,17 @@
               </el-button>
               
               <el-button
+                v-if="authStore.role === 'admin'"
+                type="text"
+                size="small"
+                @click="handleNodeAction('terminal', row)"
+                title="打开Web终端连接到节点"
+              >
+                <el-icon><Platform /></el-icon>
+                Web终端
+              </el-button>
+              
+              <el-button
                 v-if="row.schedulable"
                 type="text"
                 size="small"
@@ -598,14 +609,6 @@
                     <el-dropdown-item command="taints">
                       <el-icon><WarningFilled /></el-icon>
                       管理污点
-                    </el-dropdown-item>
-                    <el-dropdown-item 
-                      v-if="authStore.role === 'admin'"
-                      command="terminal"
-                      divided
-                    >
-                      <el-icon><Platform /></el-icon>
-                      Web终端
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>

@@ -30,6 +30,7 @@ func GetAllModels() []interface{} {
 		&AnsibleFavorite{},
 		&AnsibleTaskHistory{},
 		&SystemSSHKey{},
+		&NodeSettings{},
 		&AnsibleTag{},
 		&AnsibleTaskTag{},
 		&AnsibleWorkflow{},
