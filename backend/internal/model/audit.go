@@ -32,6 +32,7 @@ const (
 	ActionView   AuditAction = "view"
 	ActionLogin  AuditAction = "login"
 	ActionLogout AuditAction = "logout"
+	ActionConnect AuditAction = "connect" // 连接终端
 	ActionTest   AuditAction = "test"   // 测试连接
 	ActionQuery  AuditAction = "query"  // 查询
 	ActionBind   AuditAction = "bind"   // 绑定

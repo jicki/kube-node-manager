@@ -201,6 +201,9 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 
 	// WebSocket 节点实时同步 (节点状态实时推送)
 	api.GET("/nodes/ws", handlers.WebSocket.HandleWebSocket)
+	
+	// WebSocket 终端 (Admin only)
+	api.GET("/terminal/ws", handlers.Terminal.HandleWebSocket)
 
 	users := protected.Group("/users")
 	{
@@ -229,6 +232,10 @@ func setupRoutes(router *gin.Engine, handlers *handler.Handlers, healthHandler *
 		nodes.GET("", handlers.Node.List)
 		nodes.GET("/:cluster_id/:node_name", handlers.Node.Get)
 		nodes.GET("/:cluster_id/stats", handlers.Node.GetSummary)
+		// SSH 配置
+		nodes.GET("/:node_name/ssh-config", handlers.Terminal.GetSettings)
+		nodes.PUT("/:node_name/ssh-config", handlers.Terminal.UpdateSettings)
+		
 		// 单节点操作
 		nodes.POST("/:node_name/cordon", handlers.Node.Cordon)
 		nodes.POST("/:node_name/uncordon", handlers.Node.Uncordon)

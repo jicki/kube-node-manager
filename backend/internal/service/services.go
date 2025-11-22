@@ -232,11 +232,20 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 		}
 	}
 
+	// 创建 Ansible 和 SSH 密钥服务
+	// 从环境变量获取加密密钥
+	encryptionKey := os.Getenv("SSH_ENCRYPTION_KEY")
+	if encryptionKey == "" {
+		// 兼容旧的环境变量名
+		encryptionKey = os.Getenv("ANSIBLE_ENCRYPTION_KEY")
+	}
+	sshKeySvc := sshkey.NewService(db, logger, encryptionKey)
+
 	// 创建服务实例
 	authSvc := auth.NewService(db, logger, cfg.JWT, ldapSvc, auditSvc)
 	labelSvc := label.NewService(db, logger, auditSvc, k8sSvc)
 	taintSvc := taint.NewService(db, logger, auditSvc, k8sSvc)
-	nodeSvc := node.NewService(logger, k8sSvc, auditSvc)
+	nodeSvc := node.NewService(db, logger, k8sSvc, auditSvc, sshKeySvc)
 
 	// 设置进度服务
 	progressSvc.SetAuthService(authSvc)
@@ -290,14 +299,6 @@ func NewServices(db *gorm.DB, logger *logger.Logger, cfg *config.Config) *Servic
 	feishuSvc.SetTaintService(taintAdapter)
 	feishuSvc.SetAnomalyService(anomalyAdapter)
 
-	// 创建 Ansible 和 SSH 密钥服务
-	// 从环境变量获取加密密钥
-	encryptionKey := os.Getenv("SSH_ENCRYPTION_KEY")
-	if encryptionKey == "" {
-		// 兼容旧的环境变量名
-		encryptionKey = os.Getenv("ANSIBLE_ENCRYPTION_KEY")
-	}
-	sshKeySvc := sshkey.NewService(db, logger, encryptionKey)
 	ansibleSvc := ansible.NewService(db, logger, k8sSvc, realtimeMgr.GetWebSocketHub(), encryptionKey)
 
 	return &Services{

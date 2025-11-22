@@ -7,16 +7,21 @@ import (
 	"kube-node-manager/internal/service/audit"
 	"kube-node-manager/internal/service/k8s"
 	"kube-node-manager/internal/service/progress"
+	"kube-node-manager/internal/service/sshkey"
 	"kube-node-manager/pkg/logger"
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // Service 节点管理服务
 type Service struct {
 	logger          *logger.Logger
+	db              *gorm.DB
 	k8sSvc          *k8s.Service
 	auditSvc        *audit.Service
+	sshKeySvc       *sshkey.Service
 	progressSvc     *progress.Service
 	concurrencyCtrl *ConcurrencyController // 并发控制器
 }
@@ -95,14 +100,119 @@ type CordonHistoryResponse struct {
 	Timestamp    time.Time `json:"timestamp"`
 }
 
+// SSHConfigResponse SSH 连接配置响应
+type SSHConfigResponse struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	AuthType string `json:"auth_type"` // password or key
+}
+
 // NewService 创建新的节点管理服务实例
-func NewService(logger *logger.Logger, k8sSvc *k8s.Service, auditSvc *audit.Service) *Service {
+func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, auditSvc *audit.Service, sshKeySvc *sshkey.Service) *Service {
 	return &Service{
 		logger:          logger,
+		db:              db,
 		k8sSvc:          k8sSvc,
 		auditSvc:        auditSvc,
+		sshKeySvc:       sshKeySvc,
 		concurrencyCtrl: NewConcurrencyController(),
 	}
+}
+
+// GetNodeSettings 获取节点配置
+func (s *Service) GetNodeSettings(clusterName, nodeName string) (*model.NodeSettings, error) {
+	var settings model.NodeSettings
+	result := s.db.Where("cluster_name = ? AND node_name = ?", clusterName, nodeName).
+		Preload("SystemSSHKey").
+		First(&settings)
+	
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &settings, nil
+}
+
+// SaveNodeSettings 保存节点配置
+func (s *Service) SaveNodeSettings(settings *model.NodeSettings) error {
+	// 查找是否存在
+	var existing model.NodeSettings
+	result := s.db.Where("cluster_name = ? AND node_name = ?", settings.ClusterName, settings.NodeName).First(&existing)
+
+	if result.Error == gorm.ErrRecordNotFound {
+		// 创建新记录
+		return s.db.Create(settings).Error
+	} else if result.Error != nil {
+		return result.Error
+	}
+
+	// 更新记录
+	settings.ID = existing.ID
+	return s.db.Save(settings).Error
+}
+
+// GetNodeSSHConfig 获取节点 SSH 配置（包括解析 SystemSSHKey）
+func (s *Service) GetNodeSSHConfig(clusterName, nodeName string) (*model.SystemSSHKey, string, error) {
+	// 1. 获取节点IP
+	nodeInfo, err := s.k8sSvc.GetNode(clusterName, nodeName)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to get node info: %v", err)
+	}
+
+	// 优先使用 InternalIP，其次 ExternalIP
+	host := nodeInfo.InternalIP
+	if host == "" {
+		host = nodeInfo.ExternalIP
+	}
+	if host == "" {
+		return nil, "", fmt.Errorf("no valid IP address found for node %s", nodeName)
+	}
+
+	// 2. 获取节点配置
+	settings, err := s.GetNodeSettings(clusterName, nodeName)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to get node settings: %v", err)
+	}
+
+	var sshKey *model.SystemSSHKey
+
+	// 3. 确定使用的 Key
+	if settings != nil && settings.SystemSSHKeyID != nil {
+		// 使用配置的 Key，需要解密
+		sshKey, err = s.sshKeySvc.GetDecryptedByID(*settings.SystemSSHKeyID)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to get system ssh key %d: %v", *settings.SystemSSHKeyID, err)
+		}
+	} else {
+		// 使用默认 Key，需要解密
+		sshKey, err = s.sshKeySvc.GetDefault()
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to get default system ssh key: %v", err)
+		}
+		if sshKey == nil {
+			return nil, "", fmt.Errorf("no default system ssh key found and no specific key configured")
+		}
+	}
+
+	// 4. 覆盖配置 (Port / User)
+	if settings != nil {
+		if settings.SSHPort != 0 {
+			sshKey.Port = settings.SSHPort
+		}
+		if settings.SSHUser != "" {
+			sshKey.Username = settings.SSHUser
+		}
+	}
+	
+	// 如果 Key 中没有端口且配置中也没有，默认 22
+	if sshKey.Port == 0 {
+		sshKey.Port = 22
+	}
+
+	return sshKey, host, nil
 }
 
 // List 获取节点列表

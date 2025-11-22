@@ -13,6 +13,7 @@ import (
 	"kube-node-manager/internal/handler/progress"
 	"kube-node-manager/internal/handler/sshkey"
 	"kube-node-manager/internal/handler/taint"
+	"kube-node-manager/internal/handler/terminal"
 	"kube-node-manager/internal/handler/user"
 	"kube-node-manager/internal/handler/websocket"
 	"kube-node-manager/internal/service"
@@ -33,6 +34,7 @@ type Handlers struct {
 	Anomaly           *anomaly.Handler
 	WebSocket         *websocket.Handler
 	SSHKey            *sshkey.Handler
+	Terminal          *terminal.Handler
 	Ansible           *ansibleHandler.Handler
 	AnsibleTemplate   *ansibleHandler.TemplateHandler
 	AnsibleInventory  *ansibleHandler.InventoryHandler
@@ -65,6 +67,7 @@ func NewHandlers(services *service.Services, logger *logger.Logger) *Handlers {
 		Anomaly:          anomaly.NewHandler(services.Anomaly, services.Anomaly.GetCleanupService(), logger),
 		WebSocket:        websocket.NewHandler(services.WSHub, logger),
 		SSHKey:           sshkey.NewHandler(services.SSHKey, logger),
+		Terminal:         terminal.NewHandler(services.Node, services.Audit, logger),
 		Ansible:          ansibleMainHandler,
 		AnsibleTemplate:  ansibleHandler.NewTemplateHandler(services.Ansible.GetTemplateService(), logger),
 		AnsibleInventory: ansibleHandler.NewInventoryHandler(services.Ansible.GetInventoryService(), logger),

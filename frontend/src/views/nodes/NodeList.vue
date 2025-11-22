@@ -599,6 +599,14 @@
                       <el-icon><WarningFilled /></el-icon>
                       管理污点
                     </el-dropdown-item>
+                    <el-dropdown-item 
+                      v-if="authStore.role === 'admin'"
+                      command="terminal"
+                      divided
+                    >
+                      <el-icon><Platform /></el-icon>
+                      Web终端
+                    </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -906,6 +914,14 @@
       @error="handleProgressError"
       @cancelled="handleProgressCancelled"
     />
+
+    <!-- Web Terminal -->
+    <WebTerminal
+      v-if="terminalVisible"
+      v-model="terminalVisible"
+      :cluster-name="currentTerminalNode.clusterName"
+      :node-name="currentTerminalNode.name"
+    />
   </div>
 </template>
 
@@ -919,6 +935,7 @@ import { useAuthStore } from '@/store/modules/auth'
 import { formatTime, formatNodeStatus, formatNodeRoles, formatCPU, formatMemory } from '@/utils/format'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import NodeDetailDialog from './components/NodeDetailDialog.vue'
+import WebTerminal from './components/WebTerminal.vue'
 import ProgressDialog from '@/components/common/ProgressDialog.vue'
 import labelApi from '@/api/label'
 import taintApi from '@/api/taint'
@@ -943,7 +960,8 @@ import {
   QuestionFilled,
   Filter,
   Edit,
-  User
+  User,
+  Platform
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -979,6 +997,10 @@ const cordonReasonForm = ref({
   isBatch: false,
   nodes: []
 })
+
+// Web Terminal
+const terminalVisible = ref(false)
+const currentTerminalNode = ref({ name: '', clusterName: '' })
 
 // 驱逐确认对话框相关
 const drainConfirmVisible = ref(false)
@@ -1336,6 +1358,13 @@ const handleNodeAction = (command, node) => {
           cluster_name: clusterStore.currentClusterName
         }
       })
+      break
+    case 'terminal':
+      currentTerminalNode.value = {
+        name: node.name,
+        clusterName: clusterStore.currentClusterName
+      }
+      terminalVisible.value = true
       break
   }
 }
