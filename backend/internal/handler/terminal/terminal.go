@@ -88,37 +88,19 @@ func (h *Handler) HandleWebSocket(c *gin.Context) {
 	ws.WriteMessage(websocket.TextMessage, []byte("\r\n[INFO] 正在获取节点SSH配置...\r\n"))
 	
 	// 创建带超时的context
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
 	
-	// 使用channel接收结果
-	type sshConfigResult struct {
-		sshKey *model.SystemSSHKey
-		host   string
-		err    error
-	}
-	resultChan := make(chan sshConfigResult, 1)
-	
-	go func() {
-		sshKey, host, err := h.nodeSvc.GetNodeSSHConfig(clusterName, nodeName)
-		resultChan <- sshConfigResult{sshKey: sshKey, host: host, err: err}
-	}()
-	
-	var sshKey *model.SystemSSHKey
-	var host string
-	
-	select {
-	case result := <-resultChan:
-		if result.err != nil {
-			h.logger.Errorf("Failed to get SSH config: %v", result.err)
-			ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n[ERROR] 获取SSH配置失败: %v\r\n", result.err)))
-			return
+	// 直接调用GetNodeSSHConfig，传入带超时的context
+	sshKey, host, err := h.nodeSvc.GetNodeSSHConfig(ctx, clusterName, nodeName)
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			h.logger.Errorf("Timeout getting SSH config for node %s", nodeName)
+			ws.WriteMessage(websocket.TextMessage, []byte("\r\n[ERROR] 获取SSH配置超时（30秒）\r\n可能原因:\r\n1. Kubernetes API响应缓慢\r\n2. 网络连接问题\r\n3. 集群负载过高\r\n"))
+		} else {
+			h.logger.Errorf("Failed to get SSH config: %v", err)
+			ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n[ERROR] 获取SSH配置失败: %v\r\n", err)))
 		}
-		sshKey = result.sshKey
-		host = result.host
-	case <-ctx.Done():
-		h.logger.Errorf("Timeout getting SSH config for node %s", nodeName)
-		ws.WriteMessage(websocket.TextMessage, []byte("\r\n[ERROR] 获取SSH配置超时（30秒）\r\n可能原因:\r\n1. Kubernetes API响应缓慢\r\n2. 网络连接问题\r\n3. 集群负载过高\r\n"))
 		return
 	}
 	

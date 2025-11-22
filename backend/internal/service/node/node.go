@@ -154,13 +154,13 @@ func (s *Service) SaveNodeSettings(settings *model.NodeSettings) error {
 }
 
 // GetNodeSSHConfig 获取节点 SSH 配置（包括解析 SystemSSHKey）
-func (s *Service) GetNodeSSHConfig(clusterName, nodeName string) (*model.SystemSSHKey, string, error) {
+func (s *Service) GetNodeSSHConfig(ctx context.Context, clusterName, nodeName string) (*model.SystemSSHKey, string, error) {
 	s.logger.Infof("GetNodeSSHConfig START: cluster=%s, node=%s", clusterName, nodeName)
 	
 	// 1. 获取节点IP - 优先使用缓存，避免API调用超时
 	s.logger.Infof("Step 1: Getting node info for %s/%s (using cache)", clusterName, nodeName)
-	// 使用GetNodeWithCache，强制刷新设为false以优先使用缓存
-	nodeInfo, err := s.k8sSvc.GetNodeWithCache(clusterName, nodeName, false)
+	// 使用GetNodeWithCacheContext，传入context以支持超时控制
+	nodeInfo, err := s.k8sSvc.GetNodeWithCacheContext(ctx, clusterName, nodeName, false)
 	if err != nil {
 		s.logger.Errorf("Step 1 FAILED: Failed to get node info: %v", err)
 		return nil, "", fmt.Errorf("failed to get node info: %v", err)

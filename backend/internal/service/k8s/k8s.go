@@ -493,6 +493,11 @@ func (s *Service) GetNode(clusterName, nodeName string) (*NodeInfo, error) {
 
 // GetNodeWithCache 获取单个节点信息（可选择是否强制刷新缓存）
 func (s *Service) GetNodeWithCache(clusterName, nodeName string, forceRefresh bool) (*NodeInfo, error) {
+	return s.GetNodeWithCacheContext(context.Background(), clusterName, nodeName, forceRefresh)
+}
+
+// GetNodeWithCacheContext 获取单个节点信息（带context，可选择是否强制刷新缓存）
+func (s *Service) GetNodeWithCacheContext(ctx context.Context, clusterName, nodeName string, forceRefresh bool) (*NodeInfo, error) {
 	// 尝试使用智能缓存（由 Informer 实时更新）
 	if s.realtimeManager != nil && !forceRefresh {
 		type SmartCacheProvider interface {
@@ -519,12 +524,11 @@ func (s *Service) GetNodeWithCache(clusterName, nodeName string, forceRefresh bo
 		}
 	}
 
-	// 传统模式：使用旧的缓存逻辑或直接从 API 获取
-	ctx := context.Background()
+	// 传统模式：使用旧的缓存逻辑或直接从 API 获取（使用传入的context）
 
-	// 定义获取函数
+	// 定义获取函数，传入context以支持超时控制
 	fetchFunc := func() (interface{}, error) {
-		return s.fetchNodeFromAPI(clusterName, nodeName)
+		return s.fetchNodeFromAPIWithContext(ctx, clusterName, nodeName)
 	}
 
 	// 使用缓存层
@@ -542,16 +546,19 @@ func (s *Service) GetNodeWithCache(clusterName, nodeName string, forceRefresh bo
 	return node, nil
 }
 
-// fetchNodeFromAPI 从K8s API获取单个节点信息（无缓存）
+// fetchNodeFromAPI 从K8s API获取单个节点信息（无缓存，使用默认超时）
 func (s *Service) fetchNodeFromAPI(clusterName, nodeName string) (*NodeInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return s.fetchNodeFromAPIWithContext(ctx, clusterName, nodeName)
+}
+
+// fetchNodeFromAPIWithContext 从K8s API获取单个节点信息（无缓存，使用传入的context）
+func (s *Service) fetchNodeFromAPIWithContext(ctx context.Context, clusterName, nodeName string) (*NodeInfo, error) {
 	client, err := s.getClient(clusterName)
 	if err != nil {
 		return nil, err
 	}
-
-	// 优化：减少超时时间 30s -> 10s
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
