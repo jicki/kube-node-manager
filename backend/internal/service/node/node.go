@@ -124,7 +124,6 @@ func NewService(db *gorm.DB, logger *logger.Logger, k8sSvc *k8s.Service, auditSv
 func (s *Service) GetNodeSettings(clusterName, nodeName string) (*model.NodeSettings, error) {
 	var settings model.NodeSettings
 	result := s.db.Where("cluster_name = ? AND node_name = ?", clusterName, nodeName).
-		Preload("SystemSSHKey").
 		First(&settings)
 	
 	if result.Error != nil {

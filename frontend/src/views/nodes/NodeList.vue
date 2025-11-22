@@ -538,7 +538,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button type="text" size="small" @click="viewNodeDetail(row)">
@@ -2747,7 +2747,7 @@ onActivated(async () => {
 
 .action-buttons {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   align-items: center;
   flex-wrap: wrap;
   width: 100%;
@@ -2755,27 +2755,36 @@ onActivated(async () => {
 }
 
 .action-buttons .el-button {
-  padding: 4px 6px;
-  font-size: 11px;
-  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 14px;
+  border-radius: 6px;
   border: 1px solid transparent;
   font-weight: 500;
-  letter-spacing: 0.1px;
+  letter-spacing: 0.3px;
   flex-shrink: 0;
   white-space: nowrap;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .action-buttons .el-button--text {
-  color: #666;
-  background: #f5f5f5;
-  border-color: #e8e8e8;
-  transition: all 0.2s ease;
+  color: #333;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 1px solid #dee2e6;
+  transition: all 0.3s ease;
 }
 
 .action-buttons .el-button--text:hover {
-  color: #1890ff;
-  background: #e6f7ff;
-  border-color: #91d5ff;
+  color: #ffffff;
+  background: linear-gradient(135deg, #1890ff 0%, #0050b3 100%);
+  border-color: #1890ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.3);
+}
+
+.action-buttons .el-button--text:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
 .more-actions-btn {
@@ -2838,6 +2847,16 @@ onActivated(async () => {
   background: #f0f9ff;
   color: #1890ff;
   transform: translateX(2px);
+}
+
+.action-buttons .el-button .el-icon {
+  font-size: 16px;
+  margin-right: 4px;
+}
+
+.action-buttons .el-button:hover .el-icon {
+  transform: scale(1.1);
+  transition: transform 0.2s ease;
 }
 
 .action-buttons .el-dropdown-menu .el-dropdown-menu__item .el-icon,
